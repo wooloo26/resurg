@@ -1,8 +1,8 @@
 #include "lexer.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Private struct definition
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 struct Lexer {
     const char *source;       // full source text
     const char *file;         // source file name (for diagnostics)
@@ -15,9 +15,9 @@ struct Lexer {
     int32_t pending_pos;      // next index to return from pending
 };
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static bool is_alpha(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
@@ -65,9 +65,9 @@ static Token make_token(const Lexer *l, TokenKind kind, const char *start, int32
     };
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Keyword table
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef struct {
     const char *word;
     TokenKind kind;
@@ -91,9 +91,9 @@ static TokenKind lookup_keyword(const char *text, int32_t len) {
     return TOK_IDENT;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Scanning routines
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static Token scan_number(Lexer *l, SrcLoc s) {
     const char *start = l->source + l->pos - 1;
     bool is_float = false;
@@ -198,7 +198,7 @@ static Token scan_string(Lexer *l, SrcLoc s) {
         }
 
         char *val = extract_str_content(l, content_start, l->pos);
-        advance(l); // closing '"'
+        advance(l); // consume '"'
         return make_str_token(l, val, s);
     }
 
@@ -245,7 +245,7 @@ static Token scan_string(Lexer *l, SrcLoc s) {
                 if (peek(l) == '}') {
                     brace_depth--;
                     if (brace_depth == 0) {
-                        advance(l);
+                        advance(l); // consume '}'
                         break;
                     }
                 }
@@ -257,9 +257,10 @@ static Token scan_string(Lexer *l, SrcLoc s) {
                 if (t.kind == TOK_EOF || t.kind == TOK_ERROR) {
                     break;
                 }
+                // skip newlines inside interpolation
                 if (t.kind == TOK_NEWLINE) {
                     continue;
-                } // skip newlines inside interpolation
+                }
                 BUF_PUSH(l->pending, t);
             }
 
@@ -277,7 +278,7 @@ static Token scan_string(Lexer *l, SrcLoc s) {
     if (peek(l) == '\0') {
         rg_error(s, "unterminated string literal");
     } else {
-        advance(l); // closing '"'
+        advance(l); // consume '"'
     }
 
     // Return first pending token
@@ -302,9 +303,9 @@ static Token scan_ident(Lexer *l, SrcLoc s) {
     return make_token(l, kind, start, len, s);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Punctuation and operator tokens
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static Token scan_punctuation(Lexer *l, char c, SrcLoc s) {
     switch (c) {
     case ':':
@@ -361,9 +362,9 @@ static Token scan_punctuation(Lexer *l, char c, SrcLoc s) {
     return make_token(l, TOK_ERROR, &l->source[l->pos - 1], 1, s);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Core token scanner — used by both lexer_next and interpolation scanning
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static Token scan_token(Lexer *l) {
     // Skip whitespace and comments
     for (;;) {
@@ -409,9 +410,9 @@ static Token scan_token(Lexer *l) {
     return scan_punctuation(l, c, s);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 Lexer *lexer_create(const char *source, const char *file, Arena *arena) {
     Lexer *l = malloc(sizeof(*l));
     if (l == NULL) {

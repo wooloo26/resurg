@@ -4,10 +4,10 @@
 #include "ast.h"
 #include "types.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Semantic analysis — type inference, type checking, scope resolution.
 // Walks the AST and annotates / validates before codegen.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef struct Symbol Symbol;
 typedef struct Scope Scope;
 typedef struct Sema Sema;

@@ -1,8 +1,8 @@
 #include "types.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Type singletons — avoids allocation for primitive types.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 const Type TYPE_BOOL_INST = {.kind = TYPE_BOOL};
 const Type TYPE_I32_INST = {.kind = TYPE_I32};
 const Type TYPE_U32_INST = {.kind = TYPE_U32};
@@ -11,9 +11,9 @@ const Type TYPE_STR_INST = {.kind = TYPE_STR};
 const Type TYPE_UNIT_INST = {.kind = TYPE_UNIT};
 const Type TYPE_ERROR_INST = {.kind = TYPE_ERROR};
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Shared type metadata table
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const struct {
     TypeKind kind;
     const char *rg_name;
@@ -31,9 +31,9 @@ static const struct {
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Type utility functions
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 const Type *type_from_name(const char *name) {
     if (name == NULL) {
         return NULL;

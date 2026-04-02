@@ -11,10 +11,10 @@
 #include <stdnoreturn.h>
 #include <string.h>
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Arena allocator — bump-pointer allocation for AST nodes, tokens, strings.
 // Freed in one shot at end of compilation.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 #define ARENA_BLOCK_SIZE ((size_t)1024 * 1024) // 1 MiB
 
 typedef struct Arena Arena;
@@ -32,14 +32,14 @@ char *arena_strndup(Arena *a, const char *s, size_t len);
 // Format a string into the arena (printf-style).
 char *arena_sprintf(Arena *a, const char *fmt, ...);
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Stretchy buffer — type-safe dynamic array via macros.
 // Usage:
 //   Token *tokens = NULL;
 //   BUF_PUSH(tokens, tok);
 //   for (int i = 0; i < BUF_LEN(tokens); i++) { ... }
 //   BUF_FREE(tokens);
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef struct {
     size_t len;
     size_t cap;
@@ -63,9 +63,9 @@ typedef struct {
 // Grow a stretchy buffer to at least new_len elements.
 void *buf__grow(const void *buf, size_t new_len, size_t elem_size);
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Diagnostics — error/warning reporting with source location.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef struct {
     const char *file;
     int32_t line;

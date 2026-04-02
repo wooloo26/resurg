@@ -3,17 +3,17 @@
 
 #include "common.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Resolved types — produced by semantic analysis.
 // v0.1.0 only needs primitive types.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef enum {
-    TYPE_BOOL,
-    TYPE_I32,
-    TYPE_U32,
-    TYPE_F64,
-    TYPE_STR,
-    TYPE_UNIT,
+    TYPE_BOOL,  //
+    TYPE_I32,   //
+    TYPE_U32,   //
+    TYPE_F64,   //
+    TYPE_STR,   //
+    TYPE_UNIT,  //
     TYPE_ERROR, // sentinel for type errors (allows continued checking)
 } TypeKind;
 

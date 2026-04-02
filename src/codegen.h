@@ -4,9 +4,9 @@
 #include "ast.h"
 #include "types.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Code generator — emits C17 source from a type-checked AST.
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Variable name mapping for shadowed variables
 typedef struct VarEntry VarEntry;
 typedef struct CodeGen CodeGen;

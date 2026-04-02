@@ -1,8 +1,8 @@
 #include "codegen.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // VarEntry — private implementation (opaque in codegen.h)
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 struct VarEntry {
     const char *rg_name; // Resurg name
     const char *c_name;  // C name (may be mangled for shadowing)
@@ -12,17 +12,17 @@ struct CodeGen {
     FILE *out;               // output file handle
     Arena *arena;            // for temporary string building
     int32_t indent;          // current indentation level
-    const char *module;      // current module name (for name mangling)
-    const char *source_file; // escaped source file path for assert output
+    const char *module;      // may be NULL
+    const char *source_file; // may be NULL until emit_file
     int32_t tmp_counter;     // counter for temp variable names
     int32_t sb_counter;      // counter for string builder names
     VarEntry *vars;          /* buf */
     int32_t shadow_counter;  // counter for shadow name mangling
 };
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_indent(CodeGen *cg) {
     for (int32_t i = 0; i < cg->indent; i++) {
         fprintf(cg->out, "    ");
@@ -53,9 +53,9 @@ static const char *next_sb(CodeGen *cg) {
     return arena_sprintf(cg->arena, "_rg_sb_%d", cg->sb_counter++);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Variable name tracking (for shadowed variables)
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static int32_t var_find(const CodeGen *cg, const char *name) {
     for (int32_t i = BUF_LEN(cg->vars) - 1; i >= 0; i--) {
         if (strcmp(cg->vars[i].rg_name, name) == 0) {
@@ -86,9 +86,9 @@ static void var_scope_reset(CodeGen *cg) {
     cg->shadow_counter = 0;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Function name mangling (avoid C reserved words / stdlib conflicts)
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *mangle_fn_name(CodeGen *cg, const char *name) {
     if (strcmp(name, "main") == 0) {
         return "main";
@@ -96,16 +96,16 @@ static const char *mangle_fn_name(CodeGen *cg, const char *name) {
     return arena_sprintf(cg->arena, "rg_%s", name);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Forward declarations
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *emit_expr(CodeGen *cg, const ASTNode *node);
 static void emit_stmt(CodeGen *cg, const ASTNode *node);
 static void emit_block_stmts(CodeGen *cg, const ASTNode *block);
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helpers for ternary optimization
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Return the simple result expression from a branch body, or NULL if the body
 // contains statements that prevent ternary emission.
 static const ASTNode *simple_branch_result(const ASTNode *body) {
@@ -158,9 +158,9 @@ static bool is_simple_ternary(const ASTNode *node) {
     return else_result != NULL && is_pure_expr(else_result);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // C operator string
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *c_binop(TokenKind op) {
     switch (op) {
     case TOK_PLUS:
@@ -209,9 +209,9 @@ static const char *c_compound_op(TokenKind op) {
     }
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Escape a string for C string literal output
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *c_str_escape(const CodeGen *cg, const char *s) {
     if (s == NULL) {
         return "";
@@ -301,9 +301,9 @@ static const char *fmt_f64(const CodeGen *cg, double v) {
     return arena_strdup(cg->arena, buf);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Expression emission — returns a C expression string
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Emit an if/else branch body, optionally assigning the result to a target
 // variable.
 static void emit_branch(CodeGen *cg, const ASTNode *body, const char *target) {
@@ -395,9 +395,9 @@ static const char *str_convert_expr(CodeGen *cg, const ASTNode *node) {
     }
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Per-node expression emitters
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *emit_literal_expr(CodeGen *cg, const ASTNode *node) {
     switch (node->literal.kind) {
     case LIT_BOOL:
@@ -602,9 +602,9 @@ static const char *emit_str_interp_expr(CodeGen *cg, const ASTNode *node) {
     return tmp;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Expression emission — dispatch
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const char *emit_expr(CodeGen *cg, const ASTNode *node) {
     if (node == NULL) {
         return "0";
@@ -633,9 +633,9 @@ static const char *emit_expr(CodeGen *cg, const ASTNode *node) {
     }
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Statement emission
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_block_stmts(CodeGen *cg, const ASTNode *block) {
     if (block == NULL || block->kind != NODE_BLOCK) {
         return;
@@ -646,9 +646,9 @@ static void emit_block_stmts(CodeGen *cg, const ASTNode *block) {
     // Note: block.result is NOT emitted here (caller handles it)
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Per-node statement emitters
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_var_decl_stmt(CodeGen *cg, const ASTNode *node) {
     const Type *t = node->type;
     if (t == NULL) {
@@ -751,9 +751,9 @@ static void emit_for_stmt(CodeGen *cg, const ASTNode *node) {
     emit_line(cg, "}");
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Statement emission — dispatch
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_stmt(CodeGen *cg, const ASTNode *node) {
     if (node == NULL) {
         return;
@@ -807,9 +807,9 @@ static void emit_stmt(CodeGen *cg, const ASTNode *node) {
     }
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Function emission
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_fn_body(CodeGen *cg, const ASTNode *fn_node) {
     const ASTNode *body = fn_node->fn_decl.body;
     const Type *ret = fn_node->type;
@@ -915,9 +915,9 @@ static void emit_fn_decl(CodeGen *cg, const ASTNode *node, bool forward_only) {
     fprintf(cg->out, "\n");
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // File emission
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static void emit_preamble(CodeGen *cg) {
     emit(cg, "// Generated by resurg compiler — do not edit.\n");
     emit(cg, "#include <stdint.h>\n");
@@ -981,9 +981,9 @@ static void emit_file(CodeGen *cg, const ASTNode *file) {
     }
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 CodeGen *codegen_create(FILE *out, Arena *arena) {
     CodeGen *cg = malloc(sizeof(*cg));
     if (cg == NULL) {

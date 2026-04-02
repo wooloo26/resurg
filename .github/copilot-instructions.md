@@ -73,15 +73,7 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Comments
 
-- `//` only. `/* */` for `/* buf */` tags and lint suppression only.
-- Multi-line: stacked `//`. No `/* ... */` blocks.
-- 75-char `// ---...` banners between sections. One blank line above; none below.
-- Headers: Forward declarations → Types → Public API.
-- Implementations: Private struct → Helpers → Core logic → Public API.
-- `/* buf */` for stretchy-buffer pointers. `// may be NULL` for nullable.
-- `// NODE_KIND` before tagged-union variants. Trailing `//` on enum values.
-- Public functions: one-line `//` at header declaration. Static: comment only if non-trivial.
+- `//` only. `/* buf */` tags and lint suppression only.
+- `/* buf */` for stretchy-buffer pointers.
 - Describe **what/why**, not types. `// consume 'X'` for `advance()` calls.
 - `TODO:`, `FIXME:`, `HACK:` only. `// NOLINTNEXTLINE(check)` for suppression.
-- Close `#endif` with guard name: `#endif // RG_TOKEN_H`
-- No `/* */` explanations, no Javadoc, no commented-out code.

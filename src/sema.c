@@ -1,8 +1,8 @@
 #include "sema.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Private struct definitions (opaque in sema.h)
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 struct Symbol {
     const char *name;
     const Type *type;
@@ -12,8 +12,8 @@ struct Symbol {
 };
 
 struct Scope {
-    Symbol *symbols; // linked list of symbols in this scope
-    struct Scope *parent;
+    Symbol *symbols;         // may be NULL
+    struct Scope *parent;    // may be NULL (global scope)
     bool is_loop;            // allows break/continue
     const char *module_name; // set on module scope
 };
@@ -24,9 +24,9 @@ struct Sema {
     int32_t error_count;
 };
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Scope
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static Scope *scope_push(Sema *s, bool is_loop) {
     Scope *sc = arena_alloc(s->arena, sizeof(Scope));
     sc->symbols = NULL;
@@ -71,9 +71,9 @@ static Symbol *scope_lookup(const Sema *s, const char *name) {
     return NULL;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helper: is scope inside a loop?
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static bool in_loop(const Sema *s) {
     for (Scope *sc = s->current_scope; sc != NULL; sc = sc->parent) {
         if (sc->is_loop) {
@@ -83,9 +83,9 @@ static bool in_loop(const Sema *s) {
     return false;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helper: resolve ASTType to Type*
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const Type *resolve_ast_type(Sema *s, const ASTType *at) {
     if (at == NULL || at->kind == AST_TYPE_INFERRED) {
         return NULL;
@@ -99,9 +99,9 @@ static const Type *resolve_ast_type(Sema *s, const ASTType *at) {
     return t;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Function signature storage (for forward references)
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef struct FnSig {
     const char *name;
     const Type *return_type;
@@ -121,9 +121,9 @@ static FnSig *find_fn_sig(const char *name) {
     return NULL;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Type checking — recursive AST walk
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const Type *check_node(Sema *s, ASTNode *node);
 
 static const Type *check_literal(Sema *s, ASTNode *node) {
@@ -507,9 +507,9 @@ static const Type *check_node(Sema *s, ASTNode *node) {
     return result;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Semantic analysis — public API
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 Sema *sema_create(Arena *arena) {
     Sema *s = malloc(sizeof(*s));
     if (s == NULL) {

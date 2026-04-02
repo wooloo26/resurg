@@ -1,8 +1,8 @@
 #include "parser.h"
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Private struct definition
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 struct Parser {
     const Token *tokens; // stretchy buffer from lexer (read-only)
     int32_t pos;         // current position
@@ -11,9 +11,9 @@ struct Parser {
     const char *file;    // source file name (for diagnostics)
 };
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static const Token *current(const Parser *p) {
     return &p->tokens[p->pos];
 }
@@ -63,17 +63,17 @@ static SrcLoc loc(const Parser *p) {
     return current(p)->loc;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Forward declarations
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static ASTNode *parse_expr(Parser *p);
 static ASTNode *parse_stmt(Parser *p);
 static ASTNode *parse_block(Parser *p);
 static ASTNode *parse_decl(Parser *p);
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Type annotation
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static ASTType parse_type(Parser *p) {
     ASTType t = {.kind = AST_TYPE_NAME, .loc = loc(p)};
 
@@ -95,11 +95,11 @@ static ASTType parse_type(Parser *p) {
     return t;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Expressions — Pratt-style precedence climbing
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 typedef enum {
-    PREC_NONE,
+    PREC_NONE,       //
     PREC_ASSIGN,     // = += -= *= /=
     PREC_OR,         // ||
     PREC_AND,        // &&
@@ -109,7 +109,7 @@ typedef enum {
     PREC_FACTOR,     // * / %
     PREC_UNARY,      // ! -
     PREC_CALL,       // () .
-    PREC_PRIMARY,
+    PREC_PRIMARY,    //
 } Precedence;
 
 static Precedence get_precedence(TokenKind kind) {
@@ -278,7 +278,7 @@ static ASTNode *parse_prec(Parser *p, Precedence min_prec) {
         }
 
         SrcLoc s = loc(p);
-        advance_tok(p);
+        advance_tok(p); // consume operator
 
         // Assignment
         if (op == TOK_EQ) {
@@ -336,9 +336,9 @@ static ASTNode *parse_expr(Parser *p) {
     return parse_prec(p, PREC_ASSIGN);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Blocks
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static ASTNode *parse_block(Parser *p) {
     SrcLoc s = loc(p);
     expect(p, TOK_LBRACE);
@@ -368,9 +368,9 @@ static ASTNode *parse_block(Parser *p) {
     return n;
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Statements and declarations
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 static ASTNode *parse_var_decl(Parser *p) {
     SrcLoc s = loc(p);
     ASTNode *n = ast_new(p->arena, NODE_VAR_DECL, s);
@@ -498,12 +498,12 @@ static ASTNode *parse_stmt(Parser *p) {
 
     if (check(p, TOK_BREAK)) {
         SrcLoc s = loc(p);
-        advance_tok(p);
+        advance_tok(p); // consume 'break'
         return ast_new(p->arena, NODE_BREAK, s);
     }
     if (check(p, TOK_CONTINUE)) {
         SrcLoc s = loc(p);
-        advance_tok(p);
+        advance_tok(p); // consume 'continue'
         return ast_new(p->arena, NODE_CONTINUE, s);
     }
 
@@ -527,7 +527,7 @@ static ASTNode *parse_decl(Parser *p) {
     // module
     if (check(p, TOK_MODULE)) {
         SrcLoc s = loc(p);
-        advance_tok(p);
+        advance_tok(p); // consume 'module'
         ASTNode *n = ast_new(p->arena, NODE_MODULE, s);
         n->module.name = expect(p, TOK_IDENT)->lexeme;
         return n;
@@ -535,7 +535,7 @@ static ASTNode *parse_decl(Parser *p) {
 
     // pub fn ...
     if (check(p, TOK_PUB)) {
-        advance_tok(p);
+        advance_tok(p); // consume 'pub'
         skip_newlines(p);
         if (check(p, TOK_FN)) {
             return parse_fn_decl(p, true);
@@ -553,9 +553,9 @@ static ASTNode *parse_decl(Parser *p) {
     return parse_stmt(p);
 }
 
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
     Parser *p = malloc(sizeof(*p));
     if (p == NULL) {
