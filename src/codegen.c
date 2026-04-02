@@ -218,7 +218,7 @@ static const char *c_str_escape(const CodeGen *cg, const char *s) {
     }
     // Count extra space needed for escapes
     int32_t extra = 0;
-    for (const char *p = s; *p; p++) {
+    for (const char *p = s; *p != '\0'; p++) {
         switch (*p) {
         case '\\':
         case '"':
@@ -237,7 +237,7 @@ static const char *c_str_escape(const CodeGen *cg, const char *s) {
     int32_t len = (int32_t)strlen(s);
     char *buf = arena_alloc(cg->arena, len + extra + 1);
     int32_t j = 0;
-    for (const char *p = s; *p; p++) {
+    for (const char *p = s; *p != '\0'; p++) {
         switch (*p) {
         case '\\':
             buf[j++] = '\\';
