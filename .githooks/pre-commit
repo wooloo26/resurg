@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "=== pre-commit: checking formatting ==="
+# Collect all C sources
+ALL_C=$(find src runtime -name '*.c' -o -name '*.h' 2>/dev/null)
+if [ -n "$ALL_C" ]; then
+    for f in $ALL_C; do
+        if ! clang-format --style=file --dry-run --Werror "$f" 2>/dev/null; then
+            echo "ERROR: $f is not formatted. Run 'make format' and re-commit."
+            exit 1
+        fi
+    done
+    echo "  formatting OK"
+fi
+
+echo "=== pre-commit: running clang-tidy ==="
+make tidy
+
+echo "=== pre-commit: building ==="
+make all
+
+echo "=== pre-commit: all checks passed ==="

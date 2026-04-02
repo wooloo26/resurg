@@ -1,0 +1,7 @@
+// TEST: compile_error
+// EXPECT-ERROR: 'break' outside of loop
+module test_err
+
+fn main() {
+    break
+}

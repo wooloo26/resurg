@@ -1,0 +1,203 @@
+// v0.1.0 — Functions (expression and block bodies)
+module test_functions
+
+// ── expression body ──
+fn add(a: i32, b: i32) = a + b
+
+fn double(x: i32) = x * 2
+
+fn is_positive(n: i32) = n > 0
+
+// ── block body ──
+fn multiply(a: i32, b: i32) -> i32 {
+    result := a * b
+    result
+}
+
+fn abs(x: i32) -> i32 {
+    if x < 0 { -x } else { x }
+}
+
+// ── no return type (unit) ──
+fn do_nothing() {
+}
+
+// ── single parameter ──
+fn square(x: i32) = x * x
+
+// ── nested calls ──
+fn test_nested_calls() {
+    result := add(double(3), multiply(2, 4))
+    // double(3) = 6, multiply(2,4) = 8, add(6,8) = 14
+    assert result == 14
+}
+
+// ── function returning bool ──
+fn is_even(n: i32) -> bool {
+    n % 2 == 0
+}
+
+// ── function with multiple statements ──
+fn sum_range_manual(n: i32) -> i32 {
+    total := 0
+    i := 0
+    loop {
+        if i >= n { break }
+        total = total + i
+        i = i + 1
+    }
+    total
+}
+
+fn test_expression_body() {
+    assert add(1, 2) == 3
+    assert add(0, 0) == 0
+    assert add(-5, 5) == 0
+    assert double(0) == 0
+    assert double(7) == 14
+    assert double(-3) == -6
+    assert is_positive(1) == true
+    assert is_positive(0) == false
+    assert is_positive(-1) == false
+}
+
+fn test_block_body() {
+    assert multiply(3, 4) == 12
+    assert multiply(0, 100) == 0
+    assert multiply(-2, 3) == -6
+    assert abs(5) == 5
+    assert abs(-5) == 5
+    assert abs(0) == 0
+}
+
+fn test_square() {
+    assert square(0) == 0
+    assert square(5) == 25
+    assert square(-4) == 16
+}
+
+fn test_is_even() {
+    assert is_even(0) == true
+    assert is_even(1) == false
+    assert is_even(2) == true
+    assert is_even(99) == false
+    assert is_even(100) == true
+}
+
+fn test_sum_range() {
+    assert sum_range_manual(0) == 0
+    assert sum_range_manual(1) == 0
+    assert sum_range_manual(5) == 10   // 0+1+2+3+4
+    assert sum_range_manual(10) == 45  // 0+1+...+9
+}
+
+// ── recursive function ──
+fn factorial(n: i32) -> i32 {
+    if n <= 1 { 1 } else { n * factorial(n - 1) }
+}
+
+fn test_recursion() {
+    assert factorial(0) == 1
+    assert factorial(1) == 1
+    assert factorial(5) == 120
+    assert factorial(10) == 3628800
+}
+
+// ── function with f64 params and return ──
+fn average(a: f64, b: f64) -> f64 {
+    (a + b) / 2.0
+}
+
+fn test_f64_functions() {
+    assert average(2.0, 4.0) == 3.0
+    assert average(0.0, 0.0) == 0.0
+    assert average(-1.0, 1.0) == 0.0
+}
+
+// ── function with str params and return ──
+fn greet(name: str) -> str {
+    "Hello, {name}!"
+}
+
+fn test_str_functions() {
+    assert greet("World") == "Hello, World!"
+    assert greet("Resurg") == "Hello, Resurg!"
+}
+
+// ── function with bool params ──
+fn bool_to_str(val: bool) -> str {
+    if val { "yes" } else { "no" }
+}
+
+fn test_bool_functions() {
+    assert bool_to_str(true) == "yes"
+    assert bool_to_str(false) == "no"
+}
+
+// ── function with u32 params ──
+fn u32_double(x: u32) -> u32 {
+    x * 2
+}
+
+fn test_u32_functions() {
+    var a: u32 = 5
+    assert u32_double(a) == 10
+    var b: u32 = 0
+    assert u32_double(b) == 0
+}
+
+// ── zero-parameter function returning a value ──
+fn answer() = 42
+
+fn get_greeting() -> str {
+    "hello"
+}
+
+fn test_zero_param_returns() {
+    assert answer() == 42
+    assert get_greeting() == "hello"
+}
+
+// ── expression body with if/else ──
+fn sign(n: i32) = if n > 0 { 1 } else if n < 0 { -1 } else { 0 }
+
+fn test_expression_body_if_else() {
+    assert sign(10) == 1
+    assert sign(-5) == -1
+    assert sign(0) == 0
+}
+
+// ── many parameters ──
+fn sum4(a: i32, b: i32, c: i32, d: i32) = a + b + c + d
+
+fn test_many_params() {
+    assert sum4(1, 2, 3, 4) == 10
+    assert sum4(0, 0, 0, 0) == 0
+    assert sum4(-1, -2, 3, 4) == 4
+}
+
+// ── function calling function in expression body ──
+fn add_then_double(a: i32, b: i32) = double(add(a, b))
+
+fn test_composed_expression_body() {
+    assert add_then_double(1, 2) == 6
+    assert add_then_double(0, 5) == 10
+}
+
+fn main() {
+    test_expression_body()
+    test_block_body()
+    test_square()
+    test_nested_calls()
+    test_is_even()
+    test_sum_range()
+    test_recursion()
+    test_f64_functions()
+    test_str_functions()
+    test_bool_functions()
+    test_u32_functions()
+    test_zero_param_returns()
+    test_expression_body_if_else()
+    test_many_params()
+    test_composed_expression_body()
+}

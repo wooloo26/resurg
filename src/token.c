@@ -1,0 +1,72 @@
+#include "token.h"
+
+// ---------------------------------------------------------------------------
+// Token kind -> string (for debugging)
+// ---------------------------------------------------------------------------
+const char *token_kind_str(TokenKind kind) {
+    static const char *names[] = {
+        [TOK_INT_LIT] = "INT_LIT",
+        [TOK_FLOAT_LIT] = "FLOAT_LIT",
+        [TOK_STR_LIT] = "STR_LIT",
+        [TOK_TRUE] = "true",
+        [TOK_FALSE] = "false",
+        [TOK_IDENT] = "IDENT",
+        [TOK_MODULE] = "module",
+        [TOK_PUB] = "pub",
+        [TOK_FN] = "fn",
+        [TOK_VAR] = "var",
+        [TOK_IF] = "if",
+        [TOK_ELSE] = "else",
+        [TOK_LOOP] = "loop",
+        [TOK_FOR] = "for",
+        [TOK_BREAK] = "break",
+        [TOK_CONTINUE] = "continue",
+        [TOK_ASSERT] = "assert",
+        [TOK_BOOL] = "bool",
+        [TOK_I32] = "i32",
+        [TOK_U32] = "u32",
+        [TOK_F64] = "f64",
+        [TOK_STR] = "str",
+        [TOK_UNIT] = "unit",
+        [TOK_PLUS] = "+",
+        [TOK_MINUS] = "-",
+        [TOK_STAR] = "*",
+        [TOK_SLASH] = "/",
+        [TOK_PERCENT] = "%",
+        [TOK_EQ_EQ] = "==",
+        [TOK_BANG_EQ] = "!=",
+        [TOK_LT] = "<",
+        [TOK_LT_EQ] = "<=",
+        [TOK_GT] = ">",
+        [TOK_GT_EQ] = ">=",
+        [TOK_AMP_AMP] = "&&",
+        [TOK_PIPE_PIPE] = "||",
+        [TOK_BANG] = "!",
+        [TOK_PIPE] = "|",
+        [TOK_COLON_EQ] = ":=",
+        [TOK_EQ] = "=",
+        [TOK_PLUS_EQ] = "+=",
+        [TOK_MINUS_EQ] = "-=",
+        [TOK_STAR_EQ] = "*=",
+        [TOK_SLASH_EQ] = "/=",
+        [TOK_LPAREN] = "(",
+        [TOK_RPAREN] = ")",
+        [TOK_LBRACE] = "{",
+        [TOK_RBRACE] = "}",
+        [TOK_COLON] = ":",
+        [TOK_COMMA] = ",",
+        [TOK_DOT_DOT] = "..",
+        [TOK_DOT] = ".",
+        [TOK_ARROW] = "->",
+        [TOK_SEMICOLON] = ";",
+        [TOK_INTERP_START] = "INTERP_START",
+        [TOK_INTERP_END] = "INTERP_END",
+        [TOK_NEWLINE] = "NEWLINE",
+        [TOK_EOF] = "EOF",
+        [TOK_ERROR] = "ERROR",
+    };
+    if (kind >= 0 && kind < (int32_t)(sizeof(names) / sizeof(names[0])) && names[kind] != NULL) {
+        return names[kind];
+    }
+    return "?";
+}

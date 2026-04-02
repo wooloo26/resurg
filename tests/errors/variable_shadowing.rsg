@@ -1,0 +1,10 @@
+// TEST: compile_error
+// EXPECT-ERROR: variable 'x' shadows an existing binding
+module test_err
+
+fn main() {
+    x := 10
+    if true {
+        x := 20
+    }
+}

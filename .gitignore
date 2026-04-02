@@ -1,0 +1,17 @@
+# Build output
+build/
+*.o
+*.exe
+
+# Generated C output
+out/
+
+# Editor
+.vscode/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+tests_v0.2.0

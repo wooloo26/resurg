@@ -1,0 +1,100 @@
+// v0.1.0 — Module declaration and pub visibility
+module test_modules
+
+// ── pub function (exported) ──
+pub fn public_add(a: i32, b: i32) = a + b
+
+// ── private function (default, not exported) ──
+fn private_helper(x: i32) -> i32 {
+    x * 2
+}
+
+// ── pub with various return types ──
+pub fn public_greet(name: str) -> str {
+    "Hello, {name}"
+}
+
+pub fn public_is_zero(n: i32) = n == 0
+
+// ── test that pub and private functions work within the same module ──
+fn test_pub_functions() {
+    assert public_add(2, 3) == 5
+    assert public_add(0, 0) == 0
+    assert public_add(-1, 1) == 0
+}
+
+fn test_private_functions() {
+    assert private_helper(5) == 10
+    assert private_helper(0) == 0
+    assert private_helper(-3) == -6
+}
+
+fn test_pub_greet() {
+    assert public_greet("World") == "Hello, World"
+    assert public_greet("Resurg") == "Hello, Resurg"
+}
+
+fn test_pub_is_zero() {
+    assert public_is_zero(0) == true
+    assert public_is_zero(1) == false
+    assert public_is_zero(-1) == false
+}
+
+// ── pub function calling private function ──
+pub fn public_double(x: i32) -> i32 {
+    private_helper(x)
+}
+
+fn test_pub_calls_private() {
+    assert public_double(5) == 10
+    assert public_double(0) == 0
+}
+
+// ── private function calling pub function ──
+fn private_add_one(x: i32) -> i32 {
+    public_add(x, 1)
+}
+
+fn test_private_calls_pub() {
+    assert private_add_one(0) == 1
+    assert private_add_one(9) == 10
+}
+
+// ── pub with different return types ──
+pub fn pub_bool() -> bool {
+    true
+}
+
+pub fn pub_f64() -> f64 {
+    3.14
+}
+
+pub fn pub_u32() -> u32 {
+    42
+}
+
+fn test_pub_various_types() {
+    assert pub_bool() == true
+    assert pub_f64() == 3.14
+    assert pub_u32() == 42
+}
+
+// ── private expression-body function ──
+fn private_negate(x: i32) = -x
+
+fn test_private_expression_body() {
+    assert private_negate(5) == -5
+    assert private_negate(-3) == 3
+    assert private_negate(0) == 0
+}
+
+fn main() {
+    test_pub_functions()
+    test_private_functions()
+    test_pub_greet()
+    test_pub_is_zero()
+    test_pub_calls_private()
+    test_private_calls_pub()
+    test_pub_various_types()
+    test_private_expression_body()
+}

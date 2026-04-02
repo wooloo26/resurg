@@ -1,0 +1,116 @@
+// v0.1.0 — Primitive types: bool, i32, u32, f64, str, unit
+module test_primitives
+
+// ── bool ──
+fn test_bool() {
+    t := true
+    f := false
+    assert t == true
+    assert f == false
+    assert t != f
+}
+
+// ── i32 ──
+fn test_i32() {
+    x := 42
+    y := -1
+    z := 0
+    assert x == 42
+    assert y == -1
+    assert z == 0
+
+    // large values
+    big := 2_147_483_647
+    small := -2_147_483_648
+    assert big == 2_147_483_647
+    assert small == -2_147_483_648
+}
+
+// ── u32 ──
+fn test_u32() {
+    var a: u32 = 0
+    var b: u32 = 100
+    var c: u32 = 4_294_967_295
+    assert a == 0
+    assert b == 100
+    assert c == 4_294_967_295
+
+    // underscore separator
+    var d: u32 = 1_000_000
+    assert d == 1000000
+}
+
+// ── f64 ──
+fn test_f64() {
+    pi := 3.14
+    neg := -0.5
+    zero := 0.0
+    sci := 2.5e10
+    assert pi == 3.14
+    assert neg == -0.5
+    assert zero == 0.0
+    assert sci == 2.5e10
+
+    // underscore separator
+    big := 1_000.5
+    assert big == 1000.5
+
+    // negative zero
+    nz := -0.0
+    assert nz == 0.0
+}
+
+// ── str ──
+fn test_str() {
+    s := "hello"
+    empty := ""
+    assert s == "hello"
+    assert empty == ""
+
+    // str equality
+    a := "same"
+    b := "same"
+    assert a == b
+    assert a != "different"
+}
+
+// ── unit ──
+fn test_unit() -> unit {
+    // a function with no meaningful return produces unit
+}
+
+// ── bool operations ──
+fn test_bool_operations() {
+    a := true
+    b := false
+    assert (a && a) == true
+    assert (a && b) == false
+    assert (a || b) == true
+    assert (b || b) == false
+    assert !a == false
+    assert !b == true
+
+    // chained
+    assert (a && a && a) == true
+    assert (b || b || a) == true
+}
+
+// ── i32 boundary arithmetic ──
+fn test_i32_boundary() {
+    max := 2_147_483_647
+    min := -2_147_483_648
+    assert max > 0
+    assert min < 0
+    assert max + min == -1
+}
+
+fn main() {
+    test_bool()
+    test_i32()
+    test_u32()
+    test_f64()
+    test_str()
+    test_unit()
+    test_bool_operations()
+    test_i32_boundary()
+}

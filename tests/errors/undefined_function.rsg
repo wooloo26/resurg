@@ -1,0 +1,7 @@
+// TEST: compile_error
+// EXPECT-ERROR: undefined function 'nonexistent'
+module test_err
+
+fn main() {
+    x := nonexistent(42)
+}
