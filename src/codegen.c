@@ -375,7 +375,7 @@ static void emit_if(CodeGen *cg, const ASTNode *node, const char *target, bool i
 // String conversion helper for interpolation
 static const char *str_convert_expr(CodeGen *cg, const ASTNode *node) {
     const char *val = emit_expr(cg, node);
-    Type *t = node->type;
+    const Type *t = node->type;
     if (t == NULL) {
         return val;
     }
@@ -500,7 +500,7 @@ static const char *emit_binary_expr(CodeGen *cg, const ASTNode *node) {
     const char *right = emit_expr(cg, rhs);
 
     // String equality/inequality
-    Type *lt = lhs->type;
+    const Type *lt = lhs->type;
     if (lt != NULL && lt->kind == TYPE_STR) {
         if (node->binary.op == TOK_EQ_EQ) {
             return arena_sprintf(cg->arena, "rg_str_eq(%s, %s)", left, right);
@@ -533,7 +533,7 @@ static const char *emit_call_expr(CodeGen *cg, const ASTNode *node) {
 }
 
 static const char *emit_if_expr(CodeGen *cg, const ASTNode *node) {
-    Type *t = node->type;
+    const Type *t = node->type;
     if (t == NULL || t->kind == TYPE_UNIT) {
         emit_if(cg, node, NULL, false);
         return "(void)0";
@@ -650,7 +650,7 @@ static void emit_block_stmts(CodeGen *cg, const ASTNode *block) {
 // Per-node statement emitters
 // ---------------------------------------------------------------------------
 static void emit_var_decl_stmt(CodeGen *cg, const ASTNode *node) {
-    Type *t = node->type;
+    const Type *t = node->type;
     if (t == NULL) {
         t = node->var_decl.init != NULL ? node->var_decl.init->type : NULL;
     }
@@ -658,7 +658,7 @@ static void emit_var_decl_stmt(CodeGen *cg, const ASTNode *node) {
         t = type_from_name(node->var_decl.type.name);
     }
     if (t == NULL) {
-        t = &g_type_i32_inst;
+        t = &TYPE_I32_INST;
     }
     const char *c_name = var_define(cg, node->var_decl.name);
     const char *val = emit_expr(cg, node->var_decl.init);
@@ -812,7 +812,7 @@ static void emit_stmt(CodeGen *cg, const ASTNode *node) {
 // ---------------------------------------------------------------------------
 static void emit_fn_body(CodeGen *cg, const ASTNode *fn_node) {
     const ASTNode *body = fn_node->fn_decl.body;
-    Type *ret = fn_node->type;
+    const Type *ret = fn_node->type;
     bool is_unit = ret == NULL || ret->kind == TYPE_UNIT;
     bool is_main = strcmp(fn_node->fn_decl.name, "main") == 0;
 
@@ -882,12 +882,12 @@ static void emit_fn_decl(CodeGen *cg, const ASTNode *node, bool forward_only) {
     } else {
         for (int32_t i = 0; i < param_count; i++) {
             const ASTNode *p = node->fn_decl.params[i];
-            Type *pt = p->type;
+            const Type *pt = p->type;
             if (pt == NULL && p->param.type.kind == AST_TYPE_NAME) {
                 pt = type_from_name(p->param.type.name);
             }
             if (pt == NULL) {
-                pt = &g_type_i32_inst;
+                pt = &TYPE_I32_INST;
             }
             if (i > 0) {
                 fprintf(cg->out, ", ");

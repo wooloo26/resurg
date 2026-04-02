@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 struct Symbol {
     const char *name;
-    Type *type;
+    const Type *type;
     bool is_pub;
     bool is_fn;
     struct Symbol *next; // intrusive linked list
@@ -41,7 +41,7 @@ static void scope_pop(Sema *s) {
     s->current_scope = s->current_scope->parent;
 }
 
-static void scope_define(Sema *s, const char *name, Type *type, bool is_pub, bool is_fn) {
+static void scope_define(Sema *s, const char *name, const Type *type, bool is_pub, bool is_fn) {
     Symbol *sym = arena_alloc(s->arena, sizeof(Symbol));
     sym->name = name;
     sym->type = type;
@@ -86,15 +86,15 @@ static bool in_loop(const Sema *s) {
 // ---------------------------------------------------------------------------
 // Helper: resolve ASTType to Type*
 // ---------------------------------------------------------------------------
-static Type *resolve_ast_type(Sema *s, const ASTType *at) {
+static const Type *resolve_ast_type(Sema *s, const ASTType *at) {
     if (at == NULL || at->kind == AST_TYPE_INFERRED) {
         return NULL;
     }
-    Type *t = type_from_name(at->name);
+    const Type *t = type_from_name(at->name);
     if (t == NULL) {
         rg_error(at->loc, "unknown type '%s'", at->name);
         s->error_count++;
-        return &g_type_error_inst;
+        return &TYPE_ERROR_INST;
     }
     return t;
 }
@@ -104,8 +104,8 @@ static Type *resolve_ast_type(Sema *s, const ASTType *at) {
 // ---------------------------------------------------------------------------
 typedef struct FnSig {
     const char *name;
-    Type *return_type;
-    Type **param_types; /* buf */
+    const Type *return_type;
+    const Type **param_types; /* buf */
     int32_t param_count;
     bool is_pub;
 } FnSig;
@@ -124,41 +124,41 @@ static FnSig *find_fn_sig(const char *name) {
 // ---------------------------------------------------------------------------
 // Type checking — recursive AST walk
 // ---------------------------------------------------------------------------
-static Type *check_node(Sema *s, ASTNode *node);
+static const Type *check_node(Sema *s, ASTNode *node);
 
-static Type *check_literal(Sema *s, ASTNode *node) {
+static const Type *check_literal(Sema *s, ASTNode *node) {
     (void)s;
     switch (node->literal.kind) {
     case LIT_BOOL:
-        return &g_type_bool_inst;
+        return &TYPE_BOOL_INST;
     case LIT_I32:
-        return &g_type_i32_inst;
+        return &TYPE_I32_INST;
     case LIT_U32:
-        return &g_type_u32_inst;
+        return &TYPE_U32_INST;
     case LIT_F64:
-        return &g_type_f64_inst;
+        return &TYPE_F64_INST;
     case LIT_STR:
-        return &g_type_str_inst;
+        return &TYPE_STR_INST;
     case LIT_UNIT:
-        return &g_type_unit_inst;
+        return &TYPE_UNIT_INST;
     }
-    return &g_type_error_inst;
+    return &TYPE_ERROR_INST;
 }
 
-static Type *check_ident(Sema *s, ASTNode *node) {
+static const Type *check_ident(Sema *s, ASTNode *node) {
     Symbol *sym = scope_lookup(s, node->ident.name);
     if (sym == NULL) {
         rg_error(node->loc, "undefined variable '%s'", node->ident.name);
         s->error_count++;
-        return &g_type_error_inst;
+        return &TYPE_ERROR_INST;
     }
     return sym->type;
 }
 
-static Type *check_unary(Sema *s, ASTNode *node) {
-    Type *operand = check_node(s, node->unary.operand);
+static const Type *check_unary(Sema *s, ASTNode *node) {
+    const Type *operand = check_node(s, node->unary.operand);
     if (node->unary.op == TOK_BANG) {
-        return &g_type_bool_inst;
+        return &TYPE_BOOL_INST;
     }
     if (node->unary.op == TOK_MINUS) {
         return operand;
@@ -167,7 +167,7 @@ static Type *check_unary(Sema *s, ASTNode *node) {
 }
 
 // Promote an integer literal node to match a target numeric type
-static Type *promote_literal(ASTNode *lit, Type *target) {
+static const Type *promote_literal(ASTNode *lit, const Type *target) {
     if (lit == NULL || lit->kind != NODE_LITERAL) {
         return NULL;
     }
@@ -186,14 +186,14 @@ static Type *promote_literal(ASTNode *lit, Type *target) {
     return target;
 }
 
-static Type *check_binary(Sema *s, ASTNode *node) {
-    Type *left = check_node(s, node->binary.left);
-    Type *right = check_node(s, node->binary.right);
+static const Type *check_binary(Sema *s, ASTNode *node) {
+    const Type *left = check_node(s, node->binary.left);
+    const Type *right = check_node(s, node->binary.right);
 
     // Promote integer literal to match the other side's numeric type
     if (left != NULL && right != NULL) {
         if (type_is_numeric(left) && type_is_numeric(right) && !type_eq(left, right)) {
-            Type *p;
+            const Type *p;
             p = promote_literal(node->binary.left, right);
             if (p != NULL) {
                 left = p;
@@ -215,7 +215,7 @@ static Type *check_binary(Sema *s, ASTNode *node) {
     case TOK_GT_EQ:
     case TOK_AMP_AMP:
     case TOK_PIPE_PIPE:
-        return &g_type_bool_inst;
+        return &TYPE_BOOL_INST;
 
     // Arithmetic returns the operand type
     default:
@@ -223,7 +223,7 @@ static Type *check_binary(Sema *s, ASTNode *node) {
     }
 }
 
-static Type *check_call(Sema *s, ASTNode *node) {
+static const Type *check_call(Sema *s, ASTNode *node) {
     // Check callee
     const char *fn_name = NULL;
     if (node->call.callee->kind == NODE_IDENT) {
@@ -253,13 +253,13 @@ static Type *check_call(Sema *s, ASTNode *node) {
             s->error_count++;
         }
     }
-    return &g_type_error_inst;
+    return &TYPE_ERROR_INST;
 }
 
-static Type *check_if(Sema *s, ASTNode *node) {
+static const Type *check_if(Sema *s, ASTNode *node) {
     check_node(s, node->if_expr.cond);
-    Type *then_t = check_node(s, node->if_expr.then_body);
-    Type *else_t = NULL;
+    const Type *then_t = check_node(s, node->if_expr.then_body);
+    const Type *else_t = NULL;
     if (node->if_expr.else_body != NULL) {
         else_t = check_node(s, node->if_expr.else_body);
     }
@@ -274,15 +274,15 @@ static Type *check_if(Sema *s, ASTNode *node) {
     if (then_t != NULL) {
         return then_t;
     }
-    return &g_type_unit_inst;
+    return &TYPE_UNIT_INST;
 }
 
-static Type *check_block(Sema *s, ASTNode *node) {
+static const Type *check_block(Sema *s, ASTNode *node) {
     scope_push(s, false);
     for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
         check_node(s, node->block.stmts[i]);
     }
-    Type *result_type = &g_type_unit_inst;
+    const Type *result_type = &TYPE_UNIT_INST;
     if (node->block.result != NULL) {
         result_type = check_node(s, node->block.result);
     }
@@ -290,16 +290,16 @@ static Type *check_block(Sema *s, ASTNode *node) {
     return result_type;
 }
 
-static Type *check_var_decl(Sema *s, ASTNode *node) {
-    Type *init_type = NULL;
+static const Type *check_var_decl(Sema *s, ASTNode *node) {
+    const Type *init_type = NULL;
     if (node->var_decl.init != NULL) {
         init_type = check_node(s, node->var_decl.init);
     }
 
-    Type *declared = resolve_ast_type(s, &node->var_decl.type);
+    const Type *declared = resolve_ast_type(s, &node->var_decl.type);
 
     // Determine final type
-    Type *var_type;
+    const Type *var_type;
     if (declared != NULL) {
         var_type = declared;
         // If init is a literal, retype it to match declared type
@@ -314,7 +314,7 @@ static Type *check_var_decl(Sema *s, ASTNode *node) {
     } else {
         rg_error(node->loc, "cannot infer type for '%s'", node->var_decl.name);
         s->error_count++;
-        var_type = &g_type_error_inst;
+        var_type = &TYPE_ERROR_INST;
     }
 
     if (scope_lookup_current(s, node->var_decl.name) != NULL) {
@@ -335,9 +335,9 @@ static void check_fn_body(Sema *s, ASTNode *fn_node) {
     // Register parameters
     for (int32_t i = 0; i < BUF_LEN(fn_node->fn_decl.params); i++) {
         ASTNode *param = fn_node->fn_decl.params[i];
-        Type *pt = resolve_ast_type(s, &param->param.type);
+        const Type *pt = resolve_ast_type(s, &param->param.type);
         if (pt == NULL) {
-            pt = &g_type_error_inst;
+            pt = &TYPE_ERROR_INST;
         }
         param->type = pt;
         scope_define(s, param->param.name, pt, false, false);
@@ -345,12 +345,12 @@ static void check_fn_body(Sema *s, ASTNode *fn_node) {
 
     // Check body
     if (fn_node->fn_decl.body != NULL) {
-        Type *body_type = check_node(s, fn_node->fn_decl.body);
+        const Type *body_type = check_node(s, fn_node->fn_decl.body);
 
         // If return type not declared, infer from body
-        Type *ret = resolve_ast_type(s, &fn_node->fn_decl.return_type);
+        const Type *ret = resolve_ast_type(s, &fn_node->fn_decl.return_type);
         if (ret == NULL) {
-            ret = body_type != NULL ? body_type : &g_type_unit_inst;
+            ret = body_type != NULL ? body_type : &TYPE_UNIT_INST;
         }
         fn_node->type = ret;
 
@@ -370,30 +370,30 @@ static void check_fn_body(Sema *s, ASTNode *fn_node) {
     scope_pop(s);
 }
 
-static Type *check_assign(Sema *s, ASTNode *node) {
+static const Type *check_assign(Sema *s, ASTNode *node) {
     check_node(s, node->assign.target);
     check_node(s, node->assign.value);
-    return &g_type_unit_inst;
+    return &TYPE_UNIT_INST;
 }
 
-static Type *check_compound_assign(Sema *s, ASTNode *node) {
+static const Type *check_compound_assign(Sema *s, ASTNode *node) {
     check_node(s, node->compound_assign.target);
     check_node(s, node->compound_assign.value);
-    return &g_type_unit_inst;
+    return &TYPE_UNIT_INST;
 }
 
-static Type *check_str_interp(Sema *s, ASTNode *node) {
+static const Type *check_str_interp(Sema *s, ASTNode *node) {
     for (int32_t i = 0; i < BUF_LEN(node->str_interp.parts); i++) {
         check_node(s, node->str_interp.parts[i]);
     }
-    return &g_type_str_inst;
+    return &TYPE_STR_INST;
 }
 
-static Type *check_node(Sema *s, ASTNode *node) {
+static const Type *check_node(Sema *s, ASTNode *node) {
     if (node == NULL) {
-        return &g_type_unit_inst;
+        return &TYPE_UNIT_INST;
     }
-    Type *result = &g_type_unit_inst;
+    const Type *result = &TYPE_UNIT_INST;
 
     switch (node->kind) {
     case NODE_FILE:
@@ -418,7 +418,7 @@ static Type *check_node(Sema *s, ASTNode *node) {
     case NODE_PARAM:
         result = resolve_ast_type(s, &node->param.type);
         if (result == NULL) {
-            result = &g_type_error_inst;
+            result = &TYPE_ERROR_INST;
         }
         break;
 
@@ -471,7 +471,7 @@ static Type *check_node(Sema *s, ASTNode *node) {
 
     case NODE_MEMBER:
         check_node(s, node->member.object);
-        result = &g_type_error_inst;
+        result = &TYPE_ERROR_INST;
         break;
 
     case NODE_IF:
@@ -488,7 +488,7 @@ static Type *check_node(Sema *s, ASTNode *node) {
         check_node(s, node->for_loop.start);
         check_node(s, node->for_loop.end);
         scope_push(s, true);
-        scope_define(s, node->for_loop.var_name, &g_type_i32_inst, false, false);
+        scope_define(s, node->for_loop.var_name, &TYPE_I32_INST, false, false);
         check_node(s, node->for_loop.body);
         scope_pop(s);
         break;
@@ -539,11 +539,11 @@ bool sema_check(Sema *s, ASTNode *file) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_FN_DECL) {
             // Resolve return type (may be inferred — default to unit)
-            Type *ret = &g_type_unit_inst;
+            const Type *ret = &TYPE_UNIT_INST;
             if (decl->fn_decl.return_type.kind == AST_TYPE_NAME) {
                 ret = type_from_name(decl->fn_decl.return_type.name);
                 if (ret == NULL) {
-                    ret = &g_type_unit_inst;
+                    ret = &TYPE_UNIT_INST;
                 }
             }
 
@@ -556,9 +556,9 @@ bool sema_check(Sema *s, ASTNode *file) {
             sig.is_pub = decl->fn_decl.is_pub;
             for (int32_t j = 0; j < sig.param_count; j++) {
                 ASTNode *param = decl->fn_decl.params[j];
-                Type *pt = type_from_name(param->param.type.name);
+                const Type *pt = type_from_name(param->param.type.name);
                 if (pt == NULL) {
-                    pt = &g_type_error_inst;
+                    pt = &TYPE_ERROR_INST;
                 }
                 BUF_PUSH(sig.param_types, pt);
             }

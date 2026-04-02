@@ -78,7 +78,7 @@ typedef enum {
 struct ASTNode {
     NodeKind kind;
     SrcLoc loc;
-    Type *type; // may be NULL
+    const Type *type; // may be NULL
 
     union {
         // NODE_MODULE

@@ -3,13 +3,13 @@
 // ---------------------------------------------------------------------------
 // Type singletons — avoids allocation for primitive types.
 // ---------------------------------------------------------------------------
-Type g_type_bool_inst = {.kind = TYPE_BOOL};
-Type g_type_i32_inst = {.kind = TYPE_I32};
-Type g_type_u32_inst = {.kind = TYPE_U32};
-Type g_type_f64_inst = {.kind = TYPE_F64};
-Type g_type_str_inst = {.kind = TYPE_STR};
-Type g_type_unit_inst = {.kind = TYPE_UNIT};
-Type g_type_error_inst = {.kind = TYPE_ERROR};
+const Type TYPE_BOOL_INST = {.kind = TYPE_BOOL};
+const Type TYPE_I32_INST = {.kind = TYPE_I32};
+const Type TYPE_U32_INST = {.kind = TYPE_U32};
+const Type TYPE_F64_INST = {.kind = TYPE_F64};
+const Type TYPE_STR_INST = {.kind = TYPE_STR};
+const Type TYPE_UNIT_INST = {.kind = TYPE_UNIT};
+const Type TYPE_ERROR_INST = {.kind = TYPE_ERROR};
 
 // ---------------------------------------------------------------------------
 // Shared type metadata table
@@ -18,15 +18,15 @@ static const struct {
     TypeKind kind;
     const char *rg_name;
     const char *c_name;
-    Type *inst;
+    const Type *inst;
 } TYPE_INFO[] = {
-    {.kind = TYPE_BOOL, .rg_name = "bool", .c_name = "bool", .inst = &g_type_bool_inst},
-    {.kind = TYPE_I32, .rg_name = "i32", .c_name = "int32_t", .inst = &g_type_i32_inst},
-    {.kind = TYPE_U32, .rg_name = "u32", .c_name = "uint32_t", .inst = &g_type_u32_inst},
-    {.kind = TYPE_F64, .rg_name = "f64", .c_name = "double", .inst = &g_type_f64_inst},
-    {.kind = TYPE_STR, .rg_name = "str", .c_name = "RgStr", .inst = &g_type_str_inst},
-    {.kind = TYPE_UNIT, .rg_name = "unit", .c_name = "void", .inst = &g_type_unit_inst},
-    {.kind = TYPE_ERROR, .rg_name = "<error>", .c_name = "/* error */", .inst = &g_type_error_inst},
+    {.kind = TYPE_BOOL, .rg_name = "bool", .c_name = "bool", .inst = &TYPE_BOOL_INST},
+    {.kind = TYPE_I32, .rg_name = "i32", .c_name = "int32_t", .inst = &TYPE_I32_INST},
+    {.kind = TYPE_U32, .rg_name = "u32", .c_name = "uint32_t", .inst = &TYPE_U32_INST},
+    {.kind = TYPE_F64, .rg_name = "f64", .c_name = "double", .inst = &TYPE_F64_INST},
+    {.kind = TYPE_STR, .rg_name = "str", .c_name = "RgStr", .inst = &TYPE_STR_INST},
+    {.kind = TYPE_UNIT, .rg_name = "unit", .c_name = "void", .inst = &TYPE_UNIT_INST},
+    {.kind = TYPE_ERROR, .rg_name = "<error>", .c_name = "/* error */", .inst = &TYPE_ERROR_INST},
 };
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
@@ -34,7 +34,7 @@ static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE
 // ---------------------------------------------------------------------------
 // Type utility functions
 // ---------------------------------------------------------------------------
-Type *type_from_name(const char *name) {
+const Type *type_from_name(const char *name) {
     if (name == NULL) {
         return NULL;
     }

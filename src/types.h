@@ -22,16 +22,16 @@ typedef struct {
 } Type;
 
 // Singleton type instances (avoids allocation for primitives)
-extern Type g_type_bool_inst;
-extern Type g_type_i32_inst;
-extern Type g_type_u32_inst;
-extern Type g_type_f64_inst;
-extern Type g_type_str_inst;
-extern Type g_type_unit_inst;
-extern Type g_type_error_inst;
+extern const Type TYPE_BOOL_INST;
+extern const Type TYPE_I32_INST;
+extern const Type TYPE_U32_INST;
+extern const Type TYPE_F64_INST;
+extern const Type TYPE_STR_INST;
+extern const Type TYPE_UNIT_INST;
+extern const Type TYPE_ERROR_INST;
 
 // Resolve a type name ("i32", "bool", etc.) to its singleton.
-Type *type_from_name(const char *name);
+const Type *type_from_name(const char *name);
 // Return the Resurg name for a resolved type.
 const char *type_name(const Type *t);
 // Return the C type string for code generation.
