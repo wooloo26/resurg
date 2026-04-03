@@ -35,9 +35,15 @@
 - Heap: `Foo *p = malloc(n * sizeof(*p));`. `calloc` only for intentional zero-init.
 - Nullify freed pointers that remain in scope.
 
+## Size Limits
+
+Avoid overly long lines, functions, and files.
+
+- **Calls:** break deeply nested or multi-argument calls into named intermediates.
+- **Functions / Files:** split only when it genuinely reduces complexity, eliminates duplication, or enforces single responsibility.
+
 ## Functions
 
-- Keep functions short and focused. When a function grows large, consider splitting — but only if it genuinely reduces complexity, eliminates duplication, or enforces single responsibility.
 - `const` for read-only pointer params; `restrict` for non-aliasing contracts.
 - Return errors via typed enums, write results to output params:
   ```c
@@ -83,6 +89,7 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Comments
 
+、
 VSCode-style Doxygen block comments.
 
 - `/** Brief description. */` for single-line doc comments.

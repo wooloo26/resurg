@@ -458,51 +458,64 @@ static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode
     return operand;
 }
 
-static const char *emit_binary_expression(CodeGenerator *generator, const ASTNode *node) {
+/** Attempt to constant-fold a binary op on two i32 literals. Returns NULL if not foldable. */
+static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node) {
     const ASTNode *left_operand = node->binary.left;
     const ASTNode *right_operand = node->binary.right;
 
-    // Constant-fold binary operations on integer literals
-    if (left_operand->kind == NODE_LITERAL && right_operand->kind == NODE_LITERAL &&
-        left_operand->literal.kind == LITERAL_I32 && right_operand->literal.kind == LITERAL_I32) {
-        int64_t left_value = left_operand->literal.integer_value;
-        int64_t right_value = right_operand->literal.integer_value;
-        int64_t result;
-        bool folded = true;
-        switch (node->binary.operator) {
-        case TOKEN_PLUS:
-            result = left_value + right_value;
-            break;
-        case TOKEN_MINUS:
-            result = left_value - right_value;
-            break;
-        case TOKEN_STAR:
-            result = left_value * right_value;
-            break;
-        case TOKEN_SLASH:
-            folded = (right_value != 0);
-            if (folded) {
-                result = left_value / right_value;
-            }
-            break;
-        case TOKEN_PERCENT:
-            folded = (right_value != 0);
-            if (folded) {
-                result = left_value % right_value;
-            }
-            break;
-        default:
-            folded = false;
-            break;
-        }
-        if (folded) {
-            if (result == (int64_t)(-2147483647 - 1)) {
-                return "(-2147483647 - 1)";
-            }
-            return arena_sprintf(generator->arena, "%lld", (long long)result);
-        }
+    bool both_i32 = left_operand->kind == NODE_LITERAL && right_operand->kind == NODE_LITERAL &&
+                    left_operand->literal.kind == LITERAL_I32 && right_operand->literal.kind == LITERAL_I32;
+    if (!both_i32) {
+        return NULL;
     }
 
+    int64_t left_value = left_operand->literal.integer_value;
+    int64_t right_value = right_operand->literal.integer_value;
+    int64_t result;
+    bool folded = true;
+    switch (node->binary.operator) {
+    case TOKEN_PLUS:
+        result = left_value + right_value;
+        break;
+    case TOKEN_MINUS:
+        result = left_value - right_value;
+        break;
+    case TOKEN_STAR:
+        result = left_value * right_value;
+        break;
+    case TOKEN_SLASH:
+        folded = (right_value != 0);
+        if (folded) {
+            result = left_value / right_value;
+        }
+        break;
+    case TOKEN_PERCENT:
+        folded = (right_value != 0);
+        if (folded) {
+            result = left_value % right_value;
+        }
+        break;
+    default:
+        folded = false;
+        break;
+    }
+    if (!folded) {
+        return NULL;
+    }
+    if (result == (int64_t)(-2147483647 - 1)) {
+        return "(-2147483647 - 1)";
+    }
+    return arena_sprintf(generator->arena, "%lld", (long long)result);
+}
+
+static const char *emit_binary_expression(CodeGenerator *generator, const ASTNode *node) {
+    const char *folded = fold_i32_binary(generator, node);
+    if (folded != NULL) {
+        return folded;
+    }
+
+    const ASTNode *left_operand = node->binary.left;
+    const ASTNode *right_operand = node->binary.right;
     const char *left = emit_expression(generator, left_operand);
     const char *right = emit_expression(generator, right_operand);
 
@@ -517,7 +530,8 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
         }
     }
 
-    return arena_sprintf(generator->arena, "(%s %s %s)", left, c_binary_operator(node->binary.operator), right);
+    const char *operator= c_binary_operator(node->binary.operator);
+    return arena_sprintf(generator->arena, "(%s %s %s)", left, operator, right);
 }
 
 static const char *emit_call_expression(CodeGenerator *generator, const ASTNode *node) {
