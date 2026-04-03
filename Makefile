@@ -1,49 +1,30 @@
 CC      := clang
-CFLAGS  := -std=c17 -Wall -Wextra -Wpedantic -Werror -Isrc -D_CRT_SECURE_NO_WARNINGS
-LDFLAGS :=
-
 BUILD   := build
 SRC     := src
 RUNTIME := runtime
 
-# Compiler sources
-SRCS := $(wildcard $(SRC)/*.c)
-HDRS := $(wildcard $(SRC)/*.h)
-OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SRCS))
-
-# Runtime sources (linked into compiled programs, not the compiler)
-RT_SRCS := $(wildcard $(RUNTIME)/*.c)
-RT_OBJS := $(patsubst $(RUNTIME)/%.c,$(BUILD)/rt_%.o,$(RT_SRCS))
-
 ifeq ($(OS),Windows_NT)
-  EXE := .exe
+  EXE    := .exe
+  RT_LIB := $(BUILD)/resurg_runtime.lib
 else
-  EXE :=
+  EXE    :=
+  RT_LIB := $(BUILD)/libresurg_runtime.a
 endif
 
 TARGET := $(BUILD)/resurg$(EXE)
 
-.PHONY: all clean runtime test format tidy setup
+.PHONY: all clean configure run test format tidy setup
 
-all: $(TARGET) runtime
+# Build everything (auto-configures on first run)
+all: $(BUILD)/Makefile
+	cmake --build $(BUILD)
 
-$(TARGET): $(OBJS) | $(BUILD)
-	$(CC) $(LDFLAGS) -o $@ $^
+# CMake configure (re-run when CMakeLists.txt changes)
+$(BUILD)/Makefile: CMakeLists.txt
+	cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
-$(BUILD)/%.o: $(SRC)/%.c $(HDRS) | $(BUILD)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-runtime: $(RT_OBJS)
-
-$(BUILD)/rt_%.o: $(RUNTIME)/%.c | $(BUILD)
-	$(CC) -std=c17 -Wall -Wextra -Wpedantic -Werror -I$(RUNTIME) -c -o $@ $<
-
-$(BUILD):
-ifeq ($(OS),Windows_NT)
-	@if not exist $(BUILD) mkdir $(BUILD)
-else
-	@mkdir -p $(BUILD)
-endif
+configure:
+	cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
 clean:
 ifeq ($(OS),Windows_NT)
@@ -58,33 +39,33 @@ setup:
 	@echo 'Git hooks configured.'
 
 # Run a .rsg file: make run FILE=tests/v0.1.0/primitives.rsg
-run: $(TARGET) runtime
+run: all
 	$(TARGET) $(FILE) -o $(BUILD)/out.c
-	$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out$(EXE) $(BUILD)/out.c $(RT_OBJS)
+	$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out$(EXE) $(BUILD)/out.c $(RT_LIB)
 	$(BUILD)/out$(EXE)
 
 # Run all test cases
 TESTS := $(wildcard tests/**/*.rsg)
 TEST_TARGETS := $(patsubst %.rsg,%.test,$(TESTS))
 
-test: $(TARGET) runtime $(TEST_TARGETS)
+test: all $(TEST_TARGETS)
 	@echo $(words $(TESTS)) tests passed.
 
-$(TEST_TARGETS): %.test: %.rsg $(TARGET) runtime
+$(TEST_TARGETS): %.test: %.rsg all
 ifeq ($(OS),Windows_NT)
-	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_test.ps1 $< $(TARGET) $(CC) "$(RT_OBJS)" $(BUILD) $(RUNTIME)
+	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_test.ps1 $< $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME)
 else
-	@bash tests/run_test.sh $< $(TARGET) $(CC) "$(RT_OBJS)" $(BUILD) $(RUNTIME)
+	@bash tests/run_test.sh $< $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME)
 endif
 	@echo   PASS  $<
 
 # Format all C sources with clang-format
-ALL_C := $(wildcard $(SRC)/*.c $(SRC)/*.h $(RUNTIME)/*.c $(RUNTIME)/*.h)
+ALL_C := $(wildcard $(SRC)/*.c $(SRC)/*.h $(SRC)/codegen/*.c $(SRC)/codegen/*.h $(RUNTIME)/*.c $(RUNTIME)/*.h)
 format:
 	clang-format -i --style=file $(ALL_C)
 	@echo 'Formatted $(words $(ALL_C)) file(s).'
 
-# Run clang-tidy on all C sources
-TIDY_SRCS := $(wildcard $(SRC)/*.c $(RUNTIME)/*.c)
-tidy:
-	$(foreach f,$(TIDY_SRCS),clang-tidy --quiet $(f) -- $(CFLAGS) &&) echo clang-tidy passed.
+# Run clang-tidy on all C sources (uses compile_commands.json)
+TIDY_SRCS := $(wildcard $(SRC)/*.c $(SRC)/codegen/*.c $(RUNTIME)/*.c)
+tidy: $(BUILD)/Makefile
+	$(foreach f,$(TIDY_SRCS),clang-tidy --quiet -p $(BUILD) $(f) &&) echo clang-tidy passed.

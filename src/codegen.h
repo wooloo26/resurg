@@ -1,11 +1,11 @@
-#ifndef RG_CODE_GENERATOR_H
-#define RG_CODE_GENERATOR_H
+#ifndef RG_CODEGEN_H
+#define RG_CODEGEN_H
 
 #include "ast.h"
 #include "types.h"
 
 /**
- * @file code_generator.h
+ * @file codegen.h
  * @brief Code generator - emits C17 source from a type-checked AST.
  *
  * Handles function mangling, variable shadowing, string interpolation,
@@ -27,4 +27,4 @@ void code_generator_destroy(CodeGenerator *generator);
  */
 void code_generator_emit(CodeGenerator *generator, const ASTNode *file);
 
-#endif // RG_CODE_GENERATOR_H
+#endif // RG_CODEGEN_H

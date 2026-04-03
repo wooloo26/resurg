@@ -1,5 +1,6 @@
 # Build output
 build/
+CMakeUserPresets.json
 
 # OS
 Thumbs.db
