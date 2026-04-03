@@ -55,10 +55,7 @@ SourceLocation parser_current_location(const Parser *parser) {
 // ── Parser lifecycle ───────────────────────────────────────────────────
 
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
-    Parser *parser = malloc(sizeof(*parser));
-    if (parser == NULL) {
-        rsg_fatal("out of memory");
-    }
+    Parser *parser = rsg_malloc(sizeof(*parser));
     parser->tokens = tokens;
     parser->position = 0;
     parser->count = count;

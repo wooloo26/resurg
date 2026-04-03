@@ -2,6 +2,16 @@
 
 // ── Scope manipulation ─────────────────────────────────────────────────
 
+/** Search a single scope's symbol list for @p name. */
+static Symbol *find_in_scope(const Scope *scope, const char *name) {
+    for (Symbol *symbol = scope->symbols; symbol != NULL; symbol = symbol->next) {
+        if (strcmp(symbol->name, name) == 0) {
+            return symbol;
+        }
+    }
+    return NULL;
+}
+
 Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop) {
     Scope *scope = arena_alloc(analyzer->arena, sizeof(Scope));
     scope->symbols = NULL;
@@ -27,20 +37,14 @@ void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type
 }
 
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name) {
-    for (Symbol *symbol = analyzer->current_scope->symbols; symbol != NULL; symbol = symbol->next) {
-        if (strcmp(symbol->name, name) == 0) {
-            return symbol;
-        }
-    }
-    return NULL;
+    return find_in_scope(analyzer->current_scope, name);
 }
 
 Symbol *scope_lookup(const SemanticAnalyzer *analyzer, const char *name) {
     for (Scope *scope = analyzer->current_scope; scope != NULL; scope = scope->parent) {
-        for (Symbol *symbol = scope->symbols; symbol != NULL; symbol = symbol->next) {
-            if (strcmp(symbol->name, name) == 0) {
-                return symbol;
-            }
+        Symbol *symbol = find_in_scope(scope, name);
+        if (symbol != NULL) {
+            return symbol;
         }
     }
     return NULL;

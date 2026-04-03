@@ -84,6 +84,13 @@ typedef struct {
     int32_t column;
 } SourceLocation;
 
+/** Checked malloc - aborts on OOM. */
+void *rsg_malloc(size_t size);
+/** Checked calloc - aborts on OOM. */
+void *rsg_calloc(size_t count, size_t size);
+/** Checked realloc - aborts on OOM. */
+void *rsg_realloc(void *pointer, size_t size);
+
 /**
  * Emit "file:line:col: error: ..." to stderr and increment the global
  * error counter.

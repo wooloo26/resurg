@@ -17,14 +17,8 @@ struct Arena {
 
 /** Allocate a new ArenaBlock with the given byte @p capacity. */
 static ArenaBlock *arena_block_new(size_t capacity) {
-    ArenaBlock *block = calloc(1, sizeof(*block));
-    if (block == NULL) {
-        rsg_fatal("out of memory");
-    }
-    block->data = malloc(capacity);
-    if (block->data == NULL) {
-        rsg_fatal("out of memory");
-    }
+    ArenaBlock *block = rsg_calloc(1, sizeof(*block));
+    block->data = rsg_malloc(capacity);
     block->used = 0;
     block->capacity = capacity;
     block->next = NULL;
@@ -32,10 +26,7 @@ static ArenaBlock *arena_block_new(size_t capacity) {
 }
 
 Arena *arena_create(void) {
-    Arena *arena = malloc(sizeof(*arena));
-    if (arena == NULL) {
-        rsg_fatal("out of memory");
-    }
+    Arena *arena = rsg_malloc(sizeof(*arena));
     arena->head = arena_block_new(ARENA_BLOCK_SIZE);
     arena->current = arena->head;
     return arena;
@@ -107,16 +98,39 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
     size_t new_size = sizeof(BufferHeader) + new_capacity * element_size;
     BufferHeader *header;
     if (buffer != NULL) {
-        header = realloc(BUFFER__HEADER(buffer), new_size);
+        header = rsg_realloc(BUFFER__HEADER(buffer), new_size);
     } else {
-        header = malloc(new_size);
+        header = rsg_malloc(new_size);
         header->length = 0;
-    }
-    if (header == NULL) {
-        rsg_fatal("out of memory");
     }
     header->capacity = new_capacity;
     return (char *)header + sizeof(BufferHeader);
+}
+
+// Checked allocation wrappers - abort on OOM.
+
+void *rsg_malloc(size_t size) {
+    void *pointer = malloc(size);
+    if (pointer == NULL) {
+        rsg_fatal("out of memory");
+    }
+    return pointer;
+}
+
+void *rsg_calloc(size_t count, size_t size) {
+    void *pointer = calloc(count, size);
+    if (pointer == NULL) {
+        rsg_fatal("out of memory");
+    }
+    return pointer;
+}
+
+void *rsg_realloc(void *pointer, size_t size) {
+    void *result = realloc(pointer, size);
+    if (result == NULL) {
+        rsg_fatal("out of memory");
+    }
+    return result;
 }
 
 /** Global error count - checked by the driver to decide exit status. */

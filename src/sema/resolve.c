@@ -71,28 +71,13 @@ static_assert((int)LITERAL_F64 == (int)TYPE_F64, "LiteralKind/TypeKind mismatch:
 static_assert((int)LITERAL_STRING == (int)TYPE_STRING, "LiteralKind/TypeKind mismatch: STRING");
 static_assert((int)LITERAL_UNIT == (int)TYPE_UNIT, "LiteralKind/TypeKind mismatch: UNIT");
 
-/** Singleton instance table indexed by TypeKind (first 18 primitives). */
-static const Type *const TYPE_INSTANCES[] = {
-    &TYPE_BOOL_INSTANCE, &TYPE_I8_INSTANCE,     &TYPE_I16_INSTANCE,   &TYPE_I32_INSTANCE, &TYPE_I64_INSTANCE,
-    &TYPE_I128_INSTANCE, &TYPE_U8_INSTANCE,     &TYPE_U16_INSTANCE,   &TYPE_U32_INSTANCE, &TYPE_U64_INSTANCE,
-    &TYPE_U128_INSTANCE, &TYPE_ISIZE_INSTANCE,  &TYPE_USIZE_INSTANCE, &TYPE_F32_INSTANCE, &TYPE_F64_INSTANCE,
-    &TYPE_CHAR_INSTANCE, &TYPE_STRING_INSTANCE, &TYPE_UNIT_INSTANCE,
-};
-
-static const int32_t TYPE_INSTANCE_COUNT = (int32_t)(sizeof(TYPE_INSTANCES) / sizeof(TYPE_INSTANCES[0]));
-
 const Type *literal_kind_to_type(LiteralKind kind) {
-    if ((int32_t)kind >= 0 && (int32_t)kind < TYPE_INSTANCE_COUNT) {
-        return TYPE_INSTANCES[kind];
-    }
-    return &TYPE_ERROR_INSTANCE;
+    return type_singleton((TypeKind)kind);
 }
 
 LiteralKind type_to_literal_kind(TypeKind kind) {
-    if ((int32_t)kind >= 0 && (int32_t)kind < TYPE_INSTANCE_COUNT) {
-        return (LiteralKind)kind;
-    }
-    return LITERAL_I32;
+    // Safe cast: validated by static_asserts above.
+    return (LiteralKind)kind;
 }
 
 // ── Literal promotion ──────────────────────────────────────────────────

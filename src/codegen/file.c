@@ -215,10 +215,7 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
 // ── Public API ─────────────────────────────────────────────────────────
 
 CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
-    CodeGenerator *generator = malloc(sizeof(*generator));
-    if (generator == NULL) {
-        rsg_fatal("out of memory");
-    }
+    CodeGenerator *generator = rsg_malloc(sizeof(*generator));
     generator->output = output;
     generator->arena = arena;
     generator->indent = 0;

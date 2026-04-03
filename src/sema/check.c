@@ -8,10 +8,7 @@ FunctionSignature *g_function_signatures = NULL; /* buf */
 // ── Public API ─────────────────────────────────────────────────────────
 
 SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
-    SemanticAnalyzer *analyzer = malloc(sizeof(*analyzer));
-    if (analyzer == NULL) {
-        rsg_fatal("out of memory");
-    }
+    SemanticAnalyzer *analyzer = rsg_malloc(sizeof(*analyzer));
     analyzer->arena = arena;
     analyzer->current_scope = NULL;
     analyzer->error_count = 0;

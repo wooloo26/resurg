@@ -87,6 +87,9 @@ bool type_is_unsigned_integer(const Type *type);
 /** Return true if @p type is any floating-point type. */
 bool type_is_float(const Type *type);
 
+/** Return the singleton instance for a primitive @p kind, or TYPE_ERROR for compounds. */
+const Type *type_singleton(TypeKind kind);
+
 /** Create an array type [size]element. */
 Type *type_create_array(Arena *arena, const Type *element, int32_t size);
 /** Create a tuple type from an array of element types. */

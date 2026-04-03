@@ -211,6 +211,11 @@ bool type_is_float(const Type *type) {
     return type != NULL && (type_flags(type->kind) & TF_FLOAT);
 }
 
+const Type *type_singleton(TypeKind kind) {
+    const TypeInfoEntry *info = find_type_info_by_kind(kind);
+    return info != NULL ? info->instance : &TYPE_ERROR_INSTANCE;
+}
+
 static Type *type_create(Arena *arena, TypeKind kind) {
     Type *type = arena_alloc(arena, sizeof(Type));
     memset(type, 0, sizeof(Type));

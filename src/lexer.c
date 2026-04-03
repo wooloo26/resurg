@@ -477,10 +477,7 @@ static Token scan_token(Lexer *lexer) {
 }
 
 Lexer *lexer_create(const char *source, const char *file, Arena *arena) {
-    Lexer *lexer = malloc(sizeof(*lexer));
-    if (lexer == NULL) {
-        rsg_fatal("out of memory");
-    }
+    Lexer *lexer = rsg_malloc(sizeof(*lexer));
     lexer->source = source;
     lexer->file = file;
     lexer->position = 0;

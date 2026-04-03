@@ -26,11 +26,7 @@ static char *read_file(const char *path) {
     }
     fseek(file_handle, 0, SEEK_SET);
 
-    char *buffer = calloc((size_t)size + 1, 1);
-    if (buffer == NULL) {
-        fclose(file_handle);
-        rsg_fatal("out of memory");
-    }
+    char *buffer = rsg_calloc((size_t)size + 1, 1);
     fread(buffer, 1, (size_t)size, file_handle);
     fclose(file_handle);
     return buffer;

@@ -31,18 +31,14 @@ static void emit_branch(CodeGenerator *generator, const ASTNode *body, const cha
 
 void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target, bool is_else_if) {
     const char *condition_value = codegen_emit_expression(generator, node->if_expression.condition);
+
+    // Wrap in parentheses unless already parenthesized
+    const char *wrapped =
+        (condition_value[0] == '(') ? condition_value : arena_sprintf(generator->arena, "(%s)", condition_value);
     if (is_else_if) {
-        if (condition_value[0] == '(') {
-            fprintf(generator->output, "if %s {\n", condition_value);
-        } else {
-            fprintf(generator->output, "if (%s) {\n", condition_value);
-        }
+        fprintf(generator->output, "if %s {\n", wrapped);
     } else {
-        if (condition_value[0] == '(') {
-            codegen_emit_line(generator, "if %s {", condition_value);
-        } else {
-            codegen_emit_line(generator, "if (%s) {", condition_value);
-        }
+        codegen_emit_line(generator, "if %s {", wrapped);
     }
     generator->indent++;
 
@@ -74,6 +70,17 @@ void codegen_emit_block_statements(CodeGenerator *generator, const ASTNode *bloc
         codegen_emit_statement(generator, block->block.statements[i]);
     }
     // Note: block.result is NOT emitted here (caller handles it)
+}
+
+/** Emit all block statements and the trailing result (if any) as a statement. */
+static void emit_block_body(CodeGenerator *generator, const ASTNode *block) {
+    if (block == NULL || block->kind != NODE_BLOCK) {
+        return;
+    }
+    codegen_emit_block_statements(generator, block);
+    if (block->block.result != NULL) {
+        codegen_emit_statement(generator, block->block.result);
+    }
 }
 
 // ── Per-node statement emitters ────────────────────────────────────────
@@ -141,13 +148,7 @@ static void emit_compound_assign_statement(CodeGenerator *generator, const ASTNo
 static void emit_loop_statement(CodeGenerator *generator, const ASTNode *node) {
     codegen_emit_line(generator, "while (1) {");
     generator->indent++;
-    const ASTNode *body = node->loop.body;
-    if (body != NULL && body->kind == NODE_BLOCK) {
-        codegen_emit_block_statements(generator, body);
-        if (body->block.result != NULL) {
-            codegen_emit_statement(generator, body->block.result);
-        }
-    }
+    emit_block_body(generator, node->loop.body);
     generator->indent--;
     codegen_emit_line(generator, "}");
 }
@@ -159,12 +160,7 @@ static void emit_for_statement(CodeGenerator *generator, const ASTNode *node) {
     codegen_emit_line(generator, "for (int32_t %s = %s; %s < %s; %s++) {", c_variable_name, start, c_variable_name, end,
                       c_variable_name);
     generator->indent++;
-    if (node->for_loop.body != NULL && node->for_loop.body->kind == NODE_BLOCK) {
-        codegen_emit_block_statements(generator, node->for_loop.body);
-        if (node->for_loop.body->block.result != NULL) {
-            codegen_emit_statement(generator, node->for_loop.body->block.result);
-        }
-    }
+    emit_block_body(generator, node->for_loop.body);
     generator->indent--;
     codegen_emit_line(generator, "}");
 }
@@ -206,10 +202,7 @@ void codegen_emit_statement(CodeGenerator *generator, const ASTNode *node) {
     case NODE_BLOCK:
         codegen_emit_line(generator, "{");
         generator->indent++;
-        codegen_emit_block_statements(generator, node);
-        if (node->block.result != NULL) {
-            codegen_emit_statement(generator, node->block.result);
-        }
+        emit_block_body(generator, node);
         generator->indent--;
         codegen_emit_line(generator, "}");
         break;
