@@ -14,8 +14,8 @@ endif()
 
 # --- Compiler executable ---
 
-file(GLOB COMPILER_SRCS src/*.c src/codegen/*.c)
-file(GLOB COMPILER_HDRS src/*.h src/codegen/*.h)
+file(GLOB COMPILER_SRCS src/*.c src/codegen/*.c src/sema/*.c)
+file(GLOB COMPILER_HDRS src/*.h src/codegen/*.h src/sema/*.h)
 
 add_executable(resurg ${COMPILER_SRCS} ${COMPILER_HDRS})
 target_include_directories(resurg PRIVATE src)

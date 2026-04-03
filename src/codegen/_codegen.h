@@ -1,10 +1,11 @@
-#ifndef RG_INTERNAL_H
-#define RG_INTERNAL_H
+#ifndef RG__CODEGEN_H
+#define RG__CODEGEN_H
 
 #include "codegen.h"
+#include "types.h"
 
 /**
- * @file internal.h
+ * @file _codegen.h
  * @brief Internal declarations shared across codegen translation units.
  *
  * Not part of the public API -- only included by src/codegen/ files.
@@ -109,4 +110,4 @@ void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *
  */
 void codegen_emit_block_statements(CodeGenerator *generator, const ASTNode *block);
 
-#endif // RG_INTERNAL_H
+#endif // RG__CODEGEN_H

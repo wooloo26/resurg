@@ -2,7 +2,7 @@
 #include "common.h"
 #include "lexer.h"
 #include "parser.h"
-#include "semantic_analyzer.h"
+#include "sema.h"
 
 /** Maximum source file size accepted by the compiler (64 MiB). */
 #define MAX_SOURCE_SIZE (64L * 1024 * 1024)

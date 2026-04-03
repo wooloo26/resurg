@@ -1,11 +1,10 @@
-#ifndef RG_SEMANTIC_ANALYZER_H
-#define RG_SEMANTIC_ANALYZER_H
+#ifndef RG_SEMA_H
+#define RG_SEMA_H
 
 #include "ast.h"
-#include "types.h"
 
 /**
- * @file semantic_analyzer.h
+ * @file sema.h
  * @brief Semantic analysis - scope resolution, type inference, and type checking.
  *
  * Walks the AST produced by the parser, annotates each node with a resolved
@@ -25,4 +24,4 @@ void semantic_analyzer_destroy(SemanticAnalyzer *analyzer);
  */
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file);
 
-#endif // RG_SEMANTIC_ANALYZER_H
+#endif // RG_SEMA_H

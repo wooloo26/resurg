@@ -2,7 +2,6 @@
 #define RG_CODEGEN_H
 
 #include "ast.h"
-#include "types.h"
 
 /**
  * @file codegen.h
