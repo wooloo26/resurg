@@ -376,10 +376,16 @@ fn max<T: Ord>(a: T, b: T) -> T {
 }
 
 pact A { Ord; Display }       // or: pact A = Ord + Display
-
 pact B<T> { Into<T>; Clone }
 
 fn complex_merge<T: Ord + Display, U: B<T>>(a: []T, b: []U) -> []T { ... }
+
+struct Pair<T, U> { first: T, second: U }
+Pair<i32, str> { ... } // or infer
+
+enum Either<L, R> { Left(L), Right(R) }
+
+type Callback<T> = fn(T) -> bool
 ```
 
 ### Extension Methods
@@ -473,7 +479,7 @@ assert
 **Reserved (future):**
 
 ```
-async  await  comptime  macro  spawn
+async  await  comptime  macro  spawn  where
 ```
 
 Conventions: `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` constants. Comments: `//`.
