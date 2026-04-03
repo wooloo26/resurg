@@ -5,7 +5,7 @@
 
 /**
  * @file parser.h
- * @brief Recursive-descent parser — transforms a token stream into an AST.
+ * @brief Recursive-descent parser - transforms a token stream into an AST.
  */
 typedef struct Parser Parser;
 

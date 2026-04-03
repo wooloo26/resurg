@@ -1,6 +1,6 @@
 #include "semantic_analyzer.h"
 
-/** Symbol table entry — one per declared name in a scope. */
+/** Symbol table entry - one per declared name in a scope. */
 struct Symbol {
     const char *name;
     const Type *type;
@@ -10,7 +10,7 @@ struct Symbol {
 };
 
 /**
- * Lexical scope — a linked list of Symbols with a pointer to the
+ * Lexical scope - a linked list of Symbols with a pointer to the
  * enclosing scope.
  */
 struct Scope {
@@ -26,7 +26,7 @@ struct SemanticAnalyzer {
     int32_t error_count;
 };
 
-// Scope manipulation —?push/pop/define/lookup.
+// Scope manipulation - push/pop/define/lookup.
 
 /**
  * Push a new child scope.  If @p is_loop is true, break/continue are legal
@@ -108,7 +108,7 @@ static const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *a
 }
 
 /**
- * Stored function signature — registered in pass 1 so that forward calls
+ * Stored function signature - registered in pass 1 so that forward calls
  * can be type-checked in pass 2.
  */
 typedef struct FunctionSignature {
@@ -130,7 +130,7 @@ static FunctionSignature *find_function_signature(const char *name) {
     return NULL;
 }
 
-/** Recursive AST walk — type-checks each node and returns its resolved type. */
+/** Recursive AST walk - type-checks each node and returns its resolved type. */
 static const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node);
 
 static const Type *check_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -547,7 +547,7 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         ASTNode *declaration = file->file.declarations[i];
         if (declaration->kind == NODE_FUNCTION_DECLARATION) {
-            // Resolve return type (may be inferred —?default to unit)
+            // Resolve return type (may be inferred - default to unit)
             const Type *resolved_return = &TYPE_UNIT_INSTANCE;
             if (declaration->function_declaration.return_type.kind == AST_TYPE_NAME) {
                 resolved_return = type_from_name(declaration->function_declaration.return_type.name);

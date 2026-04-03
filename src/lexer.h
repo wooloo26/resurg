@@ -5,7 +5,7 @@
 
 /**
  * @file lexer.h
- * @brief Lexer — transforms source text into a flat stream of Tokens.
+ * @brief Lexer - transforms source text into a flat stream of Tokens.
  *
  * Handles string interpolation by expanding interpolated strings into a
  * sequence of STRING_LITERAL / INTERPOLATION_START / ... / INTERPOLATION_END

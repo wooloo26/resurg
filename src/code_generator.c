@@ -18,7 +18,7 @@ struct CodeGenerator {
     int32_t shadow_variable_counter; // suffix counter for shadowed renames
 };
 
-// Output helpers —?indented printing to the C file.
+// Output helpers - indented printing to the C file.
 
 static void emit_indent(CodeGenerator *generator) {
     for (int32_t i = 0; i < generator->indent; i++) {
@@ -50,7 +50,7 @@ static const char *next_string_builder(CodeGenerator *generator) {
     return arena_sprintf(generator->arena, "_rg_sb_%d", generator->string_builder_counter++);
 }
 
-// Variable name tracking —?resolves Resurg names to C identifiers,
+// Variable name tracking - resolves Resurg names to C identifiers,
 // appending a numeric suffix when a name shadows an outer binding.
 
 static int32_t variable_find(const CodeGenerator *generator, const char *name) {
@@ -100,7 +100,7 @@ static const char *emit_expression(CodeGenerator *generator, const ASTNode *node
 static void emit_statement(CodeGenerator *generator, const ASTNode *node);
 static void emit_block_statements(CodeGenerator *generator, const ASTNode *block);
 
-// Ternary optimisation helpers —?detect if-expressions that can be emitted
+// Ternary optimisation helpers - detect if-expressions that can be emitted
 // as C ternary operators instead of if/else statements with a temporary.
 
 /**
@@ -144,7 +144,7 @@ static bool is_pure_expression(const ASTNode *node) {
 
 /**
  * Return true if the if-expression has both branches, and both produce
- * a trivial (pure) result — safe to emit as `cond ? a : b`.
+ * a trivial (pure) result - safe to emit as `cond ? a : b`.
  */
 static bool is_simple_ternary(const ASTNode *node) {
     if (node->kind != NODE_IF || node->if_expression.else_body == NULL) {
@@ -304,7 +304,7 @@ static const char *format_float64(const CodeGenerator *generator, double value) 
     return arena_strdup(generator->arena, buffer);
 }
 
-// Expression emitters —?each returns a C expression string.  Some emit
+// Expression emitters - each returns a C expression string.  Some emit
 // auxiliary lines (e.g. temporaries for if-expressions) as a side effect.
 
 /** Emit an if/else branch body, optionally assigning the result to @p target. */
@@ -611,7 +611,7 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
     return temporary;
 }
 
-/** Expression dispatch — returns a C expression string for @p node. */
+/** Expression dispatch - returns a C expression string for @p node. */
 static const char *emit_expression(CodeGenerator *generator, const ASTNode *node) {
     if (node == NULL) {
         return "0";
@@ -642,7 +642,7 @@ static const char *emit_expression(CodeGenerator *generator, const ASTNode *node
 
 /**
  * Emit the statements of a block (excludes the trailing result expression
- * — the caller is responsible for that).
+ * - the caller is responsible for that).
  */
 static void emit_block_statements(CodeGenerator *generator, const ASTNode *block) {
     if (block == NULL || block->kind != NODE_BLOCK) {
@@ -761,7 +761,7 @@ static void emit_for_statement(CodeGenerator *generator, const ASTNode *node) {
     emit_line(generator, "}");
 }
 
-/** Statement dispatch — emits a C statement for @p node. */
+/** Statement dispatch - emits a C statement for @p node. */
 static void emit_statement(CodeGenerator *generator, const ASTNode *node) {
     if (node == NULL) {
         return;

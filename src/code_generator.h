@@ -6,7 +6,7 @@
 
 /**
  * @file code_generator.h
- * @brief Code generator — emits C17 source from a type-checked AST.
+ * @brief Code generator - emits C17 source from a type-checked AST.
  *
  * Handles function mangling, variable shadowing, string interpolation,
  * ternary optimisation, and constant folding of integer expressions.

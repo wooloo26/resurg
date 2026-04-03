@@ -1,6 +1,6 @@
 #include "runtime.h"
 
-// Checked allocation helpers — abort on OOM.
+// Checked allocation helpers - abort on OOM.
 
 static void *checked_malloc(size_t size) {
     void *ptr = malloc(size);
@@ -141,7 +141,7 @@ void rg_assert(bool condition, const char *message, const char *file, int32_t li
     }
 }
 
-// Typed I/O — print values to stdout without a trailing newline.
+// Typed I/O - print values to stdout without a trailing newline.
 
 void rg_print_string(RgString source) {
     fwrite(source.data, 1, source.length, stdout);

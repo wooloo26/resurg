@@ -61,7 +61,7 @@ static Token make_token(const Lexer *lexer, TokenKind kind, const char *start, i
     };
 }
 
-/** Keyword lookup table — maps reserved words to their TokenKind. */
+/** Keyword lookup table - maps reserved words to their TokenKind. */
 typedef struct {
     const char *word;
     TokenKind kind;
@@ -90,7 +90,7 @@ static TokenKind lookup_keyword(const char *text, int32_t len) {
     return TOKEN_IDENTIFIER;
 }
 
-// Scanning routines —?one per lexeme category.
+// Scanning routines - one per lexeme category.
 
 /**
  * Scan a decimal integer or floating-point literal.  Underscores are
@@ -238,7 +238,7 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
             // Lex expression tokens until matching '}'
             int32_t brace_depth = 1;
             while (brace_depth > 0 && peek(lexer) != '\0') {
-                // Skip whitespace (but not newlines —?those are inside a
+                // Skip whitespace (but not newlines - those are inside a
                 // string)
                 while (peek(lexer) == ' ' || peek(lexer) == '\t') {
                     advance(lexer);
@@ -374,7 +374,7 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
 }
 
 /**
- * Core scanner — skips whitespace and comments, then dispatches to the
+ * Core scanner - skips whitespace and comments, then dispatches to the
  * appropriate scan_* routine.  Used by both lexer_next and interpolation
  * scanning.
  */
@@ -385,7 +385,7 @@ static Token scan_token(Lexer *lexer) {
             advance(lexer);
         }
 
-        // Newlines are significant —?emit TOKEN_NEWLINE as a statement
+        // Newlines are significant - emit TOKEN_NEWLINE as a statement
         // terminator.
         if (peek(lexer) == '\n') {
             SourceLocation location = current_location(lexer);

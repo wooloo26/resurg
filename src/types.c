@@ -1,6 +1,6 @@
 #include "types.h"
 
-/** Type singletons — one per primitive TypeKind. */
+/** Type singletons - one per primitive TypeKind. */
 const Type TYPE_BOOL_INSTANCE = {.kind = TYPE_BOOL};
 const Type TYPE_I32_INSTANCE = {.kind = TYPE_I32};
 const Type TYPE_U32_INSTANCE = {.kind = TYPE_U32};

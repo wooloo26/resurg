@@ -3,7 +3,7 @@
 
 /**
  * @file runtime.h
- * @brief Resurg runtime library — linked into every compiled program.
+ * @brief Resurg runtime library - linked into every compiled program.
  *
  * Provides: immutable reference-counted strings, string interpolation
  * helpers, assert, and typed I/O functions.
@@ -45,7 +45,7 @@ RgString rg_string_from_f64(double value);
 RgString rg_string_from_bool(bool value);
 
 /**
- * String builder — growable byte buffer for assembling interpolated strings
+ * String builder - growable byte buffer for assembling interpolated strings
  * with many parts.
  */
 typedef struct {

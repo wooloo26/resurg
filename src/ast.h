@@ -7,7 +7,7 @@
 
 /**
  * @file ast.h
- * @brief Abstract Syntax Tree — node kinds, the ASTNode tagged union, and
+ * @brief Abstract Syntax Tree - node kinds, the ASTNode tagged union, and
  * construction / debug-dump utilities.
  */
 
@@ -15,11 +15,11 @@ typedef struct ASTNode ASTNode;
 typedef struct ASTType ASTType;
 
 /**
- * Syntactic type annotation — either an explicit name or "inferred".
+ * Syntactic type annotation - either an explicit name or "inferred".
  * Resolved types (used during sema and codegen) live in types.h.
  */
 typedef enum {
-    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit —?or user-defined
+    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit - or user-defined
     AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
 } ASTTypeKind;
 
@@ -62,7 +62,7 @@ typedef enum {
     NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
 } NodeKind;
 
-/** Sub-kind for NODE_LITERAL — indicates which payload field is active. */
+/** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
 typedef enum {
     LITERAL_BOOL,
     LITERAL_I32,
@@ -73,7 +73,7 @@ typedef enum {
 } LiteralKind;
 
 /**
- * AST node — a tagged union covering every syntactic construct.
+ * AST node - a tagged union covering every syntactic construct.
  * Each variant stores its children in the anonymous union; stretchy-buffer
  * pointers are marked with a trailing @c buf comment.
  */

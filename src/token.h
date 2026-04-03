@@ -41,14 +41,14 @@ typedef enum {
     TOKEN_STRING, // str
     TOKEN_UNIT,   // unit
 
-    // Operators —?arithmetic
+    // Operators - arithmetic
     TOKEN_PLUS,    // +
     TOKEN_MINUS,   // -
     TOKEN_STAR,    // *
     TOKEN_SLASH,   // /
     TOKEN_PERCENT, // %
 
-    // Operators —?comparison
+    // Operators - comparison
     TOKEN_EQUAL_EQUAL,   // ==
     TOKEN_BANG_EQUAL,    // !=
     TOKEN_LESS,          // <
@@ -56,13 +56,13 @@ typedef enum {
     TOKEN_GREATER,       // >
     TOKEN_GREATER_EQUAL, // >=
 
-    // Operators —?logical
+    // Operators - logical
     TOKEN_AMPERSAND_AMPERSAND, // &&
     TOKEN_PIPE_PIPE,           // ||
     TOKEN_BANG,                // !
     TOKEN_PIPE,                // |
 
-    // Operators —?assignment
+    // Operators - assignment
     TOKEN_COLON_EQUAL, // :=
     TOKEN_EQUAL,       // =
     TOKEN_PLUS_EQUAL,  // +=

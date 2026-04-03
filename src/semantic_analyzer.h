@@ -6,7 +6,7 @@
 
 /**
  * @file semantic_analyzer.h
- * @brief Semantic analysis — scope resolution, type inference, and type checking.
+ * @brief Semantic analysis - scope resolution, type inference, and type checking.
  *
  * Walks the AST produced by the parser, annotates each node with a resolved
  * Type*, and reports errors for undefined names, type mismatches, etc.

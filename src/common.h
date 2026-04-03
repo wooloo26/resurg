@@ -39,7 +39,7 @@ char *arena_strndup(Arena *arena, const char *source, size_t length);
 char *arena_sprintf(Arena *arena, const char *format, ...);
 
 /**
- * Stretchy buffer — type-safe dynamic array via macros.
+ * Stretchy buffer - type-safe dynamic array via macros.
  *
  * Declare as a typed NULL pointer, grow with BUFFER_PUSH, and free with
  * BUFFER_FREE.  The header lives just before the data pointer.
@@ -74,7 +74,7 @@ typedef struct {
         (buffer)[BUFFER__HEADER(buffer)->length++] = (value);                                                          \
     } while (0)
 
-/** Internal growth routine for stretchy buffers — do not call directly. */
+/** Internal growth routine for stretchy buffers - do not call directly. */
 void *buffer__grow(const void *buffer, size_t new_length, size_t element_size);
 
 /** A file:line:column triple attached to tokens and AST nodes. */

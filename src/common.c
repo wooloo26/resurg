@@ -119,7 +119,7 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
     return (char *)header + sizeof(BufferHeader);
 }
 
-/** Global error count — checked by the driver to decide exit status. */
+/** Global error count - checked by the driver to decide exit status. */
 static int32_t g_error_count = 0;
 
 void rg_error(SourceLocation location, const char *format, ...) {

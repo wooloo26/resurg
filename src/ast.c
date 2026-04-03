@@ -7,7 +7,7 @@ static void print_indent(int32_t level) {
     }
 }
 
-// Per-node dump helpers — each prints one node kind and recurses.
+// Per-node dump helpers - each prints one node kind and recurses.
 static void dump_file_node(const ASTNode *node, int32_t level) {
     fprintf(stderr, "File\n");
     for (int32_t i = 0; i < BUFFER_LENGTH(node->file.declarations); i++) {

@@ -119,7 +119,7 @@ static int compile(const CliArgs *args) {
         goto cleanup;
     }
 
-    // Stage 2: Parsing — build the AST from the token stream.
+    // Stage 2: Parsing - build the AST from the token stream.
     parser = parser_create(tokens, BUFFER_LENGTH(tokens), arena, args->input_file);
     ASTNode *file_node = parser_parse(parser);
 
@@ -128,14 +128,14 @@ static int compile(const CliArgs *args) {
         goto cleanup;
     }
 
-    // Stage 3: Semantic analysis — type-check and validate the AST.
+    // Stage 3: Semantic analysis - type-check and validate the AST.
     analyzer = semantic_analyzer_create(arena);
     if (!semantic_analyzer_check(analyzer, file_node)) {
         status = 1;
         goto cleanup;
     }
 
-    // Stage 4: Code generation — emit C source from the validated AST.
+    // Stage 4: Code generation - emit C source from the validated AST.
     {
         FILE *out = stdout;
         if (args->output_file != NULL) {

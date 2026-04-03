@@ -386,7 +386,7 @@ static ASTNode *parse_variable_declaration(Parser *parser) {
         expect(parser, TOKEN_EQUAL);
         node->variable_declaration.initializer = parse_expression(parser);
     } else {
-        // `name := expr` —?already consumed IDENT, needs look-ahead
+        // `name := expr` - already consumed IDENT, needs look-ahead
         node->variable_declaration.is_variable = false;
         node->variable_declaration.name = previous(parser)->lexeme;
         node->variable_declaration.type.kind = AST_TYPE_INFERRED;
@@ -506,7 +506,7 @@ static ASTNode *parse_statement(Parser *parser) {
         return ast_new(parser->arena, NODE_CONTINUE, location);
     }
 
-    // `ident :=` —?inferred variable declaration
+    // `ident :=` - inferred variable declaration
     if (check(parser, TOKEN_IDENTIFIER) && parser->position + 1 < parser->count &&
         parser->tokens[parser->position + 1].kind == TOKEN_COLON_EQUAL) {
         advance_token(parser); // consume IDENT
