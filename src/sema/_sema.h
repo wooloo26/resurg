@@ -57,6 +57,13 @@ struct SemanticAnalyzer {
     int32_t error_count;
 };
 
+/** Report a semantic error and bump the analyzer's error counter. */
+#define SEMA_ERROR(analyzer, location, ...)                                                                            \
+    do {                                                                                                               \
+        rsg_error(location, __VA_ARGS__);                                                                              \
+        (analyzer)->error_count++;                                                                                     \
+    } while (0)
+
 // ── Globals (defined in check.c) ───────────────────────────────────────
 
 extern TypeAlias *g_type_aliases;                /* buf */

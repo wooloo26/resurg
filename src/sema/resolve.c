@@ -29,8 +29,7 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
     if (ast_type->kind == AST_TYPE_ARRAY) {
         const Type *element = resolve_ast_type(analyzer, ast_type->array_element);
         if (element == NULL) {
-            rsg_error(ast_type->location, "array element type required");
-            analyzer->error_count++;
+            SEMA_ERROR(analyzer, ast_type->location, "array element type required");
             return &TYPE_ERROR_INSTANCE;
         }
         return type_create_array(analyzer->arena, element, ast_type->array_size);
@@ -56,96 +55,59 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
     if (alias != NULL) {
         return alias;
     }
-    rsg_error(ast_type->location, "unknown type '%s'", ast_type->name);
-    analyzer->error_count++;
+    SEMA_ERROR(analyzer, ast_type->location, "unknown type '%s'", ast_type->name);
     return &TYPE_ERROR_INSTANCE;
 }
 
 // ── Literal ↔ type mapping ─────────────────────────────────────────────
 
+/**
+ * Bidirectional mapping between LiteralKind and TypeKind.
+ * Both enums share the same ordering for the first 18 entries.
+ */
+static const struct {
+    LiteralKind literal;
+    TypeKind type;
+    const Type *instance;
+} LITERAL_TYPE_MAP[] = {
+    {LITERAL_BOOL, TYPE_BOOL, &TYPE_BOOL_INSTANCE},
+    {LITERAL_I8, TYPE_I8, &TYPE_I8_INSTANCE},
+    {LITERAL_I16, TYPE_I16, &TYPE_I16_INSTANCE},
+    {LITERAL_I32, TYPE_I32, &TYPE_I32_INSTANCE},
+    {LITERAL_I64, TYPE_I64, &TYPE_I64_INSTANCE},
+    {LITERAL_I128, TYPE_I128, &TYPE_I128_INSTANCE},
+    {LITERAL_U8, TYPE_U8, &TYPE_U8_INSTANCE},
+    {LITERAL_U16, TYPE_U16, &TYPE_U16_INSTANCE},
+    {LITERAL_U32, TYPE_U32, &TYPE_U32_INSTANCE},
+    {LITERAL_U64, TYPE_U64, &TYPE_U64_INSTANCE},
+    {LITERAL_U128, TYPE_U128, &TYPE_U128_INSTANCE},
+    {LITERAL_ISIZE, TYPE_ISIZE, &TYPE_ISIZE_INSTANCE},
+    {LITERAL_USIZE, TYPE_USIZE, &TYPE_USIZE_INSTANCE},
+    {LITERAL_F32, TYPE_F32, &TYPE_F32_INSTANCE},
+    {LITERAL_F64, TYPE_F64, &TYPE_F64_INSTANCE},
+    {LITERAL_CHAR, TYPE_CHAR, &TYPE_CHAR_INSTANCE},
+    {LITERAL_STRING, TYPE_STRING, &TYPE_STRING_INSTANCE},
+    {LITERAL_UNIT, TYPE_UNIT, &TYPE_UNIT_INSTANCE},
+};
+
+static const int32_t LITERAL_TYPE_MAP_COUNT = (int32_t)(sizeof(LITERAL_TYPE_MAP) / sizeof(LITERAL_TYPE_MAP[0]));
+
 const Type *literal_kind_to_type(LiteralKind kind) {
-    switch (kind) {
-    case LITERAL_BOOL:
-        return &TYPE_BOOL_INSTANCE;
-    case LITERAL_I8:
-        return &TYPE_I8_INSTANCE;
-    case LITERAL_I16:
-        return &TYPE_I16_INSTANCE;
-    case LITERAL_I32:
-        return &TYPE_I32_INSTANCE;
-    case LITERAL_I64:
-        return &TYPE_I64_INSTANCE;
-    case LITERAL_I128:
-        return &TYPE_I128_INSTANCE;
-    case LITERAL_U8:
-        return &TYPE_U8_INSTANCE;
-    case LITERAL_U16:
-        return &TYPE_U16_INSTANCE;
-    case LITERAL_U32:
-        return &TYPE_U32_INSTANCE;
-    case LITERAL_U64:
-        return &TYPE_U64_INSTANCE;
-    case LITERAL_U128:
-        return &TYPE_U128_INSTANCE;
-    case LITERAL_ISIZE:
-        return &TYPE_ISIZE_INSTANCE;
-    case LITERAL_USIZE:
-        return &TYPE_USIZE_INSTANCE;
-    case LITERAL_F32:
-        return &TYPE_F32_INSTANCE;
-    case LITERAL_F64:
-        return &TYPE_F64_INSTANCE;
-    case LITERAL_CHAR:
-        return &TYPE_CHAR_INSTANCE;
-    case LITERAL_STRING:
-        return &TYPE_STRING_INSTANCE;
-    case LITERAL_UNIT:
-        return &TYPE_UNIT_INSTANCE;
+    for (int32_t i = 0; i < LITERAL_TYPE_MAP_COUNT; i++) {
+        if (LITERAL_TYPE_MAP[i].literal == kind) {
+            return LITERAL_TYPE_MAP[i].instance;
+        }
     }
     return &TYPE_ERROR_INSTANCE;
 }
 
 LiteralKind type_to_literal_kind(TypeKind kind) {
-    switch (kind) {
-    case TYPE_BOOL:
-        return LITERAL_BOOL;
-    case TYPE_I8:
-        return LITERAL_I8;
-    case TYPE_I16:
-        return LITERAL_I16;
-    case TYPE_I32:
-        return LITERAL_I32;
-    case TYPE_I64:
-        return LITERAL_I64;
-    case TYPE_I128:
-        return LITERAL_I128;
-    case TYPE_U8:
-        return LITERAL_U8;
-    case TYPE_U16:
-        return LITERAL_U16;
-    case TYPE_U32:
-        return LITERAL_U32;
-    case TYPE_U64:
-        return LITERAL_U64;
-    case TYPE_U128:
-        return LITERAL_U128;
-    case TYPE_ISIZE:
-        return LITERAL_ISIZE;
-    case TYPE_USIZE:
-        return LITERAL_USIZE;
-    case TYPE_F32:
-        return LITERAL_F32;
-    case TYPE_F64:
-        return LITERAL_F64;
-    case TYPE_CHAR:
-        return LITERAL_CHAR;
-    case TYPE_STRING:
-        return LITERAL_STRING;
-    case TYPE_UNIT:
-        return LITERAL_UNIT;
-    default:
-        return LITERAL_I32;
+    for (int32_t i = 0; i < LITERAL_TYPE_MAP_COUNT; i++) {
+        if (LITERAL_TYPE_MAP[i].type == kind) {
+            return LITERAL_TYPE_MAP[i].literal;
+        }
     }
+    return LITERAL_I32;
 }
 
 // ── Literal promotion ──────────────────────────────────────────────────

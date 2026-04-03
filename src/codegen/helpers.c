@@ -188,9 +188,9 @@ const char *codegen_c_escape_file_path(const CodeGenerator *generator, const cha
     return buffer;
 }
 
-const char *codegen_format_float64(const CodeGenerator *generator, double value) {
+static const char *format_float(const CodeGenerator *generator, double value, int32_t precision, const char *suffix) {
     char buffer[64];
-    int32_t length = snprintf(buffer, sizeof(buffer), "%.17g", value);
+    int32_t length = snprintf(buffer, sizeof(buffer), "%.*g", precision, value);
     bool has_dot = false;
     for (int32_t i = 0; i < length; i++) {
         if (buffer[i] == '.' || buffer[i] == 'e' || buffer[i] == 'E') {
@@ -199,32 +199,23 @@ const char *codegen_format_float64(const CodeGenerator *generator, double value)
         }
     }
     if (!has_dot) {
-        buffer[length] = '.';
-        buffer[length + 1] = '0';
-        buffer[length + 2] = '\0';
+        buffer[length++] = '.';
+        buffer[length++] = '0';
+        buffer[length] = '\0';
+    }
+    if (suffix[0] != '\0') {
+        buffer[length++] = suffix[0];
+        buffer[length] = '\0';
     }
     return arena_strdup(generator->arena, buffer);
 }
 
+const char *codegen_format_float64(const CodeGenerator *generator, double value) {
+    return format_float(generator, value, 17, "");
+}
+
 const char *codegen_format_float32(const CodeGenerator *generator, double value) {
-    char buffer[64];
-    int32_t length = snprintf(buffer, sizeof(buffer), "%.9g", value);
-    bool has_dot = false;
-    for (int32_t i = 0; i < length; i++) {
-        if (buffer[i] == '.' || buffer[i] == 'e' || buffer[i] == 'E') {
-            has_dot = true;
-            break;
-        }
-    }
-    if (!has_dot) {
-        buffer[length] = '.';
-        buffer[length + 1] = '0';
-        buffer[length + 2] = '\0';
-        length += 2;
-    }
-    buffer[length] = 'f';
-    buffer[length + 1] = '\0';
-    return arena_strdup(generator->arena, buffer);
+    return format_float(generator, value, 9, "f");
 }
 
 // ── Type naming ────────────────────────────────────────────────────────
@@ -232,42 +223,6 @@ const char *codegen_format_float32(const CodeGenerator *generator, double value)
 /** Generate a clean C identifier suffix for @p type. */
 static const char *type_tag(CodeGenerator *gen, const Type *type) {
     switch (type->kind) {
-    case TYPE_BOOL:
-        return "bool";
-    case TYPE_I8:
-        return "i8";
-    case TYPE_I16:
-        return "i16";
-    case TYPE_I32:
-        return "i32";
-    case TYPE_I64:
-        return "i64";
-    case TYPE_I128:
-        return "i128";
-    case TYPE_U8:
-        return "u8";
-    case TYPE_U16:
-        return "u16";
-    case TYPE_U32:
-        return "u32";
-    case TYPE_U64:
-        return "u64";
-    case TYPE_U128:
-        return "u128";
-    case TYPE_ISIZE:
-        return "isize";
-    case TYPE_USIZE:
-        return "usize";
-    case TYPE_F32:
-        return "f32";
-    case TYPE_F64:
-        return "f64";
-    case TYPE_CHAR:
-        return "char";
-    case TYPE_STRING:
-        return "str";
-    case TYPE_UNIT:
-        return "unit";
     case TYPE_ARRAY:
         return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array_element), type->array_size);
     case TYPE_TUPLE: {
@@ -277,8 +232,10 @@ static const char *type_tag(CodeGenerator *gen, const Type *type) {
         }
         return result;
     }
-    default:
+    case TYPE_ERROR:
         return "err";
+    default:
+        return type_name(type);
     }
 }
 

@@ -10,8 +10,7 @@ const Type *check_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
 const Type *check_identifier(SemanticAnalyzer *analyzer, ASTNode *node) {
     Symbol *symbol = scope_lookup(analyzer, node->identifier.name);
     if (symbol == NULL) {
-        rsg_error(node->location, "undefined variable '%s'", node->identifier.name);
-        analyzer->error_count++;
+        SEMA_ERROR(analyzer, node->location, "undefined variable '%s'", node->identifier.name);
         return &TYPE_ERROR_INSTANCE;
     }
     return symbol->type;
@@ -55,8 +54,7 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     // Check for type mismatch after promotion
     if (!type_equal(left, right)) {
         if (left->kind != TYPE_ERROR && right->kind != TYPE_ERROR) {
-            rsg_error(node->location, "type mismatch: '%s' and '%s'", type_name(left), type_name(right));
-            analyzer->error_count++;
+            SEMA_ERROR(analyzer, node->location, "type mismatch: '%s' and '%s'", type_name(left), type_name(right));
         }
     }
 
@@ -107,8 +105,8 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         if (signature != NULL) {
             int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
             if (arg_count != signature->parameter_count) {
-                rsg_error(node->location, "expected %d arguments, got %d", signature->parameter_count, arg_count);
-                analyzer->error_count++;
+                SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d", signature->parameter_count,
+                           arg_count);
             } else {
                 for (int32_t i = 0; i < arg_count; i++) {
                     ASTNode *arg = node->call.arguments[i];
@@ -117,9 +115,8 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
                     const Type *arg_type = arg->type;
                     if (arg_type != NULL && param_type != NULL && !type_equal(arg_type, param_type) &&
                         arg_type->kind != TYPE_ERROR && param_type->kind != TYPE_ERROR) {
-                        rsg_error(arg->location, "type mismatch: expected '%s', got '%s'", type_name(param_type),
-                                  type_name(arg_type));
-                        analyzer->error_count++;
+                        SEMA_ERROR(analyzer, arg->location, "type mismatch: expected '%s', got '%s'",
+                                   type_name(param_type), type_name(arg_type));
                     }
                 }
             }
@@ -131,8 +128,7 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
             return symbol->type;
         }
         if (symbol == NULL) {
-            rsg_error(node->location, "undefined function '%s'", function_name);
-            analyzer->error_count++;
+            SEMA_ERROR(analyzer, node->location, "undefined function '%s'", function_name);
         }
     }
     return &TYPE_ERROR_INSTANCE;

@@ -77,24 +77,21 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
         // Check for type mismatch between declared and initializer (non-literal)
         if (init_type != NULL && !type_equal(declared, init_type) && init_type->kind != TYPE_ERROR &&
             declared->kind != TYPE_ERROR) {
-            rsg_error(node->location, "type mismatch: expected '%s', got '%s'", type_name(declared),
-                      type_name(init_type));
-            analyzer->error_count++;
+            SEMA_ERROR(analyzer, node->location, "type mismatch: expected '%s', got '%s'", type_name(declared),
+                       type_name(init_type));
         }
     } else if (init_type != NULL) {
         variable_type = init_type;
     } else {
-        rsg_error(node->location, "cannot infer type for '%s'", node->variable_declaration.name);
-        analyzer->error_count++;
+        SEMA_ERROR(analyzer, node->location, "cannot infer type for '%s'", node->variable_declaration.name);
         variable_type = &TYPE_ERROR_INSTANCE;
     }
 
     if (scope_lookup_current(analyzer, node->variable_declaration.name) != NULL) {
-        rsg_error(node->location, "redefinition of '%s' in the same scope", node->variable_declaration.name);
-        analyzer->error_count++;
+        SEMA_ERROR(analyzer, node->location, "redefinition of '%s' in the same scope", node->variable_declaration.name);
     } else if (scope_lookup(analyzer, node->variable_declaration.name) != NULL) {
-        rsg_error(node->location, "variable '%s' shadows an existing binding", node->variable_declaration.name);
-        analyzer->error_count++;
+        SEMA_ERROR(analyzer, node->location, "variable '%s' shadows an existing binding",
+                   node->variable_declaration.name);
     }
 
     scope_define(analyzer, node->variable_declaration.name, variable_type, false, false);
@@ -202,8 +199,8 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
     case NODE_BREAK:
     case NODE_CONTINUE:
         if (!in_loop(analyzer)) {
-            rsg_error(node->location, "'%s' outside of loop", node->kind == NODE_BREAK ? "break" : "continue");
-            analyzer->error_count++;
+            SEMA_ERROR(analyzer, node->location, "'%s' outside of loop",
+                       node->kind == NODE_BREAK ? "break" : "continue");
         }
         break;
 
