@@ -32,13 +32,15 @@ enum {
  * Shared metadata table: maps each TypeKind to its Resurg name, C name,
  * singleton pointer, and classification flags.
  */
-static const struct {
-    TypeKind kind;
+typedef struct {
     const char *rsg_name;
     const char *c_name;
     const Type *instance;
+    TypeKind kind;
     uint8_t flags;
-} TYPE_INFO[] = {
+} TypeInfoEntry;
+
+static const TypeInfoEntry TYPE_INFO[] = {
     {.kind = TYPE_BOOL, .rsg_name = "bool", .c_name = "bool", .instance = &TYPE_BOOL_INSTANCE, .flags = 0},
     {.kind = TYPE_I8,
      .rsg_name = "i8",
@@ -94,13 +96,22 @@ static const struct {
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
 
-static uint8_t type_flags(TypeKind kind) {
+/**
+ * Find the TYPE_INFO entry for @p kind.  Returns NULL for compound
+ * types (TYPE_ARRAY, TYPE_TUPLE) that have no table entry.
+ */
+static const TypeInfoEntry *find_type_info_by_kind(TypeKind kind) {
     for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
         if (TYPE_INFO[i].kind == kind) {
-            return TYPE_INFO[i].flags;
+            return &TYPE_INFO[i];
         }
     }
-    return 0;
+    return NULL;
+}
+
+static uint8_t type_flags(TypeKind kind) {
+    const TypeInfoEntry *info = find_type_info_by_kind(kind);
+    return info != NULL ? info->flags : 0;
 }
 
 // Type utility functions.
@@ -121,10 +132,9 @@ const char *type_name(const Type *type) {
     if (type == NULL) {
         return "<unknown>";
     }
-    for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
-        if (TYPE_INFO[i].kind == type->kind) {
-            return TYPE_INFO[i].rsg_name;
-        }
+    const TypeInfoEntry *info = find_type_info_by_kind(type->kind);
+    if (info != NULL) {
+        return info->rsg_name;
     }
     if (type->kind == TYPE_ARRAY) {
         static char array_name_buffer[128];
@@ -152,12 +162,8 @@ const char *c_type_string(const Type *type) {
     if (type == NULL) {
         return "/* ? */";
     }
-    for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
-        if (TYPE_INFO[i].kind == type->kind) {
-            return TYPE_INFO[i].c_name;
-        }
-    }
-    return "/* ? */";
+    const TypeInfoEntry *info = find_type_info_by_kind(type->kind);
+    return info != NULL ? info->c_name : "/* ? */";
 }
 
 bool type_equal(const Type *a, const Type *b) {
@@ -205,19 +211,22 @@ bool type_is_float(const Type *type) {
     return type != NULL && (type_flags(type->kind) & TF_FLOAT);
 }
 
-Type *type_create_array(Arena *arena, const Type *element, int32_t size) {
+static Type *type_create(Arena *arena, TypeKind kind) {
     Type *type = arena_alloc(arena, sizeof(Type));
     memset(type, 0, sizeof(Type));
-    type->kind = TYPE_ARRAY;
+    type->kind = kind;
+    return type;
+}
+
+Type *type_create_array(Arena *arena, const Type *element, int32_t size) {
+    Type *type = type_create(arena, TYPE_ARRAY);
     type->array_element = element;
     type->array_size = size;
     return type;
 }
 
 Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count) {
-    Type *type = arena_alloc(arena, sizeof(Type));
-    memset(type, 0, sizeof(Type));
-    type->kind = TYPE_TUPLE;
+    Type *type = type_create(arena, TYPE_TUPLE);
     type->tuple_elements = elements;
     type->tuple_count = count;
     return type;

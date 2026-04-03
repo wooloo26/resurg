@@ -131,23 +131,8 @@ static const char *emit_literal_expression(CodeGenerator *generator, const ASTNo
         return codegen_format_float32(generator, node->literal.float64_value);
     case LITERAL_F64:
         return codegen_format_float64(generator, node->literal.float64_value);
-    case LITERAL_CHAR: {
-        char c = node->literal.char_value;
-        switch (c) {
-        case '\n':
-            return "'\\n'";
-        case '\t':
-            return "'\\t'";
-        case '\\':
-            return "'\\\\'";
-        case '\'':
-            return "'\\\''";
-        case '\0':
-            return "'\\0'";
-        default:
-            return arena_sprintf(generator->arena, "'%c'", c);
-        }
-    }
+    case LITERAL_CHAR:
+        return codegen_c_char_escape(generator, node->literal.char_value);
     case LITERAL_STRING: {
         const char *escaped = codegen_c_string_escape(generator, node->literal.string_value);
         return arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")", escaped);

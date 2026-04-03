@@ -218,6 +218,23 @@ const char *codegen_format_float32(const CodeGenerator *generator, double value)
     return format_float(generator, value, 9, "f");
 }
 
+const char *codegen_c_char_escape(const CodeGenerator *generator, char c) {
+    switch (c) {
+    case '\n':
+        return "'\\n'";
+    case '\t':
+        return "'\\t'";
+    case '\\':
+        return "'\\\\'";
+    case '\'':
+        return "'\\''";
+    case '\0':
+        return "'\\0'";
+    default:
+        return arena_sprintf(generator->arena, "'%c'", c);
+    }
+}
+
 // ── Type naming ────────────────────────────────────────────────────────
 
 /** Generate a clean C identifier suffix for @p type. */

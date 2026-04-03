@@ -74,6 +74,8 @@ const char *codegen_c_escape_file_path(const CodeGenerator *generator, const cha
 const char *codegen_format_float64(const CodeGenerator *generator, double value);
 /** Format @p value as a C float literal with the f suffix. */
 const char *codegen_format_float32(const CodeGenerator *generator, double value);
+/** Return the C char literal representation of @p c (e.g. '\\n'). */
+const char *codegen_c_char_escape(const CodeGenerator *generator, char c);
 
 // ── Type naming (codegen_helpers.c) ────────────────────────────────────
 

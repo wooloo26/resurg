@@ -122,32 +122,37 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
 /** Global error count - checked by the driver to decide exit status. */
 static int32_t g_error_count = 0;
 
+/** Shared diagnostic printer: prefix + formatted message + newline. */
+static void emit_diagnostic(FILE *stream, const char *prefix, const char *format, va_list arguments) {
+    fputs(prefix, stream);
+    vfprintf(stream, format, arguments);
+    fputc('\n', stream);
+}
+
 void rsg_error(SourceLocation location, const char *format, ...) {
-    fprintf(stderr, "%s:%d:%d: error: ", location.file, location.line, location.column);
+    char prefix[256];
+    snprintf(prefix, sizeof(prefix), "%s:%d:%d: error: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
-    vfprintf(stderr, format, arguments);
+    emit_diagnostic(stderr, prefix, format, arguments);
     va_end(arguments);
-    fprintf(stderr, "\n");
     g_error_count++;
 }
 
 void rsg_warn(SourceLocation location, const char *format, ...) {
-    fprintf(stderr, "%s:%d:%d: warning: ", location.file, location.line, location.column);
+    char prefix[256];
+    snprintf(prefix, sizeof(prefix), "%s:%d:%d: warning: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
-    vfprintf(stderr, format, arguments);
+    emit_diagnostic(stderr, prefix, format, arguments);
     va_end(arguments);
-    fprintf(stderr, "\n");
 }
 
 noreturn void rsg_fatal(const char *format, ...) {
-    fprintf(stderr, "fatal: ");
     va_list arguments;
     va_start(arguments, format);
-    vfprintf(stderr, format, arguments);
+    emit_diagnostic(stderr, "fatal: ", format, arguments);
     va_end(arguments);
-    fprintf(stderr, "\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
 }
