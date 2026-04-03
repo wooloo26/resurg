@@ -69,24 +69,49 @@ static ASTNode *parse_statement(Parser *parser);
 static ASTNode *parse_block(Parser *parser);
 static ASTNode *parse_declaration(Parser *parser);
 
-/** Parse an explicit type annotation (e.g. i32, str, bool). */
+/** Parse an explicit type annotation (e.g. i32, str, bool, [N]T, (A,B)). */
 static ASTType parse_type(Parser *parser) {
     ASTType type = {.kind = AST_TYPE_NAME, .location = current_location(parser)};
 
-    switch (current(parser)->kind) {
-    case TOKEN_BOOL:
-    case TOKEN_I32:
-    case TOKEN_U32:
-    case TOKEN_F64:
-    case TOKEN_STRING:
-    case TOKEN_UNIT:
-    case TOKEN_IDENTIFIER:
+    // Array type: [N]T
+    if (check(parser, TOKEN_LEFT_BRACKET)) {
+        type.kind = AST_TYPE_ARRAY;
+        advance_token(parser); // consume '['
+        if (!check(parser, TOKEN_INTEGER_LITERAL)) {
+            rsg_error(current_location(parser), "expected array size");
+            type.kind = AST_TYPE_INFERRED;
+            return type;
+        }
+        type.array_size = (int32_t)current(parser)->literal_value.integer_value;
+        advance_token(parser); // consume size
+        expect(parser, TOKEN_RIGHT_BRACKET);
+        ASTType *element = arena_alloc(parser->arena, sizeof(ASTType));
+        *element = parse_type(parser);
+        type.array_element = element;
+        return type;
+    }
+
+    // Tuple type: (T, U, ...)
+    if (check(parser, TOKEN_LEFT_PAREN)) {
+        type.kind = AST_TYPE_TUPLE;
+        type.tuple_elements = NULL;
+        advance_token(parser); // consume '('
+        if (!check(parser, TOKEN_RIGHT_PAREN)) {
+            do {
+                ASTType *element = arena_alloc(parser->arena, sizeof(ASTType));
+                *element = parse_type(parser);
+                BUFFER_PUSH(type.tuple_elements, element);
+            } while (match(parser, TOKEN_COMMA));
+        }
+        expect(parser, TOKEN_RIGHT_PAREN);
+        return type;
+    }
+
+    if (token_is_type_keyword(current(parser)->kind) || check(parser, TOKEN_IDENTIFIER)) {
         type.name = advance_token(parser)->lexeme;
-        break;
-    default:
+    } else {
         rsg_error(current_location(parser), "expected type name");
         type.kind = AST_TYPE_INFERRED;
-        break;
     }
     return type;
 }
@@ -162,6 +187,57 @@ static ASTNode *parse_string_interpolation(Parser *parser, SourceLocation locati
     return interpolation;
 }
 
+/**
+ * Parse an array literal: [expr, ...] or [N]T[expr, ...].
+ * The opening '[' has NOT been consumed yet.
+ */
+static ASTNode *parse_array_literal(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_LEFT_BRACKET);
+
+    // Check if this is [N]T[values] (typed array literal)
+    // Pattern: INTEGER_LITERAL, ']', type-keyword-or-identifier
+    if (check(parser, TOKEN_INTEGER_LITERAL) && parser->position + 1 < parser->count &&
+        parser->tokens[parser->position + 1].kind == TOKEN_RIGHT_BRACKET && parser->position + 2 < parser->count &&
+        (token_is_type_keyword(parser->tokens[parser->position + 2].kind) ||
+         parser->tokens[parser->position + 2].kind == TOKEN_IDENTIFIER)) {
+        int32_t size = (int32_t)current(parser)->literal_value.integer_value;
+        advance_token(parser); // consume size
+        advance_token(parser); // consume ']'
+
+        // Now parse element type
+        ASTNode *node = ast_new(parser->arena, NODE_ARRAY_LITERAL, location);
+        node->array_literal.element_type = parse_type(parser);
+        node->array_literal.size = size;
+        node->array_literal.elements = NULL;
+
+        // Parse [values]
+        expect(parser, TOKEN_LEFT_BRACKET);
+        if (!check(parser, TOKEN_RIGHT_BRACKET)) {
+            do {
+                skip_newlines(parser);
+                BUFFER_PUSH(node->array_literal.elements, parse_expression(parser));
+            } while (match(parser, TOKEN_COMMA));
+        }
+        expect(parser, TOKEN_RIGHT_BRACKET);
+        return node;
+    }
+
+    // Simple array literal: [expr, expr, ...]
+    ASTNode *node = ast_new(parser->arena, NODE_ARRAY_LITERAL, location);
+    node->array_literal.element_type.kind = AST_TYPE_INFERRED;
+    node->array_literal.elements = NULL;
+    if (!check(parser, TOKEN_RIGHT_BRACKET)) {
+        do {
+            skip_newlines(parser);
+            BUFFER_PUSH(node->array_literal.elements, parse_expression(parser));
+        } while (match(parser, TOKEN_COMMA));
+    }
+    node->array_literal.size = BUFFER_LENGTH(node->array_literal.elements);
+    expect(parser, TOKEN_RIGHT_BRACKET);
+    return node;
+}
+
 static ASTNode *parse_primary(Parser *parser) {
     SourceLocation location = current_location(parser);
 
@@ -175,6 +251,12 @@ static ASTNode *parse_primary(Parser *parser) {
         ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
         node->literal.kind = LITERAL_F64;
         node->literal.float64_value = previous(parser)->literal_value.float_value;
+        return node;
+    }
+    if (match(parser, TOKEN_CHAR_LITERAL)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_CHAR;
+        node->literal.char_value = previous(parser)->literal_value.char_value;
         return node;
     }
     if (match(parser, TOKEN_STRING_LITERAL)) {
@@ -198,16 +280,50 @@ static ASTNode *parse_primary(Parser *parser) {
         node->literal.boolean_value = false;
         return node;
     }
+
+    // Typed literal syntax: type_keyword(expr) e.g. i64(100), f32(3.14)
+    if (token_is_type_keyword(current(parser)->kind) && parser->position + 1 < parser->count &&
+        parser->tokens[parser->position + 1].kind == TOKEN_LEFT_PAREN) {
+        ASTNode *node = ast_new(parser->arena, NODE_TYPE_CONVERSION, location);
+        node->type_conversion.target_type.kind = AST_TYPE_NAME;
+        node->type_conversion.target_type.name = advance_token(parser)->lexeme;
+        node->type_conversion.target_type.location = location;
+        expect(parser, TOKEN_LEFT_PAREN);
+        node->type_conversion.operand = parse_expression(parser);
+        expect(parser, TOKEN_RIGHT_PAREN);
+        return node;
+    }
+
     if (match(parser, TOKEN_IDENTIFIER)) {
         ASTNode *node = ast_new(parser->arena, NODE_IDENTIFIER, location);
         node->identifier.name = previous(parser)->lexeme;
         return node;
     }
-    if (match(parser, TOKEN_LEFT_PAREN)) {
-        ASTNode *expression = parse_expression(parser);
-        expect(parser, TOKEN_RIGHT_PAREN);
-        return expression;
+
+    // Array literal: [N]T[elems] (typed) or handled via var decl context
+    if (check(parser, TOKEN_LEFT_BRACKET)) {
+        return parse_array_literal(parser);
     }
+
+    // Parenthesized expression or tuple literal
+    if (match(parser, TOKEN_LEFT_PAREN)) {
+        ASTNode *first = parse_expression(parser);
+        if (match(parser, TOKEN_COMMA)) {
+            // Tuple literal: (expr, expr, ...)
+            ASTNode *node = ast_new(parser->arena, NODE_TUPLE_LITERAL, location);
+            node->tuple_literal.elements = NULL;
+            BUFFER_PUSH(node->tuple_literal.elements, first);
+            do {
+                skip_newlines(parser);
+                BUFFER_PUSH(node->tuple_literal.elements, parse_expression(parser));
+            } while (match(parser, TOKEN_COMMA));
+            expect(parser, TOKEN_RIGHT_PAREN);
+            return node;
+        }
+        expect(parser, TOKEN_RIGHT_PAREN);
+        return first;
+    }
+
     if (check(parser, TOKEN_IF)) {
         return parse_expression(parser);
     }
@@ -237,11 +353,29 @@ static ASTNode *parse_postfix(Parser *parser) {
             left = node;
             continue;
         }
-        if (match(parser, TOKEN_DOT)) {
-            ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
-            node->member.object = left;
-            node->member.member = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        if (match(parser, TOKEN_LEFT_BRACKET)) {
+            ASTNode *node = ast_new(parser->arena, NODE_INDEX, location);
+            node->index_access.object = left;
+            node->index_access.index = parse_expression(parser);
+            expect(parser, TOKEN_RIGHT_BRACKET);
             left = node;
+            continue;
+        }
+        if (match(parser, TOKEN_DOT)) {
+            // Tuple member access: t.0, t.1, or struct/module access: t.name
+            if (check(parser, TOKEN_INTEGER_LITERAL)) {
+                ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
+                node->member.object = left;
+                node->member.member = arena_sprintf(parser->arena, "%llu",
+                                                    (unsigned long long)current(parser)->literal_value.integer_value);
+                advance_token(parser);
+                left = node;
+            } else {
+                ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
+                node->member.object = left;
+                node->member.member = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+                left = node;
+            }
             continue;
         }
         break;
@@ -512,6 +646,17 @@ static ASTNode *parse_declaration(Parser *parser) {
         advance_token(parser); // consume 'module'
         ASTNode *node = ast_new(parser->arena, NODE_MODULE, location);
         node->module.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        return node;
+    }
+
+    // type alias: type Name = UnderlyingType
+    if (check(parser, TOKEN_TYPE)) {
+        SourceLocation location = current_location(parser);
+        advance_token(parser); // consume 'type'
+        ASTNode *node = ast_new(parser->arena, NODE_TYPE_ALIAS, location);
+        node->type_alias.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        expect(parser, TOKEN_EQUAL);
+        node->type_alias.alias_type = parse_type(parser);
         return node;
     }
 

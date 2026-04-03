@@ -1,0 +1,71 @@
+// v0.2.0 — No implicit conversions (enforce)
+module test_no_implicit_conversions
+
+// ── same-type operations work correctly ──
+fn test_same_type_i32() {
+    var a: i32 = 10
+    var b: i32 = 20
+    assert(a + b == 30)
+}
+
+fn test_same_type_u32() {
+    var a: u32 = 10
+    var b: u32 = 20
+    assert(a + b == 30)
+}
+
+fn test_same_type_f64() {
+    var a: f64 = 1.5
+    var b: f64 = 2.5
+    assert(a + b == 4.0)
+}
+
+fn test_same_type_f32() {
+    var a: f32 = 1.5
+    var b: f32 = 2.5
+    assert(a + b == 4.0)
+}
+
+// ── same-type comparisons ──
+fn test_same_type_comparison() {
+    var a: i64 = 100
+    var b: i64 = 200
+    assert(a < b)
+    assert(b > a)
+}
+
+fn test_same_type_u8_comparison() {
+    var a: u8 = 0
+    var b: u8 = 255
+    assert(a < b)
+    assert(b > a)
+}
+
+// ── bool is not implicitly an integer ──
+fn test_bool_not_integer() {
+    var flag: bool = true
+    // bool values should only support boolean operations
+    assert(flag == true)
+    assert(!flag == false)
+}
+
+// ── assignment respects types ──
+fn test_typed_assignment() {
+    var x: i32 = 42
+    x = 100
+    assert(x == 100)
+    var y: u8 = 10
+    y = 20
+    assert(y == 20)
+}
+
+fn main() {
+    test_same_type_i32()
+    test_same_type_u32()
+    test_same_type_f64()
+    test_same_type_f32()
+    test_same_type_comparison()
+    test_same_type_u8_comparison()
+    test_bool_not_integer()
+    test_typed_assignment()
+}

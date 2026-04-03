@@ -15,25 +15,33 @@ typedef struct ASTNode ASTNode;
 typedef struct ASTType ASTType;
 
 /**
- * Syntactic type annotation - either an explicit name or "inferred".
- * Resolved types (used during sema and codegen) live in types.h.
+ * Syntactic type annotation - either an explicit name, an array type,
+ * a tuple type, or "inferred".
  */
 typedef enum {
-    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit - or user-defined
+    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit, user-defined
     AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
+    AST_TYPE_ARRAY,    // [N]T
+    AST_TYPE_TUPLE,    // (A, B, ...)
 } ASTTypeKind;
 
 struct ASTType {
     ASTTypeKind kind;
-    const char *name; // may be NULL
+    const char *name; // may be NULL (for NAME kind)
     SourceLocation location;
+    // AST_TYPE_ARRAY fields
+    ASTType *array_element; // heap-allocated element type
+    int32_t array_size;     // element count N
+    // AST_TYPE_TUPLE fields
+    ASTType **tuple_elements; /* buf */
 };
 
 /** Discriminator for the ASTNode tagged union. */
 typedef enum {
     // Top-level
-    NODE_MODULE, // module declaration
-    NODE_FILE,   // root list of declarations
+    NODE_MODULE,     // module declaration
+    NODE_FILE,       // root list of declarations
+    NODE_TYPE_ALIAS, // type alias declaration
 
     // Declarations
     NODE_FUNCTION_DECLARATION, // function declaration
@@ -46,7 +54,7 @@ typedef enum {
     NODE_CONTINUE,             // continue
 
     // Expressions
-    NODE_LITERAL,              // int, float, str, bool, unit literals
+    NODE_LITERAL,              // int, float, str, bool, char, unit literals
     NODE_IDENTIFIER,           // variable / function reference
     NODE_UNARY,                // !x, -x
     NODE_BINARY,               // x + y, x == y, x && y
@@ -54,19 +62,35 @@ typedef enum {
     NODE_COMPOUND_ASSIGN,      // x += expr, x -= expr, ...
     NODE_CALL,                 // foo(a, b)
     NODE_MEMBER,               // module.func (dot access)
+    NODE_INDEX,                // arr[i] (array indexing)
     NODE_IF,                   // if/else expression
     NODE_LOOP,                 // loop { ... }
     NODE_FOR,                  // for i := 0..N { ... }
     NODE_BLOCK,                // { stmts; optional trailing expr }
     NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
+    NODE_ARRAY_LITERAL,        // [1, 2, 3] or [3]i32[1, 2, 3]
+    NODE_TUPLE_LITERAL,        // (1, true, "hi")
+    NODE_TYPE_CONVERSION,      // i64(100), f32(3.14)
 } NodeKind;
 
 /** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
 typedef enum {
     LITERAL_BOOL,
+    LITERAL_I8,
+    LITERAL_I16,
     LITERAL_I32,
+    LITERAL_I64,
+    LITERAL_I128,
+    LITERAL_U8,
+    LITERAL_U16,
     LITERAL_U32,
+    LITERAL_U64,
+    LITERAL_U128,
+    LITERAL_ISIZE,
+    LITERAL_USIZE,
+    LITERAL_F32,
     LITERAL_F64,
+    LITERAL_CHAR,
     LITERAL_STRING,
     LITERAL_UNIT,
 } LiteralKind;
@@ -91,6 +115,12 @@ struct ASTNode {
         struct {
             ASTNode **declarations; /* buf */
         } file;
+
+        // NODE_TYPE_ALIAS
+        struct {
+            const char *name;
+            ASTType alias_type;
+        } type_alias;
 
         // NODE_FUNCTION_DECLARATION
         struct {
@@ -125,9 +155,10 @@ struct ASTNode {
             LiteralKind kind;
             union {
                 bool boolean_value;
-                int64_t integer_value; // for LITERAL_I32 and LITERAL_U32
-                double float64_value;
+                uint64_t integer_value; // for all integer literal kinds
+                double float64_value;   // for LITERAL_F32 and LITERAL_F64
                 const char *string_value;
+                char char_value; // for LITERAL_CHAR
             };
         } literal;
 
@@ -174,6 +205,12 @@ struct ASTNode {
             const char *member;
         } member;
 
+        // NODE_INDEX
+        struct {
+            ASTNode *object;
+            ASTNode *index;
+        } index_access;
+
         // NODE_IF
         struct {
             ASTNode *condition;
@@ -204,6 +241,24 @@ struct ASTNode {
         struct {
             ASTNode **parts; /* buf */
         } string_interpolation;
+
+        // NODE_ARRAY_LITERAL
+        struct {
+            ASTNode **elements;   /* buf */
+            ASTType element_type; // may be inferred
+            int32_t size;         // N from [N]T prefix, or element count
+        } array_literal;
+
+        // NODE_TUPLE_LITERAL
+        struct {
+            ASTNode **elements; /* buf */
+        } tuple_literal;
+
+        // NODE_TYPE_CONVERSION
+        struct {
+            ASTType target_type;
+            ASTNode *operand;
+        } type_conversion;
     };
 };
 

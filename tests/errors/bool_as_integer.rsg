@@ -1,0 +1,8 @@
+// TEST: compile_error
+// EXPECT-ERROR: type mismatch
+module test_err
+
+fn main() {
+    var flag: bool = true
+    var x: i32 = flag + 1
+}

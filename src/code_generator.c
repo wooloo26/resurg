@@ -304,6 +304,244 @@ static const char *format_float64(const CodeGenerator *generator, double value) 
     return arena_strdup(generator->arena, buffer);
 }
 
+/** Format @p value as a C float literal with the f suffix. */
+static const char *format_float32(const CodeGenerator *generator, double value) {
+    char buffer[64];
+    int32_t length = snprintf(buffer, sizeof(buffer), "%.9g", value);
+    bool has_dot = false;
+    for (int32_t i = 0; i < length; i++) {
+        if (buffer[i] == '.' || buffer[i] == 'e' || buffer[i] == 'E') {
+            has_dot = true;
+            break;
+        }
+    }
+    if (!has_dot) {
+        buffer[length] = '.';
+        buffer[length + 1] = '0';
+        buffer[length + 2] = '\0';
+        length += 2;
+    }
+    buffer[length] = 'f';
+    buffer[length + 1] = '\0';
+    return arena_strdup(generator->arena, buffer);
+}
+
+// Type naming helpers for compound types (arrays, tuples).
+
+/** Generate a clean C identifier suffix for @p type. */
+static const char *type_tag(CodeGenerator *gen, const Type *type) {
+    switch (type->kind) {
+    case TYPE_BOOL:
+        return "bool";
+    case TYPE_I8:
+        return "i8";
+    case TYPE_I16:
+        return "i16";
+    case TYPE_I32:
+        return "i32";
+    case TYPE_I64:
+        return "i64";
+    case TYPE_I128:
+        return "i128";
+    case TYPE_U8:
+        return "u8";
+    case TYPE_U16:
+        return "u16";
+    case TYPE_U32:
+        return "u32";
+    case TYPE_U64:
+        return "u64";
+    case TYPE_U128:
+        return "u128";
+    case TYPE_ISIZE:
+        return "isize";
+    case TYPE_USIZE:
+        return "usize";
+    case TYPE_F32:
+        return "f32";
+    case TYPE_F64:
+        return "f64";
+    case TYPE_CHAR:
+        return "char";
+    case TYPE_STRING:
+        return "str";
+    case TYPE_UNIT:
+        return "unit";
+    case TYPE_ARRAY:
+        return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array_element), type->array_size);
+    case TYPE_TUPLE: {
+        const char *result = "Tup";
+        for (int32_t i = 0; i < type->tuple_count; i++) {
+            result = arena_sprintf(gen->arena, "%s_%s", result, type_tag(gen, type->tuple_elements[i]));
+        }
+        return result;
+    }
+    default:
+        return "err";
+    }
+}
+
+/** Return the C type name for any type, generating struct names for compounds. */
+static const char *c_type_for(CodeGenerator *gen, const Type *type) {
+    if (type == NULL) {
+        return "/* ? */";
+    }
+    if (type->kind == TYPE_ARRAY || type->kind == TYPE_TUPLE) {
+        return arena_sprintf(gen->arena, "_Rsg%s", type_tag(gen, type));
+    }
+    return c_type_string(type);
+}
+
+// Compound type collection - walk AST to discover all array/tuple types.
+
+static const Type **g_compound_types = NULL; /* buf */
+
+static bool compound_type_registered(const Type *type) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(g_compound_types); i++) {
+        if (type_equal(g_compound_types[i], type)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void register_compound_type(const Type *type) {
+    if (type == NULL) {
+        return;
+    }
+    if (type->kind == TYPE_ARRAY) {
+        register_compound_type(type->array_element);
+        if (!compound_type_registered(type)) {
+            BUFFER_PUSH(g_compound_types, type);
+        }
+    } else if (type->kind == TYPE_TUPLE) {
+        for (int32_t i = 0; i < type->tuple_count; i++) {
+            register_compound_type(type->tuple_elements[i]);
+        }
+        if (!compound_type_registered(type)) {
+            BUFFER_PUSH(g_compound_types, type);
+        }
+    }
+}
+
+/** Recursively walk @p node collecting all array/tuple types. */
+static void collect_compound_types(const ASTNode *node) {
+    if (node == NULL) {
+        return;
+    }
+    if (node->type != NULL) {
+        register_compound_type(node->type);
+    }
+    switch (node->kind) {
+    case NODE_FILE:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->file.declarations); i++) {
+            collect_compound_types(node->file.declarations[i]);
+        }
+        break;
+    case NODE_FUNCTION_DECLARATION:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->function_declaration.parameters); i++) {
+            collect_compound_types(node->function_declaration.parameters[i]);
+        }
+        collect_compound_types(node->function_declaration.body);
+        break;
+    case NODE_BLOCK:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
+            collect_compound_types(node->block.statements[i]);
+        }
+        collect_compound_types(node->block.result);
+        break;
+    case NODE_VARIABLE_DECLARATION:
+        collect_compound_types(node->variable_declaration.initializer);
+        break;
+    case NODE_EXPRESSION_STATEMENT:
+        collect_compound_types(node->expression_statement.expression);
+        break;
+    case NODE_BINARY:
+        collect_compound_types(node->binary.left);
+        collect_compound_types(node->binary.right);
+        break;
+    case NODE_UNARY:
+        collect_compound_types(node->unary.operand);
+        break;
+    case NODE_CALL:
+        collect_compound_types(node->call.callee);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
+            collect_compound_types(node->call.arguments[i]);
+        }
+        break;
+    case NODE_IF:
+        collect_compound_types(node->if_expression.condition);
+        collect_compound_types(node->if_expression.then_body);
+        collect_compound_types(node->if_expression.else_body);
+        break;
+    case NODE_ASSIGN:
+        collect_compound_types(node->assign.target);
+        collect_compound_types(node->assign.value);
+        break;
+    case NODE_COMPOUND_ASSIGN:
+        collect_compound_types(node->compound_assign.target);
+        collect_compound_types(node->compound_assign.value);
+        break;
+    case NODE_ARRAY_LITERAL:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
+            collect_compound_types(node->array_literal.elements[i]);
+        }
+        break;
+    case NODE_TUPLE_LITERAL:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
+            collect_compound_types(node->tuple_literal.elements[i]);
+        }
+        break;
+    case NODE_INDEX:
+        collect_compound_types(node->index_access.object);
+        collect_compound_types(node->index_access.index);
+        break;
+    case NODE_TYPE_CONVERSION:
+        collect_compound_types(node->type_conversion.operand);
+        break;
+    case NODE_MEMBER:
+        collect_compound_types(node->member.object);
+        break;
+    case NODE_STRING_INTERPOLATION:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->string_interpolation.parts); i++) {
+            collect_compound_types(node->string_interpolation.parts[i]);
+        }
+        break;
+    case NODE_LOOP:
+        collect_compound_types(node->loop.body);
+        break;
+    case NODE_FOR:
+        collect_compound_types(node->for_loop.start);
+        collect_compound_types(node->for_loop.end);
+        collect_compound_types(node->for_loop.body);
+        break;
+    default:
+        break;
+    }
+}
+
+/** Emit typedef structs for all collected compound types. */
+static void emit_compound_typedefs(CodeGenerator *generator) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(g_compound_types); i++) {
+        const Type *type = g_compound_types[i];
+        const char *name = c_type_for(generator, type);
+        if (type->kind == TYPE_ARRAY) {
+            emit_line(generator, "typedef struct { %s _data[%d]; } %s;", c_type_for(generator, type->array_element),
+                      type->array_size, name);
+        } else if (type->kind == TYPE_TUPLE) {
+            emit_indent(generator);
+            fprintf(generator->output, "typedef struct {");
+            for (int32_t j = 0; j < type->tuple_count; j++) {
+                fprintf(generator->output, " %s _%d;", c_type_for(generator, type->tuple_elements[j]), j);
+            }
+            fprintf(generator->output, " } %s;\n", name);
+        }
+    }
+    if (BUFFER_LENGTH(g_compound_types) > 0) {
+        emit(generator, "\n");
+    }
+}
+
 // Expression emitters - each returns a C expression string.  Some emit
 // auxiliary lines (e.g. temporaries for if-expressions) as a side effect.
 
@@ -389,16 +627,32 @@ static const char *string_convert_expression(CodeGenerator *generator, const AST
     switch (type->kind) {
     case TYPE_STRING:
         return value;
-    case TYPE_I32:
-        return arena_sprintf(generator->arena, "rsg_string_from_i32(%s)", value);
-    case TYPE_U32:
-        return arena_sprintf(generator->arena, "rsg_string_from_u32(%s)", value);
-    case TYPE_F64:
-        return arena_sprintf(generator->arena, "rsg_string_from_f64(%s)", value);
     case TYPE_BOOL:
         return arena_sprintf(generator->arena, "rsg_string_from_bool(%s)", value);
+    case TYPE_I8:
+    case TYPE_I16:
+    case TYPE_I32:
+        return arena_sprintf(generator->arena, "rsg_string_from_i32((int32_t)(%s))", value);
+    case TYPE_I64:
+    case TYPE_I128:
+    case TYPE_ISIZE:
+        return arena_sprintf(generator->arena, "rsg_string_from_i64((int64_t)(%s))", value);
+    case TYPE_U8:
+    case TYPE_U16:
+    case TYPE_U32:
+        return arena_sprintf(generator->arena, "rsg_string_from_u32((uint32_t)(%s))", value);
+    case TYPE_U64:
+    case TYPE_U128:
+    case TYPE_USIZE:
+        return arena_sprintf(generator->arena, "rsg_string_from_u64((uint64_t)(%s))", value);
+    case TYPE_F32:
+        return arena_sprintf(generator->arena, "rsg_string_from_f32(%s)", value);
+    case TYPE_F64:
+        return arena_sprintf(generator->arena, "rsg_string_from_f64(%s)", value);
+    case TYPE_CHAR:
+        return arena_sprintf(generator->arena, "rsg_string_from_char(%s)", value);
     default:
-        return arena_sprintf(generator->arena, "rsg_string_from_i32(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_i32((int32_t)(%s))", value);
     }
 }
 
@@ -408,17 +662,43 @@ static const char *emit_literal_expression(CodeGenerator *generator, const ASTNo
     switch (node->literal.kind) {
     case LITERAL_BOOL:
         return node->literal.boolean_value ? "true" : "false";
-    case LITERAL_I32: {
-        int64_t value = node->literal.integer_value;
-        if (value == (int64_t)(-2147483647 - 1)) {
-            return "(-2147483647 - 1)";
-        }
-        return arena_sprintf(generator->arena, "%lld", (long long)value);
-    }
+    case LITERAL_I8:
+    case LITERAL_I16:
+    case LITERAL_I32:
+        return arena_sprintf(generator->arena, "%lld", (long long)(int64_t)node->literal.integer_value);
+    case LITERAL_I64:
+    case LITERAL_I128:
+    case LITERAL_ISIZE:
+        return arena_sprintf(generator->arena, "%lldLL", (long long)(int64_t)node->literal.integer_value);
+    case LITERAL_U8:
+    case LITERAL_U16:
     case LITERAL_U32:
         return arena_sprintf(generator->arena, "%lluU", (unsigned long long)node->literal.integer_value);
+    case LITERAL_U64:
+    case LITERAL_U128:
+    case LITERAL_USIZE:
+        return arena_sprintf(generator->arena, "%lluULL", (unsigned long long)node->literal.integer_value);
+    case LITERAL_F32:
+        return format_float32(generator, node->literal.float64_value);
     case LITERAL_F64:
         return format_float64(generator, node->literal.float64_value);
+    case LITERAL_CHAR: {
+        char c = node->literal.char_value;
+        switch (c) {
+        case '\n':
+            return "'\\n'";
+        case '\t':
+            return "'\\t'";
+        case '\\':
+            return "'\\\\'";
+        case '\'':
+            return "'\\\''";
+        case '\0':
+            return "'\\0'";
+        default:
+            return arena_sprintf(generator->arena, "'%c'", c);
+        }
+    }
     case LITERAL_STRING: {
         const char *escaped = c_string_escape(generator, node->literal.string_value);
         return arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")", escaped);
@@ -433,19 +713,32 @@ static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode
     // Fold negation into integer/float literals to avoid overflow issues
     if (node->unary.op == TOKEN_MINUS && node->unary.operand->kind == NODE_LITERAL) {
         const ASTNode *literal = node->unary.operand;
-        if (literal->literal.kind == LITERAL_I32) {
-            int64_t negated = -literal->literal.integer_value;
+        switch (literal->literal.kind) {
+        case LITERAL_I8:
+        case LITERAL_I16:
+            return arena_sprintf(generator->arena, "%lld", -(long long)(int64_t)literal->literal.integer_value);
+        case LITERAL_I32: {
+            int64_t negated = -(int64_t)literal->literal.integer_value;
             if (negated == (int64_t)(-2147483647 - 1)) {
                 return "(-2147483647 - 1)";
             }
             return arena_sprintf(generator->arena, "%lld", (long long)negated);
         }
-        if (literal->literal.kind == LITERAL_U32) {
-            return arena_sprintf(generator->arena, "(-(int64_t)%lluU)",
-                                 (unsigned long long)literal->literal.integer_value);
+        case LITERAL_I64:
+        case LITERAL_I128:
+        case LITERAL_ISIZE: {
+            uint64_t value = literal->literal.integer_value;
+            if (value == (uint64_t)9223372036854775808ULL) {
+                return "(-9223372036854775807LL - 1)";
+            }
+            return arena_sprintf(generator->arena, "%lldLL", -(long long)(int64_t)value);
         }
-        if (literal->literal.kind == LITERAL_F64) {
+        case LITERAL_F32:
+            return format_float32(generator, -literal->literal.float64_value);
+        case LITERAL_F64:
             return format_float64(generator, -literal->literal.float64_value);
+        default:
+            break;
         }
     }
     const char *operand = emit_expression(generator, node->unary.operand);
@@ -469,8 +762,8 @@ static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node
         return NULL;
     }
 
-    int64_t left_value = left_operand->literal.integer_value;
-    int64_t right_value = right_operand->literal.integer_value;
+    int64_t left_value = (int64_t)left_operand->literal.integer_value;
+    int64_t right_value = (int64_t)right_operand->literal.integer_value;
     int64_t result;
     bool folded = true;
     switch (node->binary.op) {
@@ -519,8 +812,9 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     const char *left = emit_expression(generator, left_operand);
     const char *right = emit_expression(generator, right_operand);
 
-    // String equality/inequality
     const Type *left_type = left_operand->type;
+
+    // String equality/inequality
     if (left_type != NULL && left_type->kind == TYPE_STRING) {
         if (node->binary.op == TOKEN_EQUAL_EQUAL) {
             return arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", left, right);
@@ -528,6 +822,53 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
         if (node->binary.op == TOKEN_BANG_EQUAL) {
             return arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", left, right);
         }
+    }
+
+    // Array equality/inequality - memcmp on ._data
+    if (left_type != NULL && left_type->kind == TYPE_ARRAY &&
+        (node->binary.op == TOKEN_EQUAL_EQUAL || node->binary.op == TOKEN_BANG_EQUAL)) {
+        const char *left_tmp = next_temporary(generator);
+        const char *right_tmp = next_temporary(generator);
+        const char *tname = c_type_for(generator, left_type);
+        emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
+        emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
+        const char *cmp = (node->binary.op == TOKEN_EQUAL_EQUAL) ? "==" : "!=";
+        return arena_sprintf(generator->arena, "(memcmp(%s._data, %s._data, sizeof(%s._data)) %s 0)", left_tmp,
+                             right_tmp, left_tmp, cmp);
+    }
+
+    // Tuple equality/inequality - element-wise comparison
+    if (left_type != NULL && left_type->kind == TYPE_TUPLE &&
+        (node->binary.op == TOKEN_EQUAL_EQUAL || node->binary.op == TOKEN_BANG_EQUAL)) {
+        bool is_equal = (node->binary.op == TOKEN_EQUAL_EQUAL);
+        const char *left_tmp = next_temporary(generator);
+        const char *right_tmp = next_temporary(generator);
+        const char *tname = c_type_for(generator, left_type);
+        emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
+        emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
+        const char *join = is_equal ? " && " : " || ";
+        const char *cmp = is_equal ? "==" : "!=";
+        const char *result = "";
+        for (int32_t i = 0; i < left_type->tuple_count; i++) {
+            const char *l = arena_sprintf(generator->arena, "%s._%d", left_tmp, i);
+            const char *r = arena_sprintf(generator->arena, "%s._%d", right_tmp, i);
+            const char *part;
+            if (left_type->tuple_elements[i]->kind == TYPE_STRING) {
+                if (is_equal) {
+                    part = arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", l, r);
+                } else {
+                    part = arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", l, r);
+                }
+            } else {
+                part = arena_sprintf(generator->arena, "(%s %s %s)", l, cmp, r);
+            }
+            if (i == 0) {
+                result = part;
+            } else {
+                result = arena_sprintf(generator->arena, "%s%s%s", result, join, part);
+            }
+        }
+        return arena_sprintf(generator->arena, "(%s)", result);
     }
 
     const char *op = c_binary_operator(node->binary.op);
@@ -589,7 +930,7 @@ static const char *emit_if_expression(CodeGenerator *generator, const ASTNode *n
         return arena_sprintf(generator->arena, "(%s ? %s : %s)", condition, then_value, else_value);
     }
     const char *temporary = next_temporary(generator);
-    emit_line(generator, "%s %s;", c_type_string(type), temporary);
+    emit_line(generator, "%s %s;", c_type_for(generator, type), temporary);
     emit_if(generator, node, temporary, false);
     return temporary;
 }
@@ -646,6 +987,49 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
     return temporary;
 }
 
+static const char *emit_array_literal_expression(CodeGenerator *generator, const ASTNode *node) {
+    const Type *type = node->type;
+    const char *tname = c_type_for(generator, type);
+    const char *result = arena_sprintf(generator->arena, "(%s){ ._data = { ", tname);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
+        if (i > 0) {
+            result = arena_sprintf(generator->arena, "%s, ", result);
+        }
+        const char *elem = emit_expression(generator, node->array_literal.elements[i]);
+        result = arena_sprintf(generator->arena, "%s%s", result, elem);
+    }
+    return arena_sprintf(generator->arena, "%s } }", result);
+}
+
+static const char *emit_tuple_literal_expression(CodeGenerator *generator, const ASTNode *node) {
+    const Type *type = node->type;
+    const char *tname = c_type_for(generator, type);
+    const char *result = arena_sprintf(generator->arena, "(%s){ ", tname);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
+        if (i > 0) {
+            result = arena_sprintf(generator->arena, "%s, ", result);
+        }
+        const char *elem = emit_expression(generator, node->tuple_literal.elements[i]);
+        result = arena_sprintf(generator->arena, "%s._%d = %s", result, i, elem);
+    }
+    return arena_sprintf(generator->arena, "%s }", result);
+}
+
+static const char *emit_index_expression(CodeGenerator *generator, const ASTNode *node) {
+    const char *object = emit_expression(generator, node->index_access.object);
+    const char *index = emit_expression(generator, node->index_access.index);
+    return arena_sprintf(generator->arena, "%s._data[%s]", object, index);
+}
+
+static const char *emit_type_conversion_expression(CodeGenerator *generator, const ASTNode *node) {
+    return emit_expression(generator, node->type_conversion.operand);
+}
+
+static const char *emit_member_expression(CodeGenerator *generator, const ASTNode *node) {
+    const char *object = emit_expression(generator, node->member.object);
+    return arena_sprintf(generator->arena, "%s._%s", object, node->member.member);
+}
+
 /** Expression dispatch - returns a C expression string for @p node. */
 static const char *emit_expression(CodeGenerator *generator, const ASTNode *node) {
     if (node == NULL) {
@@ -663,13 +1047,21 @@ static const char *emit_expression(CodeGenerator *generator, const ASTNode *node
     case NODE_CALL:
         return emit_call_expression(generator, node);
     case NODE_MEMBER:
-        return arena_sprintf(generator->arena, "%s", node->member.member);
+        return emit_member_expression(generator, node);
+    case NODE_INDEX:
+        return emit_index_expression(generator, node);
     case NODE_IF:
         return emit_if_expression(generator, node);
     case NODE_BLOCK:
         return emit_block_expression(generator, node);
     case NODE_STRING_INTERPOLATION:
         return emit_string_interpolation_expression(generator, node);
+    case NODE_ARRAY_LITERAL:
+        return emit_array_literal_expression(generator, node);
+    case NODE_TUPLE_LITERAL:
+        return emit_tuple_literal_expression(generator, node);
+    case NODE_TYPE_CONVERSION:
+        return emit_type_conversion_expression(generator, node);
     default:
         return "0";
     }
@@ -704,7 +1096,7 @@ static void emit_variable_declaration_statement(CodeGenerator *generator, const 
     }
     const char *c_name = variable_define(generator, node->variable_declaration.name);
     const char *value = emit_expression(generator, node->variable_declaration.initializer);
-    emit_line(generator, "%s %s = %s;", c_type_string(type), c_name, value);
+    emit_line(generator, "%s %s = %s;", c_type_for(generator, type), c_name, value);
 }
 
 static void emit_expression_statement_body(CodeGenerator *generator, const ASTNode *node) {
@@ -729,6 +1121,10 @@ static void emit_assign_statement(CodeGenerator *generator, const ASTNode *node)
     const char *target;
     if (node->assign.target->kind == NODE_IDENTIFIER) {
         target = variable_lookup(generator, node->assign.target->identifier.name);
+    } else if (node->assign.target->kind == NODE_INDEX) {
+        const char *obj = emit_expression(generator, node->assign.target->index_access.object);
+        const char *idx = emit_expression(generator, node->assign.target->index_access.index);
+        target = arena_sprintf(generator->arena, "%s._data[%s]", obj, idx);
     } else {
         target = emit_expression(generator, node->assign.target);
     }
@@ -887,7 +1283,7 @@ static void emit_function_declaration(CodeGenerator *generator, const ASTNode *n
     bool is_main = strcmp(node->function_declaration.name, "main") == 0;
 
     // Return type
-    const char *return_type = is_main ? "int" : c_type_string(node->type);
+    const char *return_type = is_main ? "int" : c_type_for(generator, node->type);
 
     // Static prefix for non-public, non-main
     const char *prefix = (!is_public && !is_main) ? "static " : "";
@@ -915,7 +1311,7 @@ static void emit_function_declaration(CodeGenerator *generator, const ASTNode *n
             if (i > 0) {
                 fprintf(generator->output, ", ");
             }
-            fprintf(generator->output, "%s %s", c_type_string(parameter_type), parameter->parameter.name);
+            fprintf(generator->output, "%s %s", c_type_for(generator, parameter_type), parameter->parameter.name);
         }
     }
 
@@ -967,6 +1363,14 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         }
     }
 
+    // Collect and emit compound type definitions (arrays, tuples)
+    if (g_compound_types != NULL) {
+        BUFFER_FREE(g_compound_types);
+        g_compound_types = NULL;
+    }
+    collect_compound_types(file);
+    emit_compound_typedefs(generator);
+
     // Forward declarations for all functions
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         const ASTNode *declaration = file->file.declarations[i];
@@ -988,7 +1392,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
     bool has_top_statements = false;
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION) {
+        if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION &&
+            declaration->kind != NODE_TYPE_ALIAS) {
             has_top_statements = true;
             break;
         }
@@ -998,7 +1403,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         generator->indent++;
         for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
             const ASTNode *declaration = file->file.declarations[i];
-            if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION) {
+            if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION &&
+                declaration->kind != NODE_TYPE_ALIAS) {
                 emit_statement(generator, declaration);
             }
         }

@@ -1,0 +1,9 @@
+// TEST: compile_error
+// EXPECT-ERROR: type mismatch
+module test_err
+
+fn main() {
+    var a: f32 = 1.5
+    var b: f64 = 2.5
+    var c: f64 = a + b
+}

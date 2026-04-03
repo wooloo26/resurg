@@ -30,14 +30,28 @@ static void dump_literal_node(const ASTNode *node) {
     case LITERAL_BOOL:
         fprintf(stderr, "%s", node->literal.boolean_value ? "true" : "false");
         break;
+    case LITERAL_I8:
+    case LITERAL_I16:
     case LITERAL_I32:
-        fprintf(stderr, "%lld", (long long)node->literal.integer_value);
+    case LITERAL_I64:
+    case LITERAL_I128:
+    case LITERAL_ISIZE:
+        fprintf(stderr, "%lld", (long long)(int64_t)node->literal.integer_value);
         break;
+    case LITERAL_U8:
+    case LITERAL_U16:
     case LITERAL_U32:
-        fprintf(stderr, "%llu", (unsigned long long)(uint64_t)node->literal.integer_value);
+    case LITERAL_U64:
+    case LITERAL_U128:
+    case LITERAL_USIZE:
+        fprintf(stderr, "%llu", (unsigned long long)node->literal.integer_value);
         break;
+    case LITERAL_F32:
     case LITERAL_F64:
         fprintf(stderr, "%g", node->literal.float64_value);
+        break;
+    case LITERAL_CHAR:
+        fprintf(stderr, "'%c'", node->literal.char_value);
         break;
     case LITERAL_STRING:
         fprintf(stderr, "\"%s\"", node->literal.string_value);
@@ -168,6 +182,11 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "Member(.%s)\n", node->member.member);
         ast_dump(node->member.object, level + 1);
         break;
+    case NODE_INDEX:
+        fprintf(stderr, "Index\n");
+        ast_dump(node->index_access.object, level + 1);
+        ast_dump(node->index_access.index, level + 1);
+        break;
     case NODE_IF:
         dump_if_node(node, level);
         break;
@@ -183,6 +202,25 @@ void ast_dump(const ASTNode *node, int32_t level) {
         break;
     case NODE_STRING_INTERPOLATION:
         dump_string_interpolation_node(node, level);
+        break;
+    case NODE_ARRAY_LITERAL:
+        fprintf(stderr, "ArrayLiteral(%d)\n", node->array_literal.size);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
+            ast_dump(node->array_literal.elements[i], level + 1);
+        }
+        break;
+    case NODE_TUPLE_LITERAL:
+        fprintf(stderr, "TupleLiteral\n");
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
+            ast_dump(node->tuple_literal.elements[i], level + 1);
+        }
+        break;
+    case NODE_TYPE_CONVERSION:
+        fprintf(stderr, "TypeConversion\n");
+        ast_dump(node->type_conversion.operand, level + 1);
+        break;
+    case NODE_TYPE_ALIAS:
+        fprintf(stderr, "TypeAlias(%s)\n", node->type_alias.name);
         break;
     }
 }

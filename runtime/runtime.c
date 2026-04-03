@@ -85,12 +85,29 @@ RsgString rsg_string_from_u32(uint32_t value) {
     return rsg_string_from_format("%u", value);
 }
 
+RsgString rsg_string_from_i64(int64_t value) {
+    return rsg_string_from_format("%lld", (long long)value);
+}
+
+RsgString rsg_string_from_u64(uint64_t value) {
+    return rsg_string_from_format("%llu", (unsigned long long)value);
+}
+
+RsgString rsg_string_from_f32(float value) {
+    return rsg_string_from_format("%g", (double)value);
+}
+
 RsgString rsg_string_from_f64(double value) {
     return rsg_string_from_format("%g", value);
 }
 
 RsgString rsg_string_from_bool(bool value) {
     return rsg_string_literal(value ? "true" : "false");
+}
+
+RsgString rsg_string_from_char(char value) {
+    char buffer[2] = {value, '\0'};
+    return rsg_string_new(buffer, 1);
 }
 
 // String builder implementation.

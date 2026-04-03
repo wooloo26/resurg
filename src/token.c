@@ -6,6 +6,7 @@ const char *token_kind_string(TokenKind kind) {
         [TOKEN_INTEGER_LITERAL] = "INTEGER_LITERAL",
         [TOKEN_FLOAT_LITERAL] = "FLOAT_LITERAL",
         [TOKEN_STRING_LITERAL] = "STRING_LITERAL",
+        [TOKEN_CHAR_LITERAL] = "CHAR_LITERAL",
         [TOKEN_TRUE] = "true",
         [TOKEN_FALSE] = "false",
         [TOKEN_IDENTIFIER] = "IDENTIFIER",
@@ -19,10 +20,23 @@ const char *token_kind_string(TokenKind kind) {
         [TOKEN_FOR] = "for",
         [TOKEN_BREAK] = "break",
         [TOKEN_CONTINUE] = "continue",
+        [TOKEN_TYPE] = "type",
         [TOKEN_BOOL] = "bool",
+        [TOKEN_I8] = "i8",
+        [TOKEN_I16] = "i16",
         [TOKEN_I32] = "i32",
+        [TOKEN_I64] = "i64",
+        [TOKEN_I128] = "i128",
+        [TOKEN_U8] = "u8",
+        [TOKEN_U16] = "u16",
         [TOKEN_U32] = "u32",
+        [TOKEN_U64] = "u64",
+        [TOKEN_U128] = "u128",
+        [TOKEN_ISIZE] = "isize",
+        [TOKEN_USIZE] = "usize",
+        [TOKEN_F32] = "f32",
         [TOKEN_F64] = "f64",
+        [TOKEN_CHAR] = "char",
         [TOKEN_STRING] = "str",
         [TOKEN_UNIT] = "unit",
         [TOKEN_PLUS] = "+",
@@ -50,6 +64,8 @@ const char *token_kind_string(TokenKind kind) {
         [TOKEN_RIGHT_PAREN] = ")",
         [TOKEN_LEFT_BRACE] = "{",
         [TOKEN_RIGHT_BRACE] = "}",
+        [TOKEN_LEFT_BRACKET] = "[",
+        [TOKEN_RIGHT_BRACKET] = "]",
         [TOKEN_COLON] = ":",
         [TOKEN_COMMA] = ",",
         [TOKEN_DOT_DOT] = "..",
@@ -66,4 +82,30 @@ const char *token_kind_string(TokenKind kind) {
         return names[kind];
     }
     return "?";
+}
+
+bool token_is_type_keyword(TokenKind kind) {
+    switch (kind) {
+    case TOKEN_BOOL:
+    case TOKEN_I8:
+    case TOKEN_I16:
+    case TOKEN_I32:
+    case TOKEN_I64:
+    case TOKEN_I128:
+    case TOKEN_U8:
+    case TOKEN_U16:
+    case TOKEN_U32:
+    case TOKEN_U64:
+    case TOKEN_U128:
+    case TOKEN_ISIZE:
+    case TOKEN_USIZE:
+    case TOKEN_F32:
+    case TOKEN_F64:
+    case TOKEN_CHAR:
+    case TOKEN_STRING:
+    case TOKEN_UNIT:
+        return true;
+    default:
+        return false;
+    }
 }

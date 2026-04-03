@@ -39,10 +39,18 @@ RsgString rsg_string_empty(void);
 RsgString rsg_string_from_i32(int32_t value);
 /** Convert a u32 to its decimal string representation. */
 RsgString rsg_string_from_u32(uint32_t value);
+/** Convert an i64 to its decimal string representation. */
+RsgString rsg_string_from_i64(int64_t value);
+/** Convert a u64 to its decimal string representation. */
+RsgString rsg_string_from_u64(uint64_t value);
+/** Convert an f32 to its shortest string representation. */
+RsgString rsg_string_from_f32(float value);
 /** Convert an f64 to its shortest string representation. */
 RsgString rsg_string_from_f64(double value);
 /** Convert a bool to "true" or "false". */
 RsgString rsg_string_from_bool(bool value);
+/** Convert a char to a single-character string. */
+RsgString rsg_string_from_char(char value);
 
 /**
  * String builder - growable byte buffer for assembling interpolated strings
