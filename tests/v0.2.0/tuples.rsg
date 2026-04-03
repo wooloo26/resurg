@@ -1,4 +1,4 @@
-// v0.2.0 — Tuples ((A, B, …))
+// v0.2.0 — Tuples ((A, B, …)
 module test_tuples
 
 // ── basic tuple creation and access ──
@@ -104,20 +104,4 @@ fn test_tuple_in_if() {
 // ── unit is the zero-size type ──
 fn test_unit_return() -> unit {
     // functions returning unit produce no value
-}
-
-fn main() {
-    test_tuple_pair()
-    test_tuple_triple()
-    test_tuple_typed()
-    test_tuple_typed_triple()
-    test_tuple_equality()
-    test_tuple_mixed_types()
-    test_tuple_nested()
-    test_tuple_return()
-    test_tuple_return_equal()
-    test_tuple_parameter()
-    test_tuple_copy()
-    test_tuple_in_if()
-    test_unit_return()
 }

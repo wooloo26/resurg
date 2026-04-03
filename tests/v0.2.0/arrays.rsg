@@ -122,20 +122,3 @@ fn test_array_equality() {
     assert(a == b)
     assert(a != c)
 }
-
-fn main() {
-    test_array_basic()
-    test_array_inferred()
-    test_array_assignment()
-    test_array_bool()
-    test_array_f64()
-    test_array_u8()
-    test_array_loop()
-    test_array_copy()
-    test_array_function()
-    test_array_return()
-    test_array_single()
-    test_array_char()
-    test_array_expression()
-    test_array_equality()
-}

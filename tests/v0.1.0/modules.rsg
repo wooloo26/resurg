@@ -87,14 +87,3 @@ fn test_private_expression_body() {
     assert(private_negate(-3) == 3)
     assert(private_negate(0) == 0)
 }
-
-fn main() {
-    test_pub_functions()
-    test_private_functions()
-    test_pub_greet()
-    test_pub_is_zero()
-    test_pub_calls_private()
-    test_private_calls_pub()
-    test_pub_various_types()
-    test_private_expression_body()
-}

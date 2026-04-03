@@ -111,16 +111,3 @@ fn test_variable_in_loop() {
     }
     assert(last == 4)
 }
-
-fn main() {
-    test_inferred_declarations()
-    test_explicit_var()
-    test_var_default()
-    test_reassignment()
-    test_multiple_declarations()
-    test_variable_across_control_flow()
-    test_self_referencing()
-    test_explicit_all_primitives()
-    test_sequential_reassignment()
-    test_variable_in_loop()
-}

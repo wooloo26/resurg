@@ -85,13 +85,10 @@ static void variable_scope_reset(CodeGenerator *generator) {
 }
 
 /**
- * Prefix non-main function names with `rsg_` to avoid C reserved-word and
+ * Prefix function names with `rsg_` to avoid C reserved-word and
  * stdlib collisions.
  */
 static const char *mangle_function_name(CodeGenerator *generator, const char *name) {
-    if (strcmp(name, "main") == 0) {
-        return "main";
-    }
     return arena_sprintf(generator->arena, "rsg_%s", name);
 }
 
@@ -1280,13 +1277,12 @@ static void emit_function_body(CodeGenerator *generator, const ASTNode *function
 
 static void emit_function_declaration(CodeGenerator *generator, const ASTNode *node, bool forward_only) {
     bool is_public = node->function_declaration.is_public;
-    bool is_main = strcmp(node->function_declaration.name, "main") == 0;
 
     // Return type
-    const char *return_type = is_main ? "int" : c_type_for(generator, node->type);
+    const char *return_type = c_type_for(generator, node->type);
 
-    // Static prefix for non-public, non-main
-    const char *prefix = (!is_public && !is_main) ? "static " : "";
+    // Static prefix for non-public functions
+    const char *prefix = !is_public ? "static " : "";
 
     // Mangled function name
     const char *function_name = mangle_function_name(generator, node->function_declaration.name);
@@ -1324,10 +1320,6 @@ static void emit_function_declaration(CodeGenerator *generator, const ASTNode *n
     generator->indent++;
     variable_scope_reset(generator);
     emit_function_body(generator, node);
-
-    if (is_main) {
-        emit_line(generator, "return 0;");
-    }
 
     generator->indent--;
     emit_line(generator, "}");
@@ -1411,6 +1403,33 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         generator->indent--;
         emit(generator, "}\n\n");
     }
+
+    // Auto-generated entry point — calls _rsg_top_level(), user main(),
+    // and all zero-parameter test_* functions.
+    emit(generator, "int main(void) {\n");
+    generator->indent++;
+
+    if (has_top_statements) {
+        emit_line(generator, "_rsg_top_level();");
+    }
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        const ASTNode *declaration = file->file.declarations[i];
+        if (declaration->kind != NODE_FUNCTION_DECLARATION) {
+            continue;
+        }
+        const char *name = declaration->function_declaration.name;
+        bool is_main = strcmp(name, "main") == 0;
+        bool is_test = strncmp(name, "test_", 5) == 0;
+        bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.parameters) != 0;
+        if ((is_main || is_test) && !has_parameters) {
+            emit_line(generator, "%s();", mangle_function_name(generator, name));
+        }
+    }
+
+    emit_line(generator, "return 0;");
+    generator->indent--;
+    emit(generator, "}\n");
 }
 
 CodeGenerator *code_generator_create(FILE *output, Arena *arena) {

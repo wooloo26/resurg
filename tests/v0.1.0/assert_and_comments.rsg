@@ -96,17 +96,3 @@ fn test_assert_negation() {
     assert(!(1 == 2))
     assert(!(1 > 2), "1 is not greater than 2")
 }
-
-fn main() {
-    test_assert_true()
-    test_assert_with_message()
-    test_assert_expressions()
-    test_assert_function_result()
-    test_assert_bool_logic()
-    test_comments_are_ignored()
-    test_assert_f64()
-    test_assert_u32()
-    test_assert_str()
-    test_comments_between_statements()
-    test_assert_negation()
-}

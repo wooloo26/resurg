@@ -72,12 +72,3 @@ fn test_char_equality() {
     assert(a == b)
     assert(a != c)
 }
-
-fn main() {
-    test_char_literals()
-    test_char_comparisons()
-    test_char_inference()
-    test_char_special()
-    test_char_functions()
-    test_char_equality()
-}

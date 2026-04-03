@@ -1,10 +1,8 @@
 // v0.1.0 — Basic arithmetic and comparison operators
 module test_operators
 
+// ═══════════════════════════════════════// Arithmetic
 // ═══════════════════════════════════════
-// Arithmetic
-// ═══════════════════════════════════════
-
 fn test_addition() {
     assert(1 + 2 == 3)
     assert(0 + 0 == 0)
@@ -54,10 +52,8 @@ fn test_f64_arithmetic() {
     assert(7.0 / 2.0 == 3.5)
 }
 
+// ═══════════════════════════════════════// Comparison
 // ═══════════════════════════════════════
-// Comparison
-// ═══════════════════════════════════════
-
 fn test_equal() {
     assert((1 == 1) == true)
     assert((1 == 2) == false)
@@ -98,10 +94,8 @@ fn test_greater_equal() {
     assert((1 >= 2) == false)
 }
 
+// ═══════════════════════════════════════// Logical
 // ═══════════════════════════════════════
-// Logical
-// ═══════════════════════════════════════
-
 fn test_logical_and() {
     assert((true && true) == true)
     assert((true && false) == false)
@@ -121,10 +115,8 @@ fn test_logical_not() {
     assert(!false == true)
 }
 
+// ═══════════════════════════════════════// Compound assignment
 // ═══════════════════════════════════════
-// Compound assignment
-// ═══════════════════════════════════════
-
 fn test_compound_assignment() {
     x := 10
     x += 5
@@ -149,10 +141,8 @@ fn test_f64_compound_assignment() {
     assert(x == 5.5)
 }
 
+// ═══════════════════════════════════════// f64 Comparison
 // ═══════════════════════════════════════
-// f64 Comparison
-// ═══════════════════════════════════════
-
 fn test_f64_equal() {
     assert((1.0 == 1.0) == true)
     assert((1.0 == 2.0) == false)
@@ -188,10 +178,8 @@ fn test_f64_greater_equal() {
     assert((1.0 >= 2.0) == false)
 }
 
+// ═══════════════════════════════════════// Precedence
 // ═══════════════════════════════════════
-// Precedence
-// ═══════════════════════════════════════
-
 fn test_precedence() {
     // multiplication before addition
     assert(2 + 3 * 4 == 14) // parentheses override precedence
@@ -237,36 +225,4 @@ fn test_u32_comparison() {
     assert((a >= b) == false)
     assert((a == b) == false)
     assert((a != b) == true)
-}
-
-fn main() {
-    test_addition()
-    test_subtraction()
-    test_multiplication()
-    test_division()
-    test_modulo()
-    test_negation()
-    test_f64_arithmetic()
-    test_equal()
-    test_not_equal()
-    test_less_than()
-    test_less_equal()
-    test_greater_than()
-    test_greater_equal()
-    test_logical_and()
-    test_logical_or()
-    test_logical_not()
-    test_compound_assignment()
-    test_f64_compound_assignment()
-    test_f64_equal()
-    test_f64_not_equal()
-    test_f64_less_than()
-    test_f64_less_equal()
-    test_f64_greater_than()
-    test_f64_greater_equal()
-    test_precedence()
-    test_and_or_precedence()
-    test_negation_expressions()
-    test_u32_arithmetic()
-    test_u32_comparison()
 }

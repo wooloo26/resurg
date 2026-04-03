@@ -112,23 +112,3 @@ fn test_string_special_characters() {
     s := "line1\nline2\ttab"
     assert(s == "line1\nline2\ttab")
 }
-
-fn main() {
-    test_string_literal()
-    test_empty_string()
-    test_string_with_escapes()
-    test_string_interpolation_variable()
-    test_string_interpolation_expression()
-    test_string_interpolation_multiple()
-    test_string_interpolation_nested_call()
-    test_string_interpolation_bool()
-    test_string_interpolation_f64()
-    test_string_no_interpolation()
-    test_string_adjacent_interpolations()
-    test_string_interpolation_u32()
-    test_string_interpolation_comparison()
-    test_string_interpolation_in_loop()
-    test_string_only_interpolation()
-    test_string_interpolation_negative()
-    test_string_special_characters()
-}

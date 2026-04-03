@@ -183,21 +183,3 @@ fn test_composed_expression_body() {
     assert(add_then_double(1, 2) == 6)
     assert(add_then_double(0, 5) == 10)
 }
-
-fn main() {
-    test_expression_body()
-    test_block_body()
-    test_square()
-    test_nested_calls()
-    test_is_even()
-    test_sum_range()
-    test_recursion()
-    test_f64_functions()
-    test_str_functions()
-    test_bool_functions()
-    test_u32_functions()
-    test_zero_param_returns()
-    test_expression_body_if_else()
-    test_many_params()
-    test_composed_expression_body()
-}

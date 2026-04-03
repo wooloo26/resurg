@@ -66,13 +66,3 @@ fn test_f32_in_function() {
 fn half(x: f32) -> f32 {
     x / 2.0
 }
-
-fn main() {
-    test_f32_literals()
-    test_f32_arithmetic()
-    test_f32_comparisons()
-    test_f32_negation()
-    test_f32_negative_zero()
-    test_f32_underscore()
-    test_f32_in_function()
-}

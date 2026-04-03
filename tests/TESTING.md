@@ -7,20 +7,12 @@ make test          # run all tests
 make run FILE=tests/v0.1.0/primitives.rsg   # run a single file
 ```
 
-`make test` discovers every `tests/**/*.rsg` and runs a three-stage pipeline:
-
-1. **Transpile** — `resurg <file> -o build/_test.c`
-2. **Compile** — `clang -std=c17 … -o build/_test build/_test.c`
-3. **Run** — `build/_test`
-
-All three stages must exit 0. On success the test prints `PASS`.
+On success the test prints `PASS`.
 
 ## Test File Conventions
 
 - Header comment: `// v0.X.0 — Description`
 - Module declaration: `module test_<feature>`
-- Test functions: `fn test_<case>()` with `// ── section ──` banners
-- Assertions: `assert <expr>` or `assert <expr>, "message"` — runtime aborts on failure
 - No `main()` needed — the compiler auto-generates one that calls all `test_*` / `main` functions
 
 ## Expected-Failure Tests

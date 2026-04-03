@@ -275,20 +275,3 @@ fn test_count_primes() {
     assert(count_primes_below(10) == 4) // 2, 3, 5, 7
     assert(count_primes_below(20) == 8) // 2,3,5,7,11,13,17,19
 }
-
-fn main() {
-    test_fizzbuzz()
-    test_fibonacci()
-    test_power()
-    test_gcd()
-    test_is_prime()
-    test_classify()
-    test_sum_digits()
-    test_collatz()
-    test_recursive_string()
-    test_range_list()
-    test_abs_diff()
-    test_mul_table_sum()
-    test_sqrt_approx()
-    test_count_primes()
-}

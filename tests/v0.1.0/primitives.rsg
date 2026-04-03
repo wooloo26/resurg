@@ -91,14 +91,3 @@ fn test_i32_boundary() {
     assert(min < 0)
     assert(max + min == -1)
 }
-
-fn main() {
-    test_bool()
-    test_i32()
-    test_u32()
-    test_f64()
-    test_str()
-    test_unit()
-    test_bool_operations()
-    test_i32_boundary()
-}

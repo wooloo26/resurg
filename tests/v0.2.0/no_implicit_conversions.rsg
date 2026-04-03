@@ -58,14 +58,3 @@ fn test_typed_assignment() {
     y = 20
     assert(y == 20)
 }
-
-fn main() {
-    test_same_type_i32()
-    test_same_type_u32()
-    test_same_type_f64()
-    test_same_type_f32()
-    test_same_type_comparison()
-    test_same_type_u8_comparison()
-    test_bool_not_integer()
-    test_typed_assignment()
-}

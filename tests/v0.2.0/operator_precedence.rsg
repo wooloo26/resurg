@@ -129,19 +129,3 @@ fn test_equality_precedence() {
     assert((1 <= 1) != false)
     assert((2 >= 3) == false)
 }
-
-fn main() {
-    test_mul_before_add()
-    test_div_before_sub()
-    test_mod_before_add()
-    test_parens_override()
-    test_comparison_after_arithmetic()
-    test_and_before_or()
-    test_not_before_and()
-    test_unary_minus_precedence()
-    test_comparison_binary()
-    test_mixed_precedence()
-    test_complex_logical()
-    test_nested_parens()
-    test_equality_precedence()
-}

@@ -106,16 +106,3 @@ fn test_multiple_aliases() {
     var h: Height = 20
     assert(area(w, h) == 200)
 }
-
-fn main() {
-    test_alias_basic()
-    test_alias_signed()
-    test_alias_float()
-    test_alias_bool()
-    test_alias_str()
-    test_alias_in_function()
-    test_alias_u8()
-    test_alias_interchangeable()
-    test_alias_usize()
-    test_multiple_aliases()
-}

@@ -90,15 +90,3 @@ fn test_function_annotations() {
     assert(identity_f32(1.5) == 1.5)
     assert(identity_char('Z') == 'Z')
 }
-
-fn main() {
-    test_annotated_integers()
-    test_annotated_floats()
-    test_annotated_char()
-    test_annotated_bool()
-    test_annotated_str()
-    test_annotated_array()
-    test_annotated_tuple()
-    test_typed_literal()
-    test_function_annotations()
-}
