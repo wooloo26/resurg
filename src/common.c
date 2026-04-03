@@ -1,8 +1,6 @@
 #include "common.h"
 
-// ------------------------------------------------------------------------
-// ArenaBlock — internal implementation
-// ------------------------------------------------------------------------
+/** Single contiguous memory block within an Arena. */
 typedef struct ArenaBlock ArenaBlock;
 
 struct ArenaBlock {
@@ -17,91 +15,91 @@ struct Arena {
     ArenaBlock *current;
 };
 
-// ------------------------------------------------------------------------
-// Arena allocator
-// ------------------------------------------------------------------------
+/** Allocate a new ArenaBlock with the given byte @p capacity. */
 static ArenaBlock *arena_block_new(size_t capacity) {
-    ArenaBlock *b = calloc(1, sizeof(*b));
-    if (b == NULL) {
+    ArenaBlock *block = calloc(1, sizeof(*block));
+    if (block == NULL) {
         rg_fatal("out of memory");
     }
-    b->data = malloc(capacity);
-    if (b->data == NULL) {
+    block->data = malloc(capacity);
+    if (block->data == NULL) {
         rg_fatal("out of memory");
     }
-    b->used = 0;
-    b->capacity = capacity;
-    b->next = NULL;
-    return b;
+    block->used = 0;
+    block->capacity = capacity;
+    block->next = NULL;
+    return block;
 }
 
 Arena *arena_create(void) {
-    Arena *a = malloc(sizeof(*a));
-    if (a == NULL) {
+    Arena *arena = malloc(sizeof(*arena));
+    if (arena == NULL) {
         rg_fatal("out of memory");
     }
-    a->head = arena_block_new(ARENA_BLOCK_SIZE);
-    a->current = a->head;
-    return a;
+    arena->head = arena_block_new(ARENA_BLOCK_SIZE);
+    arena->current = arena->head;
+    return arena;
 }
 
-void *arena_alloc(Arena *a, size_t size) {
+void *arena_alloc(Arena *arena, size_t size) {
     // Align to 8 bytes
     size = (size + 7) & ~(size_t)7;
 
-    if (a->current->used + size > a->current->capacity) {
-        size_t cap = size > ARENA_BLOCK_SIZE ? size : ARENA_BLOCK_SIZE;
-        ArenaBlock *b = arena_block_new(cap);
-        a->current->next = b;
-        a->current = b;
+    if (arena->current->used + size > arena->current->capacity) {
+        size_t capacity = size > ARENA_BLOCK_SIZE ? size : ARENA_BLOCK_SIZE;
+        ArenaBlock *block = arena_block_new(capacity);
+        arena->current->next = block;
+        arena->current = block;
     }
-    void *ptr = a->current->data + a->current->used;
-    a->current->used += size;
-    return ptr;
+    void *pointer = arena->current->data + arena->current->used;
+    arena->current->used += size;
+    return pointer;
 }
 
-char *arena_strdup(Arena *a, const char *s) {
-    size_t len = strlen(s);
-    char *dup = arena_alloc(a, len + 1);
-    memcpy(dup, s, len + 1);
-    return dup;
+char *arena_strdup(Arena *arena, const char *source) {
+    size_t length = strlen(source);
+    char *duplicate = arena_alloc(arena, length + 1);
+    memcpy(duplicate, source, length + 1);
+    return duplicate;
 }
 
-char *arena_strndup(Arena *a, const char *s, size_t len) {
-    char *dup = arena_alloc(a, len + 1);
-    memcpy(dup, s, len);
-    dup[len] = '\0';
-    return dup;
+char *arena_strndup(Arena *arena, const char *source, size_t length) {
+    char *duplicate = arena_alloc(arena, length + 1);
+    memcpy(duplicate, source, length);
+    duplicate[length] = '\0';
+    return duplicate;
 }
 
-char *arena_sprintf(Arena *a, const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    int32_t len = vsnprintf(NULL, 0, fmt, args);
-    va_end(args);
-    char *buf = arena_alloc(a, len + 1);
-    va_start(args, fmt);
-    vsnprintf(buf, len + 1, fmt, args);
-    va_end(args);
-    return buf;
+char *arena_sprintf(Arena *arena, const char *format, ...) {
+    va_list arguments;
+    va_start(arguments, format);
+    int32_t length = vsnprintf(NULL, 0, format, arguments);
+    va_end(arguments);
+    char *buffer = arena_alloc(arena, length + 1);
+    va_start(arguments, format);
+    vsnprintf(buffer, length + 1, format, arguments);
+    va_end(arguments);
+    return buffer;
 }
 
-void arena_destroy(Arena *a) {
-    ArenaBlock *b = a->head;
-    while (b != NULL) {
-        ArenaBlock *next = b->next;
-        free(b->data);
-        free(b);
-        b = next;
+void arena_destroy(Arena *arena) {
+    ArenaBlock *block = arena->head;
+    while (block != NULL) {
+        ArenaBlock *next = block->next;
+        free(block->data);
+        free(block);
+        block = next;
     }
-    free(a);
+    free(arena);
 }
 
-// ------------------------------------------------------------------------
-// Stretchy buffer
-// ------------------------------------------------------------------------
+/**
+ * Grow a stretchy buffer so it can hold at least @p new_length elements of
+ * @p element_size bytes each.  Returns the new data pointer (header hidden
+ * before it).
+ */
 void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
-    size_t new_capacity = BUF_CAP(buffer) ? BUF_CAP(buffer) * 2 : 16;
+    size_t new_capacity = BUFFER_CAPACITY(buffer) ? BUFFER_CAPACITY(buffer) * 2 : 16;
     if (new_capacity < new_length) {
         new_capacity = new_length;
     }
@@ -109,7 +107,7 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
     size_t new_size = sizeof(BufferHeader) + new_capacity * element_size;
     BufferHeader *header;
     if (buffer != NULL) {
-        header = realloc(BUF__HDR(buffer), new_size);
+        header = realloc(BUFFER__HEADER(buffer), new_size);
     } else {
         header = malloc(new_size);
         header->length = 0;
@@ -121,36 +119,34 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
     return (char *)header + sizeof(BufferHeader);
 }
 
-// ------------------------------------------------------------------------
-// Diagnostics
-// ------------------------------------------------------------------------
+/** Global error count — checked by the driver to decide exit status. */
 static int32_t g_error_count = 0;
 
-void rg_error(SrcLoc loc, const char *fmt, ...) {
-    fprintf(stderr, "%s:%d:%d: error: ", loc.file, loc.line, loc.column);
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+void rg_error(SourceLocation location, const char *format, ...) {
+    fprintf(stderr, "%s:%d:%d: error: ", location.file, location.line, location.column);
+    va_list arguments;
+    va_start(arguments, format);
+    vfprintf(stderr, format, arguments);
+    va_end(arguments);
     fprintf(stderr, "\n");
     g_error_count++;
 }
 
-void rg_warn(SrcLoc loc, const char *fmt, ...) {
-    fprintf(stderr, "%s:%d:%d: warning: ", loc.file, loc.line, loc.column);
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+void rg_warn(SourceLocation location, const char *format, ...) {
+    fprintf(stderr, "%s:%d:%d: warning: ", location.file, location.line, location.column);
+    va_list arguments;
+    va_start(arguments, format);
+    vfprintf(stderr, format, arguments);
+    va_end(arguments);
     fprintf(stderr, "\n");
 }
 
-noreturn void rg_fatal(const char *fmt, ...) {
+noreturn void rg_fatal(const char *format, ...) {
     fprintf(stderr, "fatal: ");
-    va_list args;
-    va_start(args, fmt);
-    vfprintf(stderr, fmt, args);
-    va_end(args);
+    va_list arguments;
+    va_start(arguments, format);
+    vfprintf(stderr, format, arguments);
+    va_end(arguments);
     fprintf(stderr, "\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);

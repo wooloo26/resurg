@@ -5,79 +5,81 @@
 #include "token.h"
 #include "types.h"
 
-// ------------------------------------------------------------------------
-// Forward declarations
-// ------------------------------------------------------------------------
+/**
+ * @file ast.h
+ * @brief Abstract Syntax Tree — node kinds, the ASTNode tagged union, and
+ * construction / debug-dump utilities.
+ */
+
 typedef struct ASTNode ASTNode;
 typedef struct ASTType ASTType;
 
-// ------------------------------------------------------------------------
-// Types (syntactic representation — resolved types live in types.h)
-// ------------------------------------------------------------------------
+/**
+ * Syntactic type annotation — either an explicit name or "inferred".
+ * Resolved types (used during sema and codegen) live in types.h.
+ */
 typedef enum {
-    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit — or user-defined
-    AST_TYPE_INFERRED, // type omitted, to be inferred by sema
+    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit —?or user-defined
+    AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
 } ASTTypeKind;
 
 struct ASTType {
     ASTTypeKind kind;
     const char *name; // may be NULL
-    SrcLoc loc;
+    SourceLocation location;
 };
 
-// ------------------------------------------------------------------------
-// AST node kinds
-// ------------------------------------------------------------------------
+/** Discriminator for the ASTNode tagged union. */
 typedef enum {
     // Top-level
     NODE_MODULE, // module declaration
     NODE_FILE,   // root list of declarations
 
     // Declarations
-    NODE_FN_DECL,  // function declaration
-    NODE_VAR_DECL, // variable declaration (:= or var)
-    NODE_PARAM,    // function parameter
+    NODE_FUNCTION_DECLARATION, // function declaration
+    NODE_VARIABLE_DECLARATION, // variable declaration (:= or var)
+    NODE_PARAMETER,            // function parameter
 
     // Statements
-    NODE_EXPR_STMT, // expression used as statement
-    NODE_ASSERT,    // assert(expr) or assert(expr, "msg")
-    NODE_BREAK,     // break
-    NODE_CONTINUE,  // continue
+    NODE_EXPRESSION_STATEMENT, // expression used as statement
+    NODE_ASSERT,               // assert(expr) or assert(expr, "msg")
+    NODE_BREAK,                // break
+    NODE_CONTINUE,             // continue
 
     // Expressions
-    NODE_LITERAL,         // int, float, str, bool, unit literals
-    NODE_IDENT,           // variable / function reference
-    NODE_UNARY,           // !x, -x
-    NODE_BINARY,          // x + y, x == y, x && y
-    NODE_ASSIGN,          // x = expr
-    NODE_COMPOUND_ASSIGN, // x += expr, x -= expr, ...
-    NODE_CALL,            // foo(a, b)
-    NODE_MEMBER,          // module.func (dot access)
-    NODE_IF,              // if/else expression
-    NODE_LOOP,            // loop { ... }
-    NODE_FOR,             // for i := 0..N { ... }
-    NODE_BLOCK,           // { stmts; optional trailing expr }
-    NODE_STR_INTERP,      // "hello {name}, {1+2}"
+    NODE_LITERAL,              // int, float, str, bool, unit literals
+    NODE_IDENTIFIER,           // variable / function reference
+    NODE_UNARY,                // !x, -x
+    NODE_BINARY,               // x + y, x == y, x && y
+    NODE_ASSIGN,               // x = expr
+    NODE_COMPOUND_ASSIGN,      // x += expr, x -= expr, ...
+    NODE_CALL,                 // foo(a, b)
+    NODE_MEMBER,               // module.func (dot access)
+    NODE_IF,                   // if/else expression
+    NODE_LOOP,                 // loop { ... }
+    NODE_FOR,                  // for i := 0..N { ... }
+    NODE_BLOCK,                // { stmts; optional trailing expr }
+    NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
 } NodeKind;
 
-// ------------------------------------------------------------------------
-// Literal kind (subset of token kinds, for NODE_LITERAL)
-// ------------------------------------------------------------------------
+/** Sub-kind for NODE_LITERAL — indicates which payload field is active. */
 typedef enum {
-    LIT_BOOL, //
-    LIT_I32,  //
-    LIT_U32,  //
-    LIT_F64,  //
-    LIT_STR,  //
-    LIT_UNIT, //
-} LitKind;
+    LITERAL_BOOL,
+    LITERAL_I32,
+    LITERAL_U32,
+    LITERAL_F64,
+    LITERAL_STRING,
+    LITERAL_UNIT,
+} LiteralKind;
 
-// ------------------------------------------------------------------------
-// AST node — tagged union
-// ------------------------------------------------------------------------
+/**
+ * AST node — a tagged union covering every syntactic construct.
+ * Each variant stores its children in the anonymous union; stretchy-buffer
+ * pointers are marked with a trailing @c buf comment.
+ */
 struct ASTNode {
     NodeKind kind;
-    SrcLoc loc;
+    SourceLocation location;
     const Type *type; // may be NULL
 
     union {
@@ -88,68 +90,68 @@ struct ASTNode {
 
         // NODE_FILE
         struct {
-            ASTNode **decls; /* buf */
+            ASTNode **declarations; /* buf */
         } file;
 
-        // NODE_FN_DECL
+        // NODE_FUNCTION_DECLARATION
         struct {
-            bool is_pub;
+            bool is_public;
             const char *name;
-            ASTNode **params; /* buf */
+            ASTNode **parameters; /* buf */
             ASTType return_type;
             ASTNode *body;
-        } fn_decl;
+        } function_declaration;
 
-        // NODE_PARAM
+        // NODE_PARAMETER
         struct {
             const char *name;
             ASTType type;
-        } param;
+        } parameter;
 
-        // NODE_VAR_DECL
+        // NODE_VARIABLE_DECLARATION
         struct {
             const char *name;
             ASTType type;         // may be AST_TYPE_INFERRED
             ASTNode *initializer; // initializer expression
-            bool is_var;          // true for `var x: T = ...`, false for `:=`
-        } var_decl;
+            bool is_variable;     // true for `var x: T = ...`, false for `:=`
+        } variable_declaration;
 
-        // NODE_EXPR_STMT
+        // NODE_EXPRESSION_STATEMENT
         struct {
-            ASTNode *expr;
-        } expr_stmt;
+            ASTNode *expression;
+        } expression_statement;
 
         // NODE_ASSERT
         struct {
             ASTNode *condition;
             ASTNode *message; // may be NULL
-        } assert_stmt;
+        } assert_statement;
 
         // NODE_LITERAL
         struct {
-            LitKind kind;
+            LiteralKind kind;
             union {
                 bool boolean_value;
-                int64_t integer_value; // for LIT_I32 and LIT_U32
+                int64_t integer_value; // for LITERAL_I32 and LITERAL_U32
                 double float64_value;
                 const char *string_value;
             };
         } literal;
 
-        // NODE_IDENT
+        // NODE_IDENTIFIER
         struct {
             const char *name;
-        } ident;
+        } identifier;
 
         // NODE_UNARY
         struct {
-            TokenKind op; // TOK_MINUS, TOK_BANG
+            TokenKind operator; // TOKEN_MINUS, TOKEN_BANG
             ASTNode *operand;
         } unary;
 
         // NODE_BINARY
         struct {
-            TokenKind op;
+            TokenKind operator;
             ASTNode *left;
             ASTNode *right;
         } binary;
@@ -162,7 +164,7 @@ struct ASTNode {
 
         // NODE_COMPOUND_ASSIGN
         struct {
-            TokenKind op; // TOK_PLUS_EQ, TOK_MINUS_EQ, etc.
+            TokenKind operator; // TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL, etc.
             ASTNode *target;
             ASTNode *value;
         } compound_assign;
@@ -170,7 +172,7 @@ struct ASTNode {
         // NODE_CALL
         struct {
             ASTNode *callee;
-            ASTNode **args; /* buf */
+            ASTNode **arguments; /* buf */
         } call;
 
         // NODE_MEMBER
@@ -184,7 +186,7 @@ struct ASTNode {
             ASTNode *condition;
             ASTNode *then_body;
             ASTNode *else_body; // may be NULL
-        } if_expr;
+        } if_expression;
 
         // NODE_LOOP
         struct {
@@ -193,7 +195,7 @@ struct ASTNode {
 
         // NODE_FOR
         struct {
-            const char *var_name;
+            const char *variable_name;
             ASTNode *start; // range start expression
             ASTNode *end;   // range end expression
             ASTNode *body;
@@ -201,24 +203,24 @@ struct ASTNode {
 
         // NODE_BLOCK
         struct {
-            ASTNode **stmts; /* buf */
-            ASTNode *result; // may be NULL
+            ASTNode **statements; /* buf */
+            ASTNode *result;      // may be NULL
         } block;
 
-        // NODE_STR_INTERP
+        // NODE_STRING_INTERPOLATION
         struct {
             ASTNode **parts; /* buf */
-        } str_interp;
+        } string_interpolation;
     };
 };
 
-// ------------------------------------------------------------------------
-// AST constructors (allocate from arena)
-// ------------------------------------------------------------------------
-// Allocate and initialize an AST node of the given kind.
-ASTNode *ast_new(Arena *a, NodeKind kind, SrcLoc loc);
+/** Allocate a zero-initialised ASTNode of the given @p kind from @p arena. */
+ASTNode *ast_new(Arena *arena, NodeKind kind, SourceLocation location);
 
-// Print the AST tree to stderr for debugging.
+/**
+ * Recursively pretty-print @p node to stderr (indented by @p indent
+ * levels).  Used by --dump-ast.
+ */
 void ast_dump(const ASTNode *node, int32_t indent);
 
 #endif // RG_AST_H

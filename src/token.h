@@ -3,110 +3,114 @@
 
 #include "common.h"
 
-// ------------------------------------------------------------------------
-// Token kinds — every lexeme the v0.1.0 lexer can produce.
-// ------------------------------------------------------------------------
+/**
+ * @file token.h
+ * @brief Token kinds and the Token struct produced by the lexer.
+ */
+
+/** Every lexeme the v0.1.0 lexer can produce. */
 typedef enum {
     // Literals
-    TOK_INT_LIT,   // 42, 1_000
-    TOK_FLOAT_LIT, // 3.14, 2.5e10
-    TOK_STR_LIT,   // "hello"
-    TOK_TRUE,      // true
-    TOK_FALSE,     // false
+    TOKEN_INTEGER_LITERAL, // 42, 1_000
+    TOKEN_FLOAT_LITERAL,   // 3.14, 2.5e10
+    TOKEN_STRING_LITERAL,  // "hello"
+    TOKEN_TRUE,            // true
+    TOKEN_FALSE,           // false
 
     // Identifiers
-    TOK_IDENT, // foo, bar
+    TOKEN_IDENTIFIER, // foo, bar
 
     // Keywords
-    TOK_MODULE,   // module
-    TOK_PUB,      // pub
-    TOK_FN,       // fn
-    TOK_VAR,      // var
-    TOK_IF,       // if
-    TOK_ELSE,     // else
-    TOK_LOOP,     // loop
-    TOK_FOR,      // for
-    TOK_BREAK,    // break
-    TOK_CONTINUE, // continue
-    TOK_ASSERT,   // assert
+    TOKEN_MODULE,   // module
+    TOKEN_PUBLIC,   // pub
+    TOKEN_FUNCTION, // fn
+    TOKEN_VARIABLE, // var
+    TOKEN_IF,       // if
+    TOKEN_ELSE,     // else
+    TOKEN_LOOP,     // loop
+    TOKEN_FOR,      // for
+    TOKEN_BREAK,    // break
+    TOKEN_CONTINUE, // continue
+    TOKEN_ASSERT,   // assert
 
     // Type keywords (v0.1.0 subset)
-    TOK_BOOL, // bool
-    TOK_I32,  // i32
-    TOK_U32,  // u32
-    TOK_F64,  // f64
-    TOK_STR,  // str
-    TOK_UNIT, // unit
+    TOKEN_BOOL,   // bool
+    TOKEN_I32,    // i32
+    TOKEN_U32,    // u32
+    TOKEN_F64,    // f64
+    TOKEN_STRING, // str
+    TOKEN_UNIT,   // unit
 
-    // Operators — arithmetic
-    TOK_PLUS,    // +
-    TOK_MINUS,   // -
-    TOK_STAR,    // *
-    TOK_SLASH,   // /
-    TOK_PERCENT, // %
+    // Operators —?arithmetic
+    TOKEN_PLUS,    // +
+    TOKEN_MINUS,   // -
+    TOKEN_STAR,    // *
+    TOKEN_SLASH,   // /
+    TOKEN_PERCENT, // %
 
-    // Operators — comparison
-    TOK_EQ_EQ,   // ==
-    TOK_BANG_EQ, // !=
-    TOK_LT,      // <
-    TOK_LT_EQ,   // <=
-    TOK_GT,      // >
-    TOK_GT_EQ,   // >=
+    // Operators —?comparison
+    TOKEN_EQUAL_EQUAL,   // ==
+    TOKEN_BANG_EQUAL,    // !=
+    TOKEN_LESS,          // <
+    TOKEN_LESS_EQUAL,    // <=
+    TOKEN_GREATER,       // >
+    TOKEN_GREATER_EQUAL, // >=
 
-    // Operators — logical
-    TOK_AMP_AMP,   // &&
-    TOK_PIPE_PIPE, // ||
-    TOK_BANG,      // !
-    TOK_PIPE,      // |
+    // Operators —?logical
+    TOKEN_AMPERSAND_AMPERSAND, // &&
+    TOKEN_PIPE_PIPE,           // ||
+    TOKEN_BANG,                // !
+    TOKEN_PIPE,                // |
 
-    // Operators — assignment
-    TOK_COLON_EQ, // :=
-    TOK_EQ,       // =
-    TOK_PLUS_EQ,  // +=
-    TOK_MINUS_EQ, // -=
-    TOK_STAR_EQ,  // *=
-    TOK_SLASH_EQ, // /=
+    // Operators —?assignment
+    TOKEN_COLON_EQUAL, // :=
+    TOKEN_EQUAL,       // =
+    TOKEN_PLUS_EQUAL,  // +=
+    TOKEN_MINUS_EQUAL, // -=
+    TOKEN_STAR_EQUAL,  // *=
+    TOKEN_SLASH_EQUAL, // /=
 
     // Punctuation
-    TOK_LPAREN,    // (
-    TOK_RPAREN,    // )
-    TOK_LBRACE,    // {
-    TOK_RBRACE,    // }
-    TOK_COLON,     // :
-    TOK_COMMA,     // ,
-    TOK_DOT_DOT,   // ..
-    TOK_DOT,       // .
-    TOK_ARROW,     // ->
-    TOK_SEMICOLON, // ; (optional, for future use)
+    TOKEN_LEFT_PAREN,  // (
+    TOKEN_RIGHT_PAREN, // )
+    TOKEN_LEFT_BRACE,  // {
+    TOKEN_RIGHT_BRACE, // }
+    TOKEN_COLON,       // :
+    TOKEN_COMMA,       // ,
+    TOKEN_DOT_DOT,     // ..
+    TOKEN_DOT,         // .
+    TOKEN_ARROW,       // ->
+    TOKEN_SEMICOLON,   // ; (optional, for future use)
 
     // String interpolation (inside strings)
-    TOK_INTERP_START, // start of interpolation segment
-    TOK_INTERP_END,   // end of interpolation segment
+    TOKEN_INTERPOLATION_START, // start of interpolation segment
+    TOKEN_INTERPOLATION_END,   // end of interpolation segment
 
     // Special
-    TOK_NEWLINE, // significant newline (statement terminator)
-    TOK_EOF,     // end of file
-    TOK_ERROR,   // lexer error
+    TOKEN_NEWLINE, // significant newline (statement terminator)
+    TOKEN_EOF,     // end of file
+    TOKEN_ERROR,   // lexer error
 } TokenKind;
 
-// ------------------------------------------------------------------------
-// Token — a single lexeme with source location.
-// ------------------------------------------------------------------------
+/**
+ * A single lexeme with its kind, source text, location, and optional
+ * parsed literal value.
+ */
 typedef struct {
     TokenKind kind;
     const char *lexeme; // points into arena-duped source or interned string
-    int32_t length;     // length of lexeme
-    SrcLoc loc;
+    int32_t length;
+    SourceLocation location;
 
-    // Literal values (populated for literal tokens)
+    /** Parsed literal payload (valid only for literal token kinds). */
     union {
-        int64_t integer_value; // TOK_INT_LIT
-        double float_value;    // TOK_FLOAT_LIT
-        char *string_value;    // TOK_STR_LIT (unescaped, arena-allocated)
-    } lit;
+        int64_t integer_value;
+        double float_value;
+        char *string_value; // unescaped, arena-allocated
+    } literal_value;
 } Token;
 
-// Return a human-readable name for a token kind.
-const char *token_kind_str(TokenKind kind);
+/** Return a human-readable name for @p kind (e.g. "IDENTIFIER", "+"). */
+const char *token_kind_string(TokenKind kind);
 
 #endif // RG_TOKEN_H

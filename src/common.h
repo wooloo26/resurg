@@ -11,73 +11,87 @@
 #include <stdnoreturn.h>
 #include <string.h>
 
-// ------------------------------------------------------------------------
-// Arena allocator — bump-pointer allocation for AST nodes, tokens, strings.
-// Freed in one shot at end of compilation.
-// ------------------------------------------------------------------------
-#define ARENA_BLOCK_SIZE ((size_t)1024 * 1024) // 1 MiB
+/**
+ * @file common.h
+ * @brief Shared infrastructure: arena allocator, stretchy buffers, diagnostics.
+ */
 
+/** Block size for the arena bump allocator (1 MiB). */
+#define ARENA_BLOCK_SIZE ((size_t)1024 * 1024)
+
+/**
+ * Opaque bump-pointer arena.  All AST nodes, tokens, and interned strings
+ * are allocated here and freed in one shot at end of compilation.
+ */
 typedef struct Arena Arena;
 
-// Create a new arena with a default-sized initial block.
+/** Create a new arena with one pre-allocated block. */
 Arena *arena_create(void);
-// Free all blocks and the arena itself.
-void arena_destroy(Arena *a);
-// Allocate size bytes (8-byte aligned) from the arena.
-void *arena_alloc(Arena *a, size_t size);
-// Duplicate a NUL-terminated string into the arena.
-char *arena_strdup(Arena *a, const char *s);
-// Duplicate the first len bytes of s into the arena.
-char *arena_strndup(Arena *a, const char *s, size_t len);
-// Format a string into the arena (printf-style).
-char *arena_sprintf(Arena *a, const char *fmt, ...);
+/** Free every block owned by @p arena. */
+void arena_destroy(Arena *arena);
+/** Allocate @p size bytes from @p arena, 8-byte aligned. */
+void *arena_alloc(Arena *arena, size_t size);
+/** Duplicate a NUL-terminated string into @p arena. */
+char *arena_strdup(Arena *arena, const char *source);
+/** Duplicate the first @p length bytes of @p source into @p arena. */
+char *arena_strndup(Arena *arena, const char *source, size_t length);
+/** printf-style formatting into arena-allocated memory. */
+char *arena_sprintf(Arena *arena, const char *format, ...);
 
-// ------------------------------------------------------------------------
-// Stretchy buffer — type-safe dynamic array via macros.
-// Usage:
-//   Token *tokens = NULL;
-//   BUF_PUSH(tokens, tok);
-//   for (int i = 0; i < BUF_LEN(tokens); i++) { ... }
-//   BUF_FREE(tokens);
-// ------------------------------------------------------------------------
+/**
+ * Stretchy buffer — type-safe dynamic array via macros.
+ *
+ * Declare as a typed NULL pointer, grow with BUFFER_PUSH, and free with
+ * BUFFER_FREE.  The header lives just before the data pointer.
+ *
+ * @code
+ *     Token *tokens = NULL;
+ *     BUFFER_PUSH(tokens, tok);
+ *     for (int i = 0; i < BUFFER_LENGTH(tokens); i++) { ... }
+ *     BUFFER_FREE(tokens);
+ * @endcode
+ */
 typedef struct {
     size_t length;
     size_t capacity;
 } BufferHeader;
 
-#define BUF__HDR(b) ((BufferHeader *)((char *)(b) - sizeof(BufferHeader)))
-#define BUF_LEN(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->length : 0)
-#define BUF_CAP(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->capacity : 0)
-#define BUF_END(b) ((b) + BUF_LEN(b))
-#define BUF_FREE(b) ((b) != NULL ? (free(BUF__HDR(b)), (b) = NULL) : 0)
+#define BUFFER__HEADER(buffer) ((BufferHeader *)((char *)(buffer) - sizeof(BufferHeader)))
+#define BUFFER_LENGTH(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->length : 0)
+#define BUFFER_CAPACITY(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->capacity : 0)
+#define BUFFER_END(buffer) ((buffer) + BUFFER_LENGTH(buffer))
+#define BUFFER_FREE(buffer) ((buffer) != NULL ? (free(BUFFER__HEADER(buffer)), (buffer) = NULL) : 0)
 
 // NOLINTNEXTLINE(bugprone-sizeof-expression)
-#define BUF_FIT(b, n)                                                                                                  \
-    ((n) <= BUF_CAP(b) ? 0 : ((b) = (__typeof__(b))buffer__grow((const void *)(b), (n), sizeof(*(b)))))
+#define BUFFER_FIT(buffer, needed)                                                                                     \
+    ((needed) <= BUFFER_CAPACITY(buffer)                                                                               \
+         ? 0                                                                                                           \
+         : ((buffer) = (__typeof__(buffer))buffer__grow((const void *)(buffer), (needed), sizeof(*(buffer)))))
 
-#define BUF_PUSH(b, v)                                                                                                 \
+#define BUFFER_PUSH(buffer, value)                                                                                     \
     do {                                                                                                               \
-        BUF_FIT((b), BUF_LEN(b) + 1);                                                                                  \
-        (b)[BUF__HDR(b)->length++] = (v);                                                                              \
+        BUFFER_FIT((buffer), BUFFER_LENGTH(buffer) + 1);                                                               \
+        (buffer)[BUFFER__HEADER(buffer)->length++] = (value);                                                          \
     } while (0)
 
-// Grow a stretchy buffer to at least new_length elements.
+/** Internal growth routine for stretchy buffers — do not call directly. */
 void *buffer__grow(const void *buffer, size_t new_length, size_t element_size);
 
-// ------------------------------------------------------------------------
-// Diagnostics — error/warning reporting with source location.
-// ------------------------------------------------------------------------
+/** A file:line:column triple attached to tokens and AST nodes. */
 typedef struct {
     const char *file;
     int32_t line;
     int32_t column;
-} SrcLoc;
+} SourceLocation;
 
-// Report an error at the given source location.
-void rg_error(SrcLoc loc, const char *fmt, ...);
-// Report a warning at the given source location.
-void rg_warn(SrcLoc loc, const char *fmt, ...);
-// Print a fatal error and abort.
-noreturn void rg_fatal(const char *fmt, ...);
+/**
+ * Emit "file:line:col: error: ..." to stderr and increment the global
+ * error counter.
+ */
+void rg_error(SourceLocation location, const char *format, ...);
+/** Emit "file:line:col: warning: ..." to stderr. */
+void rg_warn(SourceLocation location, const char *format, ...);
+/** Emit "fatal: ..." to stderr and terminate the process. */
+noreturn void rg_fatal(const char *format, ...);
 
 #endif // RG_COMMON_H

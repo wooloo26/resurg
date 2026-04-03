@@ -3,16 +3,20 @@
 
 #include "ast.h"
 
-// ------------------------------------------------------------------------
-// Parser — recursive descent, transforms tokens into AST.
-// ------------------------------------------------------------------------
+/**
+ * @file parser.h
+ * @brief Recursive-descent parser — transforms a token stream into an AST.
+ */
 typedef struct Parser Parser;
 
-// Create a parser for the given token stream.
+/**
+ * Create a parser over @p count tokens.  AST nodes are allocated from
+ * @p arena.
+ */
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file);
-// Destroy the parser.
-void parser_destroy(Parser *p);
-// Parse the token stream into a NODE_FILE AST.
-ASTNode *parser_parse(Parser *p);
+/** Destroy the parser (does not free the arena). */
+void parser_destroy(Parser *parser);
+/** Parse the full token stream and return the root NODE_FILE. */
+ASTNode *parser_parse(Parser *parser);
 
 #endif // RG_PARSER_H

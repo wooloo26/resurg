@@ -73,9 +73,11 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Comments
 
-Based on LLVM.
+VSCode-style Doxygen block comments.
 
+- `/** Brief description. */` for single-line doc comments.
+- Multi-line doc comments use `/** ... */` blocks with `@` tags (`@file`, `@brief`, `@param`, `@return`, `@p`, `@c`, `@code`/`@endcode`).
+- `//` for inline notes, section headers, and non-doc comments.
 - `/* buf */` for stretchy-buffer pointers.
-- Describe **why**.
 - `// consume 'X'` for `advance()` calls.
 - `// NOLINTNEXTLINE(check)` for suppression.

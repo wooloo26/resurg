@@ -1,103 +1,97 @@
 #include "parser.h"
 
-// ------------------------------------------------------------------------
-// Private struct definition
-// ------------------------------------------------------------------------
 struct Parser {
-    const Token *tokens; // stretchy buffer from lexer (read-only)
-    int32_t position;    // current position
-    int32_t count;       // total token count
-    Arena *arena;        // AST allocation arena
-    const char *file;    // source file name (for diagnostics)
+    const Token *tokens; /* buf */
+    int32_t position;
+    int32_t count;
+    Arena *arena;     // AST allocation arena
+    const char *file; // source filename for diagnostics
 };
 
-// ------------------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------------------
-static const Token *current(const Parser *p) {
-    return &p->tokens[p->position];
+// Token-stream navigation helpers.
+static const Token *current(const Parser *parser) {
+    return &parser->tokens[parser->position];
 }
 
-static const Token *previous(const Parser *p) {
-    return &p->tokens[p->position - 1];
+static const Token *previous(const Parser *parser) {
+    return &parser->tokens[parser->position - 1];
 }
 
-static bool at_end(const Parser *p) {
-    return current(p)->kind == TOK_EOF;
+static bool at_end(const Parser *parser) {
+    return current(parser)->kind == TOKEN_EOF;
 }
 
-static bool check(const Parser *p, TokenKind kind) {
-    return current(p)->kind == kind;
+static bool check(const Parser *parser, TokenKind kind) {
+    return current(parser)->kind == kind;
 }
 
-static const Token *advance_token(Parser *p) {
-    if (!at_end(p)) {
-        p->position++;
+static const Token *advance_token(Parser *parser) {
+    if (!at_end(parser)) {
+        parser->position++;
     }
-    return previous(p);
+    return previous(parser);
 }
 
-static bool match(Parser *p, TokenKind kind) {
-    if (check(p, kind)) {
-        advance_token(p);
+static bool match(Parser *parser, TokenKind kind) {
+    if (check(parser, kind)) {
+        advance_token(parser);
         return true;
     }
     return false;
 }
 
-static const Token *expect(Parser *p, TokenKind kind) {
-    if (check(p, kind)) {
-        return advance_token(p);
+/**
+ * Consume the current token if it matches @p kind; otherwise emit an error
+ * and return the current token without advancing.
+ */
+static const Token *expect(Parser *parser, TokenKind kind) {
+    if (check(parser, kind)) {
+        return advance_token(parser);
     }
-    rg_error(current(p)->loc, "expected '%s', got '%s'", token_kind_str(kind), token_kind_str(current(p)->kind));
-    return current(p);
+    rg_error(current(parser)->location, "expected '%s', got '%s'", token_kind_string(kind),
+             token_kind_string(current(parser)->kind));
+    return current(parser);
 }
 
-static void skip_newlines(Parser *p) {
-    while (check(p, TOK_NEWLINE)) {
-        advance_token(p);
+static void skip_newlines(Parser *parser) {
+    while (check(parser, TOKEN_NEWLINE)) {
+        advance_token(parser);
     }
 }
 
-static SrcLoc current_location(const Parser *p) {
-    return current(p)->loc;
+static SourceLocation current_location(const Parser *parser) {
+    return current(parser)->location;
 }
 
-// ------------------------------------------------------------------------
-// Forward declarations
-// ------------------------------------------------------------------------
-static ASTNode *parse_expression(Parser *p);
-static ASTNode *parse_statement(Parser *p);
-static ASTNode *parse_block(Parser *p);
-static ASTNode *parse_declaration(Parser *p);
+// Forward declarations for mutually-recursive descent.
+static ASTNode *parse_expression(Parser *parser);
+static ASTNode *parse_statement(Parser *parser);
+static ASTNode *parse_block(Parser *parser);
+static ASTNode *parse_declaration(Parser *parser);
 
-// ------------------------------------------------------------------------
-// Type annotation
-// ------------------------------------------------------------------------
-static ASTType parse_type(Parser *p) {
-    ASTType t = {.kind = AST_TYPE_NAME, .loc = current_location(p)};
+/** Parse an explicit type annotation (e.g. i32, str, bool). */
+static ASTType parse_type(Parser *parser) {
+    ASTType type = {.kind = AST_TYPE_NAME, .location = current_location(parser)};
 
-    switch (current(p)->kind) {
-    case TOK_BOOL:
-    case TOK_I32:
-    case TOK_U32:
-    case TOK_F64:
-    case TOK_STR:
-    case TOK_UNIT:
-    case TOK_IDENT:
-        t.name = advance_token(p)->lexeme;
+    switch (current(parser)->kind) {
+    case TOKEN_BOOL:
+    case TOKEN_I32:
+    case TOKEN_U32:
+    case TOKEN_F64:
+    case TOKEN_STRING:
+    case TOKEN_UNIT:
+    case TOKEN_IDENTIFIER:
+        type.name = advance_token(parser)->lexeme;
         break;
     default:
-        rg_error(current_location(p), "expected type name");
-        t.kind = AST_TYPE_INFERRED;
+        rg_error(current_location(parser), "expected type name");
+        type.kind = AST_TYPE_INFERRED;
         break;
     }
-    return t;
+    return type;
 }
 
-// ------------------------------------------------------------------------
-// Expressions — Pratt-style precedence climbing
-// ------------------------------------------------------------------------
+/** Operator precedence levels for Pratt-style parsing. */
 typedef enum {
     PREC_NONE,       //
     PREC_ASSIGN,     // = += -= *= /=
@@ -114,140 +108,140 @@ typedef enum {
 
 static Precedence get_precedence(TokenKind kind) {
     switch (kind) {
-    case TOK_EQ:
-    case TOK_PLUS_EQ:
-    case TOK_MINUS_EQ:
-    case TOK_STAR_EQ:
-    case TOK_SLASH_EQ:
+    case TOKEN_EQUAL:
+    case TOKEN_PLUS_EQUAL:
+    case TOKEN_MINUS_EQUAL:
+    case TOKEN_STAR_EQUAL:
+    case TOKEN_SLASH_EQUAL:
         return PREC_ASSIGN;
-    case TOK_PIPE_PIPE:
+    case TOKEN_PIPE_PIPE:
         return PREC_OR;
-    case TOK_AMP_AMP:
+    case TOKEN_AMPERSAND_AMPERSAND:
         return PREC_AND;
-    case TOK_EQ_EQ:
-    case TOK_BANG_EQ:
+    case TOKEN_EQUAL_EQUAL:
+    case TOKEN_BANG_EQUAL:
         return PREC_EQUALITY;
-    case TOK_LT:
-    case TOK_LT_EQ:
-    case TOK_GT:
-    case TOK_GT_EQ:
+    case TOKEN_LESS:
+    case TOKEN_LESS_EQUAL:
+    case TOKEN_GREATER:
+    case TOKEN_GREATER_EQUAL:
         return PREC_COMPARISON;
-    case TOK_PLUS:
-    case TOK_MINUS:
+    case TOKEN_PLUS:
+    case TOKEN_MINUS:
         return PREC_TERM;
-    case TOK_STAR:
-    case TOK_SLASH:
-    case TOK_PERCENT:
+    case TOKEN_STAR:
+    case TOKEN_SLASH:
+    case TOKEN_PERCENT:
         return PREC_FACTOR;
     default:
         return PREC_NONE;
     }
 }
 
-static ASTNode *parse_string_interpolation(Parser *p, SrcLoc s) {
-    ASTNode *interp = ast_new(p->arena, NODE_STR_INTERP, s);
-    interp->str_interp.parts = NULL;
+static ASTNode *parse_string_interpolation(Parser *parser, SourceLocation location) {
+    ASTNode *interpolation = ast_new(parser->arena, NODE_STRING_INTERPOLATION, location);
+    interpolation->string_interpolation.parts = NULL;
 
-    ASTNode *text = ast_new(p->arena, NODE_LITERAL, s);
-    text->literal.kind = LIT_STR;
-    text->literal.string_value = previous(p)->lit.string_value;
-    BUF_PUSH(interp->str_interp.parts, text);
+    ASTNode *text = ast_new(parser->arena, NODE_LITERAL, location);
+    text->literal.kind = LITERAL_STRING;
+    text->literal.string_value = previous(parser)->literal_value.string_value;
+    BUFFER_PUSH(interpolation->string_interpolation.parts, text);
 
-    while (match(p, TOK_INTERP_START)) {
-        ASTNode *expression = parse_expression(p);
-        BUF_PUSH(interp->str_interp.parts, expression);
-        expect(p, TOK_INTERP_END);
+    while (match(parser, TOKEN_INTERPOLATION_START)) {
+        ASTNode *expression = parse_expression(parser);
+        BUFFER_PUSH(interpolation->string_interpolation.parts, expression);
+        expect(parser, TOKEN_INTERPOLATION_END);
 
-        SrcLoc ts = current_location(p);
-        expect(p, TOK_STR_LIT);
-        ASTNode *text2 = ast_new(p->arena, NODE_LITERAL, ts);
-        text2->literal.kind = LIT_STR;
-        text2->literal.string_value = previous(p)->lit.string_value;
-        BUF_PUSH(interp->str_interp.parts, text2);
+        SourceLocation text_location = current_location(parser);
+        expect(parser, TOKEN_STRING_LITERAL);
+        ASTNode *text2 = ast_new(parser->arena, NODE_LITERAL, text_location);
+        text2->literal.kind = LITERAL_STRING;
+        text2->literal.string_value = previous(parser)->literal_value.string_value;
+        BUFFER_PUSH(interpolation->string_interpolation.parts, text2);
     }
-    return interp;
+    return interpolation;
 }
 
-static ASTNode *parse_primary(Parser *p) {
-    SrcLoc s = current_location(p);
+static ASTNode *parse_primary(Parser *parser) {
+    SourceLocation location = current_location(parser);
 
-    if (match(p, TOK_INT_LIT)) {
-        ASTNode *n = ast_new(p->arena, NODE_LITERAL, s);
-        n->literal.kind = LIT_I32;
-        n->literal.integer_value = previous(p)->lit.integer_value;
-        return n;
+    if (match(parser, TOKEN_INTEGER_LITERAL)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_I32;
+        node->literal.integer_value = previous(parser)->literal_value.integer_value;
+        return node;
     }
-    if (match(p, TOK_FLOAT_LIT)) {
-        ASTNode *n = ast_new(p->arena, NODE_LITERAL, s);
-        n->literal.kind = LIT_F64;
-        n->literal.float64_value = previous(p)->lit.float_value;
-        return n;
+    if (match(parser, TOKEN_FLOAT_LITERAL)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_F64;
+        node->literal.float64_value = previous(parser)->literal_value.float_value;
+        return node;
     }
-    if (match(p, TOK_STR_LIT)) {
-        if (check(p, TOK_INTERP_START)) {
-            return parse_string_interpolation(p, s);
+    if (match(parser, TOKEN_STRING_LITERAL)) {
+        if (check(parser, TOKEN_INTERPOLATION_START)) {
+            return parse_string_interpolation(parser, location);
         }
-        ASTNode *n = ast_new(p->arena, NODE_LITERAL, s);
-        n->literal.kind = LIT_STR;
-        n->literal.string_value = previous(p)->lit.string_value;
-        return n;
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_STRING;
+        node->literal.string_value = previous(parser)->literal_value.string_value;
+        return node;
     }
-    if (match(p, TOK_TRUE)) {
-        ASTNode *n = ast_new(p->arena, NODE_LITERAL, s);
-        n->literal.kind = LIT_BOOL;
-        n->literal.boolean_value = true;
-        return n;
+    if (match(parser, TOKEN_TRUE)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_BOOL;
+        node->literal.boolean_value = true;
+        return node;
     }
-    if (match(p, TOK_FALSE)) {
-        ASTNode *n = ast_new(p->arena, NODE_LITERAL, s);
-        n->literal.kind = LIT_BOOL;
-        n->literal.boolean_value = false;
-        return n;
+    if (match(parser, TOKEN_FALSE)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_BOOL;
+        node->literal.boolean_value = false;
+        return node;
     }
-    if (match(p, TOK_IDENT)) {
-        ASTNode *n = ast_new(p->arena, NODE_IDENT, s);
-        n->ident.name = previous(p)->lexeme;
-        return n;
+    if (match(parser, TOKEN_IDENTIFIER)) {
+        ASTNode *node = ast_new(parser->arena, NODE_IDENTIFIER, location);
+        node->identifier.name = previous(parser)->lexeme;
+        return node;
     }
-    if (match(p, TOK_LPAREN)) {
-        ASTNode *expression = parse_expression(p);
-        expect(p, TOK_RPAREN);
+    if (match(parser, TOKEN_LEFT_PAREN)) {
+        ASTNode *expression = parse_expression(parser);
+        expect(parser, TOKEN_RIGHT_PAREN);
         return expression;
     }
-    if (check(p, TOK_IF)) {
-        return parse_expression(p);
+    if (check(parser, TOKEN_IF)) {
+        return parse_expression(parser);
     }
-    if (check(p, TOK_LBRACE)) {
-        return parse_block(p);
+    if (check(parser, TOKEN_LEFT_BRACE)) {
+        return parse_block(parser);
     }
-    rg_error(s, "expected expression, got '%s'", token_kind_str(current(p)->kind));
-    advance_token(p);
-    return ast_new(p->arena, NODE_LITERAL, s); // error recovery
+    rg_error(location, "expected expression, got '%s'", token_kind_string(current(parser)->kind));
+    advance_token(parser);
+    return ast_new(parser->arena, NODE_LITERAL, location); // error recovery
 }
 
-static ASTNode *parse_postfix(Parser *p) {
-    ASTNode *left = parse_primary(p);
+static ASTNode *parse_postfix(Parser *parser) {
+    ASTNode *left = parse_primary(parser);
     for (;;) {
-        SrcLoc s = current_location(p);
-        if (match(p, TOK_LPAREN)) {
-            ASTNode *n = ast_new(p->arena, NODE_CALL, s);
-            n->call.callee = left;
-            n->call.args = NULL;
-            if (!check(p, TOK_RPAREN)) {
+        SourceLocation location = current_location(parser);
+        if (match(parser, TOKEN_LEFT_PAREN)) {
+            ASTNode *node = ast_new(parser->arena, NODE_CALL, location);
+            node->call.callee = left;
+            node->call.arguments = NULL;
+            if (!check(parser, TOKEN_RIGHT_PAREN)) {
                 do {
-                    skip_newlines(p);
-                    BUF_PUSH(n->call.args, parse_expression(p));
-                } while (match(p, TOK_COMMA));
+                    skip_newlines(parser);
+                    BUFFER_PUSH(node->call.arguments, parse_expression(parser));
+                } while (match(parser, TOKEN_COMMA));
             }
-            expect(p, TOK_RPAREN);
-            left = n;
+            expect(parser, TOKEN_RIGHT_PAREN);
+            left = node;
             continue;
         }
-        if (match(p, TOK_DOT)) {
-            ASTNode *n = ast_new(p->arena, NODE_MEMBER, s);
-            n->member.object = left;
-            n->member.member = expect(p, TOK_IDENT)->lexeme;
-            left = n;
+        if (match(parser, TOKEN_DOT)) {
+            ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
+            node->member.object = left;
+            node->member.member = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            left = node;
             continue;
         }
         break;
@@ -255,336 +249,339 @@ static ASTNode *parse_postfix(Parser *p) {
     return left;
 }
 
-static ASTNode *parse_unary(Parser *p) {
-    if (check(p, TOK_MINUS) || check(p, TOK_BANG)) {
-        SrcLoc s = current_location(p);
-        TokenKind op = advance_token(p)->kind;
-        ASTNode *n = ast_new(p->arena, NODE_UNARY, s);
-        n->unary.op = op;
-        n->unary.operand = parse_unary(p);
-        return n;
+static ASTNode *parse_unary(Parser *parser) {
+    if (check(parser, TOKEN_MINUS) || check(parser, TOKEN_BANG)) {
+        SourceLocation location = current_location(parser);
+        TokenKind operator= advance_token(parser)->kind;
+        ASTNode *node = ast_new(parser->arena, NODE_UNARY, location);
+        node->unary.operator= operator;
+        node->unary.operand = parse_unary(parser);
+        return node;
     }
-    return parse_postfix(p);
+    return parse_postfix(parser);
 }
 
-static ASTNode *parse_precedence(Parser *p, Precedence minimum_precedence) {
-    ASTNode *left = parse_unary(p);
+static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) {
+    ASTNode *left = parse_unary(parser);
 
     for (;;) {
-        TokenKind op = current(p)->kind;
-        Precedence precedence = get_precedence(op);
+        TokenKind operator= current(parser)->kind;
+        Precedence precedence = get_precedence(operator);
         if (precedence < minimum_precedence) {
             break;
         }
 
-        SrcLoc s = current_location(p);
-        advance_token(p); // consume operator
+        SourceLocation location = current_location(parser);
+        advance_token(parser); // consume operator
 
         // Assignment
-        if (op == TOK_EQ) {
-            ASTNode *n = ast_new(p->arena, NODE_ASSIGN, s);
-            n->assign.target = left;
-            n->assign.value = parse_precedence(p, precedence); // right-assoc
-            left = n;
+        if (operator== TOKEN_EQUAL) {
+            ASTNode *node = ast_new(parser->arena, NODE_ASSIGN, location);
+            node->assign.target = left;
+            node->assign.value = parse_precedence(parser, precedence); // right-assoc
+            left = node;
             continue;
         }
 
         // Compound assignment
-        if (op == TOK_PLUS_EQ || op == TOK_MINUS_EQ || op == TOK_STAR_EQ || op == TOK_SLASH_EQ) {
-            ASTNode *n = ast_new(p->arena, NODE_COMPOUND_ASSIGN, s);
-            n->compound_assign.op = op;
-            n->compound_assign.target = left;
-            n->compound_assign.value = parse_precedence(p, precedence);
-            left = n;
+        if (operator== TOKEN_PLUS_EQUAL || operator== TOKEN_MINUS_EQUAL || operator== TOKEN_STAR_EQUAL || operator==
+            TOKEN_SLASH_EQUAL) {
+            ASTNode *node = ast_new(parser->arena, NODE_COMPOUND_ASSIGN, location);
+            node->compound_assign.operator= operator;
+            node->compound_assign.target = left;
+            node->compound_assign.value = parse_precedence(parser, precedence);
+            left = node;
             continue;
         }
 
         // Binary
-        ASTNode *n = ast_new(p->arena, NODE_BINARY, s);
-        n->binary.op = op;
-        n->binary.left = left;
-        n->binary.right = parse_precedence(p, precedence + 1);
-        left = n;
+        ASTNode *node = ast_new(parser->arena, NODE_BINARY, location);
+        node->binary.operator= operator;
+        node->binary.left = left;
+        node->binary.right = parse_precedence(parser, precedence + 1);
+        left = node;
     }
 
     return left;
 }
 
-static ASTNode *parse_if(Parser *p) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_IF);
-    ASTNode *n = ast_new(p->arena, NODE_IF, s);
-    n->if_expr.condition = parse_expression(p);
-    n->if_expr.then_body = parse_block(p);
-    n->if_expr.else_body = NULL;
-    skip_newlines(p);
-    if (match(p, TOK_ELSE)) {
-        skip_newlines(p);
-        if (check(p, TOK_IF)) {
-            n->if_expr.else_body = parse_if(p);
+static ASTNode *parse_if(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_IF);
+    ASTNode *node = ast_new(parser->arena, NODE_IF, location);
+    node->if_expression.condition = parse_expression(parser);
+    node->if_expression.then_body = parse_block(parser);
+    node->if_expression.else_body = NULL;
+    skip_newlines(parser);
+    if (match(parser, TOKEN_ELSE)) {
+        skip_newlines(parser);
+        if (check(parser, TOKEN_IF)) {
+            node->if_expression.else_body = parse_if(parser);
         } else {
-            n->if_expr.else_body = parse_block(p);
+            node->if_expression.else_body = parse_block(parser);
         }
     }
-    return n;
+    return node;
 }
 
-static ASTNode *parse_expression(Parser *p) {
-    if (check(p, TOK_IF)) {
-        return parse_if(p);
+static ASTNode *parse_expression(Parser *parser) {
+    if (check(parser, TOKEN_IF)) {
+        return parse_if(parser);
     }
-    return parse_precedence(p, PREC_ASSIGN);
+    return parse_precedence(parser, PREC_ASSIGN);
 }
 
-// ------------------------------------------------------------------------
-// Blocks
-// ------------------------------------------------------------------------
-static ASTNode *parse_block(Parser *p) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_LBRACE);
-    skip_newlines(p);
+/**
+ * Parse a brace-enclosed block: @c { stmts... [trailing_expr] }.
+ * The last bare expression (if any) becomes the block's result value.
+ */
+static ASTNode *parse_block(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_LEFT_BRACE);
+    skip_newlines(parser);
 
-    ASTNode *n = ast_new(p->arena, NODE_BLOCK, s);
-    n->block.stmts = NULL;
-    n->block.result = NULL;
+    ASTNode *node = ast_new(parser->arena, NODE_BLOCK, location);
+    node->block.statements = NULL;
+    node->block.result = NULL;
 
-    while (!check(p, TOK_RBRACE) && !at_end(p)) {
-        ASTNode *statement = parse_statement(p);
-        BUF_PUSH(n->block.stmts, statement);
-        skip_newlines(p);
+    while (!check(parser, TOKEN_RIGHT_BRACE) && !at_end(parser)) {
+        ASTNode *statement = parse_statement(parser);
+        BUFFER_PUSH(node->block.statements, statement);
+        skip_newlines(parser);
     }
 
     // If the last statement is a bare expression, make it the block result
-    int32_t statement_count = BUF_LEN(n->block.stmts);
+    int32_t statement_count = BUFFER_LENGTH(node->block.statements);
     if (statement_count > 0) {
-        ASTNode *last = n->block.stmts[statement_count - 1];
-        if (last->kind == NODE_EXPR_STMT) {
-            n->block.result = last->expr_stmt.expr;
-            BUF__HDR(n->block.stmts)->length--;
+        ASTNode *last = node->block.statements[statement_count - 1];
+        if (last->kind == NODE_EXPRESSION_STATEMENT) {
+            node->block.result = last->expression_statement.expression;
+            BUFFER__HEADER(node->block.statements)->length--;
         }
     }
 
-    expect(p, TOK_RBRACE);
-    return n;
+    expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
 }
 
-// ------------------------------------------------------------------------
-// Statements and declarations
-// ------------------------------------------------------------------------
-static ASTNode *parse_variable_declaration(Parser *p) {
-    SrcLoc s = current_location(p);
-    ASTNode *n = ast_new(p->arena, NODE_VAR_DECL, s);
+// Statement and declaration parsers.
+
+/**
+ * Parse `var x: T = expr` or the second half of `name := expr` (IDENT
+ * already consumed).
+ */
+static ASTNode *parse_variable_declaration(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    ASTNode *node = ast_new(parser->arena, NODE_VARIABLE_DECLARATION, location);
 
     // `var x: T = expr` or `x := expr`
-    if (match(p, TOK_VAR)) {
-        n->var_decl.is_var = true;
-        n->var_decl.name = expect(p, TOK_IDENT)->lexeme;
-        n->var_decl.type.kind = AST_TYPE_INFERRED;
+    if (match(parser, TOKEN_VARIABLE)) {
+        node->variable_declaration.is_variable = true;
+        node->variable_declaration.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        node->variable_declaration.type.kind = AST_TYPE_INFERRED;
 
-        if (match(p, TOK_COLON)) {
-            n->var_decl.type = parse_type(p);
+        if (match(parser, TOKEN_COLON)) {
+            node->variable_declaration.type = parse_type(parser);
         }
-        expect(p, TOK_EQ);
-        n->var_decl.initializer = parse_expression(p);
+        expect(parser, TOKEN_EQUAL);
+        node->variable_declaration.initializer = parse_expression(parser);
     } else {
-        // `name := expr` — already consumed IDENT, needs look-ahead
-        n->var_decl.is_var = false;
-        n->var_decl.name = previous(p)->lexeme;
-        n->var_decl.type.kind = AST_TYPE_INFERRED;
-        expect(p, TOK_COLON_EQ);
-        n->var_decl.initializer = parse_expression(p);
+        // `name := expr` —?already consumed IDENT, needs look-ahead
+        node->variable_declaration.is_variable = false;
+        node->variable_declaration.name = previous(parser)->lexeme;
+        node->variable_declaration.type.kind = AST_TYPE_INFERRED;
+        expect(parser, TOKEN_COLON_EQUAL);
+        node->variable_declaration.initializer = parse_expression(parser);
     }
 
-    return n;
+    return node;
 }
 
-static ASTNode *parse_function_declaration(Parser *p, bool is_pub) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_FN);
+static ASTNode *parse_function_declaration(Parser *parser, bool is_public) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_FUNCTION);
 
-    ASTNode *n = ast_new(p->arena, NODE_FN_DECL, s);
-    n->fn_decl.is_pub = is_pub;
-    n->fn_decl.name = expect(p, TOK_IDENT)->lexeme;
-    n->fn_decl.params = NULL;
+    ASTNode *node = ast_new(parser->arena, NODE_FUNCTION_DECLARATION, location);
+    node->function_declaration.is_public = is_public;
+    node->function_declaration.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+    node->function_declaration.parameters = NULL;
 
     // Parameters
-    expect(p, TOK_LPAREN);
-    if (!check(p, TOK_RPAREN)) {
+    expect(parser, TOKEN_LEFT_PAREN);
+    if (!check(parser, TOKEN_RIGHT_PAREN)) {
         do {
-            SrcLoc ps = current_location(p);
-            ASTNode *param = ast_new(p->arena, NODE_PARAM, ps);
-            param->param.name = expect(p, TOK_IDENT)->lexeme;
-            expect(p, TOK_COLON);
-            param->param.type = parse_type(p);
-            BUF_PUSH(n->fn_decl.params, param);
-        } while (match(p, TOK_COMMA));
+            SourceLocation parameter_location = current_location(parser);
+            ASTNode *parameter = ast_new(parser->arena, NODE_PARAMETER, parameter_location);
+            parameter->parameter.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            expect(parser, TOKEN_COLON);
+            parameter->parameter.type = parse_type(parser);
+            BUFFER_PUSH(node->function_declaration.parameters, parameter);
+        } while (match(parser, TOKEN_COMMA));
     }
-    expect(p, TOK_RPAREN);
+    expect(parser, TOKEN_RIGHT_PAREN);
 
     // Return type
-    n->fn_decl.return_type.kind = AST_TYPE_INFERRED;
-    if (match(p, TOK_ARROW)) {
-        n->fn_decl.return_type = parse_type(p);
+    node->function_declaration.return_type.kind = AST_TYPE_INFERRED;
+    if (match(parser, TOKEN_ARROW)) {
+        node->function_declaration.return_type = parse_type(parser);
     }
 
-    skip_newlines(p);
+    skip_newlines(parser);
 
     // Body: block or `= expr`
-    if (check(p, TOK_LBRACE)) {
-        n->fn_decl.body = parse_block(p);
-    } else if (match(p, TOK_EQ)) {
-        n->fn_decl.body = parse_expression(p);
+    if (check(parser, TOKEN_LEFT_BRACE)) {
+        node->function_declaration.body = parse_block(parser);
+    } else if (match(parser, TOKEN_EQUAL)) {
+        node->function_declaration.body = parse_expression(parser);
     } else {
-        rg_error(current_location(p), "expected function body");
+        rg_error(current_location(parser), "expected function body");
     }
 
-    return n;
+    return node;
 }
 
-static ASTNode *parse_assert(Parser *p) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_ASSERT);
+static ASTNode *parse_assert(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_ASSERT);
 
-    ASTNode *n = ast_new(p->arena, NODE_ASSERT, s);
-    n->assert_stmt.condition = parse_expression(p);
-    n->assert_stmt.message = NULL;
+    ASTNode *node = ast_new(parser->arena, NODE_ASSERT, location);
+    node->assert_statement.condition = parse_expression(parser);
+    node->assert_statement.message = NULL;
 
-    if (match(p, TOK_COMMA)) {
-        n->assert_stmt.message = parse_expression(p);
+    if (match(parser, TOKEN_COMMA)) {
+        node->assert_statement.message = parse_expression(parser);
     }
 
-    return n;
+    return node;
 }
 
-static ASTNode *parse_loop(Parser *p) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_LOOP);
-    ASTNode *n = ast_new(p->arena, NODE_LOOP, s);
-    n->loop.body = parse_block(p);
-    return n;
+static ASTNode *parse_loop(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_LOOP);
+    ASTNode *node = ast_new(parser->arena, NODE_LOOP, location);
+    node->loop.body = parse_block(parser);
+    return node;
 }
 
-static ASTNode *parse_for(Parser *p) {
-    SrcLoc s = current_location(p);
-    expect(p, TOK_FOR);
+static ASTNode *parse_for(Parser *parser) {
+    SourceLocation location = current_location(parser);
+    expect(parser, TOKEN_FOR);
 
-    ASTNode *n = ast_new(p->arena, NODE_FOR, s);
-    n->for_loop.start = parse_expression(p);
-    expect(p, TOK_DOT_DOT);
-    n->for_loop.end = parse_expression(p);
-    expect(p, TOK_PIPE);
-    n->for_loop.var_name = expect(p, TOK_IDENT)->lexeme;
-    expect(p, TOK_PIPE);
-    n->for_loop.body = parse_block(p);
-    return n;
+    ASTNode *node = ast_new(parser->arena, NODE_FOR, location);
+    node->for_loop.start = parse_expression(parser);
+    expect(parser, TOKEN_DOT_DOT);
+    node->for_loop.end = parse_expression(parser);
+    expect(parser, TOKEN_PIPE);
+    node->for_loop.variable_name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+    expect(parser, TOKEN_PIPE);
+    node->for_loop.body = parse_block(parser);
+    return node;
 }
 
-static ASTNode *parse_statement(Parser *p) {
-    skip_newlines(p);
+static ASTNode *parse_statement(Parser *parser) {
+    skip_newlines(parser);
 
     // Keyword-initiated statements
-    if (check(p, TOK_VAR)) {
-        return parse_variable_declaration(p);
+    if (check(parser, TOKEN_VARIABLE)) {
+        return parse_variable_declaration(parser);
     }
-    if (check(p, TOK_ASSERT)) {
-        return parse_assert(p);
+    if (check(parser, TOKEN_ASSERT)) {
+        return parse_assert(parser);
     }
-    if (check(p, TOK_LOOP)) {
-        return parse_loop(p);
+    if (check(parser, TOKEN_LOOP)) {
+        return parse_loop(parser);
     }
-    if (check(p, TOK_FOR)) {
-        return parse_for(p);
-    }
-
-    if (check(p, TOK_BREAK)) {
-        SrcLoc s = current_location(p);
-        advance_token(p); // consume 'break'
-        return ast_new(p->arena, NODE_BREAK, s);
-    }
-    if (check(p, TOK_CONTINUE)) {
-        SrcLoc s = current_location(p);
-        advance_token(p); // consume 'continue'
-        return ast_new(p->arena, NODE_CONTINUE, s);
+    if (check(parser, TOKEN_FOR)) {
+        return parse_for(parser);
     }
 
-    // `ident :=` — inferred variable declaration
-    if (check(p, TOK_IDENT) && p->position + 1 < p->count && p->tokens[p->position + 1].kind == TOK_COLON_EQ) {
-        advance_token(p); // consume IDENT
-        return parse_variable_declaration(p);
+    if (check(parser, TOKEN_BREAK)) {
+        SourceLocation location = current_location(parser);
+        advance_token(parser); // consume 'break'
+        return ast_new(parser->arena, NODE_BREAK, location);
+    }
+    if (check(parser, TOKEN_CONTINUE)) {
+        SourceLocation location = current_location(parser);
+        advance_token(parser); // consume 'continue'
+        return ast_new(parser->arena, NODE_CONTINUE, location);
+    }
+
+    // `ident :=` —?inferred variable declaration
+    if (check(parser, TOKEN_IDENTIFIER) && parser->position + 1 < parser->count &&
+        parser->tokens[parser->position + 1].kind == TOKEN_COLON_EQUAL) {
+        advance_token(parser); // consume IDENT
+        return parse_variable_declaration(parser);
     }
 
     // Expression statement
-    SrcLoc s = current_location(p);
-    ASTNode *expression = parse_expression(p);
-    ASTNode *n = ast_new(p->arena, NODE_EXPR_STMT, s);
-    n->expr_stmt.expr = expression;
-    return n;
+    SourceLocation location = current_location(parser);
+    ASTNode *expression = parse_expression(parser);
+    ASTNode *node = ast_new(parser->arena, NODE_EXPRESSION_STATEMENT, location);
+    node->expression_statement.expression = expression;
+    return node;
 }
 
-static ASTNode *parse_declaration(Parser *p) {
-    skip_newlines(p);
+static ASTNode *parse_declaration(Parser *parser) {
+    skip_newlines(parser);
 
     // module
-    if (check(p, TOK_MODULE)) {
-        SrcLoc s = current_location(p);
-        advance_token(p); // consume 'module'
-        ASTNode *n = ast_new(p->arena, NODE_MODULE, s);
-        n->module.name = expect(p, TOK_IDENT)->lexeme;
-        return n;
+    if (check(parser, TOKEN_MODULE)) {
+        SourceLocation location = current_location(parser);
+        advance_token(parser); // consume 'module'
+        ASTNode *node = ast_new(parser->arena, NODE_MODULE, location);
+        node->module.name = expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        return node;
     }
 
     // pub fn ...
-    if (check(p, TOK_PUB)) {
-        advance_token(p); // consume 'pub'
-        skip_newlines(p);
-        if (check(p, TOK_FN)) {
-            return parse_function_declaration(p, true);
+    if (check(parser, TOKEN_PUBLIC)) {
+        advance_token(parser); // consume 'pub'
+        skip_newlines(parser);
+        if (check(parser, TOKEN_FUNCTION)) {
+            return parse_function_declaration(parser, true);
         }
-        rg_error(current_location(p), "expected 'fn' after 'pub'");
+        rg_error(current_location(parser), "expected 'fn' after 'pub'");
         return NULL;
     }
 
     // fn ...
-    if (check(p, TOK_FN)) {
-        return parse_function_declaration(p, false);
+    if (check(parser, TOKEN_FUNCTION)) {
+        return parse_function_declaration(parser, false);
     }
 
     // Top-level statement (for scripts)
-    return parse_statement(p);
+    return parse_statement(parser);
 }
 
-// ------------------------------------------------------------------------
-// Public API
-// ------------------------------------------------------------------------
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
-    Parser *p = malloc(sizeof(*p));
-    if (p == NULL) {
+    Parser *parser = malloc(sizeof(*parser));
+    if (parser == NULL) {
         rg_fatal("out of memory");
     }
-    p->tokens = tokens;
-    p->position = 0;
-    p->count = count;
-    p->arena = arena;
-    p->file = file;
-    return p;
+    parser->tokens = tokens;
+    parser->position = 0;
+    parser->count = count;
+    parser->arena = arena;
+    parser->file = file;
+    return parser;
 }
 
-void parser_destroy(Parser *p) {
-    free(p);
+void parser_destroy(Parser *parser) {
+    free(parser);
 }
 
-ASTNode *parser_parse(Parser *p) {
-    SrcLoc s = {.file = p->file, .line = 1, .column = 1};
-    ASTNode *file = ast_new(p->arena, NODE_FILE, s);
-    file->file.decls = NULL;
+ASTNode *parser_parse(Parser *parser) {
+    SourceLocation location = {.file = parser->file, .line = 1, .column = 1};
+    ASTNode *file = ast_new(parser->arena, NODE_FILE, location);
+    file->file.declarations = NULL;
 
-    skip_newlines(p);
-    while (!at_end(p)) {
-        ASTNode *declaration = parse_declaration(p);
+    skip_newlines(parser);
+    while (!at_end(parser)) {
+        ASTNode *declaration = parse_declaration(parser);
         if (declaration != NULL) {
-            BUF_PUSH(file->file.decls, declaration);
+            BUFFER_PUSH(file->file.declarations, declaration);
         }
-        skip_newlines(p);
+        skip_newlines(parser);
     }
 
     return file;

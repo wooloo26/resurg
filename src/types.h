@@ -3,44 +3,48 @@
 
 #include "common.h"
 
-// ------------------------------------------------------------------------
-// Resolved types — produced by semantic analysis.
-// v0.1.0 only needs primitive types.
-// ------------------------------------------------------------------------
+/**
+ * @file types.h
+ * @brief Resolved types produced by semantic analysis.  v0.1.0 only needs
+ * primitive types; each is represented as a singleton Type instance.
+ */
 typedef enum {
-    TYPE_BOOL,  //
-    TYPE_I32,   //
-    TYPE_U32,   //
-    TYPE_F64,   //
-    TYPE_STR,   //
-    TYPE_UNIT,  //
-    TYPE_ERROR, // sentinel for type errors (allows continued checking)
+    TYPE_BOOL,
+    TYPE_I32,
+    TYPE_U32,
+    TYPE_F64,
+    TYPE_STRING,
+    TYPE_UNIT,
+    TYPE_ERROR, // sentinel for continued checking after type errors
 } TypeKind;
 
 typedef struct {
     TypeKind kind;
 } Type;
 
-// Singleton type instances (avoids allocation for primitives)
-extern const Type TYPE_BOOL_INST;
-extern const Type TYPE_I32_INST;
-extern const Type TYPE_U32_INST;
-extern const Type TYPE_F64_INST;
-extern const Type TYPE_STR_INST;
-extern const Type TYPE_UNIT_INST;
-extern const Type TYPE_ERROR_INST;
+/** Singleton type instances (avoids heap allocation for primitives). */
+extern const Type TYPE_BOOL_INSTANCE;
+extern const Type TYPE_I32_INSTANCE;
+extern const Type TYPE_U32_INSTANCE;
+extern const Type TYPE_F64_INSTANCE;
+extern const Type TYPE_STRING_INSTANCE;
+extern const Type TYPE_UNIT_INSTANCE;
+extern const Type TYPE_ERROR_INSTANCE;
 
-// Resolve a type name ("i32", "bool", etc.) to its singleton.
+/**
+ * Resolve a Resurg type name ("i32", "str", ...) to its singleton.  Returns
+ * NULL if @p name is unknown.
+ */
 const Type *type_from_name(const char *name);
-// Return the Resurg name for a resolved type.
-const char *type_name(const Type *t);
-// Return the C type string for code generation.
-const char *c_type_str(const Type *t);
-// Return true if two types are equal.
-bool type_eq(const Type *a, const Type *b);
-// Return true if the type is numeric (i32, u32, or f64).
-bool type_is_numeric(const Type *t);
-// Return true if the type is an integer (i32 or u32).
-bool type_is_integer(const Type *t);
+/** Return the Resurg-language name for @p type (e.g. "i32"). */
+const char *type_name(const Type *type);
+/** Return the C type string used during code generation (e.g. "int32_t"). */
+const char *c_type_string(const Type *type);
+/** Return true if both types are non-NULL and have the same kind. */
+bool type_equal(const Type *a, const Type *b);
+/** Return true if @p type is i32, u32, or f64. */
+bool type_is_numeric(const Type *type);
+/** Return true if @p type is i32 or u32. */
+bool type_is_integer(const Type *type);
 
 #endif // RG_TYPES_H

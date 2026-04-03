@@ -1,23 +1,18 @@
 #include "lexer.h"
 
-// ------------------------------------------------------------------------
-// Private struct definition
-// ------------------------------------------------------------------------
 struct Lexer {
-    const char *source;       // full source text
-    const char *file;         // source file name (for diagnostics)
-    int32_t position;         // current byte offset
-    int32_t length;           // total source length
-    int32_t line;             // current line (1-based)
-    int32_t column;           // current column (1-based)
+    const char *source;
+    const char *file; // source filename for diagnostics
+    int32_t position;
+    int32_t length;
+    int32_t line;             // 1-based current line
+    int32_t column;           // 1-based current column
     Arena *arena;             // for allocating lexemes / string literals
-    Token *pending; /* buf */ // for interpolation
-    int32_t pending_position; // next index to return from pending
+    Token *pending; /* buf */ // buffered tokens from string interpolation
+    int32_t pending_position; // read cursor into pending
 };
 
-// ------------------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------------------
+// Character classification helpers.
 static bool is_alpha(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
@@ -30,99 +25,106 @@ static bool is_alnum(char c) {
     return is_alpha(c) || is_digit(c);
 }
 
-static char peek(const Lexer *l) {
-    return (char)(l->position < l->length ? l->source[l->position] : '\0');
+static char peek(const Lexer *lexer) {
+    return (char)(lexer->position < lexer->length ? lexer->source[lexer->position] : '\0');
 }
 
-static char peek_next(const Lexer *l) {
-    return (char)(l->position + 1 < l->length ? l->source[l->position + 1] : '\0');
+static char peek_next(const Lexer *lexer) {
+    return (char)(lexer->position + 1 < lexer->length ? lexer->source[lexer->position + 1] : '\0');
 }
-static char advance(Lexer *l) {
-    char c = peek(l);
-    l->position++;
-    l->column++;
+static char advance(Lexer *lexer) {
+    char c = peek(lexer);
+    lexer->position++;
+    lexer->column++;
     return c;
 }
 
-static bool match(Lexer *l, char expected) {
-    if (peek(l) == expected) {
-        advance(l);
+static bool match(Lexer *lexer, char expected) {
+    if (peek(lexer) == expected) {
+        advance(lexer);
         return true;
     }
     return false;
 }
 
-static SrcLoc current_location(const Lexer *l) {
-    return (SrcLoc){.file = l->file, .line = l->line, .column = l->column};
+static SourceLocation current_location(const Lexer *lexer) {
+    return (SourceLocation){.file = lexer->file, .line = lexer->line, .column = lexer->column};
 }
 
-static Token make_token(const Lexer *l, TokenKind kind, const char *start, int32_t length, SrcLoc s) {
+static Token make_token(const Lexer *lexer, TokenKind kind, const char *start, int32_t length,
+                        SourceLocation location) {
     return (Token){
         .kind = kind,
-        .lexeme = arena_strndup(l->arena, start, length),
+        .lexeme = arena_strndup(lexer->arena, start, length),
         .length = length,
-        .loc = s,
+        .location = location,
     };
 }
 
-// ------------------------------------------------------------------------
-// Keyword table
-// ------------------------------------------------------------------------
+/** Keyword lookup table — maps reserved words to their TokenKind. */
 typedef struct {
     const char *word;
     TokenKind kind;
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOK_MODULE}, {"pub", TOK_PUB},   {"fn", TOK_FN},       {"var", TOK_VAR},     {"if", TOK_IF},
-    {"else", TOK_ELSE},     {"loop", TOK_LOOP}, {"for", TOK_FOR},     {"break", TOK_BREAK}, {"continue", TOK_CONTINUE},
-    {"assert", TOK_ASSERT}, {"true", TOK_TRUE}, {"false", TOK_FALSE}, {"bool", TOK_BOOL},   {"i32", TOK_I32},
-    {"u32", TOK_U32},       {"f64", TOK_F64},   {"str", TOK_STR},     {"unit", TOK_UNIT},
+    {"module", TOKEN_MODULE}, {"pub", TOKEN_PUBLIC},        {"fn", TOKEN_FUNCTION},   {"var", TOKEN_VARIABLE},
+    {"if", TOKEN_IF},         {"else", TOKEN_ELSE},         {"loop", TOKEN_LOOP},     {"for", TOKEN_FOR},
+    {"break", TOKEN_BREAK},   {"continue", TOKEN_CONTINUE}, {"assert", TOKEN_ASSERT}, {"true", TOKEN_TRUE},
+    {"false", TOKEN_FALSE},   {"bool", TOKEN_BOOL},         {"i32", TOKEN_I32},       {"u32", TOKEN_U32},
+    {"f64", TOKEN_F64},       {"str", TOKEN_STRING},        {"unit", TOKEN_UNIT},
 };
 
 static const int32_t KEYWORD_COUNT = (int32_t)(sizeof(KEYWORDS) / sizeof(KEYWORDS[0]));
 
+/**
+ * Look up @p text (length @p len) in the keyword table.  Returns
+ * TOKEN_IDENTIFIER if no keyword matches.
+ */
 static TokenKind lookup_keyword(const char *text, int32_t len) {
     for (int32_t i = 0; i < KEYWORD_COUNT; i++) {
         if ((int32_t)strlen(KEYWORDS[i].word) == len && memcmp(KEYWORDS[i].word, text, len) == 0) {
             return KEYWORDS[i].kind;
         }
     }
-    return TOK_IDENT;
+    return TOKEN_IDENTIFIER;
 }
 
-// ------------------------------------------------------------------------
-// Scanning routines
-// ------------------------------------------------------------------------
-static Token scan_number(Lexer *l, SrcLoc s) {
-    const char *start = l->source + l->position - 1;
+// Scanning routines —?one per lexeme category.
+
+/**
+ * Scan a decimal integer or floating-point literal.  Underscores are
+ * silently stripped before parsing the numeric value.
+ */
+static Token scan_number(Lexer *lexer, SourceLocation location) {
+    const char *start = lexer->source + lexer->position - 1;
     bool is_float = false;
 
-    while (is_digit(peek(l)) || peek(l) == '_') {
-        advance(l);
+    while (is_digit(peek(lexer)) || peek(lexer) == '_') {
+        advance(lexer);
     }
 
-    if (peek(l) == '.' && peek_next(l) != '.') {
+    if (peek(lexer) == '.' && peek_next(lexer) != '.') {
         is_float = true;
-        advance(l); // consume '.'
-        while (is_digit(peek(l)) || peek(l) == '_') {
-            advance(l);
+        advance(lexer); // consume '.'
+        while (is_digit(peek(lexer)) || peek(lexer) == '_') {
+            advance(lexer);
         }
     }
 
-    if (peek(l) == 'e' || peek(l) == 'E') {
+    if (peek(lexer) == 'e' || peek(lexer) == 'E') {
         is_float = true;
-        advance(l);
-        if (peek(l) == '+' || peek(l) == '-') {
-            advance(l);
+        advance(lexer); // consume 'e' or 'E'
+        if (peek(lexer) == '+' || peek(lexer) == '-') {
+            advance(lexer); // consume sign
         }
-        while (is_digit(peek(l))) {
-            advance(l);
+        while (is_digit(peek(lexer))) {
+            advance(lexer);
         }
     }
 
-    int32_t length = (int32_t)(l->source + l->position - start);
-    Token t = make_token(l, is_float ? TOK_FLOAT_LIT : TOK_INT_LIT, start, length, s);
+    int32_t length = (int32_t)(lexer->source + lexer->position - start);
+    Token token = make_token(lexer, is_float ? TOKEN_FLOAT_LITERAL : TOKEN_INTEGER_LITERAL, start, length, location);
 
     // Strip underscores and parse value
     char buffer[64];
@@ -135,256 +137,268 @@ static Token scan_number(Lexer *l, SrcLoc s) {
     buffer[buffer_index] = '\0';
 
     if (is_float) {
-        t.lit.float_value = strtod(buffer, NULL);
+        token.literal_value.float_value = strtod(buffer, NULL);
     } else {
-        t.lit.integer_value = strtoll(buffer, NULL, 10);
+        token.literal_value.integer_value = strtoll(buffer, NULL, 10);
     }
 
-    return t;
+    return token;
 }
 
-// Forward declaration for scanning a single non-string token
 static Token scan_token(Lexer *l);
 
-static char *extract_str_content(const Lexer *l, int32_t from, int32_t to) {
+static char *extract_string_content(const Lexer *lexer, int32_t from, int32_t to) {
     // Copy raw content between positions (escape sequences preserved as-is)
-    return arena_strndup(l->arena, l->source + from, to - from);
+    return arena_strndup(lexer->arena, lexer->source + from, to - from);
 }
 
-static Token make_str_token(const Lexer *l, const char *val, SrcLoc s) {
-    (void)l;
+static Token make_string_token(const Lexer *lexer, const char *value, SourceLocation location) {
+    (void)lexer;
     return (Token){
-        .kind = TOK_STR_LIT,
-        .lexeme = val,
-        .length = (int32_t)strlen(val),
-        .loc = s,
-        .lit.string_value = (char *)val,
+        .kind = TOKEN_STRING_LITERAL,
+        .lexeme = value,
+        .length = (int32_t)strlen(value),
+        .location = location,
+        .literal_value.string_value = (char *)value,
     };
 }
 
-static Token scan_string(Lexer *l, SrcLoc s) {
+static Token scan_string(Lexer *lexer, SourceLocation location) {
     // Opening '"' already consumed
-    int32_t content_start = l->position;
+    int32_t content_start = lexer->position;
 
     // Quick lookahead for interpolation (avoid save/restore)
-    bool has_interp = false;
-    for (int32_t i = l->position; i < l->length && l->source[i] != '"'; i++) {
-        if (l->source[i] == '\\') {
+    bool has_interpolation = false;
+    for (int32_t i = lexer->position; i < lexer->length && lexer->source[i] != '"'; i++) {
+        if (lexer->source[i] == '\\') {
             i++;
             continue;
         }
-        if (l->source[i] == '{') {
-            has_interp = true;
+        if (lexer->source[i] == '{') {
+            has_interpolation = true;
             break;
         }
     }
 
-    if (!has_interp) {
+    if (!has_interpolation) {
         // Simple string: scan to closing quote
-        while (peek(l) != '"' && peek(l) != '\0') {
-            if (peek(l) == '\\') {
-                advance(l);
+        while (peek(lexer) != '"' && peek(lexer) != '\0') {
+            if (peek(lexer) == '\\') {
+                advance(lexer); // consume '\\'
             }
-            if (peek(l) == '\n') {
-                l->line++;
-                l->column = 0;
+            if (peek(lexer) == '\n') {
+                lexer->line++;
+                lexer->column = 0;
             }
-            advance(l);
+            advance(lexer);
         }
 
-        if (peek(l) == '\0') {
-            rg_error(s, "unterminated string literal");
-            return make_token(l, TOK_ERROR, l->source + content_start - 1, l->position - content_start + 1, s);
+        if (peek(lexer) == '\0') {
+            rg_error(location, "unterminated string literal");
+            return make_token(lexer, TOKEN_ERROR, lexer->source + content_start - 1,
+                              lexer->position - content_start + 1, location);
         }
 
-        char *val = extract_str_content(l, content_start, l->position);
-        advance(l); // consume '"'
-        return make_str_token(l, val, s);
+        char *value = extract_string_content(lexer, content_start, lexer->position);
+        advance(lexer); // consume '"'
+        return make_string_token(lexer, value, location);
     }
 
     // Interpolated string: produce token sequence into pending buffer
-    // Pattern: STR_LIT [INTERP_START expr_tokens... INTERP_END STR_LIT]*
-    l->pending = NULL;
-    l->pending_position = 0;
+    // Pattern: STRING_LITERAL [INTERPOLATION_START expr_tokens... INTERPOLATION_END STRING_LITERAL]*
+    lexer->pending = NULL;
+    lexer->pending_position = 0;
 
-    while (peek(l) != '"' && peek(l) != '\0') {
+    while (peek(lexer) != '"' && peek(lexer) != '\0') {
         // Scan text segment until '{' or '"'
-        int32_t seg_start = l->position;
-        SrcLoc seg_loc = current_location(l);
+        int32_t segment_start = lexer->position;
+        SourceLocation segment_location = current_location(lexer);
 
-        while (peek(l) != '{' && peek(l) != '"' && peek(l) != '\0') {
-            if (peek(l) == '\\') {
-                advance(l);
+        while (peek(lexer) != '{' && peek(lexer) != '"' && peek(lexer) != '\0') {
+            if (peek(lexer) == '\\') {
+                advance(lexer); // consume '\\'
             }
-            if (peek(l) == '\n') {
-                l->line++;
-                l->column = 0;
+            if (peek(lexer) == '\n') {
+                lexer->line++;
+                lexer->column = 0;
             }
-            advance(l);
+            advance(lexer);
         }
 
         // Emit text segment
-        char *text = extract_str_content(l, seg_start, l->position);
-        BUF_PUSH(l->pending, make_str_token(l, text, seg_loc));
+        char *text = extract_string_content(lexer, segment_start, lexer->position);
+        BUFFER_PUSH(lexer->pending, make_string_token(lexer, text, segment_location));
 
-        if (peek(l) == '{') {
-            advance(l); // consume '{'
+        if (peek(lexer) == '{') {
+            advance(lexer); // consume '{'
 
-            // Emit INTERP_START
-            BUF_PUSH(l->pending, make_token(l, TOK_INTERP_START, "{", 1, current_location(l)));
+            // Emit INTERPOLATION_START
+            BUFFER_PUSH(lexer->pending, make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_location(lexer)));
 
             // Lex expression tokens until matching '}'
             int32_t brace_depth = 1;
-            while (brace_depth > 0 && peek(l) != '\0') {
-                // Skip whitespace (but not newlines — those are inside a
+            while (brace_depth > 0 && peek(lexer) != '\0') {
+                // Skip whitespace (but not newlines —?those are inside a
                 // string)
-                while (peek(l) == ' ' || peek(l) == '\t') {
-                    advance(l);
+                while (peek(lexer) == ' ' || peek(lexer) == '\t') {
+                    advance(lexer);
                 }
 
-                if (peek(l) == '}') {
+                if (peek(lexer) == '}') {
                     brace_depth--;
                     if (brace_depth == 0) {
-                        advance(l); // consume '}'
+                        advance(lexer); // consume '}'
                         break;
                     }
                 }
-                if (peek(l) == '{') {
+                if (peek(lexer) == '{') {
                     brace_depth++;
                 }
 
-                Token t = scan_token(l);
-                if (t.kind == TOK_EOF || t.kind == TOK_ERROR) {
+                Token token = scan_token(lexer);
+                if (token.kind == TOKEN_EOF || token.kind == TOKEN_ERROR) {
                     break;
                 }
                 // skip newlines inside interpolation
-                if (t.kind == TOK_NEWLINE) {
+                if (token.kind == TOKEN_NEWLINE) {
                     continue;
                 }
-                BUF_PUSH(l->pending, t);
+                BUFFER_PUSH(lexer->pending, token);
             }
 
-            // Emit INTERP_END
-            BUF_PUSH(l->pending, make_token(l, TOK_INTERP_END, "}", 1, current_location(l)));
+            // Emit INTERPOLATION_END
+            BUFFER_PUSH(lexer->pending, make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_location(lexer)));
         }
     }
 
-    // If the string ends with an interpolation, emit a trailing empty STR_LIT
-    // so the parser always sees: STR_LIT [INTERP_START expr INTERP_END STR_LIT]*
-    if (BUF_LEN(l->pending) > 0 && l->pending[BUF_LEN(l->pending) - 1].kind == TOK_INTERP_END) {
-        BUF_PUSH(l->pending, make_str_token(l, "", current_location(l)));
+    // If the string ends with an interpolation, emit a trailing empty STRING_LITERAL
+    // so the parser always sees: STRING_LITERAL [INTERPOLATION_START expr INTERPOLATION_END STRING_LITERAL]*
+    if (BUFFER_LENGTH(lexer->pending) > 0 &&
+        lexer->pending[BUFFER_LENGTH(lexer->pending) - 1].kind == TOKEN_INTERPOLATION_END) {
+        BUFFER_PUSH(lexer->pending, make_string_token(lexer, "", current_location(lexer)));
     }
 
-    if (peek(l) == '\0') {
-        rg_error(s, "unterminated string literal");
+    if (peek(lexer) == '\0') {
+        rg_error(location, "unterminated string literal");
     } else {
-        advance(l); // consume '"'
+        advance(lexer); // consume '"'
     }
 
     // Return first pending token
-    if (BUF_LEN(l->pending) > 0) {
-        Token first = l->pending[0];
-        l->pending_position = 1;
+    if (BUFFER_LENGTH(lexer->pending) > 0) {
+        Token first = lexer->pending[0];
+        lexer->pending_position = 1;
         return first;
     }
 
     // Empty string edge case
-    return make_str_token(l, "", s);
+    return make_string_token(lexer, "", location);
 }
 
-static Token scan_ident(Lexer *l, SrcLoc s) {
-    const char *start = l->source + l->position - 1;
-    while (is_alnum(peek(l))) {
-        advance(l);
+static Token scan_ident(Lexer *lexer, SourceLocation location) {
+    const char *start = lexer->source + lexer->position - 1;
+    while (is_alnum(peek(lexer))) {
+        advance(lexer);
     }
 
-    int32_t length = (int32_t)(l->source + l->position - start);
+    int32_t length = (int32_t)(lexer->source + lexer->position - start);
     TokenKind kind = lookup_keyword(start, length);
-    return make_token(l, kind, start, length, s);
+    return make_token(lexer, kind, start, length, location);
 }
 
-// ------------------------------------------------------------------------
-// Punctuation and operator tokens
-// ------------------------------------------------------------------------
-static Token scan_punctuation(Lexer *l, char c, SrcLoc s) {
+/** Dispatch a single- or double-character punctuation / operator token. */
+static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
     switch (c) {
     case ':':
-        return match(l, '=') ? make_token(l, TOK_COLON_EQ, ":=", 2, s) : make_token(l, TOK_COLON, ":", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
+                                 : make_token(lexer, TOKEN_COLON, ":", 1, location);
     case '=':
-        return match(l, '=') ? make_token(l, TOK_EQ_EQ, "==", 2, s) : make_token(l, TOK_EQ, "=", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_EQUAL_EQUAL, "==", 2, location)
+                                 : make_token(lexer, TOKEN_EQUAL, "=", 1, location);
     case '!':
-        return match(l, '=') ? make_token(l, TOK_BANG_EQ, "!=", 2, s) : make_token(l, TOK_BANG, "!", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_BANG_EQUAL, "!=", 2, location)
+                                 : make_token(lexer, TOKEN_BANG, "!", 1, location);
     case '<':
-        return match(l, '=') ? make_token(l, TOK_LT_EQ, "<=", 2, s) : make_token(l, TOK_LT, "<", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_LESS_EQUAL, "<=", 2, location)
+                                 : make_token(lexer, TOKEN_LESS, "<", 1, location);
     case '>':
-        return match(l, '=') ? make_token(l, TOK_GT_EQ, ">=", 2, s) : make_token(l, TOK_GT, ">", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_GREATER_EQUAL, ">=", 2, location)
+                                 : make_token(lexer, TOKEN_GREATER, ">", 1, location);
     case '&':
-        if (match(l, '&')) {
-            return make_token(l, TOK_AMP_AMP, "&&", 2, s);
+        if (match(lexer, '&')) {
+            return make_token(lexer, TOKEN_AMPERSAND_AMPERSAND, "&&", 2, location);
         }
         break;
     case '|':
-        if (match(l, '|')) {
-            return make_token(l, TOK_PIPE_PIPE, "||", 2, s);
+        if (match(lexer, '|')) {
+            return make_token(lexer, TOKEN_PIPE_PIPE, "||", 2, location);
         }
-        return make_token(l, TOK_PIPE, "|", 1, s);
+        return make_token(lexer, TOKEN_PIPE, "|", 1, location);
     case '+':
-        return match(l, '=') ? make_token(l, TOK_PLUS_EQ, "+=", 2, s) : make_token(l, TOK_PLUS, "+", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_PLUS_EQUAL, "+=", 2, location)
+                                 : make_token(lexer, TOKEN_PLUS, "+", 1, location);
     case '-':
-        if (match(l, '>')) {
-            return make_token(l, TOK_ARROW, "->", 2, s);
+        if (match(lexer, '>')) {
+            return make_token(lexer, TOKEN_ARROW, "->", 2, location);
         }
-        return match(l, '=') ? make_token(l, TOK_MINUS_EQ, "-=", 2, s) : make_token(l, TOK_MINUS, "-", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_MINUS_EQUAL, "-=", 2, location)
+                                 : make_token(lexer, TOKEN_MINUS, "-", 1, location);
     case '*':
-        return match(l, '=') ? make_token(l, TOK_STAR_EQ, "*=", 2, s) : make_token(l, TOK_STAR, "*", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_STAR_EQUAL, "*=", 2, location)
+                                 : make_token(lexer, TOKEN_STAR, "*", 1, location);
     case '/':
-        return match(l, '=') ? make_token(l, TOK_SLASH_EQ, "/=", 2, s) : make_token(l, TOK_SLASH, "/", 1, s);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_SLASH_EQUAL, "/=", 2, location)
+                                 : make_token(lexer, TOKEN_SLASH, "/", 1, location);
     case '%':
-        return make_token(l, TOK_PERCENT, "%", 1, s);
+        return make_token(lexer, TOKEN_PERCENT, "%", 1, location);
     case '.':
-        return match(l, '.') ? make_token(l, TOK_DOT_DOT, "..", 2, s) : make_token(l, TOK_DOT, ".", 1, s);
+        return match(lexer, '.') ? make_token(lexer, TOKEN_DOT_DOT, "..", 2, location)
+                                 : make_token(lexer, TOKEN_DOT, ".", 1, location);
     case '(':
-        return make_token(l, TOK_LPAREN, "(", 1, s);
+        return make_token(lexer, TOKEN_LEFT_PAREN, "(", 1, location);
     case ')':
-        return make_token(l, TOK_RPAREN, ")", 1, s);
+        return make_token(lexer, TOKEN_RIGHT_PAREN, ")", 1, location);
     case '{':
-        return make_token(l, TOK_LBRACE, "{", 1, s);
+        return make_token(lexer, TOKEN_LEFT_BRACE, "{", 1, location);
     case '}':
-        return make_token(l, TOK_RBRACE, "}", 1, s);
+        return make_token(lexer, TOKEN_RIGHT_BRACE, "}", 1, location);
     case ',':
-        return make_token(l, TOK_COMMA, ",", 1, s);
+        return make_token(lexer, TOKEN_COMMA, ",", 1, location);
     case ';':
-        return make_token(l, TOK_SEMICOLON, ";", 1, s);
+        return make_token(lexer, TOKEN_SEMICOLON, ";", 1, location);
     default:
         break;
     }
-    rg_error(s, "unexpected character '%c'", c);
-    return make_token(l, TOK_ERROR, &l->source[l->position - 1], 1, s);
+    rg_error(location, "unexpected character '%c'", c);
+    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
 }
 
-// ------------------------------------------------------------------------
-// Core token scanner — used by both lexer_next and interpolation scanning
-// ------------------------------------------------------------------------
-static Token scan_token(Lexer *l) {
-    // Skip whitespace and comments
+/**
+ * Core scanner — skips whitespace and comments, then dispatches to the
+ * appropriate scan_* routine.  Used by both lexer_next and interpolation
+ * scanning.
+ */
+static Token scan_token(Lexer *lexer) {
+    // Skip horizontal whitespace and comments.
     for (;;) {
-        while (peek(l) == ' ' || peek(l) == '\t' || peek(l) == '\r') {
-            advance(l);
+        while (peek(lexer) == ' ' || peek(lexer) == '\t' || peek(lexer) == '\r') {
+            advance(lexer);
         }
 
-        // Newlines (may be significant — emit TOK_NEWLINE)
-        if (peek(l) == '\n') {
-            SrcLoc s = current_location(l);
-            advance(l);
-            l->line++;
-            l->column = 1;
-            return make_token(l, TOK_NEWLINE, "\n", 1, s);
+        // Newlines are significant —?emit TOKEN_NEWLINE as a statement
+        // terminator.
+        if (peek(lexer) == '\n') {
+            SourceLocation location = current_location(lexer);
+            advance(lexer); // consume '\n'
+            lexer->line++;
+            lexer->column = 1;
+            return make_token(lexer, TOKEN_NEWLINE, "\n", 1, location);
         }
 
-        // Line comments
-        if (peek(l) == '/' && peek_next(l) == '/') {
-            while (peek(l) != '\n' && peek(l) != '\0') {
-                advance(l);
+        // Line comments: skip until end of line.
+        if (peek(lexer) == '/' && peek_next(lexer) == '/') {
+            while (peek(lexer) != '\n' && peek(lexer) != '\0') {
+                advance(lexer);
             }
             continue;
         }
@@ -392,71 +406,68 @@ static Token scan_token(Lexer *l) {
         break;
     }
 
-    SrcLoc s = current_location(l);
-    char c = advance(l);
+    SourceLocation location = current_location(lexer);
+    char c = advance(lexer);
 
     if (c == '\0') {
-        return make_token(l, TOK_EOF, "", 0, s);
+        return make_token(lexer, TOKEN_EOF, "", 0, location);
     }
     if (is_digit(c)) {
-        return scan_number(l, s);
+        return scan_number(lexer, location);
     }
     if (is_alpha(c)) {
-        return scan_ident(l, s);
+        return scan_ident(lexer, location);
     }
     if (c == '"') {
-        return scan_string(l, s);
+        return scan_string(lexer, location);
     }
-    return scan_punctuation(l, c, s);
+    return scan_punctuation(lexer, c, location);
 }
 
-// ------------------------------------------------------------------------
-// Public API
-// ------------------------------------------------------------------------
 Lexer *lexer_create(const char *source, const char *file, Arena *arena) {
-    Lexer *l = malloc(sizeof(*l));
-    if (l == NULL) {
+    Lexer *lexer = malloc(sizeof(*lexer));
+    if (lexer == NULL) {
         rg_fatal("out of memory");
     }
-    l->source = source;
-    l->file = file;
-    l->position = 0;
-    l->length = (int32_t)strlen(source);
-    l->line = 1;
-    l->column = 1;
-    l->arena = arena;
-    l->pending = NULL;
-    l->pending_position = 0;
-    return l;
+    lexer->source = source;
+    lexer->file = file;
+    lexer->position = 0;
+    lexer->length = (int32_t)strlen(source);
+    lexer->line = 1;
+    lexer->column = 1;
+    lexer->arena = arena;
+    lexer->pending = NULL;
+    lexer->pending_position = 0;
+    return lexer;
 }
 
-void lexer_destroy(Lexer *l) {
-    if (l != NULL) {
-        BUF_FREE(l->pending);
-        free(l);
+void lexer_destroy(Lexer *lexer) {
+    if (lexer != NULL) {
+        BUFFER_FREE(lexer->pending);
+        free(lexer);
     }
 }
 
-Token lexer_next(Lexer *l) {
+Token lexer_next(Lexer *lexer) {
     // Return pending tokens first (from string interpolation)
-    if (l->pending != NULL && l->pending_position < BUF_LEN(l->pending)) {
-        return l->pending[l->pending_position++];
+    if (lexer->pending != NULL && lexer->pending_position < BUFFER_LENGTH(lexer->pending)) {
+        return lexer->pending[lexer->pending_position++];
     }
     // Free pending buffer when exhausted
-    if (l->pending != NULL) {
-        BUF_FREE(l->pending);
-        l->pending = NULL;
-        l->pending_position = 0;
+    if (lexer->pending != NULL) {
+        BUFFER_FREE(lexer->pending);
+        lexer->pending = NULL;
+        lexer->pending_position = 0;
     }
-    return scan_token(l);
+    return scan_token(lexer);
 }
 
-Token *lexer_scan_all(Lexer *l) {
+Token *lexer_scan_all(Lexer *lexer) {
     Token *tokens = NULL;
     for (;;) {
-        Token t = lexer_next(l);
-        BUF_PUSH(tokens, t);
-        if (t.kind == TOK_EOF) {
+        Token token = lexer_next(lexer);
+        BUFFER_PUSH(tokens, token);
+        if (token.kind == TOKEN_EOF) {
             break;
         }
     }

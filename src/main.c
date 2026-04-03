@@ -1,15 +1,17 @@
-#include "codegen.h"
+#include "code_generator.h"
 #include "common.h"
 #include "lexer.h"
 #include "parser.h"
-#include "sema.h"
+#include "semantic_analyzer.h"
 
-// ------------------------------------------------------------------------
-// File I/O
-// ------------------------------------------------------------------------
-// 64 MiB — sanity limit for source files
+/** Maximum source file size accepted by the compiler (64 MiB). */
 #define MAX_SOURCE_SIZE (64L * 1024 * 1024)
 
+/**
+ * Read the entire contents of @p path into a heap-allocated, NUL-terminated
+ * buffer.  Fatally exits on I/O failure or if the file exceeds
+ * MAX_SOURCE_SIZE.  The caller owns the returned memory.
+ */
 static char *read_file(const char *path) {
     FILE *file_handle = fopen(path, "rb");
     if (file_handle == NULL) {
@@ -34,9 +36,7 @@ static char *read_file(const char *path) {
     return buffer;
 }
 
-// ------------------------------------------------------------------------
-// Usage
-// ------------------------------------------------------------------------
+/** Print a usage synopsis to stderr and terminate with exit code 1. */
 static noreturn void usage(void) {
     fprintf(stderr, "Usage: resurg <input.rsg> [options]\n"
                     "\n"
@@ -49,16 +49,18 @@ static noreturn void usage(void) {
     exit(1);
 }
 
-// ------------------------------------------------------------------------
-// CLI argument parsing
-// ------------------------------------------------------------------------
+/** Parsed command-line options forwarded to the compilation pipeline. */
 typedef struct {
-    const char *input_file;
-    const char *output_file;
-    bool dump_tokens;
-    bool dump_ast;
+    const char *input_file;  // Mandatory .rsg source path.
+    const char *output_file; // -o destination; NULL means stdout.
+    bool dump_tokens;        // --dump-tokens: print token stream and exit.
+    bool dump_ast;           // --dump-ast: pretty-print AST and exit.
 } CliArgs;
 
+/**
+ * Parse argv into a CliArgs struct.  Fatally exits on unrecognised flags,
+ * missing arguments, or absent input file.
+ */
 static CliArgs parse_cli_args(int argc, char *argv[]) {
     CliArgs args = {0};
     for (int i = 1; i < argc; i++) {
@@ -89,32 +91,36 @@ static CliArgs parse_cli_args(int argc, char *argv[]) {
     return args;
 }
 
-// ------------------------------------------------------------------------
-// Compilation pipeline
-// ------------------------------------------------------------------------
+/**
+ * Drive the full compilation pipeline: lex -> parse -> sema -> codegen.
+ * Returns 0 on success or 1 when semantic analysis reports errors.
+ * Debug flags in @p args may short-circuit after lexing or parsing.
+ */
 static int compile(const CliArgs *args) {
     char *source = read_file(args->input_file);
     Arena *arena = arena_create();
-    Token *tokens = NULL;
+    Token *tokens = NULL; /* buf */
     Lexer *lexer = NULL;
     Parser *parser = NULL;
-    Sema *sema = NULL;
-    CodeGen *code_generator = NULL;
+    SemanticAnalyzer *analyzer = NULL;
+    CodeGenerator *code_generator = NULL;
     int status = 0;
 
+    // Stage 1: Lexical analysis.
     lexer = lexer_create(source, args->input_file, arena);
     tokens = lexer_scan_all(lexer);
 
     if (args->dump_tokens) {
-        for (int32_t i = 0; i < BUF_LEN(tokens); i++) {
+        for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
             Token *token = &tokens[i];
-            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->loc.line, token->loc.column,
-                    token_kind_str(token->kind), token->length, token->lexeme);
+            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->location.line, token->location.column,
+                    token_kind_string(token->kind), token->length, token->lexeme);
         }
         goto cleanup;
     }
 
-    parser = parser_create(tokens, BUF_LEN(tokens), arena, args->input_file);
+    // Stage 2: Parsing — build the AST from the token stream.
+    parser = parser_create(tokens, BUFFER_LENGTH(tokens), arena, args->input_file);
     ASTNode *file_node = parser_parse(parser);
 
     if (args->dump_ast) {
@@ -122,12 +128,14 @@ static int compile(const CliArgs *args) {
         goto cleanup;
     }
 
-    sema = sema_create(arena);
-    if (!sema_check(sema, file_node)) {
+    // Stage 3: Semantic analysis — type-check and validate the AST.
+    analyzer = semantic_analyzer_create(arena);
+    if (!semantic_analyzer_check(analyzer, file_node)) {
         status = 1;
         goto cleanup;
     }
 
+    // Stage 4: Code generation — emit C source from the validated AST.
     {
         FILE *out = stdout;
         if (args->output_file != NULL) {
@@ -136,28 +144,26 @@ static int compile(const CliArgs *args) {
                 rg_fatal("cannot open output '%s'", args->output_file);
             }
         }
-        code_generator = codegen_create(out, arena);
-        codegen_emit(code_generator, file_node);
+        code_generator = code_generator_create(out, arena);
+        code_generator_emit(code_generator, file_node);
         if (args->output_file != NULL) {
             fclose(out);
         }
     }
 
 cleanup:
-    codegen_destroy(code_generator);
-    sema_destroy(sema);
+    code_generator_destroy(code_generator);
+    semantic_analyzer_destroy(analyzer);
     parser_destroy(parser);
     lexer_destroy(lexer);
-    BUF_FREE(tokens);
+    BUFFER_FREE(tokens);
     free(source);
     source = NULL;
     arena_destroy(arena);
     return status;
 }
 
-// ------------------------------------------------------------------------
-// Main
-// ------------------------------------------------------------------------
+/** Entry point: parse CLI flags, then run the compilation pipeline. */
 int main(int argc, char *argv[]) {
     CliArgs args = parse_cli_args(argc, argv);
     return compile(&args);
