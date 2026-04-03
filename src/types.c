@@ -16,17 +16,17 @@ const Type TYPE_ERROR_INST = {.kind = TYPE_ERROR};
 // ------------------------------------------------------------------------
 static const struct {
     TypeKind kind;
-    const char *rg_name;
+    const char *resurg_name;
     const char *c_name;
     const Type *inst;
 } TYPE_INFO[] = {
-    {.kind = TYPE_BOOL, .rg_name = "bool", .c_name = "bool", .inst = &TYPE_BOOL_INST},
-    {.kind = TYPE_I32, .rg_name = "i32", .c_name = "int32_t", .inst = &TYPE_I32_INST},
-    {.kind = TYPE_U32, .rg_name = "u32", .c_name = "uint32_t", .inst = &TYPE_U32_INST},
-    {.kind = TYPE_F64, .rg_name = "f64", .c_name = "double", .inst = &TYPE_F64_INST},
-    {.kind = TYPE_STR, .rg_name = "str", .c_name = "RgStr", .inst = &TYPE_STR_INST},
-    {.kind = TYPE_UNIT, .rg_name = "unit", .c_name = "void", .inst = &TYPE_UNIT_INST},
-    {.kind = TYPE_ERROR, .rg_name = "<error>", .c_name = "/* error */", .inst = &TYPE_ERROR_INST},
+    {.kind = TYPE_BOOL, .resurg_name = "bool", .c_name = "bool", .inst = &TYPE_BOOL_INST},
+    {.kind = TYPE_I32, .resurg_name = "i32", .c_name = "int32_t", .inst = &TYPE_I32_INST},
+    {.kind = TYPE_U32, .resurg_name = "u32", .c_name = "uint32_t", .inst = &TYPE_U32_INST},
+    {.kind = TYPE_F64, .resurg_name = "f64", .c_name = "double", .inst = &TYPE_F64_INST},
+    {.kind = TYPE_STR, .resurg_name = "str", .c_name = "RgStr", .inst = &TYPE_STR_INST},
+    {.kind = TYPE_UNIT, .resurg_name = "unit", .c_name = "void", .inst = &TYPE_UNIT_INST},
+    {.kind = TYPE_ERROR, .resurg_name = "<error>", .c_name = "/* error */", .inst = &TYPE_ERROR_INST},
 };
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
@@ -39,7 +39,7 @@ const Type *type_from_name(const char *name) {
         return NULL;
     }
     for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
-        if (TYPE_INFO[i].kind != TYPE_ERROR && strcmp(name, TYPE_INFO[i].rg_name) == 0) {
+        if (TYPE_INFO[i].kind != TYPE_ERROR && strcmp(name, TYPE_INFO[i].resurg_name) == 0) {
             return TYPE_INFO[i].inst;
         }
     }
@@ -52,7 +52,7 @@ const char *type_name(const Type *t) {
     }
     for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
         if (TYPE_INFO[i].kind == t->kind) {
-            return TYPE_INFO[i].rg_name;
+            return TYPE_INFO[i].resurg_name;
         }
     }
     return "<unknown>";

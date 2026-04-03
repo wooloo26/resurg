@@ -29,7 +29,7 @@ static void dump_fn_decl_node(const ASTNode *node, int32_t level) {
 
 static void dump_assert_node(const ASTNode *node, int32_t level) {
     fprintf(stderr, "Assert\n");
-    ast_dump(node->assert_stmt.cond, level + 1);
+    ast_dump(node->assert_stmt.condition, level + 1);
     if (node->assert_stmt.message != NULL) {
         ast_dump(node->assert_stmt.message, level + 1);
     }
@@ -39,19 +39,19 @@ static void dump_literal_node(const ASTNode *node) {
     fprintf(stderr, "Literal(");
     switch (node->literal.kind) {
     case LIT_BOOL:
-        fprintf(stderr, "%s", node->literal.bool_val ? "true" : "false");
+        fprintf(stderr, "%s", node->literal.boolean_value ? "true" : "false");
         break;
     case LIT_I32:
-        fprintf(stderr, "%lld", (long long)node->literal.int_val);
+        fprintf(stderr, "%lld", (long long)node->literal.integer_value);
         break;
     case LIT_U32:
-        fprintf(stderr, "%llu", (unsigned long long)(uint64_t)node->literal.int_val);
+        fprintf(stderr, "%llu", (unsigned long long)(uint64_t)node->literal.integer_value);
         break;
     case LIT_F64:
-        fprintf(stderr, "%g", node->literal.f64_val);
+        fprintf(stderr, "%g", node->literal.float64_value);
         break;
     case LIT_STR:
-        fprintf(stderr, "\"%s\"", node->literal.str_val);
+        fprintf(stderr, "\"%s\"", node->literal.string_value);
         break;
     case LIT_UNIT:
         fprintf(stderr, "unit");
@@ -70,7 +70,7 @@ static void dump_call_node(const ASTNode *node, int32_t level) {
 
 static void dump_if_node(const ASTNode *node, int32_t level) {
     fprintf(stderr, "If\n");
-    ast_dump(node->if_expr.cond, level + 1);
+    ast_dump(node->if_expr.condition, level + 1);
     ast_dump(node->if_expr.then_body, level + 1);
     if (node->if_expr.else_body != NULL) {
         ast_dump(node->if_expr.else_body, level + 1);
@@ -137,7 +137,7 @@ void ast_dump(const ASTNode *node, int32_t level) {
         break;
     case NODE_VAR_DECL:
         fprintf(stderr, "VarDecl(%s, %s)\n", node->var_decl.name, node->var_decl.is_var ? "var" : ":=");
-        ast_dump(node->var_decl.init, level + 1);
+        ast_dump(node->var_decl.initializer, level + 1);
         break;
     case NODE_EXPR_STMT:
         fprintf(stderr, "ExprStmt\n");

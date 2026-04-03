@@ -100,25 +100,25 @@ void arena_destroy(Arena *a) {
 // ------------------------------------------------------------------------
 // Stretchy buffer
 // ------------------------------------------------------------------------
-void *buf__grow(const void *buf, size_t new_len, size_t elem_size) {
-    size_t new_cap = BUF_CAP(buf) ? BUF_CAP(buf) * 2 : 16;
-    if (new_cap < new_len) {
-        new_cap = new_len;
+void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
+    size_t new_capacity = BUF_CAP(buffer) ? BUF_CAP(buffer) * 2 : 16;
+    if (new_capacity < new_length) {
+        new_capacity = new_length;
     }
 
-    size_t new_size = sizeof(BufHeader) + new_cap * elem_size;
-    BufHeader *hdr;
-    if (buf != NULL) {
-        hdr = realloc(BUF__HDR(buf), new_size);
+    size_t new_size = sizeof(BufferHeader) + new_capacity * element_size;
+    BufferHeader *header;
+    if (buffer != NULL) {
+        header = realloc(BUF__HDR(buffer), new_size);
     } else {
-        hdr = malloc(new_size);
-        hdr->len = 0;
+        header = malloc(new_size);
+        header->length = 0;
     }
-    if (hdr == NULL) {
+    if (header == NULL) {
         rg_fatal("out of memory");
     }
-    hdr->cap = new_cap;
-    return (char *)hdr + sizeof(BufHeader);
+    header->capacity = new_capacity;
+    return (char *)header + sizeof(BufferHeader);
 }
 
 // ------------------------------------------------------------------------
@@ -127,7 +127,7 @@ void *buf__grow(const void *buf, size_t new_len, size_t elem_size) {
 static int32_t g_error_count = 0;
 
 void rg_error(SrcLoc loc, const char *fmt, ...) {
-    fprintf(stderr, "%s:%d:%d: error: ", loc.file, loc.line, loc.col);
+    fprintf(stderr, "%s:%d:%d: error: ", loc.file, loc.line, loc.column);
     va_list args;
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
@@ -137,7 +137,7 @@ void rg_error(SrcLoc loc, const char *fmt, ...) {
 }
 
 void rg_warn(SrcLoc loc, const char *fmt, ...) {
-    fprintf(stderr, "%s:%d:%d: warning: ", loc.file, loc.line, loc.col);
+    fprintf(stderr, "%s:%d:%d: warning: ", loc.file, loc.line, loc.column);
     va_list args;
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);

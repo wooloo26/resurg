@@ -11,27 +11,27 @@
 #define MAX_SOURCE_SIZE (64L * 1024 * 1024)
 
 static char *read_file(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (f == NULL) {
+    FILE *file_handle = fopen(path, "rb");
+    if (file_handle == NULL) {
         rg_fatal("cannot open '%s'", path);
     }
 
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
+    fseek(file_handle, 0, SEEK_END);
+    long size = ftell(file_handle);
     if (size < 0 || size > MAX_SOURCE_SIZE) {
-        fclose(f);
+        fclose(file_handle);
         rg_fatal("cannot read '%s' (size error or file too large)", path);
     }
-    fseek(f, 0, SEEK_SET);
+    fseek(file_handle, 0, SEEK_SET);
 
-    char *buf = calloc((size_t)size + 1, 1);
-    if (buf == NULL) {
-        fclose(f);
+    char *buffer = calloc((size_t)size + 1, 1);
+    if (buffer == NULL) {
+        fclose(file_handle);
         rg_fatal("out of memory");
     }
-    fread(buf, 1, (size_t)size, f);
-    fclose(f);
-    return buf;
+    fread(buffer, 1, (size_t)size, file_handle);
+    fclose(file_handle);
+    return buffer;
 }
 
 // ------------------------------------------------------------------------
@@ -99,7 +99,7 @@ static int compile(const CliArgs *args) {
     Lexer *lexer = NULL;
     Parser *parser = NULL;
     Sema *sema = NULL;
-    CodeGen *cg = NULL;
+    CodeGen *code_generator = NULL;
     int status = 0;
 
     lexer = lexer_create(source, args->input_file, arena);
@@ -107,9 +107,9 @@ static int compile(const CliArgs *args) {
 
     if (args->dump_tokens) {
         for (int32_t i = 0; i < BUF_LEN(tokens); i++) {
-            Token *t = &tokens[i];
-            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", t->loc.line, t->loc.col, token_kind_str(t->kind), t->length,
-                    t->lexeme);
+            Token *token = &tokens[i];
+            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->loc.line, token->loc.column,
+                    token_kind_str(token->kind), token->length, token->lexeme);
         }
         goto cleanup;
     }
@@ -136,15 +136,15 @@ static int compile(const CliArgs *args) {
                 rg_fatal("cannot open output '%s'", args->output_file);
             }
         }
-        cg = codegen_create(out, arena);
-        codegen_emit(cg, file_node);
+        code_generator = codegen_create(out, arena);
+        codegen_emit(code_generator, file_node);
         if (args->output_file != NULL) {
             fclose(out);
         }
     }
 
 cleanup:
-    codegen_destroy(cg);
+    codegen_destroy(code_generator);
     sema_destroy(sema);
     parser_destroy(parser);
     lexer_destroy(lexer);

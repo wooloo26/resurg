@@ -41,27 +41,28 @@ char *arena_sprintf(Arena *a, const char *fmt, ...);
 //   BUF_FREE(tokens);
 // ------------------------------------------------------------------------
 typedef struct {
-    size_t len;
-    size_t cap;
-} BufHeader;
+    size_t length;
+    size_t capacity;
+} BufferHeader;
 
-#define BUF__HDR(b) ((BufHeader *)((char *)(b) - sizeof(BufHeader)))
-#define BUF_LEN(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->len : 0)
-#define BUF_CAP(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->cap : 0)
+#define BUF__HDR(b) ((BufferHeader *)((char *)(b) - sizeof(BufferHeader)))
+#define BUF_LEN(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->length : 0)
+#define BUF_CAP(b) ((b) != NULL ? (int32_t)BUF__HDR(b)->capacity : 0)
 #define BUF_END(b) ((b) + BUF_LEN(b))
 #define BUF_FREE(b) ((b) != NULL ? (free(BUF__HDR(b)), (b) = NULL) : 0)
 
 // NOLINTNEXTLINE(bugprone-sizeof-expression)
-#define BUF_FIT(b, n) ((n) <= BUF_CAP(b) ? 0 : ((b) = (__typeof__(b))buf__grow((const void *)(b), (n), sizeof(*(b)))))
+#define BUF_FIT(b, n)                                                                                                  \
+    ((n) <= BUF_CAP(b) ? 0 : ((b) = (__typeof__(b))buffer__grow((const void *)(b), (n), sizeof(*(b)))))
 
 #define BUF_PUSH(b, v)                                                                                                 \
     do {                                                                                                               \
         BUF_FIT((b), BUF_LEN(b) + 1);                                                                                  \
-        (b)[BUF__HDR(b)->len++] = (v);                                                                                 \
+        (b)[BUF__HDR(b)->length++] = (v);                                                                              \
     } while (0)
 
-// Grow a stretchy buffer to at least new_len elements.
-void *buf__grow(const void *buf, size_t new_len, size_t elem_size);
+// Grow a stretchy buffer to at least new_length elements.
+void *buffer__grow(const void *buffer, size_t new_length, size_t element_size);
 
 // ------------------------------------------------------------------------
 // Diagnostics — error/warning reporting with source location.
@@ -69,7 +70,7 @@ void *buf__grow(const void *buf, size_t new_len, size_t elem_size);
 typedef struct {
     const char *file;
     int32_t line;
-    int32_t col;
+    int32_t column;
 } SrcLoc;
 
 // Report an error at the given source location.

@@ -109,9 +109,9 @@ struct ASTNode {
         // NODE_VAR_DECL
         struct {
             const char *name;
-            ASTType type;  // may be AST_TYPE_INFERRED
-            ASTNode *init; // initializer expression
-            bool is_var;   // true for `var x: T = ...`, false for `:=`
+            ASTType type;         // may be AST_TYPE_INFERRED
+            ASTNode *initializer; // initializer expression
+            bool is_var;          // true for `var x: T = ...`, false for `:=`
         } var_decl;
 
         // NODE_EXPR_STMT
@@ -121,7 +121,7 @@ struct ASTNode {
 
         // NODE_ASSERT
         struct {
-            ASTNode *cond;
+            ASTNode *condition;
             ASTNode *message; // may be NULL
         } assert_stmt;
 
@@ -129,10 +129,10 @@ struct ASTNode {
         struct {
             LitKind kind;
             union {
-                bool bool_val;
-                int64_t int_val; // for LIT_I32 and LIT_U32
-                double f64_val;
-                const char *str_val;
+                bool boolean_value;
+                int64_t integer_value; // for LIT_I32 and LIT_U32
+                double float64_value;
+                const char *string_value;
             };
         } literal;
 
@@ -181,7 +181,7 @@ struct ASTNode {
 
         // NODE_IF
         struct {
-            ASTNode *cond;
+            ASTNode *condition;
             ASTNode *then_body;
             ASTNode *else_body; // may be NULL
         } if_expr;

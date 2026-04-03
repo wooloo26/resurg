@@ -3,39 +3,39 @@
 // ------------------------------------------------------------------------
 // Checked allocation helpers
 // ------------------------------------------------------------------------
-static void *xmalloc(size_t size) {
-    void *p = malloc(size);
-    if (p == NULL) {
+static void *checked_malloc(size_t size) {
+    void *ptr = malloc(size);
+    if (ptr == NULL) {
         fprintf(stderr, "fatal: out of memory\n");
         // NOLINTNEXTLINE(concurrency-mt-unsafe)
         exit(1);
     }
-    return p;
+    return ptr;
 }
 
-static void *xrealloc(void *ptr, size_t size) {
-    void *p = realloc(ptr, size);
-    if (p == NULL) {
+static void *checked_realloc(void *ptr, size_t size) {
+    void *result = realloc(ptr, size);
+    if (result == NULL) {
         fprintf(stderr, "fatal: out of memory\n");
         // NOLINTNEXTLINE(concurrency-mt-unsafe)
         exit(1);
     }
-    return p;
+    return result;
 }
 
 static RgStr rg_str_from_fmt(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    int32_t len = vsnprintf(NULL, 0, fmt, args);
+    int32_t length = vsnprintf(NULL, 0, fmt, args);
     va_end(args);
-    char *buf = xmalloc(len + 1);
+    char *buffer = checked_malloc(length + 1);
     va_start(args, fmt);
-    vsnprintf(buf, len + 1, fmt, args);
+    vsnprintf(buffer, length + 1, fmt, args);
     va_end(args);
     return (RgStr){
-        .data = buf,
-        .len = len,
-        .refcount = 1,
+        .data = buffer,
+        .length = length,
+        .reference_count = 1,
     };
 }
 
@@ -45,19 +45,19 @@ static RgStr rg_str_from_fmt(const char *fmt, ...) {
 RgStr rg_str_lit(const char *s) {
     return (RgStr){
         .data = s,
-        .len = (int32_t)strlen(s),
-        .refcount = -1, // static
+        .length = (int32_t)strlen(s),
+        .reference_count = -1, // static
     };
 }
 
-RgStr rg_str_new(const char *s, int32_t len) {
-    char *buf = xmalloc(len + 1);
-    memcpy(buf, s, len);
-    buf[len] = '\0';
+RgStr rg_str_new(const char *s, int32_t length) {
+    char *buffer = checked_malloc(length + 1);
+    memcpy(buffer, s, length);
+    buffer[length] = '\0';
     return (RgStr){
-        .data = buf,
-        .len = len,
-        .refcount = 1,
+        .data = buffer,
+        .length = length,
+        .reference_count = 1,
     };
 }
 
@@ -66,15 +66,15 @@ RgStr rg_str_empty(void) {
 }
 
 RgStr rg_str_concat(RgStr a, RgStr b) {
-    int32_t len = a.len + b.len;
-    char *buf = xmalloc(len + 1);
-    memcpy(buf, a.data, a.len);
-    memcpy(buf + a.len, b.data, b.len);
-    buf[len] = '\0';
+    int32_t length = a.length + b.length;
+    char *buffer = checked_malloc(length + 1);
+    memcpy(buffer, a.data, a.length);
+    memcpy(buffer + a.length, b.data, b.length);
+    buffer[length] = '\0';
     return (RgStr){
-        .data = buf,
-        .len = len,
-        .refcount = 1,
+        .data = buffer,
+        .length = length,
+        .reference_count = 1,
     };
 }
 
@@ -98,40 +98,40 @@ RgStr rg_str_from_bool(bool v) {
 // String builder
 // ------------------------------------------------------------------------
 void rg_sb_init(RgStrBuilder *sb) {
-    sb->cap = 64;
-    sb->len = 0;
-    sb->buf = xmalloc(sb->cap);
+    sb->capacity = 64;
+    sb->length = 0;
+    sb->buffer = checked_malloc(sb->capacity);
 }
 
-void rg_sb_append(RgStrBuilder *sb, const char *s, int32_t len) {
-    while (sb->len + len >= sb->cap) {
-        sb->cap *= 2;
-        sb->buf = xrealloc(sb->buf, sb->cap);
+void rg_sb_append(RgStrBuilder *sb, const char *s, int32_t length) {
+    while (sb->length + length >= sb->capacity) {
+        sb->capacity *= 2;
+        sb->buffer = checked_realloc(sb->buffer, sb->capacity);
     }
-    memcpy(sb->buf + sb->len, s, len);
-    sb->len += len;
+    memcpy(sb->buffer + sb->length, s, length);
+    sb->length += length;
 }
 
 void rg_sb_append_str(RgStrBuilder *sb, RgStr s) {
-    rg_sb_append(sb, s.data, s.len);
+    rg_sb_append(sb, s.data, s.length);
 }
 
 RgStr rg_sb_finish(RgStrBuilder *sb) {
-    RgStr r = rg_str_new(sb->buf, sb->len);
-    free(sb->buf);
-    sb->buf = NULL;
-    sb->len = sb->cap = 0;
-    return r;
+    RgStr result = rg_str_new(sb->buffer, sb->length);
+    free(sb->buffer);
+    sb->buffer = NULL;
+    sb->length = sb->capacity = 0;
+    return result;
 }
 
 // ------------------------------------------------------------------------
 // String comparison
 // ------------------------------------------------------------------------
 bool rg_str_eq(RgStr a, RgStr b) {
-    if (a.len != b.len) {
+    if (a.length != b.length) {
         return false;
     }
-    return memcmp(a.data, b.data, a.len) == 0;
+    return memcmp(a.data, b.data, a.length) == 0;
 }
 
 // ------------------------------------------------------------------------
@@ -153,7 +153,7 @@ void rg_assert(bool cond, const char *msg, const char *file, int32_t line) {
 // I/O
 // ------------------------------------------------------------------------
 void rg_print_str(RgStr s) {
-    fwrite(s.data, 1, s.len, stdout);
+    fwrite(s.data, 1, s.length, stdout);
 }
 
 void rg_print_i32(int32_t v) {

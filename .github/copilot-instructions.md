@@ -63,7 +63,7 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Banned
 
-`gets` `sprintf` `atoi` `atof` `#pragma once` VLAs implicit-`int` `void main` pointer-hiding typedefs K&R definitions.
+`gets` `sprintf` `atoi` `atof` `#pragma once` VLAs implicit-`int` `void main` pointer-hiding typedefs K&R definitions abbreviated identifiers.
 
 ## Source Ordering (Bottom-Up)
 
@@ -73,7 +73,9 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Comments
 
-- `//` only. `/* buf */` tags and lint suppression only.
+Based on LLVM.
+
 - `/* buf */` for stretchy-buffer pointers.
-- Describe **what/why**, not types. `// consume 'X'` for `advance()` calls.
-- `TODO:`, `FIXME:`, `HACK:` only. `// NOLINTNEXTLINE(check)` for suppression.
+- Describe **why**.
+- `// consume 'X'` for `advance()` calls.
+- `// NOLINTNEXTLINE(check)` for suppression.

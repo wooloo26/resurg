@@ -178,7 +178,7 @@ static const Type *promote_literal(ASTNode *lit, const Type *target) {
         lit->literal.kind = LIT_U32;
     } else if (target->kind == TYPE_F64) {
         lit->literal.kind = LIT_F64;
-        lit->literal.f64_val = (double)lit->literal.int_val;
+        lit->literal.float64_value = (double)lit->literal.integer_value;
     } else {
         return NULL;
     }
@@ -257,7 +257,7 @@ static const Type *check_call(Sema *s, ASTNode *node) {
 }
 
 static const Type *check_if(Sema *s, ASTNode *node) {
-    check_node(s, node->if_expr.cond);
+    check_node(s, node->if_expr.condition);
     const Type *then_t = check_node(s, node->if_expr.then_body);
     const Type *else_t = NULL;
     if (node->if_expr.else_body != NULL) {
@@ -292,8 +292,8 @@ static const Type *check_block(Sema *s, ASTNode *node) {
 
 static const Type *check_var_decl(Sema *s, ASTNode *node) {
     const Type *init_type = NULL;
-    if (node->var_decl.init != NULL) {
-        init_type = check_node(s, node->var_decl.init);
+    if (node->var_decl.initializer != NULL) {
+        init_type = check_node(s, node->var_decl.initializer);
     }
 
     const Type *declared = resolve_ast_type(s, &node->var_decl.type);
@@ -303,10 +303,11 @@ static const Type *check_var_decl(Sema *s, ASTNode *node) {
     if (declared != NULL) {
         var_type = declared;
         // If init is a literal, retype it to match declared type
-        if (init_type != NULL && node->var_decl.init != NULL && node->var_decl.init->kind == NODE_LITERAL) {
-            if (declared->kind == TYPE_U32 && node->var_decl.init->literal.kind == LIT_I32) {
-                node->var_decl.init->literal.kind = LIT_U32;
-                node->var_decl.init->type = declared;
+        if (init_type != NULL && node->var_decl.initializer != NULL &&
+            node->var_decl.initializer->kind == NODE_LITERAL) {
+            if (declared->kind == TYPE_U32 && node->var_decl.initializer->literal.kind == LIT_I32) {
+                node->var_decl.initializer->literal.kind = LIT_U32;
+                node->var_decl.initializer->type = declared;
             }
         }
     } else if (init_type != NULL) {
@@ -427,7 +428,7 @@ static const Type *check_node(Sema *s, ASTNode *node) {
         break;
 
     case NODE_ASSERT:
-        check_node(s, node->assert_stmt.cond);
+        check_node(s, node->assert_stmt.condition);
         if (node->assert_stmt.message != NULL) {
             check_node(s, node->assert_stmt.message);
         }

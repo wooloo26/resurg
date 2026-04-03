@@ -4,20 +4,20 @@
 // VarEntry — private implementation (opaque in codegen.h)
 // ------------------------------------------------------------------------
 struct VarEntry {
-    const char *rg_name; // Resurg name
-    const char *c_name;  // C name (may be mangled for shadowing)
+    const char *resurg_name; // Resurg name
+    const char *c_name;      // C name (may be mangled for shadowing)
 };
 
 struct CodeGen {
-    FILE *out;               // output file handle
-    Arena *arena;            // for temporary string building
-    int32_t indent;          // current indentation level
-    const char *module;      // may be NULL
-    const char *source_file; // may be NULL until emit_file
-    int32_t tmp_counter;     // counter for temp variable names
-    int32_t sb_counter;      // counter for string builder names
-    VarEntry *vars;          /* buf */
-    int32_t shadow_counter;  // counter for shadow name mangling
+    FILE *out;                       // output file handle
+    Arena *arena;                    // for temporary string building
+    int32_t indent;                  // current indentation level
+    const char *module;              // may be NULL
+    const char *source_file;         // may be NULL until emit_file
+    int32_t temporary_counter;       // counter for temp variable names
+    int32_t string_builder_counter;  // counter for string builder names
+    VarEntry *vars;                  /* buf */
+    int32_t shadow_variable_counter; // counter for shadow name mangling
 };
 
 // ------------------------------------------------------------------------
@@ -45,45 +45,45 @@ static void emit_line(CodeGen *cg, const char *fmt, ...) {
     fprintf(cg->out, "\n");
 }
 
-static const char *next_tmp(CodeGen *cg) {
-    return arena_sprintf(cg->arena, "_rg_tmp_%d", cg->tmp_counter++);
+static const char *next_temporary(CodeGen *cg) {
+    return arena_sprintf(cg->arena, "_rg_tmp_%d", cg->temporary_counter++);
 }
 
-static const char *next_sb(CodeGen *cg) {
-    return arena_sprintf(cg->arena, "_rg_sb_%d", cg->sb_counter++);
+static const char *next_string_builder(CodeGen *cg) {
+    return arena_sprintf(cg->arena, "_rg_sb_%d", cg->string_builder_counter++);
 }
 
 // ------------------------------------------------------------------------
 // Variable name tracking (for shadowed variables)
 // ------------------------------------------------------------------------
-static int32_t var_find(const CodeGen *cg, const char *name) {
+static int32_t variable_find(const CodeGen *cg, const char *name) {
     for (int32_t i = BUF_LEN(cg->vars) - 1; i >= 0; i--) {
-        if (strcmp(cg->vars[i].rg_name, name) == 0) {
+        if (strcmp(cg->vars[i].resurg_name, name) == 0) {
             return i;
         }
     }
     return -1;
 }
 
-static const char *var_lookup(const CodeGen *cg, const char *name) {
-    int32_t idx = var_find(cg, name);
-    return (idx >= 0) ? cg->vars[idx].c_name : name;
+static const char *variable_lookup(const CodeGen *cg, const char *name) {
+    int32_t index = variable_find(cg, name);
+    return (index >= 0) ? cg->vars[index].c_name : name;
 }
 
-static const char *var_define(CodeGen *cg, const char *name) {
+static const char *variable_define(CodeGen *cg, const char *name) {
     const char *c_name =
-        (var_find(cg, name) >= 0) ? arena_sprintf(cg->arena, "%s__%d", name, cg->shadow_counter++) : name;
+        (variable_find(cg, name) >= 0) ? arena_sprintf(cg->arena, "%s__%d", name, cg->shadow_variable_counter++) : name;
     VarEntry entry = {name, c_name};
     BUF_PUSH(cg->vars, entry);
     return c_name;
 }
 
-static void var_scope_reset(CodeGen *cg) {
+static void variable_scope_reset(CodeGen *cg) {
     if (cg->vars != NULL) {
         BUF_FREE(cg->vars);
         cg->vars = NULL;
     }
-    cg->shadow_counter = 0;
+    cg->shadow_variable_counter = 0;
 }
 
 // ------------------------------------------------------------------------
@@ -99,9 +99,9 @@ static const char *mangle_fn_name(CodeGen *cg, const char *name) {
 // ------------------------------------------------------------------------
 // Forward declarations
 // ------------------------------------------------------------------------
-static const char *emit_expr(CodeGen *cg, const ASTNode *node);
-static void emit_stmt(CodeGen *cg, const ASTNode *node);
-static void emit_block_stmts(CodeGen *cg, const ASTNode *block);
+static const char *emit_expression(CodeGen *cg, const ASTNode *node);
+static void emit_statement(CodeGen *cg, const ASTNode *node);
+static void emit_block_statements(CodeGen *cg, const ASTNode *block);
 
 // ------------------------------------------------------------------------
 // Helpers for ternary optimization
@@ -122,9 +122,9 @@ static const ASTNode *simple_branch_result(const ASTNode *body) {
     return body;
 }
 
-// Check whether emit_expr on this node is pure (returns a C expression string
+// Check whether emit_expression on this node is pure (returns a C expression string
 // without emitting any lines to the output file).
-static bool is_pure_expr(const ASTNode *node) {
+static bool is_pure_expression(const ASTNode *node) {
     if (node == NULL) {
         return false;
     }
@@ -133,9 +133,9 @@ static bool is_pure_expr(const ASTNode *node) {
     case NODE_IDENT:
         return true;
     case NODE_UNARY:
-        return is_pure_expr(node->unary.operand);
+        return is_pure_expression(node->unary.operand);
     case NODE_BINARY:
-        return is_pure_expr(node->binary.left) && is_pure_expr(node->binary.right);
+        return is_pure_expression(node->binary.left) && is_pure_expression(node->binary.right);
     default:
         return false;
     }
@@ -147,7 +147,7 @@ static bool is_simple_ternary(const ASTNode *node) {
         return false;
     }
     const ASTNode *then_result = simple_branch_result(node->if_expr.then_body);
-    if (then_result == NULL || !is_pure_expr(then_result)) {
+    if (then_result == NULL || !is_pure_expression(then_result)) {
         return false;
     }
     const ASTNode *else_body = node->if_expr.else_body;
@@ -155,13 +155,13 @@ static bool is_simple_ternary(const ASTNode *node) {
         return false; // else-if chains stay as statements
     }
     const ASTNode *else_result = simple_branch_result(else_body);
-    return else_result != NULL && is_pure_expr(else_result);
+    return else_result != NULL && is_pure_expression(else_result);
 }
 
 // ------------------------------------------------------------------------
 // C operator string
 // ------------------------------------------------------------------------
-static const char *c_binop(TokenKind op) {
+static const char *c_binary_operator(TokenKind op) {
     switch (op) {
     case TOK_PLUS:
         return "+";
@@ -194,7 +194,7 @@ static const char *c_binop(TokenKind op) {
     }
 }
 
-static const char *c_compound_op(TokenKind op) {
+static const char *c_compound_operator(TokenKind op) {
     switch (op) {
     case TOK_PLUS_EQ:
         return "+=";
@@ -212,7 +212,7 @@ static const char *c_compound_op(TokenKind op) {
 // ------------------------------------------------------------------------
 // Escape a string for C string literal output
 // ------------------------------------------------------------------------
-static const char *c_str_escape(const CodeGen *cg, const char *s) {
+static const char *c_string_escape(const CodeGen *cg, const char *s) {
     if (s == NULL) {
         return "";
     }
@@ -234,71 +234,71 @@ static const char *c_str_escape(const CodeGen *cg, const char *s) {
     if (extra == 0) {
         return s;
     }
-    int32_t len = (int32_t)strlen(s);
-    char *buf = arena_alloc(cg->arena, len + extra + 1);
+    int32_t length = (int32_t)strlen(s);
+    char *buffer = arena_alloc(cg->arena, length + extra + 1);
     int32_t j = 0;
     for (const char *p = s; *p != '\0'; p++) {
         switch (*p) {
         case '\\':
-            buf[j++] = '\\';
-            buf[j++] = '\\';
+            buffer[j++] = '\\';
+            buffer[j++] = '\\';
             break;
         case '"':
-            buf[j++] = '\\';
-            buf[j++] = '"';
+            buffer[j++] = '\\';
+            buffer[j++] = '"';
             break;
         case '\n':
-            buf[j++] = '\\';
-            buf[j++] = 'n';
+            buffer[j++] = '\\';
+            buffer[j++] = 'n';
             break;
         case '\r':
-            buf[j++] = '\\';
-            buf[j++] = 'r';
+            buffer[j++] = '\\';
+            buffer[j++] = 'r';
             break;
         case '\t':
-            buf[j++] = '\\';
-            buf[j++] = 't';
+            buffer[j++] = '\\';
+            buffer[j++] = 't';
             break;
         default:
-            buf[j++] = *p;
+            buffer[j++] = *p;
             break;
         }
     }
-    buf[j] = '\0';
-    return buf;
+    buffer[j] = '\0';
+    return buffer;
 }
 
 // Escape a file path for embedding in C string (backslash -> forward slash)
-static const char *c_escape_path(const CodeGen *cg, const char *path) {
+static const char *c_escape_file_path(const CodeGen *cg, const char *path) {
     if (path == NULL) {
         return "";
     }
-    int32_t len = (int32_t)strlen(path);
-    char *buf = arena_alloc(cg->arena, len + 1);
-    for (int32_t i = 0; i < len; i++) {
-        buf[i] = (char)((path[i] == '\\') ? '/' : path[i]);
+    int32_t length = (int32_t)strlen(path);
+    char *buffer = arena_alloc(cg->arena, length + 1);
+    for (int32_t i = 0; i < length; i++) {
+        buffer[i] = (char)((path[i] == '\\') ? '/' : path[i]);
     }
-    buf[len] = '\0';
-    return buf;
+    buffer[length] = '\0';
+    return buffer;
 }
 
 // Format a double as a C literal string (ensures trailing .0 if needed)
-static const char *fmt_f64(const CodeGen *cg, double v) {
-    char buf[64];
-    int32_t len = snprintf(buf, sizeof(buf), "%.17g", v);
+static const char *format_float64(const CodeGen *cg, double v) {
+    char buffer[64];
+    int32_t length = snprintf(buffer, sizeof(buffer), "%.17g", v);
     bool has_dot = false;
-    for (int32_t i = 0; i < len; i++) {
-        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+    for (int32_t i = 0; i < length; i++) {
+        if (buffer[i] == '.' || buffer[i] == 'e' || buffer[i] == 'E') {
             has_dot = true;
             break;
         }
     }
     if (!has_dot) {
-        buf[len] = '.';
-        buf[len + 1] = '0';
-        buf[len + 2] = '\0';
+        buffer[length] = '.';
+        buffer[length + 1] = '0';
+        buffer[length + 2] = '\0';
     }
-    return arena_strdup(cg->arena, buf);
+    return arena_strdup(cg->arena, buffer);
 }
 
 // ------------------------------------------------------------------------
@@ -310,24 +310,24 @@ static void emit_branch(CodeGen *cg, const ASTNode *body, const char *target) {
     if (body->kind == NODE_BLOCK) {
         if (target != NULL) {
             for (int32_t i = 0; i < BUF_LEN(body->block.stmts); i++) {
-                emit_stmt(cg, body->block.stmts[i]);
+                emit_statement(cg, body->block.stmts[i]);
             }
             if (body->block.result != NULL) {
-                const char *v = emit_expr(cg, body->block.result);
+                const char *v = emit_expression(cg, body->block.result);
                 emit_line(cg, "%s = %s;", target, v);
             }
         } else {
-            emit_block_stmts(cg, body);
+            emit_block_statements(cg, body);
             if (body->block.result != NULL) {
-                emit_stmt(cg, body->block.result);
+                emit_statement(cg, body->block.result);
             }
         }
     } else {
         if (target != NULL) {
-            const char *v = emit_expr(cg, body);
+            const char *v = emit_expression(cg, body);
             emit_line(cg, "%s = %s;", target, v);
         } else {
-            emit_stmt(cg, body);
+            emit_statement(cg, body);
         }
     }
 }
@@ -336,18 +336,18 @@ static void emit_branch(CodeGen *cg, const ASTNode *body, const char *target) {
 // If target is non-NULL, assigns result to target (expression mode).
 // If target is NULL, emits as statement (no result value).
 static void emit_if(CodeGen *cg, const ASTNode *node, const char *target, bool is_else_if) {
-    const char *cond = emit_expr(cg, node->if_expr.cond);
+    const char *cond_value = emit_expression(cg, node->if_expr.condition);
     if (is_else_if) {
-        if (cond[0] == '(') {
-            fprintf(cg->out, "if %s {\n", cond);
+        if (cond_value[0] == '(') {
+            fprintf(cg->out, "if %s {\n", cond_value);
         } else {
-            fprintf(cg->out, "if (%s) {\n", cond);
+            fprintf(cg->out, "if (%s) {\n", cond_value);
         }
     } else {
-        if (cond[0] == '(') {
-            emit_line(cg, "if %s {", cond);
+        if (cond_value[0] == '(') {
+            emit_line(cg, "if %s {", cond_value);
         } else {
-            emit_line(cg, "if (%s) {", cond);
+            emit_line(cg, "if (%s) {", cond_value);
         }
     }
     cg->indent++;
@@ -373,48 +373,48 @@ static void emit_if(CodeGen *cg, const ASTNode *node, const char *target, bool i
 }
 
 // String conversion helper for interpolation
-static const char *str_convert_expr(CodeGen *cg, const ASTNode *node) {
-    const char *val = emit_expr(cg, node);
+static const char *string_convert_expression(CodeGen *cg, const ASTNode *node) {
+    const char *value = emit_expression(cg, node);
     const Type *t = node->type;
     if (t == NULL) {
-        return val;
+        return value;
     }
     switch (t->kind) {
     case TYPE_STR:
-        return val;
+        return value;
     case TYPE_I32:
-        return arena_sprintf(cg->arena, "rg_str_from_i32(%s)", val);
+        return arena_sprintf(cg->arena, "rg_str_from_i32(%s)", value);
     case TYPE_U32:
-        return arena_sprintf(cg->arena, "rg_str_from_u32(%s)", val);
+        return arena_sprintf(cg->arena, "rg_str_from_u32(%s)", value);
     case TYPE_F64:
-        return arena_sprintf(cg->arena, "rg_str_from_f64(%s)", val);
+        return arena_sprintf(cg->arena, "rg_str_from_f64(%s)", value);
     case TYPE_BOOL:
-        return arena_sprintf(cg->arena, "rg_str_from_bool(%s)", val);
+        return arena_sprintf(cg->arena, "rg_str_from_bool(%s)", value);
     default:
-        return arena_sprintf(cg->arena, "rg_str_from_i32(%s)", val);
+        return arena_sprintf(cg->arena, "rg_str_from_i32(%s)", value);
     }
 }
 
 // ------------------------------------------------------------------------
 // Per-node expression emitters
 // ------------------------------------------------------------------------
-static const char *emit_literal_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_literal_expression(CodeGen *cg, const ASTNode *node) {
     switch (node->literal.kind) {
     case LIT_BOOL:
-        return node->literal.bool_val ? "true" : "false";
+        return node->literal.boolean_value ? "true" : "false";
     case LIT_I32: {
-        int64_t v = node->literal.int_val;
+        int64_t v = node->literal.integer_value;
         if (v == (int64_t)(-2147483647 - 1)) {
             return "(-2147483647 - 1)";
         }
         return arena_sprintf(cg->arena, "%lld", (long long)v);
     }
     case LIT_U32:
-        return arena_sprintf(cg->arena, "%lluU", (unsigned long long)node->literal.int_val);
+        return arena_sprintf(cg->arena, "%lluU", (unsigned long long)node->literal.integer_value);
     case LIT_F64:
-        return fmt_f64(cg, node->literal.f64_val);
+        return format_float64(cg, node->literal.float64_value);
     case LIT_STR: {
-        const char *escaped = c_str_escape(cg, node->literal.str_val);
+        const char *escaped = c_string_escape(cg, node->literal.string_value);
         return arena_sprintf(cg->arena, "rg_str_lit(\"%s\")", escaped);
     }
     case LIT_UNIT:
@@ -423,25 +423,25 @@ static const char *emit_literal_expr(CodeGen *cg, const ASTNode *node) {
     return "0";
 }
 
-static const char *emit_unary_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_unary_expression(CodeGen *cg, const ASTNode *node) {
     // Fold negation into integer/float literals to avoid overflow issues
     if (node->unary.op == TOK_MINUS && node->unary.operand->kind == NODE_LITERAL) {
         const ASTNode *lit = node->unary.operand;
         if (lit->literal.kind == LIT_I32) {
-            int64_t neg = -lit->literal.int_val;
+            int64_t neg = -lit->literal.integer_value;
             if (neg == (int64_t)(-2147483647 - 1)) {
                 return "(-2147483647 - 1)";
             }
             return arena_sprintf(cg->arena, "%lld", (long long)neg);
         }
         if (lit->literal.kind == LIT_U32) {
-            return arena_sprintf(cg->arena, "(-(int64_t)%lluU)", (unsigned long long)lit->literal.int_val);
+            return arena_sprintf(cg->arena, "(-(int64_t)%lluU)", (unsigned long long)lit->literal.integer_value);
         }
         if (lit->literal.kind == LIT_F64) {
-            return fmt_f64(cg, -lit->literal.f64_val);
+            return format_float64(cg, -lit->literal.float64_value);
         }
     }
-    const char *operand = emit_expr(cg, node->unary.operand);
+    const char *operand = emit_expression(cg, node->unary.operand);
     if (node->unary.op == TOK_BANG) {
         return arena_sprintf(cg->arena, "(!%s)", operand);
     }
@@ -451,15 +451,15 @@ static const char *emit_unary_expr(CodeGen *cg, const ASTNode *node) {
     return operand;
 }
 
-static const char *emit_binary_expr(CodeGen *cg, const ASTNode *node) {
-    const ASTNode *lhs = node->binary.left;
-    const ASTNode *rhs = node->binary.right;
+static const char *emit_binary_expression(CodeGen *cg, const ASTNode *node) {
+    const ASTNode *left_operand = node->binary.left;
+    const ASTNode *right_operand = node->binary.right;
 
     // Constant-fold binary operations on integer literals
-    if (lhs->kind == NODE_LITERAL && rhs->kind == NODE_LITERAL && lhs->literal.kind == LIT_I32 &&
-        rhs->literal.kind == LIT_I32) {
-        int64_t a = lhs->literal.int_val;
-        int64_t b = rhs->literal.int_val;
+    if (left_operand->kind == NODE_LITERAL && right_operand->kind == NODE_LITERAL &&
+        left_operand->literal.kind == LIT_I32 && right_operand->literal.kind == LIT_I32) {
+        int64_t a = left_operand->literal.integer_value;
+        int64_t b = right_operand->literal.integer_value;
         int64_t result;
         bool folded = true;
         switch (node->binary.op) {
@@ -496,12 +496,12 @@ static const char *emit_binary_expr(CodeGen *cg, const ASTNode *node) {
         }
     }
 
-    const char *left = emit_expr(cg, lhs);
-    const char *right = emit_expr(cg, rhs);
+    const char *left = emit_expression(cg, left_operand);
+    const char *right = emit_expression(cg, right_operand);
 
     // String equality/inequality
-    const Type *lt = lhs->type;
-    if (lt != NULL && lt->kind == TYPE_STR) {
+    const Type *left_type = left_operand->type;
+    if (left_type != NULL && left_type->kind == TYPE_STR) {
         if (node->binary.op == TOK_EQ_EQ) {
             return arena_sprintf(cg->arena, "rg_str_eq(%s, %s)", left, right);
         }
@@ -510,124 +510,124 @@ static const char *emit_binary_expr(CodeGen *cg, const ASTNode *node) {
         }
     }
 
-    return arena_sprintf(cg->arena, "(%s %s %s)", left, c_binop(node->binary.op), right);
+    return arena_sprintf(cg->arena, "(%s %s %s)", left, c_binary_operator(node->binary.op), right);
 }
 
-static const char *emit_call_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_call_expression(CodeGen *cg, const ASTNode *node) {
     const char *callee;
     if (node->call.callee->kind == NODE_IDENT) {
         callee = mangle_fn_name(cg, node->call.callee->ident.name);
     } else {
-        callee = emit_expr(cg, node->call.callee);
+        callee = emit_expression(cg, node->call.callee);
     }
-    const char *args = "";
+    const char *arguments = "";
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-        const char *arg = emit_expr(cg, node->call.args[i]);
+        const char *argument = emit_expression(cg, node->call.args[i]);
         if (i == 0) {
-            args = arg;
+            arguments = argument;
         } else {
-            args = arena_sprintf(cg->arena, "%s, %s", args, arg);
+            arguments = arena_sprintf(cg->arena, "%s, %s", arguments, argument);
         }
     }
-    return arena_sprintf(cg->arena, "%s(%s)", callee, args);
+    return arena_sprintf(cg->arena, "%s(%s)", callee, arguments);
 }
 
-static const char *emit_if_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_if_expression(CodeGen *cg, const ASTNode *node) {
     const Type *t = node->type;
     if (t == NULL || t->kind == TYPE_UNIT) {
         emit_if(cg, node, NULL, false);
         return "(void)0";
     }
     if (is_simple_ternary(node)) {
-        const char *cond = emit_expr(cg, node->if_expr.cond);
+        const char *condition = emit_expression(cg, node->if_expr.condition);
         const ASTNode *then_result = simple_branch_result(node->if_expr.then_body);
         const ASTNode *else_result = simple_branch_result(node->if_expr.else_body);
-        const char *then_val = emit_expr(cg, then_result);
-        const char *else_val = emit_expr(cg, else_result);
-        return arena_sprintf(cg->arena, "(%s ? %s : %s)", cond, then_val, else_val);
+        const char *then_value = emit_expression(cg, then_result);
+        const char *else_value = emit_expression(cg, else_result);
+        return arena_sprintf(cg->arena, "(%s ? %s : %s)", condition, then_value, else_value);
     }
-    const char *tmp = next_tmp(cg);
-    emit_line(cg, "%s %s;", c_type_str(t), tmp);
-    emit_if(cg, node, tmp, false);
-    return tmp;
+    const char *temporary = next_temporary(cg);
+    emit_line(cg, "%s %s;", c_type_str(t), temporary);
+    emit_if(cg, node, temporary, false);
+    return temporary;
 }
 
-static const char *emit_block_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_block_expression(CodeGen *cg, const ASTNode *node) {
     for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
-        emit_stmt(cg, node->block.stmts[i]);
+        emit_statement(cg, node->block.stmts[i]);
     }
     if (node->block.result != NULL) {
-        return emit_expr(cg, node->block.result);
+        return emit_expression(cg, node->block.result);
     }
     return "(void)0";
 }
 
-static const char *emit_str_interp_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_string_interpolation_expression(CodeGen *cg, const ASTNode *node) {
     int32_t part_count = BUF_LEN(node->str_interp.parts);
-    const char **str_parts = NULL;
+    const char **string_parts = NULL;
     for (int32_t i = 0; i < part_count; i++) {
         const ASTNode *part = node->str_interp.parts[i];
         if (part->kind == NODE_LITERAL && part->literal.kind == LIT_STR) {
-            const char *text = part->literal.str_val;
+            const char *text = part->literal.string_value;
             if (text == NULL || text[0] == '\0') {
                 continue;
             }
-            BUF_PUSH(str_parts, arena_sprintf(cg->arena, "rg_str_lit(\"%s\")", c_str_escape(cg, text)));
+            BUF_PUSH(string_parts, arena_sprintf(cg->arena, "rg_str_lit(\"%s\")", c_string_escape(cg, text)));
         } else {
-            BUF_PUSH(str_parts, str_convert_expr(cg, part));
+            BUF_PUSH(string_parts, string_convert_expression(cg, part));
         }
     }
-    int32_t n = BUF_LEN(str_parts);
+    int32_t n = BUF_LEN(string_parts);
 
     if (n == 1) {
-        const char *result = str_parts[0];
-        BUF_FREE(str_parts);
+        const char *result = string_parts[0];
+        BUF_FREE(string_parts);
         return result;
     }
     if (n == 2) {
-        const char *result = arena_sprintf(cg->arena, "rg_str_concat(%s, %s)", str_parts[0], str_parts[1]);
-        BUF_FREE(str_parts);
+        const char *result = arena_sprintf(cg->arena, "rg_str_concat(%s, %s)", string_parts[0], string_parts[1]);
+        BUF_FREE(string_parts);
         return result;
     }
 
-    const char *sb = next_sb(cg);
-    emit_line(cg, "RgStrBuilder %s;", sb);
-    emit_line(cg, "rg_sb_init(&%s);", sb);
+    const char *builder = next_string_builder(cg);
+    emit_line(cg, "RgStrBuilder %s;", builder);
+    emit_line(cg, "rg_sb_init(&%s);", builder);
     for (int32_t i = 0; i < n; i++) {
-        emit_line(cg, "rg_sb_append_str(&%s, %s);", sb, str_parts[i]);
+        emit_line(cg, "rg_sb_append_str(&%s, %s);", builder, string_parts[i]);
     }
-    BUF_FREE(str_parts);
-    const char *tmp = next_tmp(cg);
-    emit_line(cg, "RgStr %s = rg_sb_finish(&%s);", tmp, sb);
-    return tmp;
+    BUF_FREE(string_parts);
+    const char *temporary = next_temporary(cg);
+    emit_line(cg, "RgStr %s = rg_sb_finish(&%s);", temporary, builder);
+    return temporary;
 }
 
 // ------------------------------------------------------------------------
 // Expression emission — dispatch
 // ------------------------------------------------------------------------
-static const char *emit_expr(CodeGen *cg, const ASTNode *node) {
+static const char *emit_expression(CodeGen *cg, const ASTNode *node) {
     if (node == NULL) {
         return "0";
     }
     switch (node->kind) {
     case NODE_LITERAL:
-        return emit_literal_expr(cg, node);
+        return emit_literal_expression(cg, node);
     case NODE_IDENT:
-        return var_lookup(cg, node->ident.name);
+        return variable_lookup(cg, node->ident.name);
     case NODE_UNARY:
-        return emit_unary_expr(cg, node);
+        return emit_unary_expression(cg, node);
     case NODE_BINARY:
-        return emit_binary_expr(cg, node);
+        return emit_binary_expression(cg, node);
     case NODE_CALL:
-        return emit_call_expr(cg, node);
+        return emit_call_expression(cg, node);
     case NODE_MEMBER:
         return arena_sprintf(cg->arena, "%s", node->member.member);
     case NODE_IF:
-        return emit_if_expr(cg, node);
+        return emit_if_expression(cg, node);
     case NODE_BLOCK:
-        return emit_block_expr(cg, node);
+        return emit_block_expression(cg, node);
     case NODE_STR_INTERP:
-        return emit_str_interp_expr(cg, node);
+        return emit_string_interpolation_expression(cg, node);
     default:
         return "0";
     }
@@ -636,12 +636,12 @@ static const char *emit_expr(CodeGen *cg, const ASTNode *node) {
 // ------------------------------------------------------------------------
 // Statement emission
 // ------------------------------------------------------------------------
-static void emit_block_stmts(CodeGen *cg, const ASTNode *block) {
+static void emit_block_statements(CodeGen *cg, const ASTNode *block) {
     if (block == NULL || block->kind != NODE_BLOCK) {
         return;
     }
     for (int32_t i = 0; i < BUF_LEN(block->block.stmts); i++) {
-        emit_stmt(cg, block->block.stmts[i]);
+        emit_statement(cg, block->block.stmts[i]);
     }
     // Note: block.result is NOT emitted here (caller handles it)
 }
@@ -649,10 +649,10 @@ static void emit_block_stmts(CodeGen *cg, const ASTNode *block) {
 // ------------------------------------------------------------------------
 // Per-node statement emitters
 // ------------------------------------------------------------------------
-static void emit_var_decl_stmt(CodeGen *cg, const ASTNode *node) {
+static void emit_variable_declaration_statement(CodeGen *cg, const ASTNode *node) {
     const Type *t = node->type;
     if (t == NULL) {
-        t = node->var_decl.init != NULL ? node->var_decl.init->type : NULL;
+        t = node->var_decl.initializer != NULL ? node->var_decl.initializer->type : NULL;
     }
     if (t == NULL && node->var_decl.type.kind == AST_TYPE_NAME) {
         t = type_from_name(node->var_decl.type.name);
@@ -660,91 +660,92 @@ static void emit_var_decl_stmt(CodeGen *cg, const ASTNode *node) {
     if (t == NULL) {
         t = &TYPE_I32_INST;
     }
-    const char *c_name = var_define(cg, node->var_decl.name);
-    const char *val = emit_expr(cg, node->var_decl.init);
-    emit_line(cg, "%s %s = %s;", c_type_str(t), c_name, val);
+    const char *c_name = variable_define(cg, node->var_decl.name);
+    const char *value = emit_expression(cg, node->var_decl.initializer);
+    emit_line(cg, "%s %s = %s;", c_type_str(t), c_name, value);
 }
 
-static void emit_expr_stmt_body(CodeGen *cg, const ASTNode *node) {
-    const ASTNode *expr = node->expr_stmt.expr;
-    switch (expr->kind) {
+static void emit_expression_statement_body(CodeGen *cg, const ASTNode *node) {
+    const ASTNode *expression = node->expr_stmt.expr;
+    switch (expression->kind) {
     case NODE_IF:
-        emit_if(cg, expr, NULL, false);
+        emit_if(cg, expression, NULL, false);
         break;
     case NODE_ASSIGN:
     case NODE_COMPOUND_ASSIGN:
-        emit_stmt(cg, expr);
+        emit_statement(cg, expression);
         break;
     default: {
-        const char *val = emit_expr(cg, expr);
-        emit_line(cg, "%s;", val);
+        const char *value = emit_expression(cg, expression);
+        emit_line(cg, "%s;", value);
         break;
     }
     }
 }
 
-static void emit_assign_stmt(CodeGen *cg, const ASTNode *node) {
+static void emit_assign_statement(CodeGen *cg, const ASTNode *node) {
     const char *target;
     if (node->assign.target->kind == NODE_IDENT) {
-        target = var_lookup(cg, node->assign.target->ident.name);
+        target = variable_lookup(cg, node->assign.target->ident.name);
     } else {
-        target = emit_expr(cg, node->assign.target);
+        target = emit_expression(cg, node->assign.target);
     }
-    const char *value = emit_expr(cg, node->assign.value);
+    const char *value = emit_expression(cg, node->assign.value);
     emit_line(cg, "%s = %s;", target, value);
 }
 
-static void emit_compound_assign_stmt(CodeGen *cg, const ASTNode *node) {
+static void emit_compound_assign_statement(CodeGen *cg, const ASTNode *node) {
     const char *target;
     if (node->compound_assign.target->kind == NODE_IDENT) {
-        target = var_lookup(cg, node->compound_assign.target->ident.name);
+        target = variable_lookup(cg, node->compound_assign.target->ident.name);
     } else {
-        target = emit_expr(cg, node->compound_assign.target);
+        target = emit_expression(cg, node->compound_assign.target);
     }
-    const char *value = emit_expr(cg, node->compound_assign.value);
-    emit_line(cg, "%s %s %s;", target, c_compound_op(node->compound_assign.op), value);
+    const char *value = emit_expression(cg, node->compound_assign.value);
+    emit_line(cg, "%s %s %s;", target, c_compound_operator(node->compound_assign.op), value);
 }
 
-static void emit_assert_stmt(CodeGen *cg, const ASTNode *node) {
-    const char *cond = emit_expr(cg, node->assert_stmt.cond);
+static void emit_assert_statement(CodeGen *cg, const ASTNode *node) {
+    const char *condition = emit_expression(cg, node->assert_stmt.condition);
     if (node->assert_stmt.message != NULL) {
-        const char *msg;
+        const char *message;
         if (node->assert_stmt.message->kind == NODE_LITERAL && node->assert_stmt.message->literal.kind == LIT_STR) {
-            msg = arena_sprintf(cg->arena, "\"%s\"", c_str_escape(cg, node->assert_stmt.message->literal.str_val));
+            message = arena_sprintf(cg->arena, "\"%s\"",
+                                    c_string_escape(cg, node->assert_stmt.message->literal.string_value));
         } else {
-            const char *msg_expr = emit_expr(cg, node->assert_stmt.message);
-            msg = arena_sprintf(cg->arena, "%s.data", msg_expr);
+            const char *message_expression = emit_expression(cg, node->assert_stmt.message);
+            message = arena_sprintf(cg->arena, "%s.data", message_expression);
         }
-        emit_line(cg, "rg_assert(%s, %s, _rg_file, %d);", cond, msg, node->loc.line);
+        emit_line(cg, "rg_assert(%s, %s, _rg_file, %d);", condition, message, node->loc.line);
     } else {
-        emit_line(cg, "rg_assert(%s, NULL, _rg_file, %d);", cond, node->loc.line);
+        emit_line(cg, "rg_assert(%s, NULL, _rg_file, %d);", condition, node->loc.line);
     }
 }
 
-static void emit_loop_stmt(CodeGen *cg, const ASTNode *node) {
+static void emit_loop_statement(CodeGen *cg, const ASTNode *node) {
     emit_line(cg, "while (1) {");
     cg->indent++;
     const ASTNode *body = node->loop.body;
     if (body != NULL && body->kind == NODE_BLOCK) {
-        emit_block_stmts(cg, body);
+        emit_block_statements(cg, body);
         if (body->block.result != NULL) {
-            emit_stmt(cg, body->block.result);
+            emit_statement(cg, body->block.result);
         }
     }
     cg->indent--;
     emit_line(cg, "}");
 }
 
-static void emit_for_stmt(CodeGen *cg, const ASTNode *node) {
-    const char *start = emit_expr(cg, node->for_loop.start);
-    const char *end = emit_expr(cg, node->for_loop.end);
-    const char *var_c = var_define(cg, node->for_loop.var_name);
-    emit_line(cg, "for (int32_t %s = %s; %s < %s; %s++) {", var_c, start, var_c, end, var_c);
+static void emit_for_statement(CodeGen *cg, const ASTNode *node) {
+    const char *start = emit_expression(cg, node->for_loop.start);
+    const char *end = emit_expression(cg, node->for_loop.end);
+    const char *variable_c = variable_define(cg, node->for_loop.var_name);
+    emit_line(cg, "for (int32_t %s = %s; %s < %s; %s++) {", variable_c, start, variable_c, end, variable_c);
     cg->indent++;
     if (node->for_loop.body != NULL && node->for_loop.body->kind == NODE_BLOCK) {
-        emit_block_stmts(cg, node->for_loop.body);
+        emit_block_statements(cg, node->for_loop.body);
         if (node->for_loop.body->block.result != NULL) {
-            emit_stmt(cg, node->for_loop.body->block.result);
+            emit_statement(cg, node->for_loop.body->block.result);
         }
     }
     cg->indent--;
@@ -754,25 +755,25 @@ static void emit_for_stmt(CodeGen *cg, const ASTNode *node) {
 // ------------------------------------------------------------------------
 // Statement emission — dispatch
 // ------------------------------------------------------------------------
-static void emit_stmt(CodeGen *cg, const ASTNode *node) {
+static void emit_statement(CodeGen *cg, const ASTNode *node) {
     if (node == NULL) {
         return;
     }
     switch (node->kind) {
     case NODE_VAR_DECL:
-        emit_var_decl_stmt(cg, node);
+        emit_variable_declaration_statement(cg, node);
         break;
     case NODE_EXPR_STMT:
-        emit_expr_stmt_body(cg, node);
+        emit_expression_statement_body(cg, node);
         break;
     case NODE_ASSIGN:
-        emit_assign_stmt(cg, node);
+        emit_assign_statement(cg, node);
         break;
     case NODE_COMPOUND_ASSIGN:
-        emit_compound_assign_stmt(cg, node);
+        emit_compound_assign_statement(cg, node);
         break;
     case NODE_ASSERT:
-        emit_assert_stmt(cg, node);
+        emit_assert_statement(cg, node);
         break;
     case NODE_BREAK:
         emit_line(cg, "break;");
@@ -781,10 +782,10 @@ static void emit_stmt(CodeGen *cg, const ASTNode *node) {
         emit_line(cg, "continue;");
         break;
     case NODE_LOOP:
-        emit_loop_stmt(cg, node);
+        emit_loop_statement(cg, node);
         break;
     case NODE_FOR:
-        emit_for_stmt(cg, node);
+        emit_for_statement(cg, node);
         break;
     case NODE_IF:
         emit_if(cg, node, NULL, false);
@@ -792,16 +793,16 @@ static void emit_stmt(CodeGen *cg, const ASTNode *node) {
     case NODE_BLOCK:
         emit_line(cg, "{");
         cg->indent++;
-        emit_block_stmts(cg, node);
+        emit_block_statements(cg, node);
         if (node->block.result != NULL) {
-            emit_stmt(cg, node->block.result);
+            emit_statement(cg, node->block.result);
         }
         cg->indent--;
         emit_line(cg, "}");
         break;
     default: {
-        const char *val = emit_expr(cg, node);
-        emit_line(cg, "%s;", val);
+        const char *value = emit_expression(cg, node);
+        emit_line(cg, "%s;", value);
         break;
     }
     }
@@ -810,47 +811,47 @@ static void emit_stmt(CodeGen *cg, const ASTNode *node) {
 // ------------------------------------------------------------------------
 // Function emission
 // ------------------------------------------------------------------------
-static void emit_fn_body(CodeGen *cg, const ASTNode *fn_node) {
+static void emit_function_body(CodeGen *cg, const ASTNode *fn_node) {
     const ASTNode *body = fn_node->fn_decl.body;
-    const Type *ret = fn_node->type;
-    bool is_unit = ret == NULL || ret->kind == TYPE_UNIT;
+    const Type *return_type = fn_node->type;
+    bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
     bool is_main = strcmp(fn_node->fn_decl.name, "main") == 0;
 
-    // Register parameters in var tracking
+    // Register parameters in variable tracking
     for (int32_t i = 0; i < BUF_LEN(fn_node->fn_decl.params); i++) {
-        const ASTNode *p = fn_node->fn_decl.params[i];
-        var_define(cg, p->param.name);
+        const ASTNode *parameter = fn_node->fn_decl.params[i];
+        variable_define(cg, parameter->param.name);
     }
 
     if (body->kind == NODE_BLOCK) {
         // Block body with optional trailing result
-        emit_block_stmts(cg, body);
+        emit_block_statements(cg, body);
 
         if (body->block.result != NULL) {
-            const ASTNode *r = body->block.result;
+            const ASTNode *result_node = body->block.result;
             // Statement-like results need special handling
-            if (r->kind == NODE_ASSIGN || r->kind == NODE_COMPOUND_ASSIGN) {
+            if (result_node->kind == NODE_ASSIGN || result_node->kind == NODE_COMPOUND_ASSIGN) {
                 // Emit as statement (side-effect only in function body)
-                emit_stmt(cg, r);
+                emit_statement(cg, result_node);
             } else if (!is_unit && !is_main) {
-                const char *result = emit_expr(cg, r);
+                const char *result = emit_expression(cg, result_node);
                 emit_line(cg, "return %s;", result);
             } else {
                 // Unit/main: evaluate for side effects
-                if (r->kind == NODE_CALL) {
-                    const char *result = emit_expr(cg, r);
+                if (result_node->kind == NODE_CALL) {
+                    const char *result = emit_expression(cg, result_node);
                     emit_line(cg, "%s;", result);
-                } else if (r->kind == NODE_IF) {
-                    emit_if(cg, r, NULL, false);
+                } else if (result_node->kind == NODE_IF) {
+                    emit_if(cg, result_node, NULL, false);
                 } else {
-                    const char *result = emit_expr(cg, r);
+                    const char *result = emit_expression(cg, result_node);
                     emit_line(cg, "(void)%s;", result);
                 }
             }
         }
     } else {
         // Expression body (fn foo() = expr)
-        const char *result = emit_expr(cg, body);
+        const char *result = emit_expression(cg, body);
         if (!is_unit && !is_main) {
             emit_line(cg, "return %s;", result);
         } else {
@@ -859,40 +860,40 @@ static void emit_fn_body(CodeGen *cg, const ASTNode *fn_node) {
     }
 }
 
-static void emit_fn_decl(CodeGen *cg, const ASTNode *node, bool forward_only) {
+static void emit_function_declaration(CodeGen *cg, const ASTNode *node, bool forward_only) {
     bool is_pub = node->fn_decl.is_pub;
     bool is_main = strcmp(node->fn_decl.name, "main") == 0;
 
     // Return type
-    const char *ret_type = is_main ? "int" : c_type_str(node->type);
+    const char *return_type = is_main ? "int" : c_type_str(node->type);
 
     // Static prefix for non-pub, non-main
     const char *prefix = (!is_pub && !is_main) ? "static " : "";
 
     // Mangled function name
-    const char *fn_name = mangle_fn_name(cg, node->fn_decl.name);
+    const char *function_name = mangle_fn_name(cg, node->fn_decl.name);
 
     // Parameters
     emit_indent(cg);
-    fprintf(cg->out, "%s%s %s(", prefix, ret_type, fn_name);
+    fprintf(cg->out, "%s%s %s(", prefix, return_type, function_name);
 
-    int32_t param_count = BUF_LEN(node->fn_decl.params);
-    if (param_count == 0) {
+    int32_t parameter_count = BUF_LEN(node->fn_decl.params);
+    if (parameter_count == 0) {
         fprintf(cg->out, "void");
     } else {
-        for (int32_t i = 0; i < param_count; i++) {
-            const ASTNode *p = node->fn_decl.params[i];
-            const Type *pt = p->type;
-            if (pt == NULL && p->param.type.kind == AST_TYPE_NAME) {
-                pt = type_from_name(p->param.type.name);
+        for (int32_t i = 0; i < parameter_count; i++) {
+            const ASTNode *parameter = node->fn_decl.params[i];
+            const Type *parameter_type = parameter->type;
+            if (parameter_type == NULL && parameter->param.type.kind == AST_TYPE_NAME) {
+                parameter_type = type_from_name(parameter->param.type.name);
             }
-            if (pt == NULL) {
-                pt = &TYPE_I32_INST;
+            if (parameter_type == NULL) {
+                parameter_type = &TYPE_I32_INST;
             }
             if (i > 0) {
                 fprintf(cg->out, ", ");
             }
-            fprintf(cg->out, "%s %s", c_type_str(pt), p->param.name);
+            fprintf(cg->out, "%s %s", c_type_str(parameter_type), parameter->param.name);
         }
     }
 
@@ -903,8 +904,8 @@ static void emit_fn_decl(CodeGen *cg, const ASTNode *node, bool forward_only) {
 
     fprintf(cg->out, ") {\n");
     cg->indent++;
-    var_scope_reset(cg);
-    emit_fn_body(cg, node);
+    variable_scope_reset(cg);
+    emit_function_body(cg, node);
 
     if (is_main) {
         emit_line(cg, "return 0;");
@@ -929,51 +930,51 @@ static void emit_file(CodeGen *cg, const ASTNode *file) {
     emit_preamble(cg);
 
     // Emit source file path constant (used by rg_assert)
-    cg->source_file = c_escape_path(cg, file->loc.file);
+    cg->source_file = c_escape_file_path(cg, file->loc.file);
     emit(cg, "static const char *_rg_file = \"%s\";\n\n", cg->source_file);
 
     // Emit module comment
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-        const ASTNode *d = file->file.decls[i];
-        if (d->kind == NODE_MODULE) {
-            cg->module = d->module.name;
-            emit(cg, "// module %s\n\n", d->module.name);
+        const ASTNode *declaration = file->file.decls[i];
+        if (declaration->kind == NODE_MODULE) {
+            cg->module = declaration->module.name;
+            emit(cg, "// module %s\n\n", declaration->module.name);
         }
     }
 
     // Forward declarations for all functions
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-        const ASTNode *d = file->file.decls[i];
-        if (d->kind == NODE_FN_DECL) {
-            emit_fn_decl(cg, d, true);
+        const ASTNode *declaration = file->file.decls[i];
+        if (declaration->kind == NODE_FN_DECL) {
+            emit_function_declaration(cg, declaration, true);
         }
     }
     emit(cg, "\n");
 
     // Full function definitions
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-        const ASTNode *d = file->file.decls[i];
-        if (d->kind == NODE_FN_DECL) {
-            emit_fn_decl(cg, d, false);
+        const ASTNode *declaration = file->file.decls[i];
+        if (declaration->kind == NODE_FN_DECL) {
+            emit_function_declaration(cg, declaration, false);
         }
     }
 
     // Top-level statements (outside functions) — wrap in a helper if needed
-    bool has_top_stmts = false;
+    bool has_top_statements = false;
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-        const ASTNode *d = file->file.decls[i];
-        if (d->kind != NODE_MODULE && d->kind != NODE_FN_DECL) {
-            has_top_stmts = true;
+        const ASTNode *declaration = file->file.decls[i];
+        if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FN_DECL) {
+            has_top_statements = true;
             break;
         }
     }
-    if (has_top_stmts) {
+    if (has_top_statements) {
         emit(cg, "static void _rg_top_level(void) {\n");
         cg->indent++;
         for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-            const ASTNode *d = file->file.decls[i];
-            if (d->kind != NODE_MODULE && d->kind != NODE_FN_DECL) {
-                emit_stmt(cg, d);
+            const ASTNode *declaration = file->file.decls[i];
+            if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FN_DECL) {
+                emit_statement(cg, declaration);
             }
         }
         cg->indent--;
@@ -994,10 +995,10 @@ CodeGen *codegen_create(FILE *out, Arena *arena) {
     cg->indent = 0;
     cg->module = NULL;
     cg->source_file = NULL;
-    cg->tmp_counter = 0;
-    cg->sb_counter = 0;
+    cg->temporary_counter = 0;
+    cg->string_builder_counter = 0;
     cg->vars = NULL;
-    cg->shadow_counter = 0;
+    cg->shadow_variable_counter = 0;
     return cg;
 }
 

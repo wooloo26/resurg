@@ -18,8 +18,8 @@
 // ------------------------------------------------------------------------
 typedef struct {
     const char *data;
-    int32_t len;
-    int32_t refcount; // -1 = static (string literals)
+    int32_t length;
+    int32_t reference_count; // -1 = static (string literals)
 } RgStr;
 
 // Wrap a C string literal (no copy, static refcount).
@@ -42,9 +42,9 @@ RgStr rg_str_from_bool(bool v);
 
 // String builder — for interpolation with many parts
 typedef struct {
-    char *buf;
-    int32_t len;
-    int32_t cap;
+    char *buffer;
+    int32_t length;
+    int32_t capacity;
 } RgStrBuilder;
 
 // Initialize a string builder.

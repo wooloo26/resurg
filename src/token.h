@@ -100,9 +100,9 @@ typedef struct {
 
     // Literal values (populated for literal tokens)
     union {
-        int64_t int_val;  // TOK_INT_LIT
-        double float_val; // TOK_FLOAT_LIT
-        char *str_val;    // TOK_STR_LIT (unescaped, arena-allocated)
+        int64_t integer_value; // TOK_INT_LIT
+        double float_value;    // TOK_FLOAT_LIT
+        char *string_value;    // TOK_STR_LIT (unescaped, arena-allocated)
     } lit;
 } Token;
 
