@@ -296,6 +296,7 @@ enum Msg {
     Quit,
     Move { x: i32, y: i32 },
     Write(str),
+    fn get_str(mut *p) { ... }
 }
 
 enum Status { Active = 1, Inactive = 0, Pending = 2 }
@@ -366,9 +367,19 @@ struct Dog: Animal + Printable {
 }
 ```
 
+### Extension Methods
+
+```rsg
+ext str {
+    fn last_char(*s) -> char { s[s.len() - 1] }
+}
+```
+
 ### Generics
 
-Pact-bounded. Constraint aliases supported.
+Pact-bounded type parameters. Monomorphized at compile time. Constraint aliases supported.
+
+Future: F-bounded polymorphism, `immut`
 
 ```rsg
 fn max<T: Ord>(a: T, b: T) -> T {
@@ -379,24 +390,27 @@ pact A { Ord; Display }       // or: pact A = Ord + Display
 pact B<T> { Into<T>; Clone }
 
 fn complex_merge<T: Ord + Display, U: B<T>>(a: []T, b: []U) -> []T { ... }
-
-struct Pair<T, U> { first: T, second: U }
-Pair<i32, str> { ... } // or infer
-
-enum Either<L, R> { Left(L), Right(R) }
-
-type Callback<T> = fn(T) -> bool
 ```
 
-### Extension Methods
+Generic structs, enums, type aliases, and extensions:
 
 ```rsg
-ext User {
-    fn is_adult(*s) = s.age >= 18
+struct Pair<T, U> {
+    first: T
+    second: U
+    fn map<V>(…) -> Pair<V, U> { ... }
+}
+Pair<i32, str> { ... } // or infer
+
+enum Either<L, R> {
+    Left(L), Right(R)
+    fn unwrap_left(*e) -> L { ... }
 }
 
-ext str {
-    fn last_char(*s) -> char { s[s.len() - 1] }
+type Callback<T> = fn(T) -> bool
+
+ext<T: Display> []T {
+    fn join(*s, sep: str) -> str { ... }
 }
 ```
 
