@@ -15,7 +15,13 @@ OBJS := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(SRCS))
 RT_SRCS := $(wildcard $(RUNTIME)/*.c)
 RT_OBJS := $(patsubst $(RUNTIME)/%.c,$(BUILD)/rt_%.o,$(RT_SRCS))
 
-TARGET := $(BUILD)/resurg
+ifeq ($(OS),Windows_NT)
+  EXE := .exe
+else
+  EXE :=
+endif
+
+TARGET := $(BUILD)/resurg$(EXE)
 
 .PHONY: all clean runtime test format tidy setup
 
@@ -54,8 +60,8 @@ setup:
 # Run a .rsg file: make run FILE=tests/v0.1.0/primitives.rsg
 run: $(TARGET) runtime
 	$(TARGET) $(FILE) -o $(BUILD)/out.c
-	$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out $(BUILD)/out.c $(RT_OBJS)
-	$(BUILD)/out
+	$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out$(EXE) $(BUILD)/out.c $(RT_OBJS)
+	$(BUILD)/out$(EXE)
 
 # Run all test cases
 TESTS := $(wildcard tests/**/*.rsg)
@@ -65,7 +71,11 @@ test: $(TARGET) runtime $(TEST_TARGETS)
 	@echo $(words $(TESTS)) tests passed.
 
 $(TEST_TARGETS): %.test: %.rsg $(TARGET) runtime
+ifeq ($(OS),Windows_NT)
+	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_test.ps1 $< $(TARGET) $(CC) "$(RT_OBJS)" $(BUILD) $(RUNTIME)
+else
 	@bash tests/run_test.sh $< $(TARGET) $(CC) "$(RT_OBJS)" $(BUILD) $(RUNTIME)
+endif
 	@echo   PASS  $<
 
 # Format all C sources with clang-format
