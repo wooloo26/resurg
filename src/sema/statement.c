@@ -139,18 +139,20 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
     scope_pop(analyzer);
 }
 
-const Type *check_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
-    const Type *target_type = check_node(analyzer, node->assign.target);
-    check_node(analyzer, node->assign.value);
-    promote_literal(node->assign.value, target_type);
+/** Shared logic for simple and compound assignment type-checking. */
+static const Type *check_assignment_common(SemanticAnalyzer *analyzer, ASTNode *target, ASTNode *value) {
+    const Type *target_type = check_node(analyzer, target);
+    check_node(analyzer, value);
+    promote_literal(value, target_type);
     return &TYPE_UNIT_INSTANCE;
 }
 
+const Type *check_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
+    return check_assignment_common(analyzer, node->assign.target, node->assign.value);
+}
+
 const Type *check_compound_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
-    const Type *target_type = check_node(analyzer, node->compound_assign.target);
-    check_node(analyzer, node->compound_assign.value);
-    promote_literal(node->compound_assign.value, target_type);
-    return &TYPE_UNIT_INSTANCE;
+    return check_assignment_common(analyzer, node->compound_assign.target, node->compound_assign.value);
 }
 
 // ── Node dispatch ──────────────────────────────────────────────────────

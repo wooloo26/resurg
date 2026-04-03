@@ -5,17 +5,12 @@
 /** Emit an if/else branch body, optionally assigning the result to @p target. */
 static void emit_branch(CodeGenerator *generator, const ASTNode *body, const char *target) {
     if (body->kind == NODE_BLOCK) {
-        if (target != NULL) {
-            for (int32_t i = 0; i < BUFFER_LENGTH(body->block.statements); i++) {
-                codegen_emit_statement(generator, body->block.statements[i]);
-            }
-            if (body->block.result != NULL) {
+        codegen_emit_block_statements(generator, body);
+        if (body->block.result != NULL) {
+            if (target != NULL) {
                 const char *value = codegen_emit_expression(generator, body->block.result);
                 codegen_emit_line(generator, "%s = %s;", target, value);
-            }
-        } else {
-            codegen_emit_block_statements(generator, body);
-            if (body->block.result != NULL) {
+            } else {
                 codegen_emit_statement(generator, body->block.result);
             }
         }
@@ -119,28 +114,27 @@ static void emit_expression_statement_body(CodeGenerator *generator, const ASTNo
     }
 }
 
-static void emit_assign_statement(CodeGenerator *generator, const ASTNode *node) {
-    const char *target;
-    if (node->assign.target->kind == NODE_IDENTIFIER) {
-        target = codegen_variable_lookup(generator, node->assign.target->identifier.name);
-    } else if (node->assign.target->kind == NODE_INDEX) {
-        const char *obj = codegen_emit_expression(generator, node->assign.target->index_access.object);
-        const char *idx = codegen_emit_expression(generator, node->assign.target->index_access.index);
-        target = arena_sprintf(generator->arena, "%s._data[%s]", obj, idx);
-    } else {
-        target = codegen_emit_expression(generator, node->assign.target);
+/** Resolve an assignment target to a C lvalue expression. */
+static const char *resolve_assign_target(CodeGenerator *generator, const ASTNode *target) {
+    if (target->kind == NODE_IDENTIFIER) {
+        return codegen_variable_lookup(generator, target->identifier.name);
     }
+    if (target->kind == NODE_INDEX) {
+        const char *obj = codegen_emit_expression(generator, target->index_access.object);
+        const char *idx = codegen_emit_expression(generator, target->index_access.index);
+        return arena_sprintf(generator->arena, "%s._data[%s]", obj, idx);
+    }
+    return codegen_emit_expression(generator, target);
+}
+
+static void emit_assign_statement(CodeGenerator *generator, const ASTNode *node) {
+    const char *target = resolve_assign_target(generator, node->assign.target);
     const char *value = codegen_emit_expression(generator, node->assign.value);
     codegen_emit_line(generator, "%s = %s;", target, value);
 }
 
 static void emit_compound_assign_statement(CodeGenerator *generator, const ASTNode *node) {
-    const char *target;
-    if (node->compound_assign.target->kind == NODE_IDENTIFIER) {
-        target = codegen_variable_lookup(generator, node->compound_assign.target->identifier.name);
-    } else {
-        target = codegen_emit_expression(generator, node->compound_assign.target);
-    }
+    const char *target = resolve_assign_target(generator, node->compound_assign.target);
     const char *value = codegen_emit_expression(generator, node->compound_assign.value);
     codegen_emit_line(generator, "%s %s %s;", target, codegen_c_compound_operator(node->compound_assign.op), value);
 }

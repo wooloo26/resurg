@@ -117,6 +117,11 @@ static void emit_preamble(CodeGenerator *generator) {
     codegen_emit(generator, "#include \"runtime.h\"\n\n");
 }
 
+/** Return true if @p node is a top-level statement (not a module, function, or type alias). */
+static bool is_top_level_statement(const ASTNode *node) {
+    return node->kind != NODE_MODULE && node->kind != NODE_FUNCTION_DECLARATION && node->kind != NODE_TYPE_ALIAS;
+}
+
 /**
  * Emit the full C translation unit: preamble, source-file constant, module
  * comment, forward declarations, function definitions, and (if present) a
@@ -163,9 +168,7 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
     // Top-level statements (outside functions) — wrap in a helper if needed
     bool has_top_statements = false;
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION &&
-            declaration->kind != NODE_TYPE_ALIAS) {
+        if (is_top_level_statement(file->file.declarations[i])) {
             has_top_statements = true;
             break;
         }
@@ -174,10 +177,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         codegen_emit(generator, "static void _rsg_top_level(void) {\n");
         generator->indent++;
         for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-            const ASTNode *declaration = file->file.declarations[i];
-            if (declaration->kind != NODE_MODULE && declaration->kind != NODE_FUNCTION_DECLARATION &&
-                declaration->kind != NODE_TYPE_ALIAS) {
-                codegen_emit_statement(generator, declaration);
+            if (is_top_level_statement(file->file.declarations[i])) {
+                codegen_emit_statement(generator, file->file.declarations[i]);
             }
         }
         generator->indent--;

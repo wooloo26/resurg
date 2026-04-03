@@ -136,36 +136,34 @@ void *rsg_realloc(void *pointer, size_t size) {
 /** Global error count - checked by the driver to decide exit status. */
 static int32_t g_error_count = 0;
 
-/** Shared diagnostic printer: prefix + formatted message + newline. */
-static void emit_diagnostic(FILE *stream, const char *prefix, const char *format, va_list arguments) {
-    fputs(prefix, stream);
-    vfprintf(stream, format, arguments);
-    fputc('\n', stream);
+/** Emit "label: msg\n" to @p stream with a location prefix. */
+static void emit_located_diagnostic(SourceLocation location, const char *label, const char *format, va_list arguments) {
+    fprintf(stderr, "%s:%d:%d: %s: ", location.file, location.line, location.column, label);
+    vfprintf(stderr, format, arguments);
+    fputc('\n', stderr);
 }
 
 void rsg_error(SourceLocation location, const char *format, ...) {
-    char prefix[256];
-    snprintf(prefix, sizeof(prefix), "%s:%d:%d: error: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
-    emit_diagnostic(stderr, prefix, format, arguments);
+    emit_located_diagnostic(location, "error", format, arguments);
     va_end(arguments);
     g_error_count++;
 }
 
 void rsg_warn(SourceLocation location, const char *format, ...) {
-    char prefix[256];
-    snprintf(prefix, sizeof(prefix), "%s:%d:%d: warning: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
-    emit_diagnostic(stderr, prefix, format, arguments);
+    emit_located_diagnostic(location, "warning", format, arguments);
     va_end(arguments);
 }
 
 noreturn void rsg_fatal(const char *format, ...) {
     va_list arguments;
     va_start(arguments, format);
-    emit_diagnostic(stderr, "fatal: ", format, arguments);
+    fputs("fatal: ", stderr);
+    vfprintf(stderr, format, arguments);
+    fputc('\n', stderr);
     va_end(arguments);
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);

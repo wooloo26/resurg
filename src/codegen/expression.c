@@ -370,9 +370,7 @@ static const char *emit_if_expression(CodeGenerator *generator, const ASTNode *n
 }
 
 static const char *emit_block_expression(CodeGenerator *generator, const ASTNode *node) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
-        codegen_emit_statement(generator, node->block.statements[i]);
-    }
+    codegen_emit_block_statements(generator, node);
     if (node->block.result != NULL) {
         return codegen_emit_expression(generator, node->block.result);
     }
