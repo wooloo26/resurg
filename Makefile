@@ -11,7 +11,8 @@ else
   RT_LIB := $(BUILD)/libresurg_runtime.a
 endif
 
-TARGET := $(BUILD)/resurg$(EXE)
+TARGET    := $(BUILD)/resurg$(EXE)
+CMAKE_CMD := cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
 .PHONY: all clean configure run test format tidy setup
 
@@ -21,10 +22,10 @@ all: $(BUILD)/Makefile
 
 # CMake configure (re-run when CMakeLists.txt changes)
 $(BUILD)/Makefile: CMakeLists.txt
-	cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
+	$(CMAKE_CMD)
 
 configure:
-	cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
+	$(CMAKE_CMD)
 
 clean:
 ifeq ($(OS),Windows_NT)
@@ -66,6 +67,6 @@ format:
 	@echo 'Formatted $(words $(ALL_C)) file(s).'
 
 # Run clang-tidy on all C sources (uses compile_commands.json)
-TIDY_SRCS := $(wildcard $(SRC)/*.c $(SRC)/codegen/*.c $(RUNTIME)/*.c)
+TIDY_SRCS := $(filter %.c,$(ALL_C))
 tidy: $(BUILD)/Makefile
 	$(foreach f,$(TIDY_SRCS),clang-tidy --quiet -p $(BUILD) $(f) &&) echo clang-tidy passed.
