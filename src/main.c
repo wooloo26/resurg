@@ -7,6 +7,9 @@
 // ------------------------------------------------------------------------
 // File I/O
 // ------------------------------------------------------------------------
+// 64 MiB — sanity limit for source files
+#define MAX_SOURCE_SIZE (64L * 1024 * 1024)
+
 static char *read_file(const char *path) {
     FILE *f = fopen(path, "rb");
     if (f == NULL) {
@@ -15,14 +18,18 @@ static char *read_file(const char *path) {
 
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
+    if (size < 0 || size > MAX_SOURCE_SIZE) {
+        fclose(f);
+        rg_fatal("cannot read '%s' (size error or file too large)", path);
+    }
     fseek(f, 0, SEEK_SET);
 
-    char *buf = malloc(size + 1);
+    char *buf = calloc((size_t)size + 1, 1);
     if (buf == NULL) {
+        fclose(f);
         rg_fatal("out of memory");
     }
-    fread(buf, 1, size, f);
-    buf[size] = '\0';
+    fread(buf, 1, (size_t)size, f);
     fclose(f);
     return buf;
 }
