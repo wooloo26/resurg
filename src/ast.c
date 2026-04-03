@@ -143,11 +143,11 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "Ident(%s)\n", node->identifier.name);
         break;
     case NODE_UNARY:
-        fprintf(stderr, "Unary(%s)\n", token_kind_string(node->unary.operator));
+        fprintf(stderr, "Unary(%s)\n", token_kind_string(node->unary.op));
         ast_dump(node->unary.operand, level + 1);
         break;
     case NODE_BINARY:
-        fprintf(stderr, "Binary(%s)\n", token_kind_string(node->binary.operator));
+        fprintf(stderr, "Binary(%s)\n", token_kind_string(node->binary.op));
         ast_dump(node->binary.left, level + 1);
         ast_dump(node->binary.right, level + 1);
         break;
@@ -157,7 +157,7 @@ void ast_dump(const ASTNode *node, int32_t level) {
         ast_dump(node->assign.value, level + 1);
         break;
     case NODE_COMPOUND_ASSIGN:
-        fprintf(stderr, "CompoundAssign(%s)\n", token_kind_string(node->compound_assign.operator));
+        fprintf(stderr, "CompoundAssign(%s)\n", token_kind_string(node->compound_assign.op));
         ast_dump(node->compound_assign.target, level + 1);
         ast_dump(node->compound_assign.value, level + 1);
         break;

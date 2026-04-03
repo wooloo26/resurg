@@ -252,9 +252,9 @@ static ASTNode *parse_postfix(Parser *parser) {
 static ASTNode *parse_unary(Parser *parser) {
     if (check(parser, TOKEN_MINUS) || check(parser, TOKEN_BANG)) {
         SourceLocation location = current_location(parser);
-        TokenKind operator= advance_token(parser)->kind;
+        TokenKind op = advance_token(parser)->kind;
         ASTNode *node = ast_new(parser->arena, NODE_UNARY, location);
-        node->unary.operator= operator;
+        node->unary.op = op;
         node->unary.operand = parse_unary(parser);
         return node;
     }
@@ -265,8 +265,8 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
     ASTNode *left = parse_unary(parser);
 
     for (;;) {
-        TokenKind operator= current(parser)->kind;
-        Precedence precedence = get_precedence(operator);
+        TokenKind op = current(parser)->kind;
+        Precedence precedence = get_precedence(op);
         if (precedence < minimum_precedence) {
             break;
         }
@@ -275,7 +275,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
         advance_token(parser); // consume operator
 
         // Assignment
-        if (operator== TOKEN_EQUAL) {
+        if (op == TOKEN_EQUAL) {
             ASTNode *node = ast_new(parser->arena, NODE_ASSIGN, location);
             node->assign.target = left;
             node->assign.value = parse_precedence(parser, precedence); // right-assoc
@@ -284,10 +284,9 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
         }
 
         // Compound assignment
-        if (operator== TOKEN_PLUS_EQUAL || operator== TOKEN_MINUS_EQUAL || operator== TOKEN_STAR_EQUAL || operator==
-            TOKEN_SLASH_EQUAL) {
+        if (op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL || op == TOKEN_SLASH_EQUAL) {
             ASTNode *node = ast_new(parser->arena, NODE_COMPOUND_ASSIGN, location);
-            node->compound_assign.operator= operator;
+            node->compound_assign.op = op;
             node->compound_assign.target = left;
             node->compound_assign.value = parse_precedence(parser, precedence);
             left = node;
@@ -296,7 +295,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
 
         // Binary
         ASTNode *node = ast_new(parser->arena, NODE_BINARY, location);
-        node->binary.operator= operator;
+        node->binary.op = op;
         node->binary.left = left;
         node->binary.right = parse_precedence(parser, precedence + 1);
         left = node;

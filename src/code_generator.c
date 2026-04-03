@@ -163,8 +163,8 @@ static bool is_simple_ternary(const ASTNode *node) {
 }
 
 /** Map Resurg binary operator TokenKind to its C operator string. */
-static const char *c_binary_operator(TokenKind operator) {
-    switch (operator) {
+static const char *c_binary_operator(TokenKind op) {
+    switch (op) {
     case TOKEN_PLUS:
         return "+";
     case TOKEN_MINUS:
@@ -196,8 +196,8 @@ static const char *c_binary_operator(TokenKind operator) {
     }
 }
 
-static const char *c_compound_operator(TokenKind operator) {
-    switch (operator) {
+static const char *c_compound_operator(TokenKind op) {
+    switch (op) {
     case TOKEN_PLUS_EQUAL:
         return "+=";
     case TOKEN_MINUS_EQUAL:
@@ -431,7 +431,7 @@ static const char *emit_literal_expression(CodeGenerator *generator, const ASTNo
 
 static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode *node) {
     // Fold negation into integer/float literals to avoid overflow issues
-    if (node->unary.operator== TOKEN_MINUS && node->unary.operand->kind == NODE_LITERAL) {
+    if (node->unary.op == TOKEN_MINUS && node->unary.operand->kind == NODE_LITERAL) {
         const ASTNode *literal = node->unary.operand;
         if (literal->literal.kind == LITERAL_I32) {
             int64_t negated = -literal->literal.integer_value;
@@ -449,10 +449,10 @@ static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode
         }
     }
     const char *operand = emit_expression(generator, node->unary.operand);
-    if (node->unary.operator== TOKEN_BANG) {
+    if (node->unary.op == TOKEN_BANG) {
         return arena_sprintf(generator->arena, "(!%s)", operand);
     }
-    if (node->unary.operator== TOKEN_MINUS) {
+    if (node->unary.op == TOKEN_MINUS) {
         return arena_sprintf(generator->arena, "(-%s)", operand);
     }
     return operand;
@@ -473,7 +473,7 @@ static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node
     int64_t right_value = right_operand->literal.integer_value;
     int64_t result;
     bool folded = true;
-    switch (node->binary.operator) {
+    switch (node->binary.op) {
     case TOKEN_PLUS:
         result = left_value + right_value;
         break;
@@ -522,16 +522,16 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     // String equality/inequality
     const Type *left_type = left_operand->type;
     if (left_type != NULL && left_type->kind == TYPE_STRING) {
-        if (node->binary.operator== TOKEN_EQUAL_EQUAL) {
+        if (node->binary.op == TOKEN_EQUAL_EQUAL) {
             return arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", left, right);
         }
-        if (node->binary.operator== TOKEN_BANG_EQUAL) {
+        if (node->binary.op == TOKEN_BANG_EQUAL) {
             return arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", left, right);
         }
     }
 
-    const char *operator= c_binary_operator(node->binary.operator);
-    return arena_sprintf(generator->arena, "(%s %s %s)", left, operator, right);
+    const char *op = c_binary_operator(node->binary.op);
+    return arena_sprintf(generator->arena, "(%s %s %s)", left, op, right);
 }
 
 static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *node) {
@@ -744,7 +744,7 @@ static void emit_compound_assign_statement(CodeGenerator *generator, const ASTNo
         target = emit_expression(generator, node->compound_assign.target);
     }
     const char *value = emit_expression(generator, node->compound_assign.value);
-    emit_line(generator, "%s %s %s;", target, c_compound_operator(node->compound_assign.operator), value);
+    emit_line(generator, "%s %s %s;", target, c_compound_operator(node->compound_assign.op), value);
 }
 
 static void emit_loop_statement(CodeGenerator *generator, const ASTNode *node) {

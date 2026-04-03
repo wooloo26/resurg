@@ -164,10 +164,10 @@ static const Type *check_identifier(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 static const Type *check_unary(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *operand = check_node(analyzer, node->unary.operand);
-    if (node->unary.operator== TOKEN_BANG) {
+    if (node->unary.op == TOKEN_BANG) {
         return &TYPE_BOOL_INSTANCE;
     }
-    if (node->unary.operator== TOKEN_MINUS) {
+    if (node->unary.op == TOKEN_MINUS) {
         return operand;
     }
     return operand;
@@ -216,7 +216,7 @@ static const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
         }
     }
 
-    switch (node->binary.operator) {
+    switch (node->binary.op) {
     // Comparison and logical operators return bool
     case TOKEN_EQUAL_EQUAL:
     case TOKEN_BANG_EQUAL:

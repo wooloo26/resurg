@@ -138,13 +138,13 @@ struct ASTNode {
 
         // NODE_UNARY
         struct {
-            TokenKind operator; // TOKEN_MINUS, TOKEN_BANG
+            TokenKind op; // TOKEN_MINUS, TOKEN_BANG
             ASTNode *operand;
         } unary;
 
         // NODE_BINARY
         struct {
-            TokenKind operator;
+            TokenKind op;
             ASTNode *left;
             ASTNode *right;
         } binary;
@@ -157,7 +157,7 @@ struct ASTNode {
 
         // NODE_COMPOUND_ASSIGN
         struct {
-            TokenKind operator; // TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL, etc.
+            TokenKind op; // TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL, etc.
             ASTNode *target;
             ASTNode *value;
         } compound_assign;
