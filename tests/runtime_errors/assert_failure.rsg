@@ -2,5 +2,5 @@
 module test_err
 
 fn main() {
-    assert false, "intentional failure"
+    assert(false, "intentional failure")
 }

@@ -440,21 +440,6 @@ static ASTNode *parse_function_declaration(Parser *parser, bool is_public) {
     return node;
 }
 
-static ASTNode *parse_assert(Parser *parser) {
-    SourceLocation location = current_location(parser);
-    expect(parser, TOKEN_ASSERT);
-
-    ASTNode *node = ast_new(parser->arena, NODE_ASSERT, location);
-    node->assert_statement.condition = parse_expression(parser);
-    node->assert_statement.message = NULL;
-
-    if (match(parser, TOKEN_COMMA)) {
-        node->assert_statement.message = parse_expression(parser);
-    }
-
-    return node;
-}
-
 static ASTNode *parse_loop(Parser *parser) {
     SourceLocation location = current_location(parser);
     expect(parser, TOKEN_LOOP);
@@ -484,9 +469,6 @@ static ASTNode *parse_statement(Parser *parser) {
     // Keyword-initiated statements
     if (check(parser, TOKEN_VARIABLE)) {
         return parse_variable_declaration(parser);
-    }
-    if (check(parser, TOKEN_ASSERT)) {
-        return parse_assert(parser);
     }
     if (check(parser, TOKEN_LOOP)) {
         return parse_loop(parser);

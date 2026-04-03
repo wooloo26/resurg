@@ -8,7 +8,7 @@ module test_control_flow
 fn test_if_basic() {
     x := 10
     result := if x > 5 { "big" } else { "small" }
-    assert result == "big"
+    assert(result == "big")
 }
 
 fn test_if_else_chain() {
@@ -20,17 +20,16 @@ fn test_if_else_chain() {
     } else {
         "zero"
     }
-    assert label == "zero"
+    assert(label == "zero")
 }
 
 fn test_if_as_expression() {
     a := 3
     b := 7
     max := if a > b { a } else { b }
-    assert max == 7
-
+    assert(max == 7)
     min := if a < b { a } else { b }
-    assert min == 3
+    assert(min == 3)
 }
 
 fn test_if_nested() {
@@ -40,17 +39,16 @@ fn test_if_nested() {
     } else {
         "small"
     }
-    assert result == "big"
+    assert(result == "big")
 }
 
 fn test_if_bool_condition() {
     flag := true
     val := if flag { 1 } else { 0 }
-    assert val == 1
-
+    assert(val == 1)
     flag = false
     val = if flag { 1 } else { 0 }
-    assert val == 0
+    assert(val == 0)
 }
 
 // ═══════════════════════════════════════
@@ -63,7 +61,7 @@ fn test_loop_break() {
         count = count + 1
         if count == 5 { break }
     }
-    assert count == 5
+    assert(count == 5)
 }
 
 fn test_loop_continue() {
@@ -77,7 +75,7 @@ fn test_loop_continue() {
         sum = sum + i
     }
     // 2 + 4 + 6 + 8 + 10 = 30
-    assert sum == 30
+    assert(sum == 30)
 }
 
 fn test_loop_immediate_break() {
@@ -86,7 +84,7 @@ fn test_loop_immediate_break() {
         executed = true
         break
     }
-    assert executed == true
+    assert(executed == true)
 }
 
 fn test_loop_counter() {
@@ -96,7 +94,7 @@ fn test_loop_counter() {
         if n >= 100 { break }
         n = n + 1
     }
-    assert n == 100
+    assert(n == 100)
 }
 
 fn test_nested_loops() {
@@ -112,7 +110,7 @@ fn test_nested_loops() {
         }
         i = i + 1
     }
-    assert count == 12  // 3 * 4
+    assert(count == 12) // 3 * 4
 }
 
 // ═══════════════════════════════════════
@@ -125,7 +123,7 @@ fn test_for_range_basic() {
         sum = sum + i
     }
     // 0 + 1 + 2 + 3 + 4 = 10
-    assert sum == 10
+    assert(sum == 10)
 }
 
 fn test_for_range_start_end() {
@@ -134,7 +132,7 @@ fn test_for_range_start_end() {
         sum = sum + i
     }
     // 3 + 4 + 5 + 6 = 18
-    assert sum == 18
+    assert(sum == 18)
 }
 
 fn test_for_range_single() {
@@ -142,7 +140,7 @@ fn test_for_range_single() {
     for 0..1 |i| {
         count = count + 1
     }
-    assert count == 1
+    assert(count == 1)
 }
 
 fn test_for_range_empty() {
@@ -150,7 +148,7 @@ fn test_for_range_empty() {
     for 5..5 |i| {
         count = count + 1
     }
-    assert count == 0
+    assert(count == 0)
 }
 
 fn test_for_range_accumulate() {
@@ -160,7 +158,7 @@ fn test_for_range_accumulate() {
         result = result * i
     }
     // 1 * 2 * 3 * 4 * 5 = 120
-    assert result == 120
+    assert(result == 120)
 }
 
 fn test_for_range_nested() {
@@ -170,7 +168,7 @@ fn test_for_range_nested() {
             sum = sum + 1
         }
     }
-    assert sum == 9
+    assert(sum == 9)
 }
 
 // ═══════════════════════════════════════
@@ -182,13 +180,12 @@ fn test_if_without_else() {
     if true {
         x = 42
     }
-    assert x == 42
-
+    assert(x == 42)
     y := 10
     if false {
         y = 99
     }
-    assert y == 10
+    assert(y == 10)
 }
 
 fn test_if_side_effect_only() {
@@ -199,7 +196,7 @@ fn test_if_side_effect_only() {
         }
     }
     // 0, 2, 4 are even
-    assert count == 3
+    assert(count == 3)
 }
 
 // ═══════════════════════════════════════
@@ -213,7 +210,7 @@ fn test_for_continue() {
         sum = sum + i
     }
     // 0 + 2 + 4 + 6 + 8 = 20
-    assert sum == 20
+    assert(sum == 20)
 }
 
 fn test_for_continue_skip_first() {
@@ -223,7 +220,7 @@ fn test_for_continue_skip_first() {
         sum = sum + i
     }
     // 1 + 2 + 3 + 4 = 10
-    assert sum == 10
+    assert(sum == 10)
 }
 
 // ═══════════════════════════════════════
@@ -238,7 +235,7 @@ fn test_for_variable_bounds() {
         sum = sum + i
     }
     // 2 + 3 + 4 + 5 = 14
-    assert sum == 14
+    assert(sum == 14)
 }
 
 fn test_for_computed_bounds() {
@@ -247,7 +244,7 @@ fn test_for_computed_bounds() {
     for 0..n * 2 |i| {
         sum = sum + 1
     }
-    assert sum == 10
+    assert(sum == 10)
 }
 
 // ═══════════════════════════════════════
@@ -266,8 +263,8 @@ fn test_break_inner_loop_only() {
             j = j + 1
         }
     }
-    assert outer_count == 3
-    assert inner_total == 6  // 3 * 2
+    assert(outer_count == 3)
+    assert(inner_total == 6) // 3 * 2
 }
 
 // ═══════════════════════════════════════
@@ -281,7 +278,7 @@ fn test_if_else_in_for() {
         sum = sum + val
     }
     // only even: 2 + 4 = 6
-    assert sum == 6
+    assert(sum == 6)
 }
 
 fn main() {

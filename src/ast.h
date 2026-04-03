@@ -42,7 +42,6 @@ typedef enum {
 
     // Statements
     NODE_EXPRESSION_STATEMENT, // expression used as statement
-    NODE_ASSERT,               // assert(expr) or assert(expr, "msg")
     NODE_BREAK,                // break
     NODE_CONTINUE,             // continue
 
@@ -120,12 +119,6 @@ struct ASTNode {
         struct {
             ASTNode *expression;
         } expression_statement;
-
-        // NODE_ASSERT
-        struct {
-            ASTNode *condition;
-            ASTNode *message; // may be NULL
-        } assert_statement;
 
         // NODE_LITERAL
         struct {

@@ -68,11 +68,11 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOKEN_MODULE}, {"pub", TOKEN_PUBLIC},        {"fn", TOKEN_FUNCTION},   {"var", TOKEN_VARIABLE},
-    {"if", TOKEN_IF},         {"else", TOKEN_ELSE},         {"loop", TOKEN_LOOP},     {"for", TOKEN_FOR},
-    {"break", TOKEN_BREAK},   {"continue", TOKEN_CONTINUE}, {"assert", TOKEN_ASSERT}, {"true", TOKEN_TRUE},
-    {"false", TOKEN_FALSE},   {"bool", TOKEN_BOOL},         {"i32", TOKEN_I32},       {"u32", TOKEN_U32},
-    {"f64", TOKEN_F64},       {"str", TOKEN_STRING},        {"unit", TOKEN_UNIT},
+    {"module", TOKEN_MODULE}, {"pub", TOKEN_PUBLIC},        {"fn", TOKEN_FUNCTION}, {"var", TOKEN_VARIABLE},
+    {"if", TOKEN_IF},         {"else", TOKEN_ELSE},         {"loop", TOKEN_LOOP},   {"for", TOKEN_FOR},
+    {"break", TOKEN_BREAK},   {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},   {"false", TOKEN_FALSE},
+    {"bool", TOKEN_BOOL},     {"i32", TOKEN_I32},           {"u32", TOKEN_U32},     {"f64", TOKEN_F64},
+    {"str", TOKEN_STRING},    {"unit", TOKEN_UNIT},
 };
 
 static const int32_t KEYWORD_COUNT = (int32_t)(sizeof(KEYWORDS) / sizeof(KEYWORDS[0]));

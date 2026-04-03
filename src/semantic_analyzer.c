@@ -248,6 +248,11 @@ static const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         check_node(analyzer, node->call.arguments[i]);
     }
 
+    // Built-in functions
+    if (function_name != NULL && strcmp(function_name, "assert") == 0) {
+        return &TYPE_UNIT_INSTANCE;
+    }
+
     // Look up function return type
     if (function_name != NULL) {
         Symbol *symbol = scope_lookup(analyzer, function_name);
@@ -436,13 +441,6 @@ static const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_EXPRESSION_STATEMENT:
         check_node(analyzer, node->expression_statement.expression);
-        break;
-
-    case NODE_ASSERT:
-        check_node(analyzer, node->assert_statement.condition);
-        if (node->assert_statement.message != NULL) {
-            check_node(analyzer, node->assert_statement.message);
-        }
         break;
 
     case NODE_BREAK:

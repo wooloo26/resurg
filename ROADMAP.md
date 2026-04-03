@@ -19,7 +19,7 @@ Core compiler infrastructure and minimal language subset.
 - [x] String litexrals and interpolation
 - [x] Module declaration (`module`)
 - [x] `pub` visibility
-- [x] `assert` (runtime assertion)
+- [x] `assert` (built-in function, runtime assertion)
 
 ## v0.2.0 — Type System Foundations
 
@@ -92,6 +92,7 @@ Null safety and error handling.
 - [ ] `while` pattern binding (`while Some(x) := expr { … }`)
 - [ ] `panic(message)` builtin (immediate abort, `noreturn`)
 - [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
+- [ ] `assert` rewritten on top of `panic`
 
 ## v0.7.0 — Slices & Collections
 

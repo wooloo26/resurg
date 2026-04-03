@@ -112,11 +112,11 @@ defer f.close()
 
 ### Assert
 
-Runtime assertion. Panics immediately on failure.
+Built-in function. Panics immediately if the condition is false.
 
 ```rsg
-assert x > 0
-assert x > 0, "x must be positive"
+assert(x > 0)
+assert(x > 0, "x must be positive")
 ```
 
 ### Panic & Recover
@@ -457,9 +457,15 @@ data |> |x| x + 1 |> println
 ### Keywords
 
 ```
-assert break  continue  defer  else   enum   false  fn
-for    if     loop      match  module mut    pact   pub
-immut  return struct    true   type   use    var    while
+break  continue  defer  else   enum   false  fn
+for    if        loop   match  module mut    pact   pub
+immut  return    struct true   type   use    var    while
+```
+
+**Built-in functions:**
+
+```
+assert
 ```
 
 **Reserved (future):**

@@ -24,14 +24,6 @@ static void dump_function_declaration_node(const ASTNode *node, int32_t level) {
     ast_dump(node->function_declaration.body, level + 1);
 }
 
-static void dump_assert_node(const ASTNode *node, int32_t level) {
-    fprintf(stderr, "Assert\n");
-    ast_dump(node->assert_statement.condition, level + 1);
-    if (node->assert_statement.message != NULL) {
-        ast_dump(node->assert_statement.message, level + 1);
-    }
-}
-
 static void dump_literal_node(const ASTNode *node) {
     fprintf(stderr, "Literal(");
     switch (node->literal.kind) {
@@ -137,9 +129,6 @@ void ast_dump(const ASTNode *node, int32_t level) {
     case NODE_EXPRESSION_STATEMENT:
         fprintf(stderr, "ExprStmt\n");
         ast_dump(node->expression_statement.expression, level + 1);
-        break;
-    case NODE_ASSERT:
-        dump_assert_node(node, level);
         break;
     case NODE_BREAK:
         fprintf(stderr, "Break\n");

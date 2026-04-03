@@ -19,7 +19,6 @@ const char *token_kind_string(TokenKind kind) {
         [TOKEN_FOR] = "for",
         [TOKEN_BREAK] = "break",
         [TOKEN_CONTINUE] = "continue",
-        [TOKEN_ASSERT] = "assert",
         [TOKEN_BOOL] = "bool",
         [TOKEN_I32] = "i32",
         [TOKEN_U32] = "u32",

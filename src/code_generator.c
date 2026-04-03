@@ -534,7 +534,28 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     return arena_sprintf(generator->arena, "(%s %s %s)", left, operator, right);
 }
 
+static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *node) {
+    int32_t argument_count = BUFFER_LENGTH(node->call.arguments);
+    const char *condition = argument_count > 0 ? emit_expression(generator, node->call.arguments[0]) : "0";
+    const char *message = "NULL";
+    if (argument_count > 1) {
+        ASTNode *message_node = node->call.arguments[1];
+        if (message_node->kind == NODE_LITERAL && message_node->literal.kind == LITERAL_STRING) {
+            message = arena_sprintf(generator->arena, "\"%s\"",
+                                    c_string_escape(generator, message_node->literal.string_value));
+        } else {
+            const char *message_expression = emit_expression(generator, message_node);
+            message = arena_sprintf(generator->arena, "%s.data", message_expression);
+        }
+    }
+    return arena_sprintf(generator->arena, "rsg_assert(%s, %s, _rsg_file, %d)", condition, message,
+                         node->location.line);
+}
+
 static const char *emit_call_expression(CodeGenerator *generator, const ASTNode *node) {
+    if (node->call.callee->kind == NODE_IDENTIFIER && strcmp(node->call.callee->identifier.name, "assert") == 0) {
+        return emit_assert_call(generator, node);
+    }
     const char *callee;
     if (node->call.callee->kind == NODE_IDENTIFIER) {
         callee = mangle_function_name(generator, node->call.callee->identifier.name);
@@ -726,24 +747,6 @@ static void emit_compound_assign_statement(CodeGenerator *generator, const ASTNo
     emit_line(generator, "%s %s %s;", target, c_compound_operator(node->compound_assign.operator), value);
 }
 
-static void emit_assert_statement(CodeGenerator *generator, const ASTNode *node) {
-    const char *condition = emit_expression(generator, node->assert_statement.condition);
-    if (node->assert_statement.message != NULL) {
-        const char *message;
-        if (node->assert_statement.message->kind == NODE_LITERAL &&
-            node->assert_statement.message->literal.kind == LITERAL_STRING) {
-            message = arena_sprintf(generator->arena, "\"%s\"",
-                                    c_string_escape(generator, node->assert_statement.message->literal.string_value));
-        } else {
-            const char *message_expression = emit_expression(generator, node->assert_statement.message);
-            message = arena_sprintf(generator->arena, "%s.data", message_expression);
-        }
-        emit_line(generator, "rsg_assert(%s, %s, _rsg_file, %d);", condition, message, node->location.line);
-    } else {
-        emit_line(generator, "rsg_assert(%s, NULL, _rsg_file, %d);", condition, node->location.line);
-    }
-}
-
 static void emit_loop_statement(CodeGenerator *generator, const ASTNode *node) {
     emit_line(generator, "while (1) {");
     generator->indent++;
@@ -792,9 +795,6 @@ static void emit_statement(CodeGenerator *generator, const ASTNode *node) {
         break;
     case NODE_COMPOUND_ASSIGN:
         emit_compound_assign_statement(generator, node);
-        break;
-    case NODE_ASSERT:
-        emit_assert_statement(generator, node);
         break;
     case NODE_BREAK:
         emit_line(generator, "break;");

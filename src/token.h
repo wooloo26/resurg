@@ -31,7 +31,6 @@ typedef enum {
     TOKEN_FOR,      // for
     TOKEN_BREAK,    // break
     TOKEN_CONTINUE, // continue
-    TOKEN_ASSERT,   // assert
 
     // Type keywords (v0.1.0 subset)
     TOKEN_BOOL,   // bool
