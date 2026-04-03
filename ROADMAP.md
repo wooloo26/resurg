@@ -90,6 +90,8 @@ Null safety and error handling.
 - [ ] `while` loop
 - [ ] `if` pattern binding (`if Some(x) := expr { … }`)
 - [ ] `while` pattern binding (`while Some(x) := expr { … }`)
+- [ ] `panic(message)` builtin (immediate abort, `noreturn`)
+- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
 
 ## v0.7.0 — Slices & Collections
 

@@ -119,6 +119,31 @@ assert x > 0
 assert x > 0, "x must be positive"
 ```
 
+### Panic & Recover
+
+`panic` immediately aborts the current execution path with a message. `recover` may only be called inside a `defer` block — it returns `Some(message)` if a panic is active and catches it, or `None` otherwise.
+
+Code after a `panic` call is unreachable. If no `recover` catches the panic, the program terminates with a diagnostic.
+
+```rsg
+fn explode() {
+    panic("something went terribly wrong")
+}
+
+fn safe_call() -> ?str {
+    var result: ?str = None
+    defer {
+        if Some(msg) := recover() {
+            result = Some(msg)
+        }
+    }
+    explode()
+    result
+}
+
+msg := safe_call()   // Some("something went terribly wrong")
+```
+
 ### Memory Model
 
 **Tracing GC.** Structs are value types (copied on assignment). `&` heap-allocates and returns `*T`. No pointer arithmetic. Auto-deref on field access (`p.field` works on `*T`).
