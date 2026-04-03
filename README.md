@@ -410,6 +410,8 @@ use std/io { read as rd }
 pub fn add(a: i32, b: i32) = a + b
 ```
 
+**Visibility:** `pub` applies to `fn`, `struct`, `enum`, `type`, `var`, and `pact` declarations.
+
 ---
 
 ## 7. Functions & Closures

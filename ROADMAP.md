@@ -128,6 +128,7 @@ Higher-order programming and code organization.
 - [ ] Extension methods (`ext User { … }`, `ext str { … }`)
 - [ ] `use` imports (path, selective, aliased)
 - [ ] Private-by-default module resolution
+- [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
 
 ## v1.0.0 — Stable Release
 
