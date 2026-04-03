@@ -22,8 +22,8 @@ static void *checked_realloc(void *ptr, size_t size) {
     return result;
 }
 
-/** Build an RgString via printf-style formatting. */
-static RgString rg_string_from_format(const char *format, ...) {
+/** Build an RsgString via printf-style formatting. */
+static RsgString rsg_string_from_format(const char *format, ...) {
     va_list arguments;
     va_start(arguments, format);
     int32_t length = vsnprintf(NULL, 0, format, arguments);
@@ -32,7 +32,7 @@ static RgString rg_string_from_format(const char *format, ...) {
     va_start(arguments, format);
     vsnprintf(buffer, length + 1, format, arguments);
     va_end(arguments);
-    return (RgString){
+    return (RsgString){
         .data = buffer,
         .length = length,
         .reference_count = 1,
@@ -41,67 +41,67 @@ static RgString rg_string_from_format(const char *format, ...) {
 
 // String constructors and conversions.
 
-RgString rg_string_literal(const char *source) {
-    return (RgString){
+RsgString rsg_string_literal(const char *source) {
+    return (RsgString){
         .data = source,
         .length = (int32_t)strlen(source),
         .reference_count = -1, // static
     };
 }
 
-RgString rg_string_new(const char *source, int32_t length) {
+RsgString rsg_string_new(const char *source, int32_t length) {
     char *buffer = checked_malloc(length + 1);
     memcpy(buffer, source, length);
     buffer[length] = '\0';
-    return (RgString){
+    return (RsgString){
         .data = buffer,
         .length = length,
         .reference_count = 1,
     };
 }
 
-RgString rg_string_empty(void) {
-    return rg_string_literal("");
+RsgString rsg_string_empty(void) {
+    return rsg_string_literal("");
 }
 
-RgString rg_string_concat(RgString left, RgString right) {
+RsgString rsg_string_concat(RsgString left, RsgString right) {
     int32_t length = left.length + right.length;
     char *buffer = checked_malloc(length + 1);
     memcpy(buffer, left.data, left.length);
     memcpy(buffer + left.length, right.data, right.length);
     buffer[length] = '\0';
-    return (RgString){
+    return (RsgString){
         .data = buffer,
         .length = length,
         .reference_count = 1,
     };
 }
 
-RgString rg_string_from_i32(int32_t value) {
-    return rg_string_from_format("%d", value);
+RsgString rsg_string_from_i32(int32_t value) {
+    return rsg_string_from_format("%d", value);
 }
 
-RgString rg_string_from_u32(uint32_t value) {
-    return rg_string_from_format("%u", value);
+RsgString rsg_string_from_u32(uint32_t value) {
+    return rsg_string_from_format("%u", value);
 }
 
-RgString rg_string_from_f64(double value) {
-    return rg_string_from_format("%g", value);
+RsgString rsg_string_from_f64(double value) {
+    return rsg_string_from_format("%g", value);
 }
 
-RgString rg_string_from_bool(bool value) {
-    return rg_string_literal(value ? "true" : "false");
+RsgString rsg_string_from_bool(bool value) {
+    return rsg_string_literal(value ? "true" : "false");
 }
 
 // String builder implementation.
 
-void rg_string_builder_init(RgStringBuilder *builder) {
+void rsg_string_builder_init(RsgStringBuilder *builder) {
     builder->capacity = 64;
     builder->length = 0;
     builder->buffer = checked_malloc(builder->capacity);
 }
 
-void rg_string_builder_append(RgStringBuilder *builder, const char *source, int32_t length) {
+void rsg_string_builder_append(RsgStringBuilder *builder, const char *source, int32_t length) {
     while (builder->length + length >= builder->capacity) {
         builder->capacity *= 2;
         builder->buffer = checked_realloc(builder->buffer, builder->capacity);
@@ -110,26 +110,26 @@ void rg_string_builder_append(RgStringBuilder *builder, const char *source, int3
     builder->length += length;
 }
 
-void rg_string_builder_append_string(RgStringBuilder *builder, RgString source) {
-    rg_string_builder_append(builder, source.data, source.length);
+void rsg_string_builder_append_string(RsgStringBuilder *builder, RsgString source) {
+    rsg_string_builder_append(builder, source.data, source.length);
 }
 
-RgString rg_string_builder_finish(RgStringBuilder *builder) {
-    RgString result = rg_string_new(builder->buffer, builder->length);
+RsgString rsg_string_builder_finish(RsgStringBuilder *builder) {
+    RsgString result = rsg_string_new(builder->buffer, builder->length);
     free(builder->buffer);
     builder->buffer = NULL;
     builder->length = builder->capacity = 0;
     return result;
 }
 
-bool rg_string_equal(RgString left, RgString right) {
+bool rsg_string_equal(RsgString left, RsgString right) {
     if (left.length != right.length) {
         return false;
     }
     return memcmp(left.data, right.data, left.length) == 0;
 }
 
-void rg_assert(bool condition, const char *message, const char *file, int32_t line) {
+void rsg_assert(bool condition, const char *message, const char *file, int32_t line) {
     if (!condition) {
         if (message != NULL) {
             fprintf(stderr, "assertion failed at %s:%d: %s\n", file, line, message);
@@ -143,22 +143,22 @@ void rg_assert(bool condition, const char *message, const char *file, int32_t li
 
 // Typed I/O - print values to stdout without a trailing newline.
 
-void rg_print_string(RgString source) {
+void rsg_print_string(RsgString source) {
     fwrite(source.data, 1, source.length, stdout);
 }
 
-void rg_print_i32(int32_t value) {
+void rsg_print_i32(int32_t value) {
     printf("%d", value);
 }
 
-void rg_print_u32(uint32_t value) {
+void rsg_print_u32(uint32_t value) {
     printf("%u", value);
 }
 
-void rg_print_f64(double value) {
+void rsg_print_f64(double value) {
     printf("%g", value);
 }
 
-void rg_print_bool(bool value) {
+void rsg_print_bool(bool value) {
     printf("%s", value ? "true" : "false");
 }

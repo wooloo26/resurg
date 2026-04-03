@@ -48,8 +48,8 @@ static const Token *expect(Parser *parser, TokenKind kind) {
     if (check(parser, kind)) {
         return advance_token(parser);
     }
-    rg_error(current(parser)->location, "expected '%s', got '%s'", token_kind_string(kind),
-             token_kind_string(current(parser)->kind));
+    rsg_error(current(parser)->location, "expected '%s', got '%s'", token_kind_string(kind),
+              token_kind_string(current(parser)->kind));
     return current(parser);
 }
 
@@ -84,7 +84,7 @@ static ASTType parse_type(Parser *parser) {
         type.name = advance_token(parser)->lexeme;
         break;
     default:
-        rg_error(current_location(parser), "expected type name");
+        rsg_error(current_location(parser), "expected type name");
         type.kind = AST_TYPE_INFERRED;
         break;
     }
@@ -214,7 +214,7 @@ static ASTNode *parse_primary(Parser *parser) {
     if (check(parser, TOKEN_LEFT_BRACE)) {
         return parse_block(parser);
     }
-    rg_error(location, "expected expression, got '%s'", token_kind_string(current(parser)->kind));
+    rsg_error(location, "expected expression, got '%s'", token_kind_string(current(parser)->kind));
     advance_token(parser);
     return ast_new(parser->arena, NODE_LITERAL, location); // error recovery
 }
@@ -434,7 +434,7 @@ static ASTNode *parse_function_declaration(Parser *parser, bool is_public) {
     } else if (match(parser, TOKEN_EQUAL)) {
         node->function_declaration.body = parse_expression(parser);
     } else {
-        rg_error(current_location(parser), "expected function body");
+        rsg_error(current_location(parser), "expected function body");
     }
 
     return node;
@@ -540,7 +540,7 @@ static ASTNode *parse_declaration(Parser *parser) {
         if (check(parser, TOKEN_FUNCTION)) {
             return parse_function_declaration(parser, true);
         }
-        rg_error(current_location(parser), "expected 'fn' after 'pub'");
+        rsg_error(current_location(parser), "expected 'fn' after 'pub'");
         return NULL;
     }
 
@@ -556,7 +556,7 @@ static ASTNode *parse_declaration(Parser *parser) {
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
     Parser *parser = malloc(sizeof(*parser));
     if (parser == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     parser->tokens = tokens;
     parser->position = 0;

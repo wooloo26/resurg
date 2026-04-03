@@ -15,21 +15,21 @@
 static char *read_file(const char *path) {
     FILE *file_handle = fopen(path, "rb");
     if (file_handle == NULL) {
-        rg_fatal("cannot open '%s'", path);
+        rsg_fatal("cannot open '%s'", path);
     }
 
     fseek(file_handle, 0, SEEK_END);
     long size = ftell(file_handle);
     if (size < 0 || size > MAX_SOURCE_SIZE) {
         fclose(file_handle);
-        rg_fatal("cannot read '%s' (size error or file too large)", path);
+        rsg_fatal("cannot read '%s' (size error or file too large)", path);
     }
     fseek(file_handle, 0, SEEK_SET);
 
     char *buffer = calloc((size_t)size + 1, 1);
     if (buffer == NULL) {
         fclose(file_handle);
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     fread(buffer, 1, (size_t)size, file_handle);
     fclose(file_handle);
@@ -72,14 +72,14 @@ static CliArgs parse_cli_args(int argc, char *argv[]) {
             args.dump_ast = true;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) {
-                rg_fatal("-o requires an argument");
+                rsg_fatal("-o requires an argument");
             }
             args.output_file = argv[i];
         } else if (argv[i][0] == '-') {
-            rg_fatal("unknown option '%s'", argv[i]);
+            rsg_fatal("unknown option '%s'", argv[i]);
         } else {
             if (args.input_file != NULL) {
-                rg_fatal("multiple input files not supported");
+                rsg_fatal("multiple input files not supported");
             }
             args.input_file = argv[i];
         }
@@ -141,7 +141,7 @@ static int compile(const CliArgs *args) {
         if (args->output_file != NULL) {
             out = fopen(args->output_file, "w");
             if (out == NULL) {
-                rg_fatal("cannot open output '%s'", args->output_file);
+                rsg_fatal("cannot open output '%s'", args->output_file);
             }
         }
         code_generator = code_generator_create(out, arena);

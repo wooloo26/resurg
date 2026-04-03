@@ -63,7 +63,17 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Banned
 
-`gets` `sprintf` `atoi` `atof` `#pragma once` VLAs implicit-`int` `void main` pointer-hiding typedefs K&R definitions abbreviated identifiers.
+- `gets`
+- `sprintf`
+- `atoi`
+- `atof`
+- `#pragma once`
+- VLAs
+- implicit-`int`
+- `void main`
+- pointer-hiding typedefs
+- K&R definitions
+- abbreviated identifiers (except `rsg` and common acronyms: `id`, `url`)
 
 ## Source Ordering (Bottom-Up)
 

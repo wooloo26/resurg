@@ -2,7 +2,7 @@
 
 /** Maps a Resurg variable name to its (possibly mangled) C identifier. */
 struct VariableEntry {
-    const char *resurg_name;
+    const char *rsg_name;
     const char *c_name; // may differ when shadowing is resolved
 };
 
@@ -11,9 +11,9 @@ struct CodeGenerator {
     Arena *arena; // for temporary string building
     int32_t indent;
     const char *module;              // current module name (may be NULL)
-    const char *source_file;         // escaped source path for rg_assert
-    int32_t temporary_counter;       // monotonic counter for _rg_tmp_N
-    int32_t string_builder_counter;  // monotonic counter for _rg_sb_N
+    const char *source_file;         // escaped source path for rsg_assert
+    int32_t temporary_counter;       // monotonic counter for _rsg_tmp_N
+    int32_t string_builder_counter;  // monotonic counter for _rsg_sb_N
     VariableEntry *variables;        /* buf */
     int32_t shadow_variable_counter; // suffix counter for shadowed renames
 };
@@ -43,11 +43,11 @@ static void emit_line(CodeGenerator *generator, const char *format, ...) {
 }
 
 static const char *next_temporary(CodeGenerator *generator) {
-    return arena_sprintf(generator->arena, "_rg_tmp_%d", generator->temporary_counter++);
+    return arena_sprintf(generator->arena, "_rsg_tmp_%d", generator->temporary_counter++);
 }
 
 static const char *next_string_builder(CodeGenerator *generator) {
-    return arena_sprintf(generator->arena, "_rg_sb_%d", generator->string_builder_counter++);
+    return arena_sprintf(generator->arena, "_rsg_sb_%d", generator->string_builder_counter++);
 }
 
 // Variable name tracking - resolves Resurg names to C identifiers,
@@ -55,7 +55,7 @@ static const char *next_string_builder(CodeGenerator *generator) {
 
 static int32_t variable_find(const CodeGenerator *generator, const char *name) {
     for (int32_t i = BUFFER_LENGTH(generator->variables) - 1; i >= 0; i--) {
-        if (strcmp(generator->variables[i].resurg_name, name) == 0) {
+        if (strcmp(generator->variables[i].rsg_name, name) == 0) {
             return i;
         }
     }
@@ -85,14 +85,14 @@ static void variable_scope_reset(CodeGenerator *generator) {
 }
 
 /**
- * Prefix non-main function names with `rg_` to avoid C reserved-word and
+ * Prefix non-main function names with `rsg_` to avoid C reserved-word and
  * stdlib collisions.
  */
 static const char *mangle_function_name(CodeGenerator *generator, const char *name) {
     if (strcmp(name, "main") == 0) {
         return "main";
     }
-    return arena_sprintf(generator->arena, "rg_%s", name);
+    return arena_sprintf(generator->arena, "rsg_%s", name);
 }
 
 // Forward declarations for mutually-recursive emitters.
@@ -377,8 +377,8 @@ static void emit_if(CodeGenerator *generator, const ASTNode *node, const char *t
 }
 
 /**
- * Convert an expression node to an RgString value for interpolation,
- * wrapping non-string types with the appropriate rg_string_from_* call.
+ * Convert an expression node to an RsgString value for interpolation,
+ * wrapping non-string types with the appropriate rsg_string_from_* call.
  */
 static const char *string_convert_expression(CodeGenerator *generator, const ASTNode *node) {
     const char *value = emit_expression(generator, node);
@@ -390,15 +390,15 @@ static const char *string_convert_expression(CodeGenerator *generator, const AST
     case TYPE_STRING:
         return value;
     case TYPE_I32:
-        return arena_sprintf(generator->arena, "rg_string_from_i32(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_i32(%s)", value);
     case TYPE_U32:
-        return arena_sprintf(generator->arena, "rg_string_from_u32(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_u32(%s)", value);
     case TYPE_F64:
-        return arena_sprintf(generator->arena, "rg_string_from_f64(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_f64(%s)", value);
     case TYPE_BOOL:
-        return arena_sprintf(generator->arena, "rg_string_from_bool(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_bool(%s)", value);
     default:
-        return arena_sprintf(generator->arena, "rg_string_from_i32(%s)", value);
+        return arena_sprintf(generator->arena, "rsg_string_from_i32(%s)", value);
     }
 }
 
@@ -421,7 +421,7 @@ static const char *emit_literal_expression(CodeGenerator *generator, const ASTNo
         return format_float64(generator, node->literal.float64_value);
     case LITERAL_STRING: {
         const char *escaped = c_string_escape(generator, node->literal.string_value);
-        return arena_sprintf(generator->arena, "rg_string_literal(\"%s\")", escaped);
+        return arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")", escaped);
     }
     case LITERAL_UNIT:
         return "(void)0";
@@ -510,10 +510,10 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     const Type *left_type = left_operand->type;
     if (left_type != NULL && left_type->kind == TYPE_STRING) {
         if (node->binary.operator== TOKEN_EQUAL_EQUAL) {
-            return arena_sprintf(generator->arena, "rg_string_equal(%s, %s)", left, right);
+            return arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", left, right);
         }
         if (node->binary.operator== TOKEN_BANG_EQUAL) {
-            return arena_sprintf(generator->arena, "(!rg_string_equal(%s, %s))", left, right);
+            return arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", left, right);
         }
     }
 
@@ -579,8 +579,8 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
             if (text == NULL || text[0] == '\0') {
                 continue;
             }
-            BUFFER_PUSH(string_parts,
-                        arena_sprintf(generator->arena, "rg_string_literal(\"%s\")", c_string_escape(generator, text)));
+            BUFFER_PUSH(string_parts, arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")",
+                                                    c_string_escape(generator, text)));
         } else {
             BUFFER_PUSH(string_parts, string_convert_expression(generator, part));
         }
@@ -594,20 +594,20 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
     }
     if (count == 2) {
         const char *result =
-            arena_sprintf(generator->arena, "rg_string_concat(%s, %s)", string_parts[0], string_parts[1]);
+            arena_sprintf(generator->arena, "rsg_string_concat(%s, %s)", string_parts[0], string_parts[1]);
         BUFFER_FREE(string_parts);
         return result;
     }
 
     const char *builder = next_string_builder(generator);
-    emit_line(generator, "RgStringBuilder %s;", builder);
-    emit_line(generator, "rg_string_builder_init(&%s);", builder);
+    emit_line(generator, "RsgStringBuilder %s;", builder);
+    emit_line(generator, "rsg_string_builder_init(&%s);", builder);
     for (int32_t i = 0; i < count; i++) {
-        emit_line(generator, "rg_string_builder_append_string(&%s, %s);", builder, string_parts[i]);
+        emit_line(generator, "rsg_string_builder_append_string(&%s, %s);", builder, string_parts[i]);
     }
     BUFFER_FREE(string_parts);
     const char *temporary = next_temporary(generator);
-    emit_line(generator, "RgString %s = rg_string_builder_finish(&%s);", temporary, builder);
+    emit_line(generator, "RsgString %s = rsg_string_builder_finish(&%s);", temporary, builder);
     return temporary;
 }
 
@@ -724,9 +724,9 @@ static void emit_assert_statement(CodeGenerator *generator, const ASTNode *node)
             const char *message_expression = emit_expression(generator, node->assert_statement.message);
             message = arena_sprintf(generator->arena, "%s.data", message_expression);
         }
-        emit_line(generator, "rg_assert(%s, %s, _rg_file, %d);", condition, message, node->location.line);
+        emit_line(generator, "rsg_assert(%s, %s, _rsg_file, %d);", condition, message, node->location.line);
     } else {
-        emit_line(generator, "rg_assert(%s, NULL, _rg_file, %d);", condition, node->location.line);
+        emit_line(generator, "rsg_assert(%s, NULL, _rsg_file, %d);", condition, node->location.line);
     }
 }
 
@@ -935,14 +935,14 @@ static void emit_preamble(CodeGenerator *generator) {
 /**
  * Emit the full C translation unit: preamble, source-file constant, module
  * comment, forward declarations, function definitions, and (if present) a
- * `_rg_top_level()` wrapper for top-level statements.
+ * `_rsg_top_level()` wrapper for top-level statements.
  */
 static void emit_file(CodeGenerator *generator, const ASTNode *file) {
     emit_preamble(generator);
 
-    // Emit source file path constant (used by rg_assert)
+    // Emit source file path constant (used by rsg_assert)
     generator->source_file = c_escape_file_path(generator, file->location.file);
-    emit(generator, "static const char *_rg_file = \"%s\";\n\n", generator->source_file);
+    emit(generator, "static const char *_rsg_file = \"%s\";\n\n", generator->source_file);
 
     // Emit module comment
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
@@ -980,7 +980,7 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         }
     }
     if (has_top_statements) {
-        emit(generator, "static void _rg_top_level(void) {\n");
+        emit(generator, "static void _rsg_top_level(void) {\n");
         generator->indent++;
         for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
             const ASTNode *declaration = file->file.declarations[i];
@@ -996,7 +996,7 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
 CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
     CodeGenerator *generator = malloc(sizeof(*generator));
     if (generator == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     generator->output = output;
     generator->arena = arena;

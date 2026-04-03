@@ -194,7 +194,7 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
         }
 
         if (peek(lexer) == '\0') {
-            rg_error(location, "unterminated string literal");
+            rsg_error(location, "unterminated string literal");
             return make_token(lexer, TOKEN_ERROR, lexer->source + content_start - 1,
                               lexer->position - content_start + 1, location);
         }
@@ -279,7 +279,7 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
     }
 
     if (peek(lexer) == '\0') {
-        rg_error(location, "unterminated string literal");
+        rsg_error(location, "unterminated string literal");
     } else {
         advance(lexer); // consume '"'
     }
@@ -369,7 +369,7 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
     default:
         break;
     }
-    rg_error(location, "unexpected character '%c'", c);
+    rsg_error(location, "unexpected character '%c'", c);
     return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
 }
 
@@ -427,7 +427,7 @@ static Token scan_token(Lexer *lexer) {
 Lexer *lexer_create(const char *source, const char *file, Arena *arena) {
     Lexer *lexer = malloc(sizeof(*lexer));
     if (lexer == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     lexer->source = source;
     lexer->file = file;

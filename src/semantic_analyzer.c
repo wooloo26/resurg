@@ -100,7 +100,7 @@ static const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *a
     }
     const Type *type = type_from_name(ast_type->name);
     if (type == NULL) {
-        rg_error(ast_type->location, "unknown type '%s'", ast_type->name);
+        rsg_error(ast_type->location, "unknown type '%s'", ast_type->name);
         analyzer->error_count++;
         return &TYPE_ERROR_INSTANCE;
     }
@@ -155,7 +155,7 @@ static const Type *check_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
 static const Type *check_identifier(SemanticAnalyzer *analyzer, ASTNode *node) {
     Symbol *symbol = scope_lookup(analyzer, node->identifier.name);
     if (symbol == NULL) {
-        rg_error(node->location, "undefined variable '%s'", node->identifier.name);
+        rsg_error(node->location, "undefined variable '%s'", node->identifier.name);
         analyzer->error_count++;
         return &TYPE_ERROR_INSTANCE;
     }
@@ -260,7 +260,7 @@ static const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
             return signature->return_type;
         }
         if (symbol == NULL) {
-            rg_error(node->location, "undefined function '%s'", function_name);
+            rsg_error(node->location, "undefined function '%s'", function_name);
             analyzer->error_count++;
         }
     }
@@ -324,16 +324,16 @@ static const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNod
     } else if (init_type != NULL) {
         variable_type = init_type;
     } else {
-        rg_error(node->location, "cannot infer type for '%s'", node->variable_declaration.name);
+        rsg_error(node->location, "cannot infer type for '%s'", node->variable_declaration.name);
         analyzer->error_count++;
         variable_type = &TYPE_ERROR_INSTANCE;
     }
 
     if (scope_lookup_current(analyzer, node->variable_declaration.name) != NULL) {
-        rg_error(node->location, "redefinition of '%s' in the same scope", node->variable_declaration.name);
+        rsg_error(node->location, "redefinition of '%s' in the same scope", node->variable_declaration.name);
         analyzer->error_count++;
     } else if (scope_lookup(analyzer, node->variable_declaration.name) != NULL) {
-        rg_error(node->location, "variable '%s' shadows an existing binding", node->variable_declaration.name);
+        rsg_error(node->location, "variable '%s' shadows an existing binding", node->variable_declaration.name);
         analyzer->error_count++;
     }
 
@@ -448,7 +448,7 @@ static const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
     case NODE_BREAK:
     case NODE_CONTINUE:
         if (!in_loop(analyzer)) {
-            rg_error(node->location, "'%s' outside of loop", node->kind == NODE_BREAK ? "break" : "continue");
+            rsg_error(node->location, "'%s' outside of loop", node->kind == NODE_BREAK ? "break" : "continue");
             analyzer->error_count++;
         }
         break;
@@ -522,7 +522,7 @@ static const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     SemanticAnalyzer *analyzer = malloc(sizeof(*analyzer));
     if (analyzer == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     analyzer->arena = arena;
     analyzer->current_scope = NULL;

@@ -19,11 +19,11 @@ struct Arena {
 static ArenaBlock *arena_block_new(size_t capacity) {
     ArenaBlock *block = calloc(1, sizeof(*block));
     if (block == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     block->data = malloc(capacity);
     if (block->data == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     block->used = 0;
     block->capacity = capacity;
@@ -34,7 +34,7 @@ static ArenaBlock *arena_block_new(size_t capacity) {
 Arena *arena_create(void) {
     Arena *arena = malloc(sizeof(*arena));
     if (arena == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     arena->head = arena_block_new(ARENA_BLOCK_SIZE);
     arena->current = arena->head;
@@ -113,7 +113,7 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
         header->length = 0;
     }
     if (header == NULL) {
-        rg_fatal("out of memory");
+        rsg_fatal("out of memory");
     }
     header->capacity = new_capacity;
     return (char *)header + sizeof(BufferHeader);
@@ -122,7 +122,7 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
 /** Global error count - checked by the driver to decide exit status. */
 static int32_t g_error_count = 0;
 
-void rg_error(SourceLocation location, const char *format, ...) {
+void rsg_error(SourceLocation location, const char *format, ...) {
     fprintf(stderr, "%s:%d:%d: error: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
@@ -132,7 +132,7 @@ void rg_error(SourceLocation location, const char *format, ...) {
     g_error_count++;
 }
 
-void rg_warn(SourceLocation location, const char *format, ...) {
+void rsg_warn(SourceLocation location, const char *format, ...) {
     fprintf(stderr, "%s:%d:%d: warning: ", location.file, location.line, location.column);
     va_list arguments;
     va_start(arguments, format);
@@ -141,7 +141,7 @@ void rg_warn(SourceLocation location, const char *format, ...) {
     fprintf(stderr, "\n");
 }
 
-noreturn void rg_fatal(const char *format, ...) {
+noreturn void rsg_fatal(const char *format, ...) {
     fprintf(stderr, "fatal: ");
     va_list arguments;
     va_start(arguments, format);

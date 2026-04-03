@@ -15,17 +15,17 @@ const Type TYPE_ERROR_INSTANCE = {.kind = TYPE_ERROR};
  */
 static const struct {
     TypeKind kind;
-    const char *resurg_name;
+    const char *rsg_name;
     const char *c_name;
     const Type *instance;
 } TYPE_INFO[] = {
-    {.kind = TYPE_BOOL, .resurg_name = "bool", .c_name = "bool", .instance = &TYPE_BOOL_INSTANCE},
-    {.kind = TYPE_I32, .resurg_name = "i32", .c_name = "int32_t", .instance = &TYPE_I32_INSTANCE},
-    {.kind = TYPE_U32, .resurg_name = "u32", .c_name = "uint32_t", .instance = &TYPE_U32_INSTANCE},
-    {.kind = TYPE_F64, .resurg_name = "f64", .c_name = "double", .instance = &TYPE_F64_INSTANCE},
-    {.kind = TYPE_STRING, .resurg_name = "str", .c_name = "RgString", .instance = &TYPE_STRING_INSTANCE},
-    {.kind = TYPE_UNIT, .resurg_name = "unit", .c_name = "void", .instance = &TYPE_UNIT_INSTANCE},
-    {.kind = TYPE_ERROR, .resurg_name = "<error>", .c_name = "/* error */", .instance = &TYPE_ERROR_INSTANCE},
+    {.kind = TYPE_BOOL, .rsg_name = "bool", .c_name = "bool", .instance = &TYPE_BOOL_INSTANCE},
+    {.kind = TYPE_I32, .rsg_name = "i32", .c_name = "int32_t", .instance = &TYPE_I32_INSTANCE},
+    {.kind = TYPE_U32, .rsg_name = "u32", .c_name = "uint32_t", .instance = &TYPE_U32_INSTANCE},
+    {.kind = TYPE_F64, .rsg_name = "f64", .c_name = "double", .instance = &TYPE_F64_INSTANCE},
+    {.kind = TYPE_STRING, .rsg_name = "str", .c_name = "RsgString", .instance = &TYPE_STRING_INSTANCE},
+    {.kind = TYPE_UNIT, .rsg_name = "unit", .c_name = "void", .instance = &TYPE_UNIT_INSTANCE},
+    {.kind = TYPE_ERROR, .rsg_name = "<error>", .c_name = "/* error */", .instance = &TYPE_ERROR_INSTANCE},
 };
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
@@ -37,7 +37,7 @@ const Type *type_from_name(const char *name) {
         return NULL;
     }
     for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
-        if (TYPE_INFO[i].kind != TYPE_ERROR && strcmp(name, TYPE_INFO[i].resurg_name) == 0) {
+        if (TYPE_INFO[i].kind != TYPE_ERROR && strcmp(name, TYPE_INFO[i].rsg_name) == 0) {
             return TYPE_INFO[i].instance;
         }
     }
@@ -50,7 +50,7 @@ const char *type_name(const Type *type) {
     }
     for (int32_t i = 0; i < TYPE_INFO_COUNT; i++) {
         if (TYPE_INFO[i].kind == type->kind) {
-            return TYPE_INFO[i].resurg_name;
+            return TYPE_INFO[i].rsg_name;
         }
     }
     return "<unknown>";

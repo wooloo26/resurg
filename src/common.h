@@ -88,10 +88,10 @@ typedef struct {
  * Emit "file:line:col: error: ..." to stderr and increment the global
  * error counter.
  */
-void rg_error(SourceLocation location, const char *format, ...);
+void rsg_error(SourceLocation location, const char *format, ...);
 /** Emit "file:line:col: warning: ..." to stderr. */
-void rg_warn(SourceLocation location, const char *format, ...);
+void rsg_warn(SourceLocation location, const char *format, ...);
 /** Emit "fatal: ..." to stderr and terminate the process. */
-noreturn void rg_fatal(const char *format, ...);
+noreturn void rsg_fatal(const char *format, ...);
 
 #endif // RG_COMMON_H

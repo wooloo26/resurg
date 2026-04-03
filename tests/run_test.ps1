@@ -7,7 +7,7 @@
 #   // TEST: runtime_error   — binary must exit != 0
 #   // EXPECT-ERROR: <text>  — stderr must contain <text>
 param(
-    [Parameter(Mandatory)][string]$RgFile,
+    [Parameter(Mandatory)][string]$RsgFile,
     [Parameter(Mandatory)][string]$Resurg,
     [Parameter(Mandatory)][string]$CC,
     [Parameter(Mandatory)][string]$RtObjs,
@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 $TestMode = 'normal'
 $ExpectError = ''
 
-foreach ($line in (Get-Content -LiteralPath $RgFile)) {
+foreach ($line in (Get-Content -LiteralPath $RsgFile)) {
     if ($line -match '^//\s+TEST:\s+(.+)') {
         $TestMode = $Matches[1].Trim()
     } elseif ($line -match '^//\s+EXPECT-ERROR:\s+(.+)') {
@@ -40,7 +40,7 @@ foreach ($line in (Get-Content -LiteralPath $RgFile)) {
 # -----------------------------------------------------------------------
 switch ($TestMode) {
     'normal' {
-        & $Resurg $RgFile -o "$Build/_test.c"
+        & $Resurg $RsgFile -o "$Build/_test.c"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         [string[]]$rtList = if ($RtObjs) { $RtObjs -split '\s+' } else { @() }
@@ -53,24 +53,24 @@ switch ($TestMode) {
 
     'compile_error' {
         $stderrFile = "$Build/_test_stderr.txt"
-        $proc = Start-Process -FilePath $Resurg -ArgumentList "$RgFile",'-o',"$Build/_test.c" `
+        $proc = Start-Process -FilePath $Resurg -ArgumentList "$RsgFile",'-o',"$Build/_test.c" `
             -RedirectStandardError $stderrFile -NoNewWindow -Wait -PassThru
         $exitCode = $proc.ExitCode
         $stderr = if (Test-Path $stderrFile) { Get-Content -Raw $stderrFile } else { '' }
 
         if ($exitCode -eq 0) {
-            Write-Host "  FAIL  $RgFile — expected compile error but resurg succeeded"
+            Write-Host "  FAIL  $RsgFile — expected compile error but resurg succeeded"
             exit 1
         }
         if ($ExpectError -ne '' -and $stderr -notlike "*$ExpectError*") {
-            Write-Host "  FAIL  $RgFile — expected error: $ExpectError"
+            Write-Host "  FAIL  $RsgFile — expected error: $ExpectError"
             Write-Host "         got: $stderr"
             exit 1
         }
     }
 
     'runtime_error' {
-        & $Resurg $RgFile -o "$Build/_test.c"
+        & $Resurg $RsgFile -o "$Build/_test.c"
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         [string[]]$rtList = if ($RtObjs) { $RtObjs -split '\s+' } else { @() }
@@ -81,13 +81,13 @@ switch ($TestMode) {
         & "$Build/_test.exe" 2>$null
         $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "  FAIL  $RgFile — expected runtime error but program succeeded"
+            Write-Host "  FAIL  $RsgFile — expected runtime error but program succeeded"
             exit 1
         }
     }
 
     default {
-        Write-Host "  FAIL  $RgFile — unknown test mode: $TestMode"
+        Write-Host "  FAIL  $RsgFile — unknown test mode: $TestMode"
         exit 1
     }
 }
