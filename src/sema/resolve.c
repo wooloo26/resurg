@@ -2,19 +2,19 @@
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
-const Type *find_type_alias(const char *name) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(g_type_aliases); i++) {
-        if (strcmp(g_type_aliases[i].name, name) == 0) {
-            return g_type_aliases[i].underlying;
+const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(analyzer->type_aliases); i++) {
+        if (strcmp(analyzer->type_aliases[i].name, name) == 0) {
+            return analyzer->type_aliases[i].underlying;
         }
     }
     return NULL;
 }
 
-FunctionSignature *find_function_signature(const char *name) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(g_function_signatures); i++) {
-        if (strcmp(g_function_signatures[i].name, name) == 0) {
-            return &g_function_signatures[i];
+FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(analyzer->function_signatures); i++) {
+        if (strcmp(analyzer->function_signatures[i].name, name) == 0) {
+            return &analyzer->function_signatures[i];
         }
     }
     return NULL;
@@ -51,7 +51,7 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
         return type;
     }
     // Check type aliases
-    const Type *alias = find_type_alias(ast_type->name);
+    const Type *alias = find_type_alias(analyzer, ast_type->name);
     if (alias != NULL) {
         return alias;
     }

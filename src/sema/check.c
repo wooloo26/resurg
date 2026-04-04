@@ -1,10 +1,5 @@
 #include "sema/_sema.h"
 
-// ── Global tables ──────────────────────────────────────────────────────
-
-TypeAlias *g_type_aliases = NULL;                /* buf */
-FunctionSignature *g_function_signatures = NULL; /* buf */
-
 // ── Public API ─────────────────────────────────────────────────────────
 
 SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
@@ -12,22 +7,28 @@ SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     analyzer->arena = arena;
     analyzer->current_scope = NULL;
     analyzer->error_count = 0;
+    analyzer->type_aliases = NULL;
+    analyzer->function_signatures = NULL;
     return analyzer;
 }
 
 void semantic_analyzer_destroy(SemanticAnalyzer *analyzer) {
-    free(analyzer);
+    if (analyzer != NULL) {
+        BUFFER_FREE(analyzer->type_aliases);
+        BUFFER_FREE(analyzer->function_signatures);
+        free(analyzer);
+    }
 }
 
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
-    // Reset globals for each compilation
-    if (g_function_signatures != NULL) {
-        BUFFER_FREE(g_function_signatures);
-        g_function_signatures = NULL;
+    // Reset tables for each compilation
+    if (analyzer->function_signatures != NULL) {
+        BUFFER_FREE(analyzer->function_signatures);
+        analyzer->function_signatures = NULL;
     }
-    if (g_type_aliases != NULL) {
-        BUFFER_FREE(g_type_aliases);
-        g_type_aliases = NULL;
+    if (analyzer->type_aliases != NULL) {
+        BUFFER_FREE(analyzer->type_aliases);
+        analyzer->type_aliases = NULL;
     }
 
     scope_push(analyzer, false); // global scope
@@ -37,10 +38,11 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
         ASTNode *declaration = file->file.declarations[i];
 
         if (declaration->kind == NODE_TYPE_ALIAS) {
-            const Type *underlying = resolve_ast_type(analyzer, &declaration->type_alias.alias_type);
+            const Type *underlying =
+                resolve_ast_type(analyzer, &declaration->type_alias.alias_type);
             if (underlying != NULL) {
                 TypeAlias alias = {.name = declaration->type_alias.name, .underlying = underlying};
-                BUFFER_PUSH(g_type_aliases, alias);
+                BUFFER_PUSH(analyzer->type_aliases, alias);
             }
         }
 
@@ -48,7 +50,8 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
             // Resolve return type (may be inferred - default to unit)
             const Type *resolved_return = &TYPE_UNIT_INSTANCE;
             if (declaration->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
-                resolved_return = resolve_ast_type(analyzer, &declaration->function_declaration.return_type);
+                resolved_return =
+                    resolve_ast_type(analyzer, &declaration->function_declaration.return_type);
                 if (resolved_return == NULL) {
                     resolved_return = &TYPE_UNIT_INSTANCE;
                 }
@@ -69,7 +72,7 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
                 }
                 BUFFER_PUSH(signature.parameter_types, parameter_type);
             }
-            BUFFER_PUSH(g_function_signatures, signature);
+            BUFFER_PUSH(analyzer->function_signatures, signature);
 
             // Register in scope
             scope_define(analyzer, declaration->function_declaration.name, resolved_return,

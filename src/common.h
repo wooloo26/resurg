@@ -93,8 +93,7 @@ void *rsg_calloc(size_t count, size_t size);
 void *rsg_realloc(void *pointer, size_t size);
 
 /**
- * Emit "file:line:col: error: ..." to stderr and increment the global
- * error counter.
+ * Emit "file:line:col: error: ..." to stderr.
  */
 void rsg_error(SourceLocation location, const char *format, ...);
 /** Emit "file:line:col: warning: ..." to stderr. */

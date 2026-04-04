@@ -133,9 +133,6 @@ void *rsg_realloc(void *pointer, size_t size) {
     return result;
 }
 
-/** Global error count - checked by the driver to decide exit status. */
-static int32_t g_error_count = 0;
-
 /** Emit "label: msg\n" to @p stream with a location prefix. */
 static void emit_located_diagnostic(SourceLocation location, const char *label, const char *format,
                                     va_list arguments) {
@@ -149,7 +146,6 @@ void rsg_error(SourceLocation location, const char *format, ...) {
     va_start(arguments, format);
     emit_located_diagnostic(location, "error", format, arguments);
     va_end(arguments);
-    g_error_count++;
 }
 
 void rsg_warn(SourceLocation location, const char *format, ...) {

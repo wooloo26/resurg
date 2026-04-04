@@ -102,7 +102,7 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     // Look up function return type and check argument types
     if (function_name != NULL) {
-        FunctionSignature *signature = find_function_signature(function_name);
+        FunctionSignature *signature = find_function_signature(analyzer, function_name);
         if (signature != NULL) {
             int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
             if (arg_count != signature->parameter_count) {

@@ -137,9 +137,9 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
             symbol->type = resolved_return;
         }
 
-        // Update g_function_signatures
+        // Update function signatures
         FunctionSignature *signature =
-            find_function_signature(function_node->function_declaration.name);
+            find_function_signature(analyzer, function_node->function_declaration.name);
         if (signature != NULL && signature->return_type->kind == TYPE_UNIT) {
             signature->return_type = resolved_return;
         }

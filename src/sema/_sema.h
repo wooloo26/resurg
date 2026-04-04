@@ -55,19 +55,16 @@ struct SemanticAnalyzer {
     Arena *arena;
     Scope *current_scope;
     int32_t error_count;
+    TypeAlias *type_aliases;                /* buf */
+    FunctionSignature *function_signatures; /* buf */
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */
-#define SEMA_ERROR(analyzer, location, ...)                                                                            \
-    do {                                                                                                               \
-        rsg_error(location, __VA_ARGS__);                                                                              \
-        (analyzer)->error_count++;                                                                                     \
+#define SEMA_ERROR(analyzer, location, ...)                                                        \
+    do {                                                                                           \
+        rsg_error(location, __VA_ARGS__);                                                          \
+        (analyzer)->error_count++;                                                                 \
     } while (0)
-
-// ── Globals (defined in check.c) ───────────────────────────────────────
-
-extern TypeAlias *g_type_aliases;                /* buf */
-extern FunctionSignature *g_function_signatures; /* buf */
 
 // ── Scope manipulation (scope.c) ───────────────────────────────────────
 
@@ -76,7 +73,8 @@ Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop);
 /** Pop the innermost scope. */
 void scope_pop(SemanticAnalyzer *analyzer);
 /** Define @p name in the current scope. */
-void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public, bool is_function);
+void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
+                  bool is_function);
 /** Look up @p name in the innermost scope only (for redefinition checks). */
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name);
 /** Walk the scope chain outward to find @p name. */
@@ -87,9 +85,9 @@ bool in_loop(const SemanticAnalyzer *analyzer);
 // ── Type resolution (resolve.c) ────────────────────────────────────────
 
 /** Look up a type alias by name.  Returns the underlying type or NULL. */
-const Type *find_type_alias(const char *name);
+const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up a function signature by name. */
-FunctionSignature *find_function_signature(const char *name);
+FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an error and returns TYPE_ERROR for unknown names.
