@@ -180,11 +180,11 @@ static Token scan_char_literal(Lexer *lexer, SourceLocation location) {
             break;
         default:
             rsg_error(location, "unknown escape sequence '\\%c'", escaped);
-            value = escaped;
+            value = (unsigned char)escaped;
             break;
         }
     } else {
-        value = advance(lexer);
+        value = (unsigned char)advance(lexer);
     }
     if (peek(lexer) != '\'') {
         rsg_error(location, "unterminated character literal");
