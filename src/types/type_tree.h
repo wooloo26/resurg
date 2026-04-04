@@ -1,15 +1,16 @@
-#ifndef RG_TT_H
-#define RG_TT_H
+#ifndef RG_TYPE_TREE_H
+#define RG_TYPE_TREE_H
 
 #include "core/common.h"
 #include "core/token.h"
-#include "types.h"
+#include "sema/_sema.h"
+#include "types/types.h"
 
 /**
- * @file tt.h
+ * @file type_tree.h
  * @brief Typed Tree — fully typed, desugared intermediate representation.
  *
- * Every TT node carries a resolved type (never NULL), desugared constructs,
+ * Every Typed Tree node carries a resolved type (never NULL), desugared constructs,
  * scope-resolved identifiers (TtSymbol wrapping Sema's Symbol), and no
  * syntactic sugar.
  */
@@ -22,11 +23,11 @@ typedef struct TtSymbol TtSymbol;
 
 /** Symbol kind in the TT — authoritative for lowering and codegen. */
 typedef enum {
-    TT_SYM_VAR,
-    TT_SYM_PARAM,
-    TT_SYM_FUNCTION,
-    TT_SYM_TYPE,
-    TT_SYM_MODULE,
+    TT_SYMBOL_VARIABLE,
+    TT_SYMBOL_PARAMETER,
+    TT_SYMBOL_FUNCTION,
+    TT_SYMBOL_TYPE,
+    TT_SYMBOL_MODULE,
 } TtSymbolKind;
 
 /**
@@ -57,29 +58,29 @@ typedef enum {
     TT_TYPE_ALIAS,
 
     // Declarations
-    TT_FUNCTION_DECL,
-    TT_PARAM,
+    TT_FUNCTION_DECLARATION,
+    TT_PARAMETER,
 
     // Statements
-    TT_VAR_DECL,
+    TT_VARIABLE_DECLARATION,
     TT_RETURN,
     TT_ASSIGN,
     TT_BREAK,
     TT_CONTINUE,
-    TT_EXPR_STMT,
+    TT_EXPRESSION_STATEMENT,
 
     // Literals
-    TT_BOOL_LIT,
-    TT_INT_LIT,
-    TT_FLOAT_LIT,
-    TT_CHAR_LIT,
-    TT_STRING_LIT,
-    TT_UNIT_LIT,
-    TT_ARRAY_LIT,
-    TT_TUPLE_LIT,
+    TT_BOOL_LITERAL,
+    TT_INT_LITERAL,
+    TT_FLOAT_LITERAL,
+    TT_CHAR_LITERAL,
+    TT_STRING_LITERAL,
+    TT_UNIT_LITERAL,
+    TT_ARRAY_LITERAL,
+    TT_TUPLE_LITERAL,
 
     // References
-    TT_VAR_REF,
+    TT_VARIABLE_REFERENCE,
     TT_MODULE_ACCESS,
     TT_INDEX,
     TT_TUPLE_INDEX,
@@ -88,7 +89,7 @@ typedef enum {
     TT_UNARY,
     TT_BINARY,
     TT_CALL,
-    TT_TYPE_CONV,
+    TT_TYPE_CONVERSION,
 
     // Control flow
     TT_IF,
@@ -127,7 +128,7 @@ struct TtNode {
             const Type *underlying;
         } type_alias;
 
-        // TT_FUNCTION_DECL
+        // TT_FUNCTION_DECLARATION
         struct {
             const char *name;
             bool is_public;
@@ -135,28 +136,28 @@ struct TtNode {
             TtNode **params; /* buf */
             const Type *return_type;
             TtNode *body;
-        } function_decl;
+        } function_declaration;
 
-        // TT_PARAM
+        // TT_PARAMETER
         struct {
             TtSymbol *symbol;
             const char *name;
             const Type *param_type;
-        } param;
+        } parameter;
 
-        // TT_VAR_DECL
+        // TT_VARIABLE_DECLARATION
         struct {
             TtSymbol *symbol;
             const char *name;
             const Type *var_type;
             TtNode *initializer;
             bool is_mut;
-        } var_decl;
+        } variable_declaration;
 
         // TT_RETURN
         struct {
             TtNode *value;
-        } return_stmt;
+        } return_statement;
 
         // TT_ASSIGN
         struct {
@@ -167,54 +168,54 @@ struct TtNode {
         // TT_BREAK
         struct {
             TtNode *value;
-        } break_stmt;
+        } break_statement;
 
-        // TT_EXPR_STMT
+        // TT_EXPRESSION_STATEMENT
         struct {
             TtNode *expression;
-        } expr_stmt;
+        } expression_statement;
 
-        // TT_BOOL_LIT
+        // TT_BOOL_LITERAL
         struct {
             bool value;
-        } bool_lit;
+        } bool_literal;
 
-        // TT_INT_LIT
+        // TT_INT_LITERAL
         struct {
             uint64_t value;
             TypeKind int_kind;
-        } int_lit;
+        } int_literal;
 
-        // TT_FLOAT_LIT
+        // TT_FLOAT_LITERAL
         struct {
             double value;
             TypeKind float_kind;
-        } float_lit;
+        } float_literal;
 
-        // TT_CHAR_LIT
+        // TT_CHAR_LITERAL
         struct {
             uint32_t value;
-        } char_lit;
+        } char_literal;
 
-        // TT_STRING_LIT
+        // TT_STRING_LITERAL
         struct {
             const char *value;
-        } string_lit;
+        } string_literal;
 
-        // TT_ARRAY_LIT
+        // TT_ARRAY_LITERAL
         struct {
             TtNode **elements; /* buf */
-        } array_lit;
+        } array_literal;
 
-        // TT_TUPLE_LIT
+        // TT_TUPLE_LITERAL
         struct {
             TtNode **elements; /* buf */
-        } tuple_lit;
+        } tuple_literal;
 
-        // TT_VAR_REF
+        // TT_VARIABLE_REFERENCE
         struct {
             TtSymbol *symbol;
-        } var_ref;
+        } variable_reference;
 
         // TT_MODULE_ACCESS
         struct {
@@ -253,18 +254,18 @@ struct TtNode {
             TtNode **arguments; /* buf */
         } call;
 
-        // TT_TYPE_CONV
+        // TT_TYPE_CONVERSION
         struct {
             TtNode *operand;
             const Type *target_type;
-        } type_conv;
+        } type_conversion;
 
         // TT_IF
         struct {
             TtNode *condition;
             TtNode *then_body;
             TtNode *else_body;
-        } if_expr;
+        } if_expression;
 
         // TT_BLOCK
         struct {
@@ -292,4 +293,4 @@ TtSymbol *tt_symbol_new(Arena *arena, TtSymbolKind kind, Symbol *sema_symbol, bo
 /** Recursively pretty-print @p node to stderr at @p indent levels. */
 void tt_dump(const TtNode *node, int32_t indent);
 
-#endif // RG_TT_H
+#endif // RG_TYPE_TREE_H

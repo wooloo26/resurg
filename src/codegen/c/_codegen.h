@@ -1,8 +1,8 @@
 #ifndef RG__CODEGEN_H
 #define RG__CODEGEN_H
 
-#include "middle/types/types.h"
 #include "rsg/codegen.h"
+#include "types/types.h"
 
 /**
  * @file _codegen.h

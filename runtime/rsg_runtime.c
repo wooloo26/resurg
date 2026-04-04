@@ -1,4 +1,4 @@
-#include "runtime.h"
+#include "rsg_runtime.h"
 
 // Checked allocation helpers - abort on OOM.
 

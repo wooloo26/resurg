@@ -1,9 +1,9 @@
 #include <sys/stat.h>
 
 #include "core/common.h"
-#include "frontend/lexer.h"
-#include "middle/lowering/lowering.h"
+#include "lexer/lexer.h"
 #include "rsg/codegen.h"
+#include "rsg/lowering.h"
 #include "rsg/parser.h"
 #include "rsg/sema.h"
 

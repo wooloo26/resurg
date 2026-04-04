@@ -1,6 +1,6 @@
 CC        := clang
 BUILD     := build
-RUNTIME   := runtime/core
+RUNTIME   := runtime
 
 ifeq ($(OS),Windows_NT)
   EXE    := .exe
@@ -35,6 +35,9 @@ endif
 
 # Set up git hooks for development
 setup:
+	@mkdir -p .githooks
+	@cp pre-commit .githooks/pre-commit
+	@chmod +x .githooks/pre-commit
 	@git config core.hooksPath .githooks
 	@echo 'Git hooks configured.'
 
@@ -60,7 +63,7 @@ endif
 	@echo   PASS  $<
 
 # Format all C sources with clang-format
-ALL_C := $(shell find lib include driver -name '*.c' -o -name '*.h') $(wildcard $(RUNTIME)/*.c $(RUNTIME)/*.h)
+ALL_C := $(shell find src include -name '*.c' -o -name '*.h') $(wildcard $(RUNTIME)/*.c $(RUNTIME)/*.h)
 format:
 	@clang-format -i --style=file $(ALL_C)
 	@echo 'Formatted $(words $(ALL_C)) file(s).'

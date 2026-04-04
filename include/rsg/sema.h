@@ -1,7 +1,7 @@
 #ifndef RG_SEMA_H
 #define RG_SEMA_H
 
-#include "frontend/ast/ast.h"
+#include "ast/ast.h"
 
 /**
  * @file sema.h

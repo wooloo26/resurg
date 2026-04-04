@@ -1,6 +1,4 @@
-#include "tt.h"
-
-#include "middle/sema/_sema.h"
+#include "types/type_tree.h"
 
 // ── TtSymbol ───────────────────────────────────────────────────────────
 
@@ -54,11 +52,11 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Module";
     case TT_TYPE_ALIAS:
         return "TypeAlias";
-    case TT_FUNCTION_DECL:
+    case TT_FUNCTION_DECLARATION:
         return "FunctionDecl";
-    case TT_PARAM:
+    case TT_PARAMETER:
         return "Param";
-    case TT_VAR_DECL:
+    case TT_VARIABLE_DECLARATION:
         return "VarDecl";
     case TT_RETURN:
         return "Return";
@@ -68,25 +66,25 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Break";
     case TT_CONTINUE:
         return "Continue";
-    case TT_EXPR_STMT:
+    case TT_EXPRESSION_STATEMENT:
         return "ExprStmt";
-    case TT_BOOL_LIT:
+    case TT_BOOL_LITERAL:
         return "BoolLit";
-    case TT_INT_LIT:
+    case TT_INT_LITERAL:
         return "IntLit";
-    case TT_FLOAT_LIT:
+    case TT_FLOAT_LITERAL:
         return "FloatLit";
-    case TT_CHAR_LIT:
+    case TT_CHAR_LITERAL:
         return "CharLit";
-    case TT_STRING_LIT:
+    case TT_STRING_LITERAL:
         return "StringLit";
-    case TT_UNIT_LIT:
+    case TT_UNIT_LITERAL:
         return "UnitLit";
-    case TT_ARRAY_LIT:
+    case TT_ARRAY_LITERAL:
         return "ArrayLit";
-    case TT_TUPLE_LIT:
+    case TT_TUPLE_LITERAL:
         return "TupleLit";
-    case TT_VAR_REF:
+    case TT_VARIABLE_REFERENCE:
         return "VarRef";
     case TT_MODULE_ACCESS:
         return "ModuleAccess";
@@ -100,7 +98,7 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Binary";
     case TT_CALL:
         return "Call";
-    case TT_TYPE_CONV:
+    case TT_TYPE_CONVERSION:
         return "TypeConv";
     case TT_IF:
         return "If";
@@ -176,31 +174,32 @@ void tt_dump(const TtNode *node, int32_t indent) {
                 node->type_alias.is_public ? " pub" : "");
         break;
 
-    case TT_FUNCTION_DECL:
-        fprintf(stderr, " \"%s\"%s\n", node->function_decl.name,
-                node->function_decl.is_public ? " pub" : "");
-        tt_dump_children(node->function_decl.params, BUFFER_LENGTH(node->function_decl.params),
-                         indent + 1);
-        if (node->function_decl.body != NULL) {
-            tt_dump(node->function_decl.body, indent + 1);
+    case TT_FUNCTION_DECLARATION:
+        fprintf(stderr, " \"%s\"%s\n", node->function_declaration.name,
+                node->function_declaration.is_public ? " pub" : "");
+        tt_dump_children(node->function_declaration.params,
+                         BUFFER_LENGTH(node->function_declaration.params), indent + 1);
+        if (node->function_declaration.body != NULL) {
+            tt_dump(node->function_declaration.body, indent + 1);
         }
         break;
 
-    case TT_PARAM:
-        fprintf(stderr, " \"%s\"\n", node->param.name);
+    case TT_PARAMETER:
+        fprintf(stderr, " \"%s\"\n", node->parameter.name);
         break;
 
-    case TT_VAR_DECL:
-        fprintf(stderr, " \"%s\"%s\n", node->var_decl.name, node->var_decl.is_mut ? " mut" : "");
-        if (node->var_decl.initializer != NULL) {
-            tt_dump(node->var_decl.initializer, indent + 1);
+    case TT_VARIABLE_DECLARATION:
+        fprintf(stderr, " \"%s\"%s\n", node->variable_declaration.name,
+                node->variable_declaration.is_mut ? " mut" : "");
+        if (node->variable_declaration.initializer != NULL) {
+            tt_dump(node->variable_declaration.initializer, indent + 1);
         }
         break;
 
     case TT_RETURN:
         fprintf(stderr, "\n");
-        if (node->return_stmt.value != NULL) {
-            tt_dump(node->return_stmt.value, indent + 1);
+        if (node->return_statement.value != NULL) {
+            tt_dump(node->return_statement.value, indent + 1);
         }
         break;
 
@@ -212,8 +211,8 @@ void tt_dump(const TtNode *node, int32_t indent) {
 
     case TT_BREAK:
         fprintf(stderr, "\n");
-        if (node->break_stmt.value != NULL) {
-            tt_dump(node->break_stmt.value, indent + 1);
+        if (node->break_statement.value != NULL) {
+            tt_dump(node->break_statement.value, indent + 1);
         }
         break;
 
@@ -221,49 +220,49 @@ void tt_dump(const TtNode *node, int32_t indent) {
         fprintf(stderr, "\n");
         break;
 
-    case TT_EXPR_STMT:
+    case TT_EXPRESSION_STATEMENT:
         fprintf(stderr, "\n");
-        tt_dump(node->expr_stmt.expression, indent + 1);
+        tt_dump(node->expression_statement.expression, indent + 1);
         break;
 
-    case TT_BOOL_LIT:
-        fprintf(stderr, " %s\n", node->bool_lit.value ? "true" : "false");
+    case TT_BOOL_LITERAL:
+        fprintf(stderr, " %s\n", node->bool_literal.value ? "true" : "false");
         break;
 
-    case TT_INT_LIT:
-        fprintf(stderr, " %lu\n", (unsigned long)node->int_lit.value);
+    case TT_INT_LITERAL:
+        fprintf(stderr, " %lu\n", (unsigned long)node->int_literal.value);
         break;
 
-    case TT_FLOAT_LIT:
-        fprintf(stderr, " %g\n", node->float_lit.value);
+    case TT_FLOAT_LITERAL:
+        fprintf(stderr, " %g\n", node->float_literal.value);
         break;
 
-    case TT_CHAR_LIT:
-        fprintf(stderr, " U+%04X\n", node->char_lit.value);
+    case TT_CHAR_LITERAL:
+        fprintf(stderr, " U+%04X\n", node->char_literal.value);
         break;
 
-    case TT_STRING_LIT:
-        fprintf(stderr, " \"%s\"\n", node->string_lit.value);
+    case TT_STRING_LITERAL:
+        fprintf(stderr, " \"%s\"\n", node->string_literal.value);
         break;
 
-    case TT_UNIT_LIT:
+    case TT_UNIT_LITERAL:
         fprintf(stderr, "\n");
         break;
 
-    case TT_ARRAY_LIT:
+    case TT_ARRAY_LITERAL:
         fprintf(stderr, "\n");
-        tt_dump_children(node->array_lit.elements, BUFFER_LENGTH(node->array_lit.elements),
+        tt_dump_children(node->array_literal.elements, BUFFER_LENGTH(node->array_literal.elements),
                          indent + 1);
         break;
 
-    case TT_TUPLE_LIT:
+    case TT_TUPLE_LITERAL:
         fprintf(stderr, "\n");
-        tt_dump_children(node->tuple_lit.elements, BUFFER_LENGTH(node->tuple_lit.elements),
+        tt_dump_children(node->tuple_literal.elements, BUFFER_LENGTH(node->tuple_literal.elements),
                          indent + 1);
         break;
 
-    case TT_VAR_REF:
-        fprintf(stderr, " \"%s\"\n", tt_symbol_name(node->var_ref.symbol));
+    case TT_VARIABLE_REFERENCE:
+        fprintf(stderr, " \"%s\"\n", tt_symbol_name(node->variable_reference.symbol));
         break;
 
     case TT_MODULE_ACCESS:
@@ -299,17 +298,17 @@ void tt_dump(const TtNode *node, int32_t indent) {
         tt_dump_children(node->call.arguments, BUFFER_LENGTH(node->call.arguments), indent + 1);
         break;
 
-    case TT_TYPE_CONV:
+    case TT_TYPE_CONVERSION:
         fprintf(stderr, "\n");
-        tt_dump(node->type_conv.operand, indent + 1);
+        tt_dump(node->type_conversion.operand, indent + 1);
         break;
 
     case TT_IF:
         fprintf(stderr, "\n");
-        tt_dump(node->if_expr.condition, indent + 1);
-        tt_dump(node->if_expr.then_body, indent + 1);
-        if (node->if_expr.else_body != NULL) {
-            tt_dump(node->if_expr.else_body, indent + 1);
+        tt_dump(node->if_expression.condition, indent + 1);
+        tt_dump(node->if_expression.then_body, indent + 1);
+        if (node->if_expression.else_body != NULL) {
+            tt_dump(node->if_expression.else_body, indent + 1);
         }
         break;
 

@@ -1,4 +1,4 @@
-#include "types.h"
+#include "types/types.h"
 
 /** Type singletons - one per primitive TypeKind. */
 const Type TYPE_BOOL_INSTANCE = {.kind = TYPE_BOOL};

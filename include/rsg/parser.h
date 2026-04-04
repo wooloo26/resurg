@@ -1,7 +1,7 @@
 #ifndef RG_PARSER_H
 #define RG_PARSER_H
 
-#include "frontend/ast/ast.h"
+#include "ast/ast.h"
 
 /**
  * @file parser.h

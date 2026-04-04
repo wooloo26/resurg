@@ -1,7 +1,7 @@
 #ifndef RG_CODEGEN_H
 #define RG_CODEGEN_H
 
-#include "frontend/ast/ast.h"
+#include "ast/ast.h"
 
 /**
  * @file codegen.h

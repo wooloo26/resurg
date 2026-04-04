@@ -1,8 +1,8 @@
 #ifndef RG__SEMA_H
 #define RG__SEMA_H
 
-#include "middle/types/types.h"
 #include "rsg/sema.h"
+#include "types/types.h"
 
 /**
  * @file _sema.h

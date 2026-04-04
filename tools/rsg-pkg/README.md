@@ -1,1 +1,1 @@
-# rsg-pkg — placeholder for future development
+# rsg-pkg

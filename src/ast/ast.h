@@ -3,7 +3,7 @@
 
 #include "core/common.h"
 #include "core/token.h"
-#include "middle/types/types.h"
+#include "types/types.h"
 
 /**
  * @file ast.h

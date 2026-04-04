@@ -1,18 +1,13 @@
-#ifndef RG_LOWERING_H
-#define RG_LOWERING_H
+#ifndef RG_PUB_LOWERING_H
+#define RG_PUB_LOWERING_H
 
-#include "middle/types/tt.h"
+#include "types/type_tree.h"
 
 typedef struct ASTNode ASTNode;
 
 /**
  * @file lowering.h
- * @brief AST → Typed Tree lowering pass.
- *
- * Desugars compound assignment, for-loops, string interpolation, and
- * tuple member access.  Binds every identifier to a TtSymbol.
- * The returned TT is allocated from its own arena and can be freed
- * independently of the Sema data.
+ * @brief Public forwarding header for the AST → Typed Tree lowering pass.
  */
 typedef struct Lowering Lowering;
 
@@ -26,4 +21,4 @@ void lowering_destroy(Lowering *lowering);
  */
 TtNode *lowering_lower(Lowering *lowering, const ASTNode *file);
 
-#endif // RG_LOWERING_H
+#endif // RG_PUB_LOWERING_H
