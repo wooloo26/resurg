@@ -219,6 +219,5 @@ const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     }
     const Type *result =
         type_create_tuple(analyzer->arena, element_types, BUFFER_LENGTH(element_types));
-    BUFFER_FREE(element_types);
     return result;
 }
