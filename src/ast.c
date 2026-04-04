@@ -51,7 +51,11 @@ static void dump_literal_node(const ASTNode *node) {
         fprintf(stderr, "%g", node->literal.float64_value);
         break;
     case LITERAL_CHAR:
-        fprintf(stderr, "'%c'", node->literal.char_value);
+        if (node->literal.char_value < 128) {
+            fprintf(stderr, "'%c'", (char)node->literal.char_value);
+        } else {
+            fprintf(stderr, "'\\u{%04X}'", node->literal.char_value);
+        }
         break;
     case LITERAL_STRING:
         fprintf(stderr, "\"%s\"", node->literal.string_value);

@@ -220,7 +220,7 @@ const char *codegen_format_float32(const CodeGenerator *generator, double value)
     return format_float(generator, value, 9, "f");
 }
 
-const char *codegen_c_char_escape(const CodeGenerator *generator, char c) {
+const char *codegen_c_char_escape(const CodeGenerator *generator, uint32_t c) {
     switch (c) {
     case '\n':
         return "'\\n'";
@@ -233,7 +233,10 @@ const char *codegen_c_char_escape(const CodeGenerator *generator, char c) {
     case '\0':
         return "'\\0'";
     default:
-        return arena_sprintf(generator->arena, "'%c'", c);
+        if (c < 128) {
+            return arena_sprintf(generator->arena, "'%c'", (char)c);
+        }
+        return arena_sprintf(generator->arena, "0x%04XU", c);
     }
 }
 

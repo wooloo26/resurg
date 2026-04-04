@@ -158,7 +158,7 @@ static Token scan_token(Lexer *l);
 /** Scan a character literal: 'A', '\n', '\t', '\\', '\'', '\0'. */
 static Token scan_char_literal(Lexer *lexer, SourceLocation location) {
     // Opening '\'' already consumed
-    char value;
+    uint32_t value;
     if (peek(lexer) == '\\') {
         advance(lexer); // consume '\\'
         char escaped = advance(lexer);

@@ -121,8 +121,8 @@ typedef struct {
     union {
         uint64_t integer_value;
         double float_value;
-        char *string_value; // unescaped, arena-allocated
-        char char_value;    // for TOKEN_CHAR_LITERAL
+        char *string_value;  // unescaped, arena-allocated
+        uint32_t char_value; // Unicode scalar value (for TOKEN_CHAR_LITERAL)
     } literal_value;
 } Token;
 

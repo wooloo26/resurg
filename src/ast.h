@@ -158,7 +158,7 @@ struct ASTNode {
                 uint64_t integer_value; // for all integer literal kinds
                 double float64_value;   // for LITERAL_F32 and LITERAL_F64
                 const char *string_value;
-                char char_value; // for LITERAL_CHAR
+                uint32_t char_value; // Unicode scalar value (for LITERAL_CHAR)
             };
         } literal;
 
