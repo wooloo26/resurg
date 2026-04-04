@@ -1,5 +1,27 @@
 #include "sema/_sema.h"
 
+// ── Reserved-prefix validation ─────────────────────────────────────────
+
+/**
+ * Return true (and emit a diagnostic) if @p name starts with a prefix
+ * reserved for the compiler or runtime.  Checked prefixes:
+ *
+ *   rsg_   – runtime functions / types
+ *   rsgu_  – codegen-mangled user functions
+ *   _rsg   – codegen temporaries and internal variables
+ *   _Rsg   – codegen compound-type names
+ */
+static bool is_reserved_identifier(SemanticAnalyzer *analyzer, SourceLocation location,
+                                   const char *name) {
+    bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "rsgu_", 5) == 0 ||
+                    strncmp(name, "_rsg", 4) == 0 || strncmp(name, "_Rsg", 4) == 0;
+    if (reserved) {
+        SEMA_ERROR(analyzer, location,
+                   "identifier '%s' uses a prefix reserved for the compiler/runtime", name);
+    }
+    return reserved;
+}
+
 // ── Statement / declaration checkers ───────────────────────────────────
 
 const Type *check_if(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -101,11 +123,16 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
                    node->variable_declaration.name);
     }
 
+    is_reserved_identifier(analyzer, node->location, node->variable_declaration.name);
+
     scope_define(analyzer, node->variable_declaration.name, variable_type, false, false);
     return variable_type;
 }
 
 void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
+    is_reserved_identifier(analyzer, function_node->location,
+                           function_node->function_declaration.name);
+
     scope_push(analyzer, false);
 
     // Register parameters
@@ -116,6 +143,7 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
             parameter_type = &TYPE_ERROR_INSTANCE;
         }
         parameter->type = parameter_type;
+        is_reserved_identifier(analyzer, parameter->location, parameter->parameter.name);
         scope_define(analyzer, parameter->parameter.name, parameter_type, false, false);
     }
 
@@ -267,6 +295,7 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         check_node(analyzer, node->for_loop.start);
         check_node(analyzer, node->for_loop.end);
         scope_push(analyzer, true);
+        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
         scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, false);
         check_node(analyzer, node->for_loop.body);
         scope_pop(analyzer);

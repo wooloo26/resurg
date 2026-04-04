@@ -55,8 +55,8 @@ const char *codegen_variable_define(CodeGenerator *generator, const char *name);
 void codegen_variable_scope_reset(CodeGenerator *generator);
 
 /**
- * Prefix function names with `rsg_` to avoid C reserved-word and
- * stdlib collisions.
+ * Prefix function names with `rsgu_` to separate user-defined names
+ * from the `rsg_` runtime namespace and C reserved words.
  */
 const char *codegen_mangle_function_name(CodeGenerator *generator, const char *name);
 

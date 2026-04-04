@@ -67,7 +67,7 @@ void codegen_variable_scope_reset(CodeGenerator *generator) {
 }
 
 const char *codegen_mangle_function_name(CodeGenerator *generator, const char *name) {
-    return arena_sprintf(generator->arena, "rsg_%s", name);
+    return arena_sprintf(generator->arena, "rsgu_%s", name);
 }
 
 // ── C formatting helpers ───────────────────────────────────────────────

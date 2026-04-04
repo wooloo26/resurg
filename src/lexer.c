@@ -350,6 +350,26 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
     return make_string_token(lexer, "", location);
 }
 
+/** Reserved keywords that cannot be used as identifiers. */
+static const char *const RESERVED_KEYWORDS[] = {
+    "async", "await", "comptime", "defer", "enum",   "immut", "macro", "match",
+    "mut",   "pact",  "return",   "spawn", "struct", "use",   "where", "while",
+};
+
+static const int32_t RESERVED_KEYWORD_COUNT =
+    (int32_t)(sizeof(RESERVED_KEYWORDS) / sizeof(RESERVED_KEYWORDS[0]));
+
+/** Return true if @p text (length @p len) is a reserved keyword. */
+static bool is_reserved_keyword(const char *text, int32_t len) {
+    for (int32_t i = 0; i < RESERVED_KEYWORD_COUNT; i++) {
+        if ((int32_t)strlen(RESERVED_KEYWORDS[i]) == len &&
+            memcmp(RESERVED_KEYWORDS[i], text, len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static Token scan_ident(Lexer *lexer, SourceLocation location) {
     const char *start = lexer->source + lexer->position - 1;
     while (is_alnum(peek(lexer))) {
@@ -358,6 +378,12 @@ static Token scan_ident(Lexer *lexer, SourceLocation location) {
 
     int32_t length = (int32_t)(lexer->source + lexer->position - start);
     TokenKind kind = lookup_keyword(start, length);
+
+    if (kind == TOKEN_IDENTIFIER && is_reserved_keyword(start, length)) {
+        rsg_error(location, "'%.*s' is a reserved keyword", length, start);
+        return make_token(lexer, TOKEN_ERROR, start, length, location);
+    }
+
     return make_token(lexer, kind, start, length, location);
 }
 

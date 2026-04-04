@@ -106,6 +106,17 @@ static int compile(const CliArgs *args) {
     lexer = lexer_create(source, args->input_file, arena);
     tokens = lexer_scan_all(lexer);
 
+    // Bail out early if the lexer produced any error tokens.
+    for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
+        if (tokens[i].kind == TOKEN_ERROR) {
+            status = 1;
+            break;
+        }
+    }
+    if (status != 0) {
+        goto cleanup;
+    }
+
     if (args->dump_tokens) {
         for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
             Token *token = &tokens[i];
