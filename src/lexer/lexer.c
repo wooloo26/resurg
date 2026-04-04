@@ -1,17 +1,4 @@
-#include "lexer.h"
-
-struct Lexer {
-    const char *source;
-    const char *file; // source filename for diagnostics
-    int32_t position;
-    int32_t length;
-    int32_t line;             // 1-based current line
-    int32_t column;           // 1-based current column
-    Arena *arena;             // for allocating lexemes / string literals
-    Token *pending; /* buf */ // buffered tokens from string interpolation
-    int32_t pending_position; // read cursor into pending
-    TokenKind last_kind;      // previous token kind (for context-sensitive scanning)
-};
+#include "_lexer.h"
 
 // Character classification helpers.
 static bool is_alpha(char c) {
@@ -26,34 +13,8 @@ static bool is_alnum(char c) {
     return is_alpha(c) || is_digit(c);
 }
 
-static char peek(const Lexer *lexer) {
-    return (char)(lexer->position < lexer->length ? lexer->source[lexer->position] : '\0');
-}
-
-static char peek_next(const Lexer *lexer) {
-    return (char)(lexer->position + 1 < lexer->length ? lexer->source[lexer->position + 1] : '\0');
-}
-static char advance(Lexer *lexer) {
-    char c = peek(lexer);
-    lexer->position++;
-    lexer->column++;
-    return c;
-}
-
-static bool match(Lexer *lexer, char expected) {
-    if (peek(lexer) == expected) {
-        advance(lexer);
-        return true;
-    }
-    return false;
-}
-
-static SourceLocation current_location(const Lexer *lexer) {
-    return (SourceLocation){.file = lexer->file, .line = lexer->line, .column = lexer->column};
-}
-
-static Token make_token(const Lexer *lexer, TokenKind kind, const char *start, int32_t length,
-                        SourceLocation location) {
+Token make_token(const Lexer *lexer, TokenKind kind, const char *start, int32_t length,
+                 SourceLocation location) {
     return (Token){
         .kind = kind,
         .lexeme = arena_strndup(lexer->arena, start, length),
@@ -153,202 +114,7 @@ static Token scan_number(Lexer *lexer, SourceLocation location) {
     return token;
 }
 
-static Token scan_token(Lexer *l);
-
-/** Scan a character literal: 'A', '\n', '\t', '\\', '\'', '\0'. */
-static Token scan_char_literal(Lexer *lexer, SourceLocation location) {
-    // Opening '\'' already consumed
-    uint32_t value;
-    if (peek(lexer) == '\\') {
-        advance(lexer); // consume '\\'
-        char escaped = advance(lexer);
-        switch (escaped) {
-        case 'n':
-            value = '\n';
-            break;
-        case 't':
-            value = '\t';
-            break;
-        case '\\':
-            value = '\\';
-            break;
-        case '\'':
-            value = '\'';
-            break;
-        case '0':
-            value = '\0';
-            break;
-        default:
-            rsg_error(location, "unknown escape sequence '\\%c'", escaped);
-            value = (unsigned char)escaped;
-            break;
-        }
-    } else {
-        value = (unsigned char)advance(lexer);
-    }
-    if (peek(lexer) != '\'') {
-        rsg_error(location, "unterminated character literal");
-        return make_token(lexer, TOKEN_ERROR, "'", 1, location);
-    }
-    advance(lexer); // consume closing '\''
-    Token token = make_token(lexer, TOKEN_CHAR_LITERAL, "'", 1, location);
-    token.literal_value.char_value = value;
-    return token;
-}
-
-static char *extract_string_content(const Lexer *lexer, int32_t from, int32_t to) {
-    // Copy raw content between positions (escape sequences preserved as-is)
-    return arena_strndup(lexer->arena, lexer->source + from, to - from);
-}
-
-static Token make_string_token(const Lexer *lexer, const char *value, SourceLocation location) {
-    (void)lexer;
-    return (Token){
-        .kind = TOKEN_STRING_LITERAL,
-        .lexeme = value,
-        .length = (int32_t)strlen(value),
-        .location = location,
-        .literal_value.string_value = (char *)value,
-    };
-}
-
-static Token scan_string(Lexer *lexer, SourceLocation location) {
-    // Opening '"' already consumed
-    int32_t content_start = lexer->position;
-
-    // Quick lookahead for interpolation (avoid save/restore)
-    bool has_interpolation = false;
-    for (int32_t i = lexer->position; i < lexer->length && lexer->source[i] != '"'; i++) {
-        if (lexer->source[i] == '\\') {
-            i++;
-            continue;
-        }
-        if (lexer->source[i] == '{') {
-            has_interpolation = true;
-            break;
-        }
-    }
-
-    if (!has_interpolation) {
-        // Simple string: scan to closing quote
-        while (peek(lexer) != '"' && peek(lexer) != '\0') {
-            if (peek(lexer) == '\\') {
-                advance(lexer); // consume '\\'
-            }
-            if (peek(lexer) == '\n') {
-                lexer->line++;
-                lexer->column = 0;
-            }
-            advance(lexer);
-        }
-
-        if (peek(lexer) == '\0') {
-            rsg_error(location, "unterminated string literal");
-            return make_token(lexer, TOKEN_ERROR, lexer->source + content_start - 1,
-                              lexer->position - content_start + 1, location);
-        }
-
-        char *value = extract_string_content(lexer, content_start, lexer->position);
-        advance(lexer); // consume '"'
-        return make_string_token(lexer, value, location);
-    }
-
-    // Interpolated string: produce token sequence into pending buffer
-    // Pattern: STRING_LITERAL [INTERPOLATION_START expr_tokens... INTERPOLATION_END
-    // STRING_LITERAL]*
-    lexer->pending = NULL;
-    lexer->pending_position = 0;
-
-    while (peek(lexer) != '"' && peek(lexer) != '\0') {
-        // Scan text segment until '{' or '"'
-        int32_t segment_start = lexer->position;
-        SourceLocation segment_location = current_location(lexer);
-
-        while (peek(lexer) != '{' && peek(lexer) != '"' && peek(lexer) != '\0') {
-            if (peek(lexer) == '\\') {
-                advance(lexer); // consume '\\'
-            }
-            if (peek(lexer) == '\n') {
-                lexer->line++;
-                lexer->column = 0;
-            }
-            advance(lexer);
-        }
-
-        // Emit text segment
-        char *text = extract_string_content(lexer, segment_start, lexer->position);
-        BUFFER_PUSH(lexer->pending, make_string_token(lexer, text, segment_location));
-
-        if (peek(lexer) == '{') {
-            advance(lexer); // consume '{'
-
-            // Emit INTERPOLATION_START
-            Token interp_start =
-                make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_location(lexer));
-            BUFFER_PUSH(lexer->pending, interp_start);
-
-            // Lex expression tokens until matching '}'
-            int32_t brace_depth = 1;
-            while (brace_depth > 0 && peek(lexer) != '\0') {
-                // Skip whitespace (but not newlines - those are inside a
-                // string)
-                while (peek(lexer) == ' ' || peek(lexer) == '\t') {
-                    advance(lexer);
-                }
-
-                if (peek(lexer) == '}') {
-                    brace_depth--;
-                    if (brace_depth == 0) {
-                        advance(lexer); // consume '}'
-                        break;
-                    }
-                }
-                if (peek(lexer) == '{') {
-                    brace_depth++;
-                }
-
-                Token token = scan_token(lexer);
-                if (token.kind == TOKEN_EOF || token.kind == TOKEN_ERROR) {
-                    break;
-                }
-                // skip newlines inside interpolation
-                if (token.kind == TOKEN_NEWLINE) {
-                    continue;
-                }
-                BUFFER_PUSH(lexer->pending, token);
-            }
-
-            // Emit INTERPOLATION_END
-            Token interp_end =
-                make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_location(lexer));
-            BUFFER_PUSH(lexer->pending, interp_end);
-        }
-    }
-
-    // If the string ends with an interpolation, emit a trailing empty STRING_LITERAL
-    // so the parser always sees: STRING_LITERAL [INTERPOLATION_START expr INTERPOLATION_END
-    // STRING_LITERAL]*
-    if (BUFFER_LENGTH(lexer->pending) > 0 &&
-        lexer->pending[BUFFER_LENGTH(lexer->pending) - 1].kind == TOKEN_INTERPOLATION_END) {
-        BUFFER_PUSH(lexer->pending, make_string_token(lexer, "", current_location(lexer)));
-    }
-
-    if (peek(lexer) == '\0') {
-        rsg_error(location, "unterminated string literal");
-    } else {
-        advance(lexer); // consume '"'
-    }
-
-    // Return first pending token
-    if (BUFFER_LENGTH(lexer->pending) > 0) {
-        Token first = lexer->pending[0];
-        lexer->pending_position = 1;
-        return first;
-    }
-
-    // Empty string edge case
-    return make_string_token(lexer, "", location);
-}
+// scan_char_literal and scan_string are in scan_string.c
 
 /** Reserved keywords that cannot be used as identifiers. */
 static const char *const RESERVED_KEYWORDS[] = {
@@ -387,12 +153,9 @@ static Token scan_ident(Lexer *lexer, SourceLocation location) {
     return make_token(lexer, kind, start, length, location);
 }
 
-/** Dispatch a single- or double-character punctuation / operator token. */
-static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
+/** Dispatch a comparison or logical operator token. */
+static Token scan_comparison_or_logical(Lexer *lexer, char c, SourceLocation location) {
     switch (c) {
-    case ':':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
-                                 : make_token(lexer, TOKEN_COLON, ":", 1, location);
     case '=':
         return match(lexer, '=') ? make_token(lexer, TOKEN_EQUAL_EQUAL, "==", 2, location)
                                  : make_token(lexer, TOKEN_EQUAL, "=", 1, location);
@@ -415,6 +178,15 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
             return make_token(lexer, TOKEN_PIPE_PIPE, "||", 2, location);
         }
         return make_token(lexer, TOKEN_PIPE, "|", 1, location);
+    default:
+        break;
+    }
+    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
+}
+
+/** Dispatch an arithmetic operator token (with optional compound assignment). */
+static Token scan_arithmetic(Lexer *lexer, char c, SourceLocation location) {
+    switch (c) {
     case '+':
         return match(lexer, '=') ? make_token(lexer, TOKEN_PLUS_EQUAL, "+=", 2, location)
                                  : make_token(lexer, TOKEN_PLUS, "+", 1, location);
@@ -432,6 +204,18 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
                                  : make_token(lexer, TOKEN_SLASH, "/", 1, location);
     case '%':
         return make_token(lexer, TOKEN_PERCENT, "%", 1, location);
+    default:
+        break;
+    }
+    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
+}
+
+/** Dispatch a single- or double-character punctuation / operator token. */
+static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
+    switch (c) {
+    case ':':
+        return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
+                                 : make_token(lexer, TOKEN_COLON, ":", 1, location);
     case '.':
         return match(lexer, '.') ? make_token(lexer, TOKEN_DOT_DOT, "..", 2, location)
                                  : make_token(lexer, TOKEN_DOT, ".", 1, location);
@@ -451,6 +235,19 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
         return make_token(lexer, TOKEN_COMMA, ",", 1, location);
     case ';':
         return make_token(lexer, TOKEN_SEMICOLON, ";", 1, location);
+    case '=':
+    case '!':
+    case '<':
+    case '>':
+    case '&':
+    case '|':
+        return scan_comparison_or_logical(lexer, c, location);
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+    case '%':
+        return scan_arithmetic(lexer, c, location);
     default:
         break;
     }
@@ -463,7 +260,7 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
  * appropriate scan_* routine.  Used by both lexer_next and interpolation
  * scanning.
  */
-static Token scan_token(Lexer *lexer) {
+Token scan_token(Lexer *lexer) {
     // Skip horizontal whitespace and comments.
     for (;;) {
         while (peek(lexer) == ' ' || peek(lexer) == '\t' || peek(lexer) == '\r') {

@@ -105,6 +105,83 @@ static CliArgs parse_cli_args(int argc, char *argv[]) {
     return args;
 }
 
+/** Run the lexer and optionally dump tokens.  Returns 0 on success, 1 on error. */
+static int run_lexer(const CliArgs *args, const char *source, Arena *arena, Token **out_tokens) {
+    Lexer *lexer = lexer_create(source, args->input_file, arena);
+    *out_tokens = lexer_scan_all(lexer);
+    lexer_destroy(lexer);
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(*out_tokens); i++) {
+        if ((*out_tokens)[i].kind == TOKEN_ERROR) {
+            return 1;
+        }
+    }
+
+    if (args->dump_tokens) {
+        for (int32_t i = 0; i < BUFFER_LENGTH(*out_tokens); i++) {
+            Token *token = &(*out_tokens)[i];
+            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->location.line,
+                    token->location.column, token_kind_string(token->kind), token->length,
+                    token->lexeme);
+        }
+        return -1; // sentinel: early exit requested
+    }
+    return 0;
+}
+
+/** Run the parser and optionally dump the AST.  Returns NULL on early exit. */
+static ASTNode *run_parser(const CliArgs *args, Token *tokens, int32_t count, Arena *arena) {
+    Parser *parser = parser_create(tokens, count, arena, args->input_file);
+    ASTNode *file_node = parser_parse(parser);
+    parser_destroy(parser);
+
+    if (args->dump_ast) {
+        ast_dump(file_node, 0);
+        return NULL;
+    }
+    return file_node;
+}
+
+/** Run semantic analysis.  Returns true on success, false on errors. */
+static bool run_sema(Arena *arena, ASTNode *file_node) {
+    SemanticAnalyzer *analyzer = semantic_analyzer_create(arena);
+    bool ok = semantic_analyzer_check(analyzer, file_node);
+    semantic_analyzer_destroy(analyzer);
+    return ok;
+}
+
+/** Lower the AST to typed tree, run TT passes, and optionally dump.  Returns NULL on early exit. */
+static TtNode *run_lowering(const CliArgs *args, Arena *tt_arena, Arena *arena, ASTNode *file_node,
+                            Lowering **out_lowering) {
+    *out_lowering = lowering_create(tt_arena, arena);
+    TtNode *tt_root = lowering_lower(*out_lowering, file_node);
+
+    tt_pass_const_fold(tt_arena, tt_root);
+
+    if (args->dump_tt) {
+        tt_dump(tt_root, 0);
+        return NULL;
+    }
+    return tt_root;
+}
+
+/** Run code generation, emitting C source to the output file. */
+static void run_codegen(const CliArgs *args, Arena *arena, const TtNode *tt_root) {
+    FILE *out = stdout;
+    if (args->output_file != NULL) {
+        out = fopen(args->output_file, "w");
+        if (out == NULL) {
+            rsg_fatal("cannot open output '%s'", args->output_file);
+        }
+    }
+    CodeGenerator *code_generator = code_generator_create(out, arena);
+    code_generator_emit(code_generator, tt_root);
+    code_generator_destroy(code_generator);
+    if (args->output_file != NULL) {
+        fclose(out);
+    }
+}
+
 /**
  * Drive the full compilation pipeline: lex -> parse -> sema -> codegen.
  * Returns 0 on success or 1 when semantic analysis reports errors.
@@ -115,90 +192,40 @@ static int compile(const CliArgs *args) {
     Arena *arena = arena_create();
     Arena *tt_arena = arena_create();
     Token *tokens = NULL; /* buf */
-    Lexer *lexer = NULL;
-    Parser *parser = NULL;
-    SemanticAnalyzer *analyzer = NULL;
+    TtNode *tt_root = NULL;
     Lowering *lowering = NULL;
-    CodeGenerator *code_generator = NULL;
     int status = 0;
 
     // Stage 1: Lexical analysis.
-    lexer = lexer_create(source, args->input_file, arena);
-    tokens = lexer_scan_all(lexer);
-
-    // Bail out early if the lexer produced any error tokens.
-    for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
-        if (tokens[i].kind == TOKEN_ERROR) {
-            status = 1;
-            break;
-        }
-    }
+    status = run_lexer(args, source, arena, &tokens);
     if (status != 0) {
+        status = (status == -1) ? 0 : status;
         goto cleanup;
     }
 
-    if (args->dump_tokens) {
-        for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
-            Token *token = &tokens[i];
-            int32_t line = token->location.line;
-            int32_t column = token->location.column;
-            const char *kind = token_kind_string(token->kind);
-            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", line, column, kind, token->length,
-                    token->lexeme);
-        }
+    // Stage 2: Parsing.
+    ASTNode *file_node = run_parser(args, tokens, BUFFER_LENGTH(tokens), arena);
+    if (file_node == NULL) {
         goto cleanup;
     }
 
-    // Stage 2: Parsing - build the AST from the token stream.
-    parser = parser_create(tokens, BUFFER_LENGTH(tokens), arena, args->input_file);
-    ASTNode *file_node = parser_parse(parser);
-
-    if (args->dump_ast) {
-        ast_dump(file_node, 0);
-        goto cleanup;
-    }
-
-    // Stage 3: Semantic analysis - type-check and validate the AST.
-    analyzer = semantic_analyzer_create(arena);
-    if (!semantic_analyzer_check(analyzer, file_node)) {
+    // Stage 3: Semantic analysis.
+    if (!run_sema(arena, file_node)) {
         status = 1;
         goto cleanup;
     }
 
-    // Stage 4: Lowering - build the Typed Tree from the validated AST.
-    lowering = lowering_create(tt_arena, arena);
-    TtNode *tt_root = lowering_lower(lowering, file_node);
-
-    // Stage 4.5: TT passes - constant folding, ternary conversion.
-    tt_pass_const_fold(tt_arena, tt_root);
-
-    if (args->dump_tt) {
-        tt_dump(tt_root, 0);
+    // Stage 4: Lowering + TT passes.
+    tt_root = run_lowering(args, tt_arena, arena, file_node, &lowering);
+    if (tt_root == NULL) {
         goto cleanup;
     }
 
-    // Stage 5: Code generation - emit C source from the Typed Tree.
-    {
-        FILE *out = stdout;
-        if (args->output_file != NULL) {
-            out = fopen(args->output_file, "w");
-            if (out == NULL) {
-                rsg_fatal("cannot open output '%s'", args->output_file);
-            }
-        }
-        code_generator = code_generator_create(out, arena);
-        code_generator_emit(code_generator, tt_root);
-        if (args->output_file != NULL) {
-            fclose(out);
-        }
-    }
+    // Stage 5: Code generation.
+    run_codegen(args, arena, tt_root);
 
 cleanup:
-    code_generator_destroy(code_generator);
     lowering_destroy(lowering);
-    semantic_analyzer_destroy(analyzer);
-    parser_destroy(parser);
-    lexer_destroy(lexer);
     BUFFER_FREE(tokens);
     free(source);
     source = NULL;

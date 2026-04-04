@@ -150,6 +150,24 @@ void hash_table_destroy(HashTable *table) {
     table->capacity = 0;
 }
 
+/**
+ * Probe the table for @p key, skipping tombstones.
+ * Returns a pointer to the matching entry, or NULL if not found.
+ */
+static HashEntry *hash_table__find_entry(const HashTable *table, const char *key) {
+    uint32_t mask = (uint32_t)(table->capacity - 1);
+    uint32_t index = hash_string(key) & mask;
+
+    while (table->entries[index].key != NULL) {
+        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
+            strcmp(table->entries[index].key, key) == 0) {
+            return &table->entries[index];
+        }
+        index = (index + 1) & mask;
+    }
+    return NULL;
+}
+
 void hash_table_insert(HashTable *table, const char *key, void *value) {
     if (table->capacity == 0 || table->count * 4 >= table->capacity * 3) {
         int32_t new_capacity =
@@ -157,24 +175,19 @@ void hash_table_insert(HashTable *table, const char *key, void *value) {
         hash_table__resize(table, new_capacity);
     }
 
-    uint32_t mask = (uint32_t)(table->capacity - 1);
-    uint32_t index = hash_string(key) & mask;
-    int32_t first_tombstone = -1;
-
-    while (table->entries[index].key != NULL) {
-        if (table->entries[index].key == HASH_TABLE_TOMBSTONE) {
-            if (first_tombstone < 0) {
-                first_tombstone = (int32_t)index;
-            }
-        } else if (strcmp(table->entries[index].key, key) == 0) {
-            table->entries[index].value = value;
-            return;
-        }
-        index = (index + 1) & mask;
+    // Check for existing key first
+    HashEntry *existing = hash_table__find_entry(table, key);
+    if (existing != NULL) {
+        existing->value = value;
+        return;
     }
 
-    if (first_tombstone >= 0) {
-        index = (uint32_t)first_tombstone;
+    // Insert into first available slot (empty or tombstone)
+    uint32_t mask = (uint32_t)(table->capacity - 1);
+    uint32_t index = hash_string(key) & mask;
+
+    while (table->entries[index].key != NULL && table->entries[index].key != HASH_TABLE_TOMBSTONE) {
+        index = (index + 1) & mask;
     }
 
     table->entries[index].key = key;
@@ -186,39 +199,22 @@ void *hash_table_lookup(const HashTable *table, const char *key) {
     if (table->capacity == 0) {
         return NULL;
     }
-
-    uint32_t mask = (uint32_t)(table->capacity - 1);
-    uint32_t index = hash_string(key) & mask;
-
-    while (table->entries[index].key != NULL) {
-        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
-            strcmp(table->entries[index].key, key) == 0) {
-            return table->entries[index].value;
-        }
-        index = (index + 1) & mask;
-    }
-    return NULL;
+    HashEntry *entry = hash_table__find_entry(table, key);
+    return entry != NULL ? entry->value : NULL;
 }
 
 bool hash_table_remove(HashTable *table, const char *key) {
     if (table->capacity == 0) {
         return false;
     }
-
-    uint32_t mask = (uint32_t)(table->capacity - 1);
-    uint32_t index = hash_string(key) & mask;
-
-    while (table->entries[index].key != NULL) {
-        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
-            strcmp(table->entries[index].key, key) == 0) {
-            table->entries[index].key = HASH_TABLE_TOMBSTONE;
-            table->entries[index].value = NULL;
-            table->count--;
-            return true;
-        }
-        index = (index + 1) & mask;
+    HashEntry *entry = hash_table__find_entry(table, key);
+    if (entry == NULL) {
+        return false;
     }
-    return false;
+    entry->key = HASH_TABLE_TOMBSTONE;
+    entry->value = NULL;
+    table->count--;
+    return true;
 }
 
 /**

@@ -39,8 +39,6 @@ const char *codegen_next_string_builder(CodeGenerator *generator);
 
 // ── C formatting helpers (codegen_helpers.c) ───────────────────────────
 
-/** Map Resurg binary operator TokenKind to its C operator string. */
-const char *codegen_c_binary_operator(TokenKind op);
 /** Escape @p source for embedding inside a C string literal. */
 const char *codegen_c_string_escape(const CodeGenerator *generator, const char *source);
 /** Format @p value as a C double literal with a trailing .0 when needed. */

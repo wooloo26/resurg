@@ -67,7 +67,7 @@ static const char *emit_unary_expression(CodeGenerator *generator, const TtNode 
 static const char *emit_binary_expression(CodeGenerator *generator, const TtNode *node) {
     const char *left = codegen_emit_expression(generator, node->binary.left);
     const char *right = codegen_emit_expression(generator, node->binary.right);
-    const char *bin_op = codegen_c_binary_operator(node->binary.op);
+    const char *bin_op = token_kind_string(node->binary.op);
     return arena_sprintf(generator->arena, "(%s %s %s)", left, bin_op, right);
 }
 

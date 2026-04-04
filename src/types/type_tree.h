@@ -288,4 +288,11 @@ TtSymbol *tt_symbol_new(Arena *arena, TtSymbolKind kind, Symbol *sema_symbol, bo
 /** Recursively pretty-print @p node to stderr at @p indent levels. */
 void tt_dump(const TtNode *node, int32_t indent);
 
+// ── TT child visitor ──────────────────────────────────────────────────
+
+/** Callback invoked for each child pointer of a TtNode. */
+typedef void (*TtChildVisitor)(void *context, TtNode **child_ptr);
+/** Call @p visitor for every child pointer in @p node. */
+void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context);
+
 #endif // RG_TYPE_TREE_H

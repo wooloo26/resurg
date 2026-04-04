@@ -49,20 +49,12 @@ static void emit_function_body(CodeGenerator *generator, const TtNode *function_
     }
 }
 
-static void emit_function_declaration(CodeGenerator *generator, const TtNode *node,
-                                      bool forward_only) {
-    bool is_public = node->function_declaration.is_public;
-
-    // Return type
+/** Emit the function signature: return-type name(params). */
+static void emit_function_signature(CodeGenerator *generator, const TtNode *node) {
+    const char *prefix = node->function_declaration.is_public ? "" : "static ";
     const char *return_type = codegen_c_type_for(generator, node->function_declaration.return_type);
-
-    // Static prefix for non-public functions
-    const char *prefix = !is_public ? "static " : "";
-
-    // Mangled function name
     const char *function_name = node->function_declaration.symbol->mangled_name;
 
-    // Parameters
     codegen_emit_indent(generator);
     fprintf(generator->output, "%s%s %s(", prefix, return_type, function_name);
 
@@ -83,6 +75,11 @@ static void emit_function_declaration(CodeGenerator *generator, const TtNode *no
                     parameter->parameter.symbol->mangled_name);
         }
     }
+}
+
+static void emit_function_declaration(CodeGenerator *generator, const TtNode *node,
+                                      bool forward_only) {
+    emit_function_signature(generator, node);
 
     if (forward_only) {
         fprintf(generator->output, ");\n");
@@ -92,7 +89,6 @@ static void emit_function_declaration(CodeGenerator *generator, const TtNode *no
     fprintf(generator->output, ") {\n");
     generator->indent++;
     emit_function_body(generator, node);
-
     generator->indent--;
     codegen_emit_line(generator, "}");
     fprintf(generator->output, "\n");
@@ -148,15 +144,8 @@ static void emit_entry_point(CodeGenerator *generator, const TtNode *file,
     codegen_emit(generator, "}\n");
 }
 
-/**
- * Emit the full C translation unit: preamble, source-file constant, module
- * comment, forward declarations, function definitions, and (if present) a
- * `_rsg_top_level()` wrapper for top-level statements.
- */
-static void emit_file(CodeGenerator *generator, const TtNode *file) {
-    emit_preamble(generator);
-
-    // Emit module comment
+/** Emit module comment and register compound types. */
+static void emit_module_and_types(CodeGenerator *generator, const TtNode *file) {
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         const TtNode *declaration = file->file.declarations[i];
         if (declaration->kind == TT_MODULE) {
@@ -165,31 +154,33 @@ static void emit_file(CodeGenerator *generator, const TtNode *file) {
         }
     }
 
-    // Emit compound type definitions (arrays, tuples) from lowering registry
     codegen_reset_compound_types(generator);
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.compound_types); i++) {
         BUFFER_PUSH(generator->compound_types, file->file.compound_types[i]);
     }
     codegen_emit_compound_typedefs(generator);
+}
 
-    // Forward declarations for all functions
+/** Emit forward declarations, then full definitions, for all functions. */
+static void emit_functions(CodeGenerator *generator, const TtNode *file) {
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const TtNode *declaration = file->file.declarations[i];
-        if (declaration->kind == TT_FUNCTION_DECLARATION) {
-            emit_function_declaration(generator, declaration, true);
+        const TtNode *decl = file->file.declarations[i];
+        if (decl->kind == TT_FUNCTION_DECLARATION) {
+            emit_function_declaration(generator, decl, true);
         }
     }
     codegen_emit(generator, "\n");
 
-    // Full function definitions
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const TtNode *declaration = file->file.declarations[i];
-        if (declaration->kind == TT_FUNCTION_DECLARATION) {
-            emit_function_declaration(generator, declaration, false);
+        const TtNode *decl = file->file.declarations[i];
+        if (decl->kind == TT_FUNCTION_DECLARATION) {
+            emit_function_declaration(generator, decl, false);
         }
     }
+}
 
-    // Top-level statements (outside functions) — wrap in a helper if needed
+/** Emit `_rsg_top_level()` wrapper if any top-level statements exist. */
+static bool emit_top_level_wrapper(CodeGenerator *generator, const TtNode *file) {
     bool has_top_statements = false;
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         if (is_top_level_statement(file->file.declarations[i])) {
@@ -197,18 +188,32 @@ static void emit_file(CodeGenerator *generator, const TtNode *file) {
             break;
         }
     }
-    if (has_top_statements) {
-        codegen_emit(generator, "static void _rsg_top_level(void) {\n");
-        generator->indent++;
-        for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-            if (is_top_level_statement(file->file.declarations[i])) {
-                codegen_emit_statement(generator, file->file.declarations[i]);
-            }
-        }
-        generator->indent--;
-        codegen_emit(generator, "}\n\n");
+    if (!has_top_statements) {
+        return false;
     }
 
+    codegen_emit(generator, "static void _rsg_top_level(void) {\n");
+    generator->indent++;
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        if (is_top_level_statement(file->file.declarations[i])) {
+            codegen_emit_statement(generator, file->file.declarations[i]);
+        }
+    }
+    generator->indent--;
+    codegen_emit(generator, "}\n\n");
+    return true;
+}
+
+/**
+ * Emit the full C translation unit: preamble, module comment, compound
+ * types, forward declarations, function definitions, and (if present)
+ * a `_rsg_top_level()` wrapper for top-level statements.
+ */
+static void emit_file(CodeGenerator *generator, const TtNode *file) {
+    emit_preamble(generator);
+    emit_module_and_types(generator, file);
+    emit_functions(generator, file);
+    bool has_top_statements = emit_top_level_wrapper(generator, file);
     emit_entry_point(generator, file, has_top_statements);
 }
 

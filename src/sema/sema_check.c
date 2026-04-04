@@ -20,6 +20,37 @@ void semantic_analyzer_destroy(SemanticAnalyzer *analyzer) {
     }
 }
 
+/** Register a single function's signature into the analyzer tables and scope. */
+static void register_function_signature(SemanticAnalyzer *analyzer, ASTNode *declaration) {
+    const Type *resolved_return = &TYPE_UNIT_INSTANCE;
+    if (declaration->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
+        resolved_return =
+            resolve_ast_type(analyzer, &declaration->function_declaration.return_type);
+        if (resolved_return == NULL) {
+            resolved_return = &TYPE_UNIT_INSTANCE;
+        }
+    }
+
+    FunctionSignature *signature = rsg_malloc(sizeof(*signature));
+    signature->name = declaration->function_declaration.name;
+    signature->return_type = resolved_return;
+    signature->parameter_types = NULL;
+    signature->parameter_count = BUFFER_LENGTH(declaration->function_declaration.parameters);
+    signature->is_public = declaration->function_declaration.is_public;
+    for (int32_t j = 0; j < signature->parameter_count; j++) {
+        ASTNode *parameter = declaration->function_declaration.parameters[j];
+        const Type *parameter_type = resolve_ast_type(analyzer, &parameter->parameter.type);
+        if (parameter_type == NULL) {
+            parameter_type = &TYPE_ERROR_INSTANCE;
+        }
+        BUFFER_PUSH(signature->parameter_types, parameter_type);
+    }
+    hash_table_insert(&analyzer->function_table, declaration->function_declaration.name, signature);
+
+    scope_define(analyzer, declaration->function_declaration.name, resolved_return,
+                 declaration->function_declaration.is_public, SYM_FUNCTION);
+}
+
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     // Reset tables for each compilation
     hash_table_destroy(&analyzer->function_table);
@@ -43,38 +74,7 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
         }
 
         if (declaration->kind == NODE_FUNCTION_DECLARATION) {
-            // Resolve return type (may be inferred - default to unit)
-            const Type *resolved_return = &TYPE_UNIT_INSTANCE;
-            if (declaration->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
-                resolved_return =
-                    resolve_ast_type(analyzer, &declaration->function_declaration.return_type);
-                if (resolved_return == NULL) {
-                    resolved_return = &TYPE_UNIT_INSTANCE;
-                }
-            }
-
-            // Build parameter types
-            FunctionSignature *signature = rsg_malloc(sizeof(*signature));
-            signature->name = declaration->function_declaration.name;
-            signature->return_type = resolved_return;
-            signature->parameter_types = NULL;
-            signature->parameter_count =
-                BUFFER_LENGTH(declaration->function_declaration.parameters);
-            signature->is_public = declaration->function_declaration.is_public;
-            for (int32_t j = 0; j < signature->parameter_count; j++) {
-                ASTNode *parameter = declaration->function_declaration.parameters[j];
-                const Type *parameter_type = resolve_ast_type(analyzer, &parameter->parameter.type);
-                if (parameter_type == NULL) {
-                    parameter_type = &TYPE_ERROR_INSTANCE;
-                }
-                BUFFER_PUSH(signature->parameter_types, parameter_type);
-            }
-            hash_table_insert(&analyzer->function_table, declaration->function_declaration.name,
-                              signature);
-
-            // Register in scope
-            scope_define(analyzer, declaration->function_declaration.name, resolved_return,
-                         declaration->function_declaration.is_public, SYM_FUNCTION);
+            register_function_signature(analyzer, declaration);
         }
     }
 

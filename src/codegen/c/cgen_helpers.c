@@ -34,39 +34,6 @@ const char *codegen_next_string_builder(CodeGenerator *generator) {
 
 // ── C formatting helpers ───────────────────────────────────────────────
 
-const char *codegen_c_binary_operator(TokenKind op) {
-    switch (op) {
-    case TOKEN_PLUS:
-        return "+";
-    case TOKEN_MINUS:
-        return "-";
-    case TOKEN_STAR:
-        return "*";
-    case TOKEN_SLASH:
-        return "/";
-    case TOKEN_PERCENT:
-        return "%";
-    case TOKEN_EQUAL_EQUAL:
-        return "==";
-    case TOKEN_BANG_EQUAL:
-        return "!=";
-    case TOKEN_LESS:
-        return "<";
-    case TOKEN_LESS_EQUAL:
-        return "<=";
-    case TOKEN_GREATER:
-        return ">";
-    case TOKEN_GREATER_EQUAL:
-        return ">=";
-    case TOKEN_AMPERSAND_AMPERSAND:
-        return "&&";
-    case TOKEN_PIPE_PIPE:
-        return "||";
-    default:
-        return "??";
-    }
-}
-
 const char *codegen_c_string_escape(const CodeGenerator *generator, const char *source) {
     if (source == NULL) {
         return "";

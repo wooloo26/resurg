@@ -76,6 +76,17 @@ static ASTNode *parse_string_interpolation(Parser *parser, SourceLocation locati
 }
 
 /**
+ * Parse a comma-separated list of expressions, appending each to @p buf.
+ * Assumes the list has at least one element.  Skips newlines between items.
+ */
+static void parse_comma_separated(Parser *parser, ASTNode ***buf) {
+    do {
+        parser_skip_newlines(parser);
+        BUFFER_PUSH(*buf, parser_parse_expression(parser));
+    } while (parser_match(parser, TOKEN_COMMA));
+}
+
+/**
  * Parse an array literal: [expr, ...] or [N]T[expr, ...].
  * The opening '[' has NOT been consumed yet.
  */
@@ -105,10 +116,7 @@ static ASTNode *parse_array_literal(Parser *parser) {
         // Parse [values]
         parser_expect(parser, TOKEN_LEFT_BRACKET);
         if (!parser_check(parser, TOKEN_RIGHT_BRACKET)) {
-            do {
-                parser_skip_newlines(parser);
-                BUFFER_PUSH(node->array_literal.elements, parser_parse_expression(parser));
-            } while (parser_match(parser, TOKEN_COMMA));
+            parse_comma_separated(parser, &node->array_literal.elements);
         }
         parser_expect(parser, TOKEN_RIGHT_BRACKET);
         return node;
@@ -119,10 +127,7 @@ static ASTNode *parse_array_literal(Parser *parser) {
     node->array_literal.element_type.kind = AST_TYPE_INFERRED;
     node->array_literal.elements = NULL;
     if (!parser_check(parser, TOKEN_RIGHT_BRACKET)) {
-        do {
-            parser_skip_newlines(parser);
-            BUFFER_PUSH(node->array_literal.elements, parser_parse_expression(parser));
-        } while (parser_match(parser, TOKEN_COMMA));
+        parse_comma_separated(parser, &node->array_literal.elements);
     }
     node->array_literal.size = BUFFER_LENGTH(node->array_literal.elements);
     parser_expect(parser, TOKEN_RIGHT_BRACKET);
@@ -205,10 +210,7 @@ static ASTNode *parse_primary(Parser *parser) {
             ASTNode *node = ast_new(parser->arena, NODE_TUPLE_LITERAL, location);
             node->tuple_literal.elements = NULL;
             BUFFER_PUSH(node->tuple_literal.elements, first);
-            do {
-                parser_skip_newlines(parser);
-                BUFFER_PUSH(node->tuple_literal.elements, parser_parse_expression(parser));
-            } while (parser_match(parser, TOKEN_COMMA));
+            parse_comma_separated(parser, &node->tuple_literal.elements);
             parser_expect(parser, TOKEN_RIGHT_PAREN);
             return node;
         }
@@ -239,10 +241,7 @@ static ASTNode *parse_postfix(Parser *parser) {
             node->call.callee = left;
             node->call.arguments = NULL;
             if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-                do {
-                    parser_skip_newlines(parser);
-                    BUFFER_PUSH(node->call.arguments, parser_parse_expression(parser));
-                } while (parser_match(parser, TOKEN_COMMA));
+                parse_comma_separated(parser, &node->call.arguments);
             }
             parser_expect(parser, TOKEN_RIGHT_PAREN);
             left = node;

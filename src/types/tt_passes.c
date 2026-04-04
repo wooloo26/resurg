@@ -101,39 +101,33 @@ static TtNode *fold_float_binary(Arena *arena, const TtNode *node) {
     return lit;
 }
 
-/** Try folding a unary negation on an integer literal. */
-static TtNode *fold_unary_negate_int(Arena *arena, const TtNode *node) {
+/** Try folding a unary negation on an integer or float literal. */
+static TtNode *fold_unary_negate(Arena *arena, const TtNode *node) {
     if (node->unary.op != TOKEN_MINUS) {
         return NULL;
     }
     const TtNode *operand = node->unary.operand;
-    if (operand->kind != TT_INT_LITERAL) {
-        return NULL;
+    if (operand->kind == TT_INT_LITERAL) {
+        TtNode *lit = tt_new(arena, TT_INT_LITERAL, node->type, node->location);
+        lit->int_literal.value = (uint64_t)(-(int64_t)operand->int_literal.value);
+        lit->int_literal.int_kind = operand->int_literal.int_kind;
+        return lit;
     }
-
-    TtNode *lit = tt_new(arena, TT_INT_LITERAL, node->type, node->location);
-    lit->int_literal.value = (uint64_t)(-(int64_t)operand->int_literal.value);
-    lit->int_literal.int_kind = operand->int_literal.int_kind;
-    return lit;
+    if (operand->kind == TT_FLOAT_LITERAL) {
+        TtNode *lit = tt_new(arena, TT_FLOAT_LITERAL, node->type, node->location);
+        lit->float_literal.value = -operand->float_literal.value;
+        lit->float_literal.float_kind = operand->float_literal.float_kind;
+        return lit;
+    }
+    return NULL;
 }
 
-/** Try folding a unary negation on a float literal. */
-static TtNode *fold_unary_negate_float(Arena *arena, const TtNode *node) {
-    if (node->unary.op != TOKEN_MINUS) {
-        return NULL;
-    }
-    const TtNode *operand = node->unary.operand;
-    if (operand->kind != TT_FLOAT_LITERAL) {
-        return NULL;
-    }
+static void const_fold(Arena *arena, TtNode **node_ptr);
 
-    TtNode *lit = tt_new(arena, TT_FLOAT_LITERAL, node->type, node->location);
-    lit->float_literal.value = -operand->float_literal.value;
-    lit->float_literal.float_kind = operand->float_literal.float_kind;
-    return lit;
+/** Visitor adapter: fold constants in each child node. */
+static void const_fold_visitor(void *ctx, TtNode **child_ptr) {
+    const_fold((Arena *)ctx, child_ptr);
 }
-
-static void const_fold_children(Arena *arena, TtNode **children, int32_t count);
 
 /** Recursively fold constants in @p node_ptr, replacing in-place. */
 static void const_fold(Arena *arena, TtNode **node_ptr) {
@@ -143,70 +137,7 @@ static void const_fold(Arena *arena, TtNode **node_ptr) {
     }
 
     // Walk children first (bottom-up folding)
-    switch (node->kind) {
-    case TT_FILE:
-        const_fold_children(arena, node->file.declarations, BUFFER_LENGTH(node->file.declarations));
-        break;
-    case TT_FUNCTION_DECLARATION:
-        const_fold(arena, &node->function_declaration.body);
-        break;
-    case TT_BLOCK:
-        const_fold_children(arena, node->block.statements, BUFFER_LENGTH(node->block.statements));
-        const_fold(arena, &node->block.result);
-        break;
-    case TT_VARIABLE_DECLARATION:
-        const_fold(arena, &node->variable_declaration.initializer);
-        break;
-    case TT_RETURN:
-        const_fold(arena, &node->return_statement.value);
-        break;
-    case TT_ASSIGN:
-        const_fold(arena, &node->assign.target);
-        const_fold(arena, &node->assign.value);
-        break;
-    case TT_BINARY:
-        const_fold(arena, &node->binary.left);
-        const_fold(arena, &node->binary.right);
-        break;
-    case TT_UNARY:
-        const_fold(arena, &node->unary.operand);
-        break;
-    case TT_CALL:
-        const_fold(arena, &node->call.callee);
-        const_fold_children(arena, node->call.arguments, BUFFER_LENGTH(node->call.arguments));
-        break;
-    case TT_IF:
-        const_fold(arena, &node->if_expression.condition);
-        const_fold(arena, &node->if_expression.then_body);
-        const_fold(arena, &node->if_expression.else_body);
-        break;
-    case TT_ARRAY_LITERAL:
-        const_fold_children(arena, node->array_literal.elements,
-                            BUFFER_LENGTH(node->array_literal.elements));
-        break;
-    case TT_TUPLE_LITERAL:
-        const_fold_children(arena, node->tuple_literal.elements,
-                            BUFFER_LENGTH(node->tuple_literal.elements));
-        break;
-    case TT_INDEX:
-        const_fold(arena, &node->index_access.object);
-        const_fold(arena, &node->index_access.index);
-        break;
-    case TT_TUPLE_INDEX:
-        const_fold(arena, &node->tuple_index.object);
-        break;
-    case TT_TYPE_CONVERSION:
-        const_fold(arena, &node->type_conversion.operand);
-        break;
-    case TT_MODULE_ACCESS:
-        const_fold(arena, &node->module_access.object);
-        break;
-    case TT_LOOP:
-        const_fold(arena, &node->loop.body);
-        break;
-    default:
-        break;
-    }
+    tt_visit_children(node, const_fold_visitor, arena);
 
     // Attempt folding at this node
     TtNode *folded = NULL;
@@ -216,19 +147,10 @@ static void const_fold(Arena *arena, TtNode **node_ptr) {
             folded = fold_float_binary(arena, node);
         }
     } else if (node->kind == TT_UNARY) {
-        folded = fold_unary_negate_int(arena, node);
-        if (folded == NULL) {
-            folded = fold_unary_negate_float(arena, node);
-        }
+        folded = fold_unary_negate(arena, node);
     }
     if (folded != NULL) {
         *node_ptr = folded;
-    }
-}
-
-static void const_fold_children(Arena *arena, TtNode **children, int32_t count) {
-    for (int32_t i = 0; i < count; i++) {
-        const_fold(arena, &children[i]);
     }
 }
 

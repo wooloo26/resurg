@@ -119,6 +119,43 @@ ASTNode *ast_new(Arena *arena, NodeKind kind, SourceLocation location) {
     return node;
 }
 
+static void dump_unary_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "Unary(%s)\n", token_kind_string(node->unary.op));
+    ast_dump(node->unary.operand, level + 1);
+}
+
+static void dump_binary_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "Binary(%s)\n", token_kind_string(node->binary.op));
+    ast_dump(node->binary.left, level + 1);
+    ast_dump(node->binary.right, level + 1);
+}
+
+static void dump_assign_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "Assign\n");
+    ast_dump(node->assign.target, level + 1);
+    ast_dump(node->assign.value, level + 1);
+}
+
+static void dump_compound_assign_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "CompoundAssign(%s)\n", token_kind_string(node->compound_assign.op));
+    ast_dump(node->compound_assign.target, level + 1);
+    ast_dump(node->compound_assign.value, level + 1);
+}
+
+static void dump_array_literal_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "ArrayLiteral(%d)\n", node->array_literal.size);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
+        ast_dump(node->array_literal.elements[i], level + 1);
+    }
+}
+
+static void dump_tuple_literal_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "TupleLiteral\n");
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
+        ast_dump(node->tuple_literal.elements[i], level + 1);
+    }
+}
+
 void ast_dump(const ASTNode *node, int32_t level) {
     if (node == NULL) {
         print_indent(level);
@@ -161,23 +198,16 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "Ident(%s)\n", node->identifier.name);
         break;
     case NODE_UNARY:
-        fprintf(stderr, "Unary(%s)\n", token_kind_string(node->unary.op));
-        ast_dump(node->unary.operand, level + 1);
+        dump_unary_node(node, level);
         break;
     case NODE_BINARY:
-        fprintf(stderr, "Binary(%s)\n", token_kind_string(node->binary.op));
-        ast_dump(node->binary.left, level + 1);
-        ast_dump(node->binary.right, level + 1);
+        dump_binary_node(node, level);
         break;
     case NODE_ASSIGN:
-        fprintf(stderr, "Assign\n");
-        ast_dump(node->assign.target, level + 1);
-        ast_dump(node->assign.value, level + 1);
+        dump_assign_node(node, level);
         break;
     case NODE_COMPOUND_ASSIGN:
-        fprintf(stderr, "CompoundAssign(%s)\n", token_kind_string(node->compound_assign.op));
-        ast_dump(node->compound_assign.target, level + 1);
-        ast_dump(node->compound_assign.value, level + 1);
+        dump_compound_assign_node(node, level);
         break;
     case NODE_CALL:
         dump_call_node(node, level);
@@ -208,16 +238,10 @@ void ast_dump(const ASTNode *node, int32_t level) {
         dump_string_interpolation_node(node, level);
         break;
     case NODE_ARRAY_LITERAL:
-        fprintf(stderr, "ArrayLiteral(%d)\n", node->array_literal.size);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
-            ast_dump(node->array_literal.elements[i], level + 1);
-        }
+        dump_array_literal_node(node, level);
         break;
     case NODE_TUPLE_LITERAL:
-        fprintf(stderr, "TupleLiteral\n");
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
-            ast_dump(node->tuple_literal.elements[i], level + 1);
-        }
+        dump_tuple_literal_node(node, level);
         break;
     case NODE_TYPE_CONVERSION:
         fprintf(stderr, "TypeConversion\n");

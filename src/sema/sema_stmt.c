@@ -193,6 +193,29 @@ const Type *check_compound_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
                                    node->compound_assign.value);
 }
 
+static void check_loop(SemanticAnalyzer *analyzer, ASTNode *node) {
+    scope_push(analyzer, true);
+    check_node(analyzer, node->loop.body);
+    scope_pop(analyzer);
+}
+
+static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
+    check_node(analyzer, node->for_loop.start);
+    check_node(analyzer, node->for_loop.end);
+    scope_push(analyzer, true);
+    is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
+    scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR);
+    check_node(analyzer, node->for_loop.body);
+    scope_pop(analyzer);
+}
+
+static void check_break_continue(SemanticAnalyzer *analyzer, const ASTNode *node) {
+    if (!in_loop(analyzer)) {
+        SEMA_ERROR(analyzer, node->location, "'%s' outside of loop",
+                   node->kind == NODE_BREAK ? "break" : "continue");
+    }
+}
+
 // ── Node dispatch ──────────────────────────────────────────────────────
 
 const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -238,10 +261,7 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_BREAK:
     case NODE_CONTINUE:
-        if (!in_loop(analyzer)) {
-            SEMA_ERROR(analyzer, node->location, "'%s' outside of loop",
-                       node->kind == NODE_BREAK ? "break" : "continue");
-        }
+        check_break_continue(analyzer, node);
         break;
 
     case NODE_LITERAL:
@@ -285,21 +305,12 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         break;
 
     case NODE_LOOP:
-        scope_push(analyzer, true);
-        check_node(analyzer, node->loop.body);
-        scope_pop(analyzer);
+        check_loop(analyzer, node);
         break;
 
-    case NODE_FOR: {
-        check_node(analyzer, node->for_loop.start);
-        check_node(analyzer, node->for_loop.end);
-        scope_push(analyzer, true);
-        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-        scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR);
-        check_node(analyzer, node->for_loop.body);
-        scope_pop(analyzer);
+    case NODE_FOR:
+        check_for(analyzer, node);
         break;
-    }
 
     case NODE_BLOCK:
         result = check_block(analyzer, node);

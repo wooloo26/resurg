@@ -30,14 +30,7 @@ static TtNode *lower_variable_declaration(Lowering *low, const ASTNode *ast) {
         init = lower_expression(low, ast->variable_declaration.initializer);
     }
 
-    TtNode *node =
-        tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, ast->location);
-    node->variable_declaration.symbol = symbol;
-    node->variable_declaration.name = name;
-    node->variable_declaration.var_type = type;
-    node->variable_declaration.initializer = init;
-    node->variable_declaration.is_mut = is_mut;
-    return node;
+    return lowering_make_var_decl(low, symbol, name, type, init, is_mut, ast->location);
 }
 
 static TtNode *lower_assign(Lowering *low, const ASTNode *ast) {
@@ -114,6 +107,42 @@ static TtNode *lower_loop(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
+/** Build `if iter >= end_bound { break }` guard for desugared for-loop. */
+static TtNode *build_for_guard(Lowering *low, TtSymbol *iter_sym, TtSymbol *end_sym,
+                               SourceLocation loc) {
+    TtNode *cond = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
+    cond->binary.op = TOKEN_GREATER_EQUAL;
+    cond->binary.left = lowering_make_var_ref(low, iter_sym, loc);
+    cond->binary.right = lowering_make_var_ref(low, end_sym, loc);
+
+    TtNode *break_node = tt_new(low->tt_arena, TT_BREAK, &TYPE_UNIT_INSTANCE, loc);
+    TtNode **break_stmts = NULL;
+    BUFFER_PUSH(break_stmts, break_node);
+    TtNode *break_block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+    break_block->block.statements = break_stmts;
+    break_block->block.result = NULL;
+
+    TtNode *guard = tt_new(low->tt_arena, TT_IF, &TYPE_UNIT_INSTANCE, loc);
+    guard->if_expression.condition = cond;
+    guard->if_expression.then_body = break_block;
+    guard->if_expression.else_body = NULL;
+    return guard;
+}
+
+/** Build `iter = iter + 1` increment for desugared for-loop. */
+static TtNode *build_for_increment(Lowering *low, TtSymbol *iter_sym, const Type *iter_type,
+                                   SourceLocation loc) {
+    TtNode *increment = tt_new(low->tt_arena, TT_BINARY, iter_type, loc);
+    increment->binary.op = TOKEN_PLUS;
+    increment->binary.left = lowering_make_var_ref(low, iter_sym, loc);
+    increment->binary.right = lowering_make_int_lit(low, 1, iter_type, TYPE_I32, loc);
+
+    TtNode *assign = tt_new(low->tt_arena, TT_ASSIGN, &TYPE_UNIT_INSTANCE, loc);
+    assign->assign.target = lowering_make_var_ref(low, iter_sym, loc);
+    assign->assign.value = increment;
+    return assign;
+}
+
 /**
  * Rewrite TT_CONTINUE nodes inside a for-loop body to include the
  * iterator increment before the continue.  Skips nested TT_LOOP nodes
@@ -121,7 +150,7 @@ static TtNode *lower_loop(Lowering *low, const ASTNode *ast) {
  *
  * Transforms: `continue` → `{ i = i + 1; continue; }`
  */
-static void rewrite_continue_for_increment(Arena *arena, TtNode **node_ptr, TtSymbol *iter_sym,
+static void rewrite_continue_for_increment(Lowering *low, TtNode **node_ptr, TtSymbol *iter_sym,
                                            const Type *iter_type, SourceLocation loc) {
     TtNode *node = *node_ptr;
     if (node == NULL) {
@@ -130,27 +159,13 @@ static void rewrite_continue_for_increment(Arena *arena, TtNode **node_ptr, TtSy
 
     if (node->kind == TT_CONTINUE) {
         // Build: { i = i + 1; continue; }
-        TtNode *inc_val = tt_new(arena, TT_BINARY, iter_type, loc);
-        inc_val->binary.op = TOKEN_PLUS;
-        TtNode *ref_left = tt_new(arena, TT_VARIABLE_REFERENCE, iter_type, loc);
-        ref_left->variable_reference.symbol = iter_sym;
-        inc_val->binary.left = ref_left;
-        TtNode *one = tt_new(arena, TT_INT_LITERAL, iter_type, loc);
-        one->int_literal.value = 1;
-        one->int_literal.int_kind = TYPE_I32;
-        inc_val->binary.right = one;
-
-        TtNode *assign = tt_new(arena, TT_ASSIGN, &TYPE_UNIT_INSTANCE, loc);
-        TtNode *ref_target = tt_new(arena, TT_VARIABLE_REFERENCE, iter_type, loc);
-        ref_target->variable_reference.symbol = iter_sym;
-        assign->assign.target = ref_target;
-        assign->assign.value = inc_val;
+        TtNode *assign = build_for_increment(low, iter_sym, iter_type, loc);
 
         TtNode **stmts = NULL;
         BUFFER_PUSH(stmts, assign);
         BUFFER_PUSH(stmts, node); // the original TT_CONTINUE
 
-        TtNode *block = tt_new(arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, node->location);
+        TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, node->location);
         block->block.statements = stmts;
         block->block.result = NULL;
         *node_ptr = block;
@@ -166,21 +181,43 @@ static void rewrite_continue_for_increment(Arena *arena, TtNode **node_ptr, TtSy
     switch (node->kind) {
     case TT_BLOCK:
         for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
-            rewrite_continue_for_increment(arena, &node->block.statements[i], iter_sym, iter_type,
+            rewrite_continue_for_increment(low, &node->block.statements[i], iter_sym, iter_type,
                                            loc);
         }
         if (node->block.result != NULL) {
-            rewrite_continue_for_increment(arena, &node->block.result, iter_sym, iter_type, loc);
+            rewrite_continue_for_increment(low, &node->block.result, iter_sym, iter_type, loc);
         }
         break;
     case TT_IF:
-        rewrite_continue_for_increment(arena, &node->if_expression.then_body, iter_sym, iter_type,
+        rewrite_continue_for_increment(low, &node->if_expression.then_body, iter_sym, iter_type,
                                        loc);
-        rewrite_continue_for_increment(arena, &node->if_expression.else_body, iter_sym, iter_type,
+        rewrite_continue_for_increment(low, &node->if_expression.else_body, iter_sym, iter_type,
                                        loc);
         break;
     default:
         break;
+    }
+}
+
+/**
+ * Lower the user's for-loop body, rewrite continue nodes, and append the
+ * resulting statements to @p out_stmts.
+ */
+static void build_for_user_body(Lowering *low, const ASTNode *body_ast, TtSymbol *var_sym,
+                                const Type *iter_type, SourceLocation loc, TtNode ***out_stmts) {
+    if (body_ast == NULL || body_ast->kind != NODE_BLOCK) {
+        return;
+    }
+    TtNode *user_body = lower_block(low, body_ast);
+    if (user_body == NULL || user_body->kind != TT_BLOCK) {
+        return;
+    }
+    rewrite_continue_for_increment(low, &user_body, var_sym, iter_type, loc);
+    for (int32_t i = 0; i < BUFFER_LENGTH(user_body->block.statements); i++) {
+        BUFFER_PUSH(*out_stmts, user_body->block.statements[i]);
+    }
+    if (user_body->block.result != NULL) {
+        BUFFER_PUSH(*out_stmts, user_body->block.result);
     }
 }
 
@@ -202,13 +239,8 @@ static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
     TtSymbol *end_sym =
         lowering_make_symbol(low, TT_SYMBOL_VARIABLE, end_name, iter_type, false, loc);
     lowering_scope_add(low, end_name, end_sym);
-
-    TtNode *end_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
-    end_decl->variable_declaration.symbol = end_sym;
-    end_decl->variable_declaration.name = end_name;
-    end_decl->variable_declaration.var_type = iter_type;
-    end_decl->variable_declaration.initializer = end_expr;
-    end_decl->variable_declaration.is_mut = false;
+    TtNode *end_decl =
+        lowering_make_var_decl(low, end_sym, end_name, iter_type, end_expr, false, loc);
 
     // var i = start
     const char *var_name = ast->for_loop.variable_name;
@@ -216,67 +248,14 @@ static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
     TtSymbol *var_sym =
         lowering_make_symbol(low, TT_SYMBOL_VARIABLE, var_name, iter_type, true, loc);
     lowering_scope_add(low, var_name, var_sym);
+    TtNode *iter_decl = lowering_make_var_decl(low, var_sym, var_name, iter_type, start, true, loc);
 
-    TtNode *iter_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
-    iter_decl->variable_declaration.symbol = var_sym;
-    iter_decl->variable_declaration.name = var_name;
-    iter_decl->variable_declaration.var_type = iter_type;
-    iter_decl->variable_declaration.initializer = start;
-    iter_decl->variable_declaration.is_mut = true;
-
-    // Build loop body statements:
-    //   if i >= _end { break }
-    //   <user body statements>
-    //   i = i + 1
+    // Build loop body: guard + user body + increment
     TtNode **loop_stmts = NULL;
+    BUFFER_PUSH(loop_stmts, build_for_guard(low, var_sym, end_sym, loc));
+    build_for_user_body(low, ast->for_loop.body, var_sym, iter_type, loc, &loop_stmts);
+    BUFFER_PUSH(loop_stmts, build_for_increment(low, var_sym, iter_type, loc));
 
-    // if i >= _end { break }
-    TtNode *cond = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
-    cond->binary.op = TOKEN_GREATER_EQUAL;
-    cond->binary.left = lowering_make_var_ref(low, var_sym, loc);
-    cond->binary.right = lowering_make_var_ref(low, end_sym, loc);
-
-    TtNode *break_node = tt_new(low->tt_arena, TT_BREAK, &TYPE_UNIT_INSTANCE, loc);
-    TtNode **break_stmts = NULL;
-    BUFFER_PUSH(break_stmts, break_node);
-    TtNode *break_block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
-    break_block->block.statements = break_stmts;
-    break_block->block.result = NULL;
-
-    TtNode *guard = tt_new(low->tt_arena, TT_IF, &TYPE_UNIT_INSTANCE, loc);
-    guard->if_expression.condition = cond;
-    guard->if_expression.then_body = break_block;
-    guard->if_expression.else_body = NULL;
-
-    BUFFER_PUSH(loop_stmts, guard);
-
-    // Inline user body statements (with continue rewriting)
-    if (ast->for_loop.body != NULL && ast->for_loop.body->kind == NODE_BLOCK) {
-        TtNode *user_body = lower_block(low, ast->for_loop.body);
-        if (user_body != NULL && user_body->kind == TT_BLOCK) {
-            // Rewrite continue → { i += 1; continue; } to preserve increment
-            rewrite_continue_for_increment(low->tt_arena, &user_body, var_sym, iter_type, loc);
-            for (int32_t i = 0; i < BUFFER_LENGTH(user_body->block.statements); i++) {
-                BUFFER_PUSH(loop_stmts, user_body->block.statements[i]);
-            }
-            if (user_body->block.result != NULL) {
-                BUFFER_PUSH(loop_stmts, user_body->block.result);
-            }
-        }
-    }
-
-    // i = i + 1
-    TtNode *increment = tt_new(low->tt_arena, TT_BINARY, iter_type, loc);
-    increment->binary.op = TOKEN_PLUS;
-    increment->binary.left = lowering_make_var_ref(low, var_sym, loc);
-    increment->binary.right = lowering_make_int_lit(low, 1, iter_type, TYPE_I32, loc);
-
-    TtNode *assign_inc = tt_new(low->tt_arena, TT_ASSIGN, &TYPE_UNIT_INSTANCE, loc);
-    assign_inc->assign.target = lowering_make_var_ref(low, var_sym, loc);
-    assign_inc->assign.value = increment;
-    BUFFER_PUSH(loop_stmts, assign_inc);
-
-    // loop { ... }
     TtNode *loop_body = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
     loop_body->block.statements = loop_stmts;
     loop_body->block.result = NULL;
@@ -312,42 +291,49 @@ static TtNode *lower_expression_statement(Lowering *low, const ASTNode *ast) {
     return lower_expression(low, inner);
 }
 
+/** Pre-register all function declarations into scope before lowering bodies. */
+static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(file_ast->file.declarations); i++) {
+        const ASTNode *decl = file_ast->file.declarations[i];
+        if (decl->kind != NODE_FUNCTION_DECLARATION) {
+            continue;
+        }
+        const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INSTANCE;
+        TtSymbol *sym = lowering_make_symbol(
+            low, TT_SYMBOL_FUNCTION, decl->function_declaration.name, ret, false, decl->location);
+        sym->mangled_name =
+            arena_sprintf(low->tt_arena, "rsgu_%s", decl->function_declaration.name);
+        lowering_scope_add(low, decl->function_declaration.name, sym);
+    }
+}
+
+/** Lower a NODE_FILE into a TT_FILE with pre-registered function symbols. */
+static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
+    lowering_scope_enter(low);
+    preregister_functions(low, ast);
+
+    TtNode **declarations = NULL;
+    for (int32_t i = 0; i < BUFFER_LENGTH(ast->file.declarations); i++) {
+        TtNode *decl = lower_node(low, ast->file.declarations[i]);
+        if (decl != NULL) {
+            BUFFER_PUSH(declarations, decl);
+        }
+    }
+    lowering_scope_leave(low);
+
+    TtNode *file_node = tt_new(low->tt_arena, TT_FILE, &TYPE_UNIT_INSTANCE, ast->location);
+    file_node->file.declarations = declarations;
+    return file_node;
+}
+
 TtNode *lower_node(Lowering *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
     }
 
     switch (ast->kind) {
-    case NODE_FILE: {
-        lowering_scope_enter(low);
-
-        // Pre-register all functions in scope before lowering bodies
-        for (int32_t i = 0; i < BUFFER_LENGTH(ast->file.declarations); i++) {
-            const ASTNode *decl = ast->file.declarations[i];
-            if (decl->kind == NODE_FUNCTION_DECLARATION) {
-                const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INSTANCE;
-                TtSymbol *sym =
-                    lowering_make_symbol(low, TT_SYMBOL_FUNCTION, decl->function_declaration.name,
-                                         ret, false, decl->location);
-                sym->mangled_name =
-                    arena_sprintf(low->tt_arena, "rsgu_%s", decl->function_declaration.name);
-                lowering_scope_add(low, decl->function_declaration.name, sym);
-            }
-        }
-
-        TtNode **declarations = NULL;
-        for (int32_t i = 0; i < BUFFER_LENGTH(ast->file.declarations); i++) {
-            TtNode *decl = lower_node(low, ast->file.declarations[i]);
-            if (decl != NULL) {
-                BUFFER_PUSH(declarations, decl);
-            }
-        }
-        lowering_scope_leave(low);
-
-        TtNode *file_node = tt_new(low->tt_arena, TT_FILE, &TYPE_UNIT_INSTANCE, ast->location);
-        file_node->file.declarations = declarations;
-        return file_node;
-    }
+    case NODE_FILE:
+        return lower_file(low, ast);
 
     case NODE_MODULE: {
         low->current_module = ast->module.name;

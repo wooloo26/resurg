@@ -108,43 +108,78 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
     return "?";
 }
 
-/** Return the token-kind operator name for unary/binary display. */
-static const char *op_string(TokenKind op) {
-    switch (op) {
-    case TOKEN_PLUS:
-        return "+";
-    case TOKEN_MINUS:
-        return "-";
-    case TOKEN_STAR:
-        return "*";
-    case TOKEN_SLASH:
-        return "/";
-    case TOKEN_PERCENT:
-        return "%";
-    case TOKEN_EQUAL_EQUAL:
-        return "==";
-    case TOKEN_BANG_EQUAL:
-        return "!=";
-    case TOKEN_LESS:
-        return "<";
-    case TOKEN_LESS_EQUAL:
-        return "<=";
-    case TOKEN_GREATER:
-        return ">";
-    case TOKEN_GREATER_EQUAL:
-        return ">=";
-    case TOKEN_AMPERSAND_AMPERSAND:
-        return "&&";
-    case TOKEN_PIPE_PIPE:
-        return "||";
-    case TOKEN_BANG:
-        return "!";
+static void tt_dump_children(TtNode **children, int32_t count, int32_t indent);
+
+static void dump_literal(const TtNode *node) {
+    switch (node->kind) {
+    case TT_BOOL_LITERAL:
+        fprintf(stderr, " %s\n", node->bool_literal.value ? "true" : "false");
+        break;
+    case TT_INT_LITERAL:
+        fprintf(stderr, " %lu\n", (unsigned long)node->int_literal.value);
+        break;
+    case TT_FLOAT_LITERAL:
+        fprintf(stderr, " %g\n", node->float_literal.value);
+        break;
+    case TT_CHAR_LITERAL:
+        fprintf(stderr, " U+%04X\n", node->char_literal.value);
+        break;
+    case TT_STRING_LITERAL:
+        fprintf(stderr, " \"%s\"\n", node->string_literal.value);
+        break;
     default:
-        return "?op";
+        fprintf(stderr, "\n");
+        break;
     }
 }
 
-static void tt_dump_children(TtNode **children, int32_t count, int32_t indent);
+static void dump_unary_binary(const TtNode *node, int32_t indent) {
+    if (node->kind == TT_UNARY) {
+        fprintf(stderr, " %s\n", token_kind_string(node->unary.op));
+        tt_dump(node->unary.operand, indent + 1);
+    } else {
+        fprintf(stderr, " %s\n", token_kind_string(node->binary.op));
+        tt_dump(node->binary.left, indent + 1);
+        tt_dump(node->binary.right, indent + 1);
+    }
+}
+
+static void dump_function_decl(const TtNode *node, int32_t indent) {
+    fprintf(stderr, " \"%s\"%s\n", node->function_declaration.name,
+            node->function_declaration.is_public ? " pub" : "");
+    tt_dump_children(node->function_declaration.params,
+                     BUFFER_LENGTH(node->function_declaration.params), indent + 1);
+    if (node->function_declaration.body != NULL) {
+        tt_dump(node->function_declaration.body, indent + 1);
+    }
+}
+
+static void dump_var_decl(const TtNode *node, int32_t indent) {
+    fprintf(stderr, " \"%s\"%s\n", node->variable_declaration.name,
+            node->variable_declaration.is_mut ? " mut" : "");
+    if (node->variable_declaration.initializer != NULL) {
+        tt_dump(node->variable_declaration.initializer, indent + 1);
+    }
+}
+
+static void dump_block(const TtNode *node, int32_t indent) {
+    fprintf(stderr, "\n");
+    tt_dump_children(node->block.statements, BUFFER_LENGTH(node->block.statements), indent + 1);
+    if (node->block.result != NULL) {
+        dump_indent(indent + 1);
+        fprintf(stderr, "result:\n");
+        tt_dump(node->block.result, indent + 2);
+    }
+}
+
+static void dump_if_node(const TtNode *node, int32_t indent) {
+    fprintf(stderr, "\n");
+    tt_dump(node->if_expression.condition, indent + 1);
+    tt_dump(node->if_expression.then_body, indent + 1);
+    if (node->if_expression.else_body != NULL) {
+        tt_dump(node->if_expression.else_body, indent + 1);
+    }
+}
 
 void tt_dump(const TtNode *node, int32_t indent) {
     if (node == NULL) {
@@ -173,13 +208,7 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_FUNCTION_DECLARATION:
-        fprintf(stderr, " \"%s\"%s\n", node->function_declaration.name,
-                node->function_declaration.is_public ? " pub" : "");
-        tt_dump_children(node->function_declaration.params,
-                         BUFFER_LENGTH(node->function_declaration.params), indent + 1);
-        if (node->function_declaration.body != NULL) {
-            tt_dump(node->function_declaration.body, indent + 1);
-        }
+        dump_function_decl(node, indent);
         break;
 
     case TT_PARAMETER:
@@ -187,11 +216,7 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_VARIABLE_DECLARATION:
-        fprintf(stderr, " \"%s\"%s\n", node->variable_declaration.name,
-                node->variable_declaration.is_mut ? " mut" : "");
-        if (node->variable_declaration.initializer != NULL) {
-            tt_dump(node->variable_declaration.initializer, indent + 1);
-        }
+        dump_var_decl(node, indent);
         break;
 
     case TT_RETURN:
@@ -219,27 +244,12 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_BOOL_LITERAL:
-        fprintf(stderr, " %s\n", node->bool_literal.value ? "true" : "false");
-        break;
-
     case TT_INT_LITERAL:
-        fprintf(stderr, " %lu\n", (unsigned long)node->int_literal.value);
-        break;
-
     case TT_FLOAT_LITERAL:
-        fprintf(stderr, " %g\n", node->float_literal.value);
-        break;
-
     case TT_CHAR_LITERAL:
-        fprintf(stderr, " U+%04X\n", node->char_literal.value);
-        break;
-
     case TT_STRING_LITERAL:
-        fprintf(stderr, " \"%s\"\n", node->string_literal.value);
-        break;
-
     case TT_UNIT_LITERAL:
-        fprintf(stderr, "\n");
+        dump_literal(node);
         break;
 
     case TT_ARRAY_LITERAL:
@@ -275,14 +285,8 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_UNARY:
-        fprintf(stderr, " %s\n", op_string(node->unary.op));
-        tt_dump(node->unary.operand, indent + 1);
-        break;
-
     case TT_BINARY:
-        fprintf(stderr, " %s\n", op_string(node->binary.op));
-        tt_dump(node->binary.left, indent + 1);
-        tt_dump(node->binary.right, indent + 1);
+        dump_unary_binary(node, indent);
         break;
 
     case TT_CALL:
@@ -297,22 +301,11 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_IF:
-        fprintf(stderr, "\n");
-        tt_dump(node->if_expression.condition, indent + 1);
-        tt_dump(node->if_expression.then_body, indent + 1);
-        if (node->if_expression.else_body != NULL) {
-            tt_dump(node->if_expression.else_body, indent + 1);
-        }
+        dump_if_node(node, indent);
         break;
 
     case TT_BLOCK:
-        fprintf(stderr, "\n");
-        tt_dump_children(node->block.statements, BUFFER_LENGTH(node->block.statements), indent + 1);
-        if (node->block.result != NULL) {
-            dump_indent(indent + 1);
-            fprintf(stderr, "result:\n");
-            tt_dump(node->block.result, indent + 2);
-        }
+        dump_block(node, indent);
         break;
 
     case TT_LOOP:
@@ -325,5 +318,97 @@ void tt_dump(const TtNode *node, int32_t indent) {
 static void tt_dump_children(TtNode **children, int32_t count, int32_t indent) {
     for (int32_t i = 0; i < count; i++) {
         tt_dump(children[i], indent);
+    }
+}
+
+// ── TT child visitor ──────────────────────────────────────────────────
+
+static void visit_buffer(TtChildVisitor visitor, void *ctx, TtNode **buf, int32_t count) {
+    for (int32_t i = 0; i < count; i++) {
+        visitor(ctx, &buf[i]);
+    }
+}
+
+void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
+    if (node == NULL) {
+        return;
+    }
+    switch (node->kind) {
+    case TT_FILE:
+        visit_buffer(visitor, context, node->file.declarations,
+                     BUFFER_LENGTH(node->file.declarations));
+        break;
+    case TT_FUNCTION_DECLARATION:
+        visit_buffer(visitor, context, node->function_declaration.params,
+                     BUFFER_LENGTH(node->function_declaration.params));
+        if (node->function_declaration.body != NULL) {
+            visitor(context, &node->function_declaration.body);
+        }
+        break;
+    case TT_BLOCK:
+        visit_buffer(visitor, context, node->block.statements,
+                     BUFFER_LENGTH(node->block.statements));
+        if (node->block.result != NULL) {
+            visitor(context, &node->block.result);
+        }
+        break;
+    case TT_VARIABLE_DECLARATION:
+        if (node->variable_declaration.initializer != NULL) {
+            visitor(context, &node->variable_declaration.initializer);
+        }
+        break;
+    case TT_RETURN:
+        if (node->return_statement.value != NULL) {
+            visitor(context, &node->return_statement.value);
+        }
+        break;
+    case TT_ASSIGN:
+        visitor(context, &node->assign.target);
+        visitor(context, &node->assign.value);
+        break;
+    case TT_BINARY:
+        visitor(context, &node->binary.left);
+        visitor(context, &node->binary.right);
+        break;
+    case TT_UNARY:
+        visitor(context, &node->unary.operand);
+        break;
+    case TT_CALL:
+        visitor(context, &node->call.callee);
+        visit_buffer(visitor, context, node->call.arguments, BUFFER_LENGTH(node->call.arguments));
+        break;
+    case TT_IF:
+        visitor(context, &node->if_expression.condition);
+        visitor(context, &node->if_expression.then_body);
+        if (node->if_expression.else_body != NULL) {
+            visitor(context, &node->if_expression.else_body);
+        }
+        break;
+    case TT_ARRAY_LITERAL:
+        visit_buffer(visitor, context, node->array_literal.elements,
+                     BUFFER_LENGTH(node->array_literal.elements));
+        break;
+    case TT_TUPLE_LITERAL:
+        visit_buffer(visitor, context, node->tuple_literal.elements,
+                     BUFFER_LENGTH(node->tuple_literal.elements));
+        break;
+    case TT_INDEX:
+        visitor(context, &node->index_access.object);
+        visitor(context, &node->index_access.index);
+        break;
+    case TT_TUPLE_INDEX:
+        visitor(context, &node->tuple_index.object);
+        break;
+    case TT_TYPE_CONVERSION:
+        visitor(context, &node->type_conversion.operand);
+        break;
+    case TT_MODULE_ACCESS:
+        visitor(context, &node->module_access.object);
+        break;
+    case TT_LOOP:
+        visitor(context, &node->loop.body);
+        break;
+    default:
+        break;
     }
 }

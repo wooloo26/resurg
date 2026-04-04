@@ -51,6 +51,10 @@ TtNode *lowering_make_var_ref(Lowering *low, TtSymbol *symbol, SourceLocation lo
 /** Create a TtIntLit node. */
 TtNode *lowering_make_int_lit(Lowering *low, uint64_t value, const Type *type, TypeKind int_kind,
                               SourceLocation location);
+/** Create a TT_VARIABLE_DECLARATION node with all fields set. */
+TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, const char *name,
+                               const Type *var_type, TtNode *initializer, bool is_mut,
+                               SourceLocation location);
 /** Map a compound-assignment TokenKind to its base arithmetic operator. */
 TokenKind lowering_compound_to_base_op(TokenKind op);
 /** Create a TtCall node for a builtin runtime function. */
@@ -67,6 +71,8 @@ TtNode *lower_expression(Lowering *low, const ASTNode *ast);
 TtNode *lower_block(Lowering *low, const ASTNode *ast);
 /** Lower a NODE_IF (used as both expression and statement). */
 TtNode *lower_statement_if(Lowering *low, const ASTNode *ast);
+/** Lower a NODE_STRING_INTERPOLATION. */
+TtNode *lower_string_interpolation(Lowering *low, const ASTNode *ast);
 /** Lower a NODE_FUNCTION_DECLARATION. */
 TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast);
 
