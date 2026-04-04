@@ -19,6 +19,10 @@
 /**
  * Immutable, reference-counted string.  reference_count == -1 marks a
  * static string literal (no heap allocation).
+ *
+ * @note Heap-allocated strings are currently never freed.  This is an
+ *       intentional simplification until the tracing GC lands (v0.4.0).
+ *       Short-lived test programs are unaffected.
  */
 typedef struct {
     const char *data;

@@ -40,6 +40,10 @@ static RsgString rsg_string_from_format(const char *format, ...) {
 }
 
 // String constructors and conversions.
+//
+// NOTE: Heap-allocated strings (reference_count == 1) are never freed.
+// This is intentional — a tracing GC is planned for v0.4.0.  Until then,
+// every rsg_string_new / rsg_string_concat leaks by design.
 
 RsgString rsg_string_literal(const char *source) {
     return (RsgString){
@@ -65,6 +69,11 @@ RsgString rsg_string_empty(void) {
 }
 
 RsgString rsg_string_concat(RsgString left, RsgString right) {
+    if (left.length > INT32_MAX - right.length) {
+        fprintf(stderr, "fatal: string concatenation overflow\n");
+        // NOLINTNEXTLINE(concurrency-mt-unsafe)
+        exit(1);
+    }
     int32_t length = left.length + right.length;
     char *buffer = checked_malloc(length + 1);
     memcpy(buffer, left.data, left.length);
