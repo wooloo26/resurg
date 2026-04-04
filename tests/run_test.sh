@@ -40,7 +40,7 @@ done < "$RG_FILE"
 case "$TEST_MODE" in
     normal)
         "$RESURG" "$RG_FILE" -o "$BUILD/_test.c"
-        $CC -std=c17 -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS
+        $CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS
         "$BUILD/_test"
         ;;
 
@@ -58,7 +58,7 @@ case "$TEST_MODE" in
 
     runtime_error)
         "$RESURG" "$RG_FILE" -o "$BUILD/_test.c"
-        $CC -std=c17 -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS
+        $CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS
         if "$BUILD/_test" 2>/dev/null; then
             echo "  FAIL  $RG_FILE — expected runtime error but program succeeded"
             exit 1
