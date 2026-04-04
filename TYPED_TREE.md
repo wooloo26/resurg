@@ -26,7 +26,7 @@ Every TT node carries a **resolved type** (never NULL), **desugared** constructs
 
 ## 1. Types — Reuse Sema's Type
 
-TT references Sema's `Type` directly — no parallel type system.
+TT references Sema's `Type` directly — no parallel type system. Monomorphised types use Lowering-owned arenas. Access variant members through accessors (`type_array_element()`, etc.) — never direct field access. Every `TypeKind` must have a `type_equal()` branch.
 
 ```pseudo
 struct Type {
@@ -41,15 +41,7 @@ struct Type {
     nominal:    { decl: *Decl }              // struct/enum/pact
     type_param: { name: string }
 }
-```
 
-- **Arenas:** Monomorphised types and TT nodes use Lowering-owned arenas (not Sema's), freeable independently.
-- **Invariant:** Every new `TypeKind` variant **must** have a `type_equal()` branch.
-- **Accessors:** All variant member access goes through accessor functions (`type_array_element()`, `type_pointee()`, etc.) — never direct field access.
-
-### Parametric Type Utilities
-
-```pseudo
 type_contains_param(type: *Type) -> bool
 type_substitute(arena: *Arena, type: *Type, param_name: string, concrete: *Type) -> *Type
 type_substitute_all(arena: *Arena, type: *Type, param_names: []string,
@@ -68,6 +60,9 @@ type_substitute_all(arena: *Arena, type: *Type, param_names: []string,
 | `T ! E`       | structural                             |
 | Struct / Enum | nominal (same `Decl*`)                 |
 | `fn(…)->R`    | param-wise + return type equal         |
+| `type_param`  | name equality (pre-mono only)          |
+
+After monomorphisation, no `type_param` should remain. `type_contains_param()` returning `true` post-mono is a bug.
 
 ---
 
@@ -78,7 +73,7 @@ struct TtSymbol {
     kind:         TtSymbolKind   // SYM_VAR | SYM_PARAM | SYM_FUNCTION | SYM_TYPE
                                  // SYM_FIELD | SYM_VARIANT | SYM_MODULE
     sema_symbol:  *Symbol
-    is_immut:     bool
+    is_mut:       bool           // binding mutability: var/:= (true) vs immut (false)
     mangled_name: string         // nullable, filled by lowering
     owner:        *TtSymbol      // enclosing struct/enum/module (nullable)
     capture_mode: CaptureMode    // CAPTURE_NONE | BY_VALUE | BY_REF
@@ -88,7 +83,9 @@ struct TtSymbol {
 
 `TtSymbol.kind` is authoritative in TT/codegen. Accessors delegate to Sema: `tt_symbol_name(sym)` → `sym.sema_symbol.name`.
 
-**Prerequisite:** Sema's `Symbol` needs `SymbolKind` enum, `is_immut`, `declaration`, and `owner` fields. See [TYPED_TREE_IMPL.md](TYPED_TREE_IMPL.md) §2.
+**Two mutability axes** (independent despite sharing `is_mut` name):
+- **Binding** — reassignability. `TtSymbol.is_mut`, `TtVarDecl.is_mut`, `TtFieldDecl.is_mut`. `var`/`:=` vs `immut`.
+- **Pointer** — pointee mutation. `TtParam.is_mut`, `TtCallArg.pass_mode`, `Type.pointer.is_mut`. `*T` vs `*mut T`.
 
 ---
 
@@ -104,7 +101,7 @@ struct TtNodeHeader {
 }
 ```
 
-All TT nodes embed `TtNodeHeader` as first member (tagged union). Non-expression nodes have `header.type = TYPE_UNIT`.
+All TT nodes embed `TtNodeHeader` as first member (tagged union). Non-expression nodes: `header.type = TYPE_UNIT`.
 
 ### 3.1 Declarations
 
@@ -113,7 +110,7 @@ struct TtModule         { header; name; declarations: []*TtNode }
 struct TtStructDecl     { header; name; is_public; type_params; fields: []*TtFieldDecl;
                           methods: []*TtFunctionDecl; embeddings: []*Type;
                           conformances: []*TtPactDecl }
-struct TtFieldDecl      { name; type: *Type; default_value: *TtExpr; is_immut }
+struct TtFieldDecl      { name; type: *Type; default_value: *TtExpr; is_mut }  // binding mut
 struct TtEnumDecl       { header; name; is_public; type_params;
                           variants: []*TtVariantDecl; methods: []*TtFunctionDecl }
 struct TtVariantDecl    { name; kind: UNIT|TUPLE|STRUCT;
@@ -124,26 +121,27 @@ struct TtTypeAlias      { header; name; is_public; type_params; underlying: *Typ
 struct TtFunctionDecl   { header; name; is_public; type_params;
                           receiver: *TtParam; params: []*TtParam;
                           return_type: *Type; body: *TtBlock }
-struct TtParam          { symbol: *TtSymbol; name; type: *Type; is_mut }
+struct TtParam          { symbol: *TtSymbol; name; type: *Type; is_mut }  // pointer mut
 struct TtExtensionDecl  { header; target_type: *Type; type_params;
                           methods: []*TtFunctionDecl }
 ```
 
-- `target_type` may contain `TYPE_TYPE_PARAM` for partially-parameterised extensions.
-- Embedding conflict: innermost wins; same-depth ambiguity is a lowering error.
+**Default method dispatch:** Default pact methods are monomorphised into each conforming type (Rust-style), substituting `Self`. `TtCall.dispatch_kind`: `STATIC` | `DYNAMIC` (vtable).
+
+**Extensions:** Lowering maps base type → `TtExtensionDecl` list. Struct's own method wins. Duplicate extension methods for the same target is a lowering error. Parameterised extensions monomorphise alongside their target.
+
+**Embedding resolution:** Promoted fields/methods resolved by shortest embedding chain depth (DFS). Shallowest wins; same-depth ambiguity → error. Diamond with same source type → deduplicated; different source types → error.
 
 ### 3.2 Statements
 
 ```pseudo
-struct TtVarDecl   { header; symbol; name; type; initializer: *TtExpr; is_immut }
+struct TtVarDecl   { header; symbol; name; type; initializer: *TtExpr; is_mut }  // binding mut
 struct TtDefer     { header; body: *TtBlock }
 struct TtReturn    { header; value: *TtExpr }
 struct TtAssign    { header; target: *TtExpr; value: *TtExpr }
 struct TtBreak     { header; value: *TtExpr }   // nullable; TYPE_UNIT when absent
 struct TtContinue  { header }                    // header.type = TYPE_UNIT
 ```
-
-All loop forms desugar into `TtLoop` using `TtBreak`/`TtContinue` for control flow (§4).
 
 ### 3.3 Expressions
 
@@ -157,16 +155,15 @@ enum TtExprKind {
     // Control flow: IF, MATCH, BLOCK, LOOP
     // Special: CLOSURE, PROPAGATE, PANIC, RECOVER
 }
-```
 
-```pseudo
 struct TtIntLit       { header; value: u64 }
 struct TtVarRef       { header; symbol: *TtSymbol }
 struct TtFieldAccess  { header; object: *TtExpr; field: *TtSymbol }
 struct TtCall         { header; callee: *TtExpr; arguments: []*TtCallArg;
                         type_args: []*Type;
                         dispatch_kind: STATIC|DYNAMIC; receiver: *TtExpr }
-struct TtCallArg      { name; value: *TtExpr; is_mut }
+struct TtCallArg      { name; value: *TtExpr; pass_mode: BY_VALUE|BY_REF|BY_MUT_REF }
+struct TtTypeConv     { header; operand: *TtExpr; target_type: *Type }
 struct TtClosure      { header; params; body: *TtExpr; captures: []*TtSymbol }
 struct TtIf           { header; condition; then_body; else_body }
 struct TtBlock        { header; statements: []*TtNode; result: *TtExpr }
@@ -177,9 +174,10 @@ struct TtHeapAlloc    { header; inner: *TtExpr }
 struct TtLoop         { header; body: *TtBlock }
 ```
 
-- `TtIf` handles boolean conditions only; if-let desugars to `TtMatchExpr`.
-- `TtBlock.result`: tail expression for expression-blocks (not in `statements`). NULL for statement-blocks (`header.type = TYPE_UNIT`).
-- `TtPropagate.header.type` = enclosing function/closure's return type. Lowering maintains a return-type stack for closures.
+- `TtIf`: boolean only; if-let → `TtMatchExpr`.
+- `TtBlock.result`: tail expression (not in `statements`); NULL for statement-blocks.
+- `TtPropagate.header.type` = enclosing function/closure return type. Forbidden inside `TtDefer`.
+- `TtTypeConv`: explicit cast (`i64(100)`). Safe widenings and explicit narrowings only.
 
 ### 3.4 Patterns
 
@@ -230,7 +228,7 @@ struct TtMatchArm  { pattern; guard: *TtExpr; body: *TtExpr }
 | embedding                     | promoted fields/methods copied into `TtStructDecl`             |
 | generic `fn max<T: Ord>`      | monomorphised: `max_i32`, `max_f64`, …                         |
 
-Side-effect targets in compound assignments bind to a temporary. Range ends also bind to temporaries.
+Compound assignment side-effect targets and range ends bind to temporaries.
 
 ---
 
@@ -238,22 +236,26 @@ Side-effect targets in compound assignments bind to a temporary. Range ends also
 
 ### Type Mapping
 
-| Type     | C17                  | C++20              | Go                  | TypeScript    |
-| -------- | -------------------- | ------------------ | ------------------- | ------------- |
-| `BOOL`   | `bool`               | `bool`             | `bool`              | `boolean`     |
-| `I32`    | `int32_t`            | `std::int32_t`     | `int32`             | `number`      |
-| `I64`    | `int64_t`            | `std::int64_t`     | `int64`             | `bigint`      |
-| `F64`    | `double`             | `double`           | `float64`           | `number`      |
-| `CHAR`   | `uint32_t`           | `char32_t`         | `rune`              | `string`      |
-| `STRING` | `RsgString`          | `std::string`      | `string`            | `string`      |
-| `UNIT`   | `void`               | `void`             | `struct{}`          | `void`        |
-| `[N]T`   | `T arr[N]`           | `std::array<T,N>`  | `[N]T`              | `T[]`         |
-| `[]T`    | `RsgSlice_T`         | `std::span<T>`     | `[]T`               | `T[]`         |
-| `(A,B)`  | `struct{A _0;B _1;}` | `std::tuple<A,B>`  | `struct{_0 A;_1 B}` | `[A, B]`      |
-| `*T`     | `T*`                 | `T*`/`shared_ptr`  | `*T`                | `T`           |
-| `?T`     | `RsgOption_T`        | `std::optional<T>` | `*T`/nil            | `T \| null`   |
-| `T!E`    | `RsgResult_T_E`      | `std::expected`    | `(T, error)`        | `Result<T,E>` |
-| `fn→R`   | function pointer     | `std::function`    | `func(…) R`         | `(…) => R`    |
+| Type     | C17                  | C++20               | Go                  | TypeScript        |
+| -------- | -------------------- | ------------------- | ------------------- | ----------------- |
+| `BOOL`   | `bool`               | `bool`              | `bool`              | `boolean`         |
+| `I8–I64` | `int8_t`–`int64_t`   | `std::int8_t`–      | `int8`–`int64`      | `number`/`bigint` |
+| `I128`   | `__int128`           | `__int128`          | `big.Int`           | `bigint`          |
+| `U8–U64` | `uint8_t`–`uint64_t` | `std::uint8_t`–     | `uint8`–`uint64`    | `number`/`bigint` |
+| `U128`   | `unsigned __int128`  | `unsigned __int128` | `big.Int`           | `bigint`          |
+| `ISIZE`  | `intptr_t`           | `std::intptr_t`     | `int`               | `number`          |
+| `USIZE`  | `size_t`             | `std::size_t`       | `uint`              | `number`          |
+| `F32/64` | `float`/`double`     | `float`/`double`    | `float32`/`float64` | `number`          |
+| `CHAR`   | `uint32_t`           | `char32_t`          | `rune`              | `string`          |
+| `STRING` | `RsgString`          | `std::string`       | `string`            | `string`          |
+| `UNIT`   | `void`               | `void`              | `struct{}`          | `void`            |
+| `[N]T`   | `T arr[N]`           | `std::array<T,N>`   | `[N]T`              | `T[]`             |
+| `[]T`    | `RsgSlice_T`         | `std::span<T>`      | `[]T`               | `T[]`             |
+| `(A,B)`  | `struct{A _0;B _1;}` | `std::tuple<A,B>`   | `struct{_0 A;_1 B}` | `[A, B]`          |
+| `*T`     | `T*`                 | `T*`/`shared_ptr`   | `*T`                | `T`               |
+| `?T`     | `RsgOption_T`        | `std::optional<T>`  | `*T`/nil            | `T \| null`       |
+| `T!E`    | `RsgResult_T_E`      | `std::expected`     | `(T, error)`        | `Result<T,E>`     |
+| `fn→R`   | function pointer     | `std::function`     | `func(…) R`         | `(…) => R`        |
 
 `CHAR` = Unicode scalar value (32-bit), not C's `char`.
 
@@ -272,16 +274,19 @@ Side-effect targets in compound assignments bind to a temporary. Range ends also
 | `TtPanic`      | `fprintf + abort`      | `std::terminate`        | `panic()`         | `throw new Error()` |
 | `TtRecover`    | `setjmp`/`longjmp`     | `try`/`catch`           | `recover()`       | `try`/`catch`       |
 
+#### C17 `setjmp`/`longjmp` Rules
+
+`TtPanic` emits defer cleanup inline before `longjmp`. Locals between `setjmp`/`longjmp` marked `volatile`. No `restrict` in functions containing `setjmp`. Other backends use native exceptions.
+
 ---
 
-## 6. Example: End-to-End Lowering
+## 6. Example
 
 ```rsg
 fn divide(a: f32, b: f32) -> f32 ! str {
     if b == 0.0 { Err("division by zero") }
     else { Ok(a / b) }
 }
-
 fn calc() -> f32 ! str {
     x := divide(10.0, 2.0)!
     y := divide(x, 5.0)!
@@ -302,7 +307,7 @@ TtFunctionDecl "calc"
   body:
     VarDecl x:F32 = Propagate(Call(divide, [10.0, 2.0]), err=STRING)
     VarDecl y:F32 = Propagate(Call(divide, [x, 5.0]), err=STRING)
-    result → VarRef(y)
+    result → Ok(VarRef(y))
 ```
 
 ---
@@ -313,40 +318,51 @@ TtFunctionDecl "calc"
 2. **No unresolved names.** Every identifier → `TtVarRef` → `TtSymbol` → `Symbol`.
 3. **No syntactic sugar.** All desugaring in lowering.
 4. **Exhaustive patterns.** Guaranteed by Sema.
-5. **Monomorphised generics.** Each instantiation = separate declaration, deduplicated by mangled name.
-6. **Immutability tracked.** `TtSymbol.is_immut` resolved; back-ends emit `const`/`readonly`.
+5. **Monomorphised generics.** Deduplicated by mangled name.
+6. **Mutability tracked.** Binding + pointer mutability fully resolved.
 7. **Back-end independence.** No target-specific info in TT nodes.
 8. **Source locations preserved.** For diagnostics from TT Passes.
-9. **`recover()` is a builtin.** → `TtCall { callee=builtin_recover }` → `?str`. Valid only inside `TtDefer`; Sema enforces.
-10. **Return type wrapping.** Lowering inserts `Ok(…)`/`Some(…)` so `TtReturn.value.type` always equals `TtFunctionDecl.return_type`.
-11. **Destructuring desugared.** → individual `TtVarDecl` + `TtFieldAccess`/`TtTupleIndex`.
+9. **`recover()` builtin** → `TtCall { callee=builtin_recover }` → `?str`. Only in `TtDefer`.
+10. **Return type wrapping.** Lowering inserts `Ok(…)`/`Some(…)` so return values match declared type.
+11. **Destructuring desugared** → individual `TtVarDecl` + `TtFieldAccess`/`TtTupleIndex`.
 12. **Binary op type consistency.** `left.type == right.type == header.type` for numeric ops.
-13. **Closure scoping.** `TtReturn` and `TtPropagate` in closures use the closure's return type, not the enclosing function's.
-14. **`TtBlock.result` separate from `statements`.** Expression-blocks: tail in `result`. Statement-blocks: `result` is NULL.
-15. **`TtBreak`/`TtContinue` required in `TtLoop`.** All loop forms desugar into `TtLoop` with explicit break/continue.
-16. **TT trusts Sema.** No re-validation of type compatibility, exhaustiveness, or scope validity.
+13. **Closure scoping.** `TtReturn`/`TtPropagate` use closure's return type, not enclosing function's.
+14. **`TtBlock.result` separate from `statements`.** NULL for statement-blocks.
+15. **All loops → `TtLoop`** with explicit `TtBreak`/`TtContinue`.
+16. **TT trusts Sema.** No re-validation.
+
+### Lowering Error Model
+
+- Accumulate errors, emit partial TT. Poison nodes (`TYPE_ERROR`) for unlowerable constructs.
+- Fatal threshold: 50 errors (configurable). Diagnostics via `rsg_error()`.
+
+### Constant Folding
+
+- **Integer overflow:** wrapping (unsigned) / two's complement (signed).
+- **Float:** IEEE 754. `0.0 / 0.0` → `NaN`.
+- **Dead branches:** constant `TtBoolLit` condition → eliminated.
 
 ---
 
 ## 8. Mangled Name Convention
 
-`tt_mangle_name()` — deterministic, injective, testable.
+`tt_mangle_name()` — deterministic, injective. Format: `_R{module_seg}_{name_seg}_{type_params}` (`_R` prefix reserved). Length-prefixed segments (Itanium-inspired).
 
-**Format:** `{module}_{name}_{type1}_{type2}_{...}`
+| Type            | Mangled       | Example                         |
+| --------------- | ------------- | ------------------------------- |
+| Primitives      | short tag     | `b`, `i32`, `f64`, `s`          |
+| `[N]T`          | `A{N}{T}`     | `A3i32` → `[3]i32`              |
+| `[]T`           | `S{T}`        | `Su8` → `[]u8`                  |
+| `(A, B)`        | `T{n}{A}{B}`  | `T2i32s` → `(i32, str)`         |
+| `*T` / `*mut T` | `P{T}`/`M{T}` | `Pi32` / `Mi32`                 |
+| `?T`            | `O{T}`        | `Os` → `?str`                   |
+| `T ! E`         | `E{T}{E}`     | `Ef32s` → `f32 ! str`           |
+| `fn(A,B)->R`    | `F{n}{…}{R}`  | `F2i32sb` → `fn(i32,str)->bool` |
+| Nominal         | `{len}{name}` | `3Vec`, `7HashMap`              |
 
-| Type            | Mangled form             | Example                  |
-| --------------- | ------------------------ | ------------------------ |
-| Primitives      | lowercase kind           | `i32`, `f64`, `str`      |
-| `[N]T`          | `arr{N}_{T}`             | `arr3_i32`               |
-| `[]T`           | `slice_{T}`              | `slice_u8`               |
-| `(A, B)`        | `tup_{A}_{B}`            | `tup_i32_str`            |
-| `*T` / `*mut T` | `ptr_{T}` / `mutptr_{T}` | `ptr_i32` / `mutptr_i32` |
-| `?T`            | `opt_{T}`                | `opt_str`                |
-| `T ! E`         | `res_{T}_{E}`            | `res_f32_str`            |
-| `fn(A,B)->R`    | `fn_{A}_{B}_to_{R}`      | `fn_i32_str_to_bool`     |
-| Nominal         | declaration name         | `Vec`, `HashMap`         |
-| Nested generics | recursive                | `Pair_i32_Pair_i32_str`  |
+```
+_R4math_3max_i32     // module math, fn max<i32>
+_R3net_4Conn         // module net, struct Conn
+```
 
-**Reserved prefixes** (`arr`, `slice`, `tup`, `ptr`, `mutptr`, `opt`, `res`, `fn`) — user types must not use these names. `_to_` separates params from return type in function mangling.
-
-Cross-module: mangled names are module-qualified; same instantiation emitted once.
+**Deduplication:** Keyed by mangled name using defining module. `Vec<i32>` from modules A and B → `_R3std_3Vec_i32`, emitted once.

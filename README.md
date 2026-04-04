@@ -4,7 +4,7 @@ Statically typed, compiled. ADTs, pattern matching, value-based errors. **Extens
 
 ## Compiler
 
-Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go.
+Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Typescript.
 
 ---
 
