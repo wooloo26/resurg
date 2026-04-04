@@ -1,3 +1,5 @@
+#include <sys/stat.h>
+
 #include "codegen.h"
 #include "common.h"
 #include "lexer.h"
@@ -13,6 +15,14 @@
  * MAX_SOURCE_SIZE.  The caller owns the returned memory.
  */
 static char *read_file(const char *path) {
+    struct stat file_stat;
+    if (stat(path, &file_stat) != 0) {
+        rsg_fatal("cannot stat '%s'", path);
+    }
+    if (!S_ISREG(file_stat.st_mode)) {
+        rsg_fatal("'%s' is not a regular file", path);
+    }
+
     FILE *file_handle = fopen(path, "rb");
     if (file_handle == NULL) {
         rsg_fatal("cannot open '%s'", path);
