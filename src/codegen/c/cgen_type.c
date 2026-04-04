@@ -30,17 +30,17 @@ static void register_compound_type(CodeGenerator *generator, const Type *type) {
     }
 }
 
-static void collect_compound_types_recurse(CodeGenerator *generator, const ASTNode *node);
+static void collect_compound_types_recurse(CodeGenerator *generator, const TtNode *node);
 
-/** Recurse over each element of a stretchy buffer of ASTNode pointers. */
-static void recurse_children(CodeGenerator *generator, ASTNode **children, int32_t count) {
+/** Recurse over each element of a stretchy buffer of TtNode pointers. */
+static void recurse_children(CodeGenerator *generator, TtNode **children, int32_t count) {
     for (int32_t i = 0; i < count; i++) {
         collect_compound_types_recurse(generator, children[i]);
     }
 }
 
 /** Recursively walk @p node collecting all array/tuple types. */
-static void collect_compound_types_recurse(CodeGenerator *generator, const ASTNode *node) {
+static void collect_compound_types_recurse(CodeGenerator *generator, const TtNode *node) {
     if (node == NULL) {
         return;
     }
@@ -48,85 +48,78 @@ static void collect_compound_types_recurse(CodeGenerator *generator, const ASTNo
         register_compound_type(generator, node->type);
     }
     switch (node->kind) {
-    case NODE_FILE:
+    case TT_FILE:
         recurse_children(generator, node->file.declarations,
                          BUFFER_LENGTH(node->file.declarations));
         break;
-    case NODE_FUNCTION_DECLARATION:
-        recurse_children(generator, node->function_declaration.parameters,
-                         BUFFER_LENGTH(node->function_declaration.parameters));
+    case TT_FUNCTION_DECLARATION:
+        recurse_children(generator, node->function_declaration.params,
+                         BUFFER_LENGTH(node->function_declaration.params));
         collect_compound_types_recurse(generator, node->function_declaration.body);
         break;
-    case NODE_BLOCK:
+    case TT_BLOCK:
         recurse_children(generator, node->block.statements, BUFFER_LENGTH(node->block.statements));
         collect_compound_types_recurse(generator, node->block.result);
         break;
-    case NODE_VARIABLE_DECLARATION:
+    case TT_VARIABLE_DECLARATION:
         collect_compound_types_recurse(generator, node->variable_declaration.initializer);
         break;
-    case NODE_EXPRESSION_STATEMENT:
+    case TT_EXPRESSION_STATEMENT:
         collect_compound_types_recurse(generator, node->expression_statement.expression);
         break;
-    case NODE_BINARY:
+    case TT_RETURN:
+        collect_compound_types_recurse(generator, node->return_statement.value);
+        break;
+    case TT_BINARY:
         collect_compound_types_recurse(generator, node->binary.left);
         collect_compound_types_recurse(generator, node->binary.right);
         break;
-    case NODE_UNARY:
+    case TT_UNARY:
         collect_compound_types_recurse(generator, node->unary.operand);
         break;
-    case NODE_CALL:
+    case TT_CALL:
         collect_compound_types_recurse(generator, node->call.callee);
         recurse_children(generator, node->call.arguments, BUFFER_LENGTH(node->call.arguments));
         break;
-    case NODE_IF:
+    case TT_IF:
         collect_compound_types_recurse(generator, node->if_expression.condition);
         collect_compound_types_recurse(generator, node->if_expression.then_body);
         collect_compound_types_recurse(generator, node->if_expression.else_body);
         break;
-    case NODE_ASSIGN:
+    case TT_ASSIGN:
         collect_compound_types_recurse(generator, node->assign.target);
         collect_compound_types_recurse(generator, node->assign.value);
         break;
-    case NODE_COMPOUND_ASSIGN:
-        collect_compound_types_recurse(generator, node->compound_assign.target);
-        collect_compound_types_recurse(generator, node->compound_assign.value);
-        break;
-    case NODE_ARRAY_LITERAL:
+    case TT_ARRAY_LITERAL:
         recurse_children(generator, node->array_literal.elements,
                          BUFFER_LENGTH(node->array_literal.elements));
         break;
-    case NODE_TUPLE_LITERAL:
+    case TT_TUPLE_LITERAL:
         recurse_children(generator, node->tuple_literal.elements,
                          BUFFER_LENGTH(node->tuple_literal.elements));
         break;
-    case NODE_INDEX:
+    case TT_INDEX:
         collect_compound_types_recurse(generator, node->index_access.object);
         collect_compound_types_recurse(generator, node->index_access.index);
         break;
-    case NODE_TYPE_CONVERSION:
+    case TT_TUPLE_INDEX:
+        collect_compound_types_recurse(generator, node->tuple_index.object);
+        break;
+    case TT_TYPE_CONVERSION:
         collect_compound_types_recurse(generator, node->type_conversion.operand);
         break;
-    case NODE_MEMBER:
-        collect_compound_types_recurse(generator, node->member.object);
+    case TT_MODULE_ACCESS:
+        collect_compound_types_recurse(generator, node->module_access.object);
         break;
-    case NODE_STRING_INTERPOLATION:
-        recurse_children(generator, node->string_interpolation.parts,
-                         BUFFER_LENGTH(node->string_interpolation.parts));
-        break;
-    case NODE_LOOP:
+    case TT_LOOP:
         collect_compound_types_recurse(generator, node->loop.body);
-        break;
-    case NODE_FOR:
-        collect_compound_types_recurse(generator, node->for_loop.start);
-        collect_compound_types_recurse(generator, node->for_loop.end);
-        collect_compound_types_recurse(generator, node->for_loop.body);
         break;
     default:
         break;
     }
 }
 
-void codegen_collect_compound_types(CodeGenerator *generator, const ASTNode *node) {
+void codegen_collect_compound_types(CodeGenerator *generator, const TtNode *node) {
     collect_compound_types_recurse(generator, node);
 }
 

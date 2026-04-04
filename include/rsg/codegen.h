@@ -1,14 +1,14 @@
 #ifndef RG_CODEGEN_H
 #define RG_CODEGEN_H
 
-#include "ast/ast.h"
+#include "types/type_tree.h"
 
 /**
  * @file codegen.h
- * @brief Code generator - emits C17 source from a type-checked AST.
+ * @brief Code generator - emits C17 source from a Typed Tree.
  *
- * Handles function mangling, variable shadowing, string interpolation,
- * ternary optimisation, and constant folding of integer expressions.
+ * Handles function mangling, variable shadowing, ternary optimisation,
+ * and constant folding of integer expressions.
  */
 typedef struct VariableEntry VariableEntry;
 typedef struct CodeGenerator CodeGenerator;
@@ -24,6 +24,6 @@ void code_generator_destroy(CodeGenerator *generator);
  * Emit the full C translation unit for @p file (preamble, forward decls,
  * function bodies, top-level statements).
  */
-void code_generator_emit(CodeGenerator *generator, const ASTNode *file);
+void code_generator_emit(CodeGenerator *generator, const TtNode *file);
 
 #endif // RG_CODEGEN_H

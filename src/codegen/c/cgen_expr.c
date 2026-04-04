@@ -6,11 +6,11 @@
  * Return the simple result expression from a branch body, or NULL if the
  * body contains statements that prevent ternary emission.
  */
-static const ASTNode *simple_branch_result(const ASTNode *body) {
+static const TtNode *simple_branch_result(const TtNode *body) {
     if (body == NULL) {
         return NULL;
     }
-    if (body->kind == NODE_BLOCK) {
+    if (body->kind == TT_BLOCK) {
         if (BUFFER_LENGTH(body->block.statements) != 0 || body->block.result == NULL) {
             return NULL;
         }
@@ -24,17 +24,22 @@ static const ASTNode *simple_branch_result(const ASTNode *body) {
  * Return true if the node evaluates to a C expression string without
  * emitting any side-effecting lines.
  */
-static bool is_pure_expression(const ASTNode *node) {
+static bool is_pure_expression(const TtNode *node) {
     if (node == NULL) {
         return false;
     }
     switch (node->kind) {
-    case NODE_LITERAL:
-    case NODE_IDENTIFIER:
+    case TT_BOOL_LITERAL:
+    case TT_INT_LITERAL:
+    case TT_FLOAT_LITERAL:
+    case TT_CHAR_LITERAL:
+    case TT_STRING_LITERAL:
+    case TT_UNIT_LITERAL:
+    case TT_VARIABLE_REFERENCE:
         return true;
-    case NODE_UNARY:
+    case TT_UNARY:
         return is_pure_expression(node->unary.operand);
-    case NODE_BINARY:
+    case TT_BINARY:
         return is_pure_expression(node->binary.left) && is_pure_expression(node->binary.right);
     default:
         return false;
@@ -45,76 +50,26 @@ static bool is_pure_expression(const ASTNode *node) {
  * Return true if the if-expression has both branches, and both produce
  * a trivial (pure) result — safe to emit as `cond ? a : b`.
  */
-static bool is_simple_ternary(const ASTNode *node) {
-    if (node->kind != NODE_IF || node->if_expression.else_body == NULL) {
+static bool is_simple_ternary(const TtNode *node) {
+    if (node->kind != TT_IF || node->if_expression.else_body == NULL) {
         return false;
     }
-    const ASTNode *then_result = simple_branch_result(node->if_expression.then_body);
+    const TtNode *then_result = simple_branch_result(node->if_expression.then_body);
     if (then_result == NULL || !is_pure_expression(then_result)) {
         return false;
     }
-    const ASTNode *else_body = node->if_expression.else_body;
-    if (else_body->kind == NODE_IF) {
+    const TtNode *else_body = node->if_expression.else_body;
+    if (else_body->kind == TT_IF) {
         return false; // else-if chains stay as statements
     }
-    const ASTNode *else_result = simple_branch_result(else_body);
+    const TtNode *else_result = simple_branch_result(else_body);
     return else_result != NULL && is_pure_expression(else_result);
-}
-
-// ── String conversion for interpolation ────────────────────────────────
-
-/** Wrap @p value with a cast and a conversion call: `func((cast)(value))`. */
-static const char *convert_with_cast(CodeGenerator *generator, const char *value, const char *cast,
-                                     const char *func) {
-    const char *argument =
-        cast != NULL ? arena_sprintf(generator->arena, "(%s)(%s)", cast, value) : value;
-    return arena_sprintf(generator->arena, "%s(%s)", func, argument);
-}
-
-/**
- * Convert an expression node to an RsgString value for interpolation,
- * wrapping non-string types with the appropriate rsg_string_from_* call.
- */
-static const char *string_convert_expression(CodeGenerator *generator, const ASTNode *node) {
-    const char *value = codegen_emit_expression(generator, node);
-    const Type *type = node->type;
-    if (type == NULL || type->kind == TYPE_STRING) {
-        return value;
-    }
-    switch (type->kind) {
-    case TYPE_BOOL:
-        return convert_with_cast(generator, value, NULL, "rsg_string_from_bool");
-    case TYPE_I8:
-    case TYPE_I16:
-    case TYPE_I32:
-        return convert_with_cast(generator, value, "int32_t", "rsg_string_from_i32");
-    case TYPE_I64:
-    case TYPE_I128:
-    case TYPE_ISIZE:
-        return convert_with_cast(generator, value, "int64_t", "rsg_string_from_i64");
-    case TYPE_U8:
-    case TYPE_U16:
-    case TYPE_U32:
-        return convert_with_cast(generator, value, "uint32_t", "rsg_string_from_u32");
-    case TYPE_U64:
-    case TYPE_U128:
-    case TYPE_USIZE:
-        return convert_with_cast(generator, value, "uint64_t", "rsg_string_from_u64");
-    case TYPE_F32:
-        return convert_with_cast(generator, value, NULL, "rsg_string_from_f32");
-    case TYPE_F64:
-        return convert_with_cast(generator, value, NULL, "rsg_string_from_f64");
-    case TYPE_CHAR:
-        return convert_with_cast(generator, value, NULL, "rsg_string_from_char");
-    default:
-        return convert_with_cast(generator, value, "int32_t", "rsg_string_from_i32");
-    }
 }
 
 // ── Per-node expression emitters ───────────────────────────────────────
 
 /** Emit a comma-separated list of expressions from @p nodes into a single string. */
-static const char *join_expressions(CodeGenerator *generator, ASTNode **nodes, int32_t count) {
+static const char *join_expressions(CodeGenerator *generator, TtNode **nodes, int32_t count) {
     const char *result = "";
     for (int32_t i = 0; i < count; i++) {
         const char *elem = codegen_emit_expression(generator, nodes[i]);
@@ -123,78 +78,81 @@ static const char *join_expressions(CodeGenerator *generator, ASTNode **nodes, i
     return result;
 }
 
-static const char *emit_literal_expression(CodeGenerator *generator, const ASTNode *node) {
-    switch (node->literal.kind) {
-    case LITERAL_BOOL:
-        return node->literal.boolean_value ? "true" : "false";
-    case LITERAL_I8:
-    case LITERAL_I16:
-    case LITERAL_I32:
-        return arena_sprintf(generator->arena, "%lld",
-                             (long long)(int64_t)node->literal.integer_value);
-    case LITERAL_I64:
-    case LITERAL_I128:
-    case LITERAL_ISIZE:
-        return arena_sprintf(generator->arena, "%lldLL",
-                             (long long)(int64_t)node->literal.integer_value);
-    case LITERAL_U8:
-    case LITERAL_U16:
-    case LITERAL_U32:
-        return arena_sprintf(generator->arena, "%lluU",
-                             (unsigned long long)node->literal.integer_value);
-    case LITERAL_U64:
-    case LITERAL_U128:
-    case LITERAL_USIZE:
-        return arena_sprintf(generator->arena, "%lluULL",
-                             (unsigned long long)node->literal.integer_value);
-    case LITERAL_F32:
-        return codegen_format_float32(generator, node->literal.float64_value);
-    case LITERAL_F64:
-        return codegen_format_float64(generator, node->literal.float64_value);
-    case LITERAL_CHAR:
-        return codegen_c_char_escape(generator, node->literal.char_value);
-    case LITERAL_STRING: {
-        const char *escaped = codegen_c_string_escape(generator, node->literal.string_value);
-        return arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")", escaped);
-    }
-    case LITERAL_UNIT:
-        return "(void)0";
-    }
-    return "0";
+static const char *emit_bool_literal(const TtNode *node) {
+    return node->bool_literal.value ? "true" : "false";
 }
 
-static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_int_literal(CodeGenerator *generator, const TtNode *node) {
+    TypeKind kind = node->int_literal.int_kind;
+    uint64_t value = node->int_literal.value;
+    switch (kind) {
+    case TYPE_I8:
+    case TYPE_I16:
+    case TYPE_I32:
+        return arena_sprintf(generator->arena, "%lld", (long long)(int64_t)value);
+    case TYPE_I64:
+    case TYPE_I128:
+    case TYPE_ISIZE:
+        return arena_sprintf(generator->arena, "%lldLL", (long long)(int64_t)value);
+    case TYPE_U8:
+    case TYPE_U16:
+    case TYPE_U32:
+        return arena_sprintf(generator->arena, "%lluU", (unsigned long long)value);
+    case TYPE_U64:
+    case TYPE_U128:
+    case TYPE_USIZE:
+        return arena_sprintf(generator->arena, "%lluULL", (unsigned long long)value);
+    default:
+        return arena_sprintf(generator->arena, "%lld", (long long)(int64_t)value);
+    }
+}
+
+static const char *emit_float_literal(CodeGenerator *generator, const TtNode *node) {
+    if (node->float_literal.float_kind == TYPE_F32) {
+        return codegen_format_float32(generator, node->float_literal.value);
+    }
+    return codegen_format_float64(generator, node->float_literal.value);
+}
+
+static const char *emit_string_literal(CodeGenerator *generator, const TtNode *node) {
+    const char *escaped = codegen_c_string_escape(generator, node->string_literal.value);
+    return arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")", escaped);
+}
+
+static const char *emit_unary_expression(CodeGenerator *generator, const TtNode *node) {
     // Fold negation into integer/float literals to avoid overflow issues
-    if (node->unary.op == TOKEN_MINUS && node->unary.operand->kind == NODE_LITERAL) {
-        const ASTNode *literal = node->unary.operand;
-        switch (literal->literal.kind) {
-        case LITERAL_I8:
-        case LITERAL_I16:
-            return arena_sprintf(generator->arena, "%lld",
-                                 -(long long)(int64_t)literal->literal.integer_value);
-        case LITERAL_I32: {
-            int64_t negated = -(int64_t)literal->literal.integer_value;
+    if (node->unary.op == TOKEN_MINUS && node->unary.operand->kind == TT_INT_LITERAL) {
+        const TtNode *literal = node->unary.operand;
+        TypeKind kind = literal->int_literal.int_kind;
+        uint64_t value = literal->int_literal.value;
+        switch (kind) {
+        case TYPE_I8:
+        case TYPE_I16:
+            return arena_sprintf(generator->arena, "%lld", -(long long)(int64_t)value);
+        case TYPE_I32: {
+            int64_t negated = -(int64_t)value;
             if (negated == (int64_t)(-2147483647 - 1)) {
                 return "(-2147483647 - 1)";
             }
             return arena_sprintf(generator->arena, "%lld", (long long)negated);
         }
-        case LITERAL_I64:
-        case LITERAL_I128:
-        case LITERAL_ISIZE: {
-            uint64_t value = literal->literal.integer_value;
+        case TYPE_I64:
+        case TYPE_I128:
+        case TYPE_ISIZE:
             if (value == (uint64_t)9223372036854775808ULL) {
                 return "(-9223372036854775807LL - 1)";
             }
             return arena_sprintf(generator->arena, "%lldLL", -(long long)(int64_t)value);
-        }
-        case LITERAL_F32:
-            return codegen_format_float32(generator, -literal->literal.float64_value);
-        case LITERAL_F64:
-            return codegen_format_float64(generator, -literal->literal.float64_value);
         default:
             break;
         }
+    }
+    if (node->unary.op == TOKEN_MINUS && node->unary.operand->kind == TT_FLOAT_LITERAL) {
+        const TtNode *literal = node->unary.operand;
+        if (literal->float_literal.float_kind == TYPE_F32) {
+            return codegen_format_float32(generator, -literal->float_literal.value);
+        }
+        return codegen_format_float64(generator, -literal->float_literal.value);
     }
     const char *operand = codegen_emit_expression(generator, node->unary.operand);
     if (node->unary.op == TOKEN_BANG) {
@@ -207,19 +165,19 @@ static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode
 }
 
 /** Attempt to constant-fold a binary op on two i32 literals. Returns NULL if not foldable. */
-static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node) {
-    const ASTNode *left_operand = node->binary.left;
-    const ASTNode *right_operand = node->binary.right;
+static const char *fold_i32_binary(CodeGenerator *generator, const TtNode *node) {
+    const TtNode *left_operand = node->binary.left;
+    const TtNode *right_operand = node->binary.right;
 
-    bool both_i32 = left_operand->kind == NODE_LITERAL && right_operand->kind == NODE_LITERAL &&
-                    left_operand->literal.kind == LITERAL_I32 &&
-                    right_operand->literal.kind == LITERAL_I32;
+    bool both_i32 = left_operand->kind == TT_INT_LITERAL && right_operand->kind == TT_INT_LITERAL &&
+                    left_operand->int_literal.int_kind == TYPE_I32 &&
+                    right_operand->int_literal.int_kind == TYPE_I32;
     if (!both_i32) {
         return NULL;
     }
 
-    int64_t left_value = (int64_t)left_operand->literal.integer_value;
-    int64_t right_value = (int64_t)right_operand->literal.integer_value;
+    int64_t left_value = (int64_t)left_operand->int_literal.value;
+    int64_t right_value = (int64_t)right_operand->int_literal.value;
     int64_t result;
     bool folded = true;
     switch (node->binary.op) {
@@ -304,14 +262,14 @@ static const char *emit_tuple_comparison(CodeGenerator *generator, const Type *t
     return arena_sprintf(generator->arena, "(%s)", result);
 }
 
-static const char *emit_binary_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_binary_expression(CodeGenerator *generator, const TtNode *node) {
     const char *folded = fold_i32_binary(generator, node);
     if (folded != NULL) {
         return folded;
     }
 
-    const ASTNode *left_operand = node->binary.left;
-    const ASTNode *right_operand = node->binary.right;
+    const TtNode *left_operand = node->binary.left;
+    const TtNode *right_operand = node->binary.right;
     const char *left = codegen_emit_expression(generator, left_operand);
     const char *right = codegen_emit_expression(generator, right_operand);
 
@@ -344,7 +302,15 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     return arena_sprintf(generator->arena, "(%s %s %s)", left, bin_op, right);
 }
 
-static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *node) {
+/** Return true if the callee is an assert builtin. */
+static bool is_assert_call(const TtNode *node) {
+    if (node->call.callee->kind != TT_VARIABLE_REFERENCE) {
+        return false;
+    }
+    return strcmp(tt_symbol_name(node->call.callee->variable_reference.symbol), "assert") == 0;
+}
+
+static const char *emit_assert_call(CodeGenerator *generator, const TtNode *node) {
     int32_t argument_count = BUFFER_LENGTH(node->call.arguments);
     const char *condition = "0";
     if (argument_count > 0) {
@@ -352,11 +318,11 @@ static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *nod
     }
     const char *message = "NULL";
     if (argument_count > 1) {
-        ASTNode *message_node = node->call.arguments[1];
-        if (message_node->kind == NODE_LITERAL && message_node->literal.kind == LITERAL_STRING) {
+        const TtNode *message_node = node->call.arguments[1];
+        if (message_node->kind == TT_STRING_LITERAL) {
             message = arena_sprintf(
                 generator->arena, "\"%s\"",
-                codegen_c_string_escape(generator, message_node->literal.string_value));
+                codegen_c_string_escape(generator, message_node->string_literal.value));
         } else {
             const char *message_expression = codegen_emit_expression(generator, message_node);
             message = arena_sprintf(generator->arena, "%s.data", message_expression);
@@ -366,15 +332,27 @@ static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *nod
                          node->location.line);
 }
 
-static const char *emit_call_expression(CodeGenerator *generator, const ASTNode *node) {
-    bool is_assert = node->call.callee->kind == NODE_IDENTIFIER &&
-                     strcmp(node->call.callee->identifier.name, "assert") == 0;
-    if (is_assert) {
+/** Return true if the callee is a runtime builtin (rsg_* name). */
+static bool is_runtime_builtin(const TtNode *callee) {
+    if (callee->kind != TT_VARIABLE_REFERENCE) {
+        return false;
+    }
+    const char *name = tt_symbol_name(callee->variable_reference.symbol);
+    return strncmp(name, "rsg_", 4) == 0;
+}
+
+static const char *emit_call_expression(CodeGenerator *generator, const TtNode *node) {
+    if (is_assert_call(node)) {
         return emit_assert_call(generator, node);
     }
     const char *callee;
-    if (node->call.callee->kind == NODE_IDENTIFIER) {
-        callee = codegen_mangle_function_name(generator, node->call.callee->identifier.name);
+    if (node->call.callee->kind == TT_VARIABLE_REFERENCE) {
+        const char *name = tt_symbol_name(node->call.callee->variable_reference.symbol);
+        if (is_runtime_builtin(node->call.callee)) {
+            callee = name; // runtime builtins keep their name
+        } else {
+            callee = codegen_mangle_function_name(generator, name);
+        }
     } else {
         callee = codegen_emit_expression(generator, node->call.callee);
     }
@@ -383,7 +361,7 @@ static const char *emit_call_expression(CodeGenerator *generator, const ASTNode 
     return arena_sprintf(generator->arena, "%s(%s)", callee, argument_list);
 }
 
-static const char *emit_if_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_if_expression(CodeGenerator *generator, const TtNode *node) {
     const Type *type = node->type;
     if (type == NULL || type->kind == TYPE_UNIT) {
         codegen_emit_if(generator, node, NULL, false);
@@ -391,8 +369,8 @@ static const char *emit_if_expression(CodeGenerator *generator, const ASTNode *n
     }
     if (is_simple_ternary(node)) {
         const char *condition = codegen_emit_expression(generator, node->if_expression.condition);
-        const ASTNode *then_result = simple_branch_result(node->if_expression.then_body);
-        const ASTNode *else_result = simple_branch_result(node->if_expression.else_body);
+        const TtNode *then_result = simple_branch_result(node->if_expression.then_body);
+        const TtNode *else_result = simple_branch_result(node->if_expression.else_body);
         const char *then_value = codegen_emit_expression(generator, then_result);
         const char *else_value = codegen_emit_expression(generator, else_result);
         return arena_sprintf(generator->arena, "(%s ? %s : %s)", condition, then_value, else_value);
@@ -403,7 +381,7 @@ static const char *emit_if_expression(CodeGenerator *generator, const ASTNode *n
     return temporary;
 }
 
-static const char *emit_block_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_block_expression(CodeGenerator *generator, const TtNode *node) {
     codegen_emit_block_statements(generator, node);
     if (node->block.result != NULL) {
         return codegen_emit_expression(generator, node->block.result);
@@ -411,59 +389,14 @@ static const char *emit_block_expression(CodeGenerator *generator, const ASTNode
     return "(void)0";
 }
 
-static const char *emit_string_interpolation_expression(CodeGenerator *generator,
-                                                        const ASTNode *node) {
-    int32_t part_count = BUFFER_LENGTH(node->string_interpolation.parts);
-    const char **string_parts = NULL;
-    for (int32_t i = 0; i < part_count; i++) {
-        const ASTNode *part = node->string_interpolation.parts[i];
-        if (part->kind == NODE_LITERAL && part->literal.kind == LITERAL_STRING) {
-            const char *text = part->literal.string_value;
-            if (text == NULL || text[0] == '\0') {
-                continue;
-            }
-            BUFFER_PUSH(string_parts, arena_sprintf(generator->arena, "rsg_string_literal(\"%s\")",
-                                                    codegen_c_string_escape(generator, text)));
-        } else {
-            BUFFER_PUSH(string_parts, string_convert_expression(generator, part));
-        }
-    }
-    int32_t count = BUFFER_LENGTH(string_parts);
-
-    if (count == 1) {
-        const char *result = string_parts[0];
-        BUFFER_FREE(string_parts);
-        return result;
-    }
-    if (count == 2) {
-        const char *result = arena_sprintf(generator->arena, "rsg_string_concat(%s, %s)",
-                                           string_parts[0], string_parts[1]);
-        BUFFER_FREE(string_parts);
-        return result;
-    }
-
-    const char *builder = codegen_next_string_builder(generator);
-    codegen_emit_line(generator, "RsgStringBuilder %s;", builder);
-    codegen_emit_line(generator, "rsg_string_builder_init(&%s);", builder);
-    for (int32_t i = 0; i < count; i++) {
-        codegen_emit_line(generator, "rsg_string_builder_append_string(&%s, %s);", builder,
-                          string_parts[i]);
-    }
-    BUFFER_FREE(string_parts);
-    const char *temporary = codegen_next_temporary(generator);
-    codegen_emit_line(generator, "RsgString %s = rsg_string_builder_finish(&%s);", temporary,
-                      builder);
-    return temporary;
-}
-
-static const char *emit_array_literal_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_array_literal_expression(CodeGenerator *generator, const TtNode *node) {
     const char *tname = codegen_c_type_for(generator, node->type);
     const char *elements = join_expressions(generator, node->array_literal.elements,
                                             BUFFER_LENGTH(node->array_literal.elements));
     return arena_sprintf(generator->arena, "(%s){ ._data = { %s } }", tname, elements);
 }
 
-static const char *emit_tuple_literal_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_tuple_literal_expression(CodeGenerator *generator, const TtNode *node) {
     const char *tname = codegen_c_type_for(generator, node->type);
     const char *result = arena_sprintf(generator->arena, "(%s){ ", tname);
     for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
@@ -476,53 +409,68 @@ static const char *emit_tuple_literal_expression(CodeGenerator *generator, const
     return arena_sprintf(generator->arena, "%s }", result);
 }
 
-static const char *emit_index_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_index_expression(CodeGenerator *generator, const TtNode *node) {
     const char *object = codegen_emit_expression(generator, node->index_access.object);
     const char *index = codegen_emit_expression(generator, node->index_access.index);
     return arena_sprintf(generator->arena, "%s._data[%s]", object, index);
 }
 
-static const char *emit_type_conversion_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_tuple_index_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *object = codegen_emit_expression(generator, node->tuple_index.object);
+    return arena_sprintf(generator->arena, "%s._%d", object, node->tuple_index.element_index);
+}
+
+static const char *emit_type_conversion_expression(CodeGenerator *generator, const TtNode *node) {
     return codegen_emit_expression(generator, node->type_conversion.operand);
 }
 
-static const char *emit_member_expression(CodeGenerator *generator, const ASTNode *node) {
-    const char *object = codegen_emit_expression(generator, node->member.object);
-    return arena_sprintf(generator->arena, "%s._%s", object, node->member.member);
+static const char *emit_module_access_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *object = codegen_emit_expression(generator, node->module_access.object);
+    return arena_sprintf(generator->arena, "%s._%s", object, node->module_access.member);
 }
 
 // ── Expression dispatch ────────────────────────────────────────────────
 
-const char *codegen_emit_expression(CodeGenerator *generator, const ASTNode *node) {
+const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node) {
     if (node == NULL) {
         return "0";
     }
     switch (node->kind) {
-    case NODE_LITERAL:
-        return emit_literal_expression(generator, node);
-    case NODE_IDENTIFIER:
-        return codegen_variable_lookup(generator, node->identifier.name);
-    case NODE_UNARY:
+    case TT_BOOL_LITERAL:
+        return emit_bool_literal(node);
+    case TT_INT_LITERAL:
+        return emit_int_literal(generator, node);
+    case TT_FLOAT_LITERAL:
+        return emit_float_literal(generator, node);
+    case TT_CHAR_LITERAL:
+        return codegen_c_char_escape(generator, node->char_literal.value);
+    case TT_STRING_LITERAL:
+        return emit_string_literal(generator, node);
+    case TT_UNIT_LITERAL:
+        return "(void)0";
+    case TT_VARIABLE_REFERENCE:
+        return codegen_variable_lookup(generator, tt_symbol_name(node->variable_reference.symbol));
+    case TT_UNARY:
         return emit_unary_expression(generator, node);
-    case NODE_BINARY:
+    case TT_BINARY:
         return emit_binary_expression(generator, node);
-    case NODE_CALL:
+    case TT_CALL:
         return emit_call_expression(generator, node);
-    case NODE_MEMBER:
-        return emit_member_expression(generator, node);
-    case NODE_INDEX:
+    case TT_MODULE_ACCESS:
+        return emit_module_access_expression(generator, node);
+    case TT_INDEX:
         return emit_index_expression(generator, node);
-    case NODE_IF:
+    case TT_TUPLE_INDEX:
+        return emit_tuple_index_expression(generator, node);
+    case TT_IF:
         return emit_if_expression(generator, node);
-    case NODE_BLOCK:
+    case TT_BLOCK:
         return emit_block_expression(generator, node);
-    case NODE_STRING_INTERPOLATION:
-        return emit_string_interpolation_expression(generator, node);
-    case NODE_ARRAY_LITERAL:
+    case TT_ARRAY_LITERAL:
         return emit_array_literal_expression(generator, node);
-    case NODE_TUPLE_LITERAL:
+    case TT_TUPLE_LITERAL:
         return emit_tuple_literal_expression(generator, node);
-    case NODE_TYPE_CONVERSION:
+    case TT_TYPE_CONVERSION:
         return emit_type_conversion_expression(generator, node);
     default:
         return "0";

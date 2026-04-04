@@ -6,26 +6,26 @@
  * Emit the body of a function: block statements, trailing result
  * expression, and an implicit `return 0;` for main.
  */
-static void emit_function_body(CodeGenerator *generator, const ASTNode *function_node) {
-    const ASTNode *body = function_node->function_declaration.body;
-    const Type *return_type = function_node->type;
+static void emit_function_body(CodeGenerator *generator, const TtNode *function_node) {
+    const TtNode *body = function_node->function_declaration.body;
+    const Type *return_type = function_node->function_declaration.return_type;
     bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
     bool is_main = strcmp(function_node->function_declaration.name, "main") == 0;
 
     // Register parameters in variable tracking
-    for (int32_t i = 0; i < BUFFER_LENGTH(function_node->function_declaration.parameters); i++) {
-        const ASTNode *parameter = function_node->function_declaration.parameters[i];
+    for (int32_t i = 0; i < BUFFER_LENGTH(function_node->function_declaration.params); i++) {
+        const TtNode *parameter = function_node->function_declaration.params[i];
         codegen_variable_define(generator, parameter->parameter.name);
     }
 
-    if (body->kind == NODE_BLOCK) {
+    if (body != NULL && body->kind == TT_BLOCK) {
         // Block body with optional trailing result
         codegen_emit_block_statements(generator, body);
 
         if (body->block.result != NULL) {
-            const ASTNode *result_node = body->block.result;
+            const TtNode *result_node = body->block.result;
             // Statement-like results need special handling
-            if (result_node->kind == NODE_ASSIGN || result_node->kind == NODE_COMPOUND_ASSIGN) {
+            if (result_node->kind == TT_ASSIGN) {
                 // Emit as statement (side-effect only in function body)
                 codegen_emit_statement(generator, result_node);
             } else if (!is_unit && !is_main) {
@@ -33,10 +33,10 @@ static void emit_function_body(CodeGenerator *generator, const ASTNode *function
                 codegen_emit_line(generator, "return %s;", result);
             } else {
                 // Unit/main: evaluate for side effects
-                if (result_node->kind == NODE_CALL) {
+                if (result_node->kind == TT_CALL) {
                     const char *result = codegen_emit_expression(generator, result_node);
                     codegen_emit_line(generator, "%s;", result);
-                } else if (result_node->kind == NODE_IF) {
+                } else if (result_node->kind == TT_IF) {
                     codegen_emit_if(generator, result_node, NULL, false);
                 } else {
                     const char *result = codegen_emit_expression(generator, result_node);
@@ -44,7 +44,7 @@ static void emit_function_body(CodeGenerator *generator, const ASTNode *function
                 }
             }
         }
-    } else {
+    } else if (body != NULL) {
         // Expression body (fn foo() = expr)
         const char *result = codegen_emit_expression(generator, body);
         if (!is_unit && !is_main) {
@@ -55,12 +55,12 @@ static void emit_function_body(CodeGenerator *generator, const ASTNode *function
     }
 }
 
-static void emit_function_declaration(CodeGenerator *generator, const ASTNode *node,
+static void emit_function_declaration(CodeGenerator *generator, const TtNode *node,
                                       bool forward_only) {
     bool is_public = node->function_declaration.is_public;
 
     // Return type
-    const char *return_type = codegen_c_type_for(generator, node->type);
+    const char *return_type = codegen_c_type_for(generator, node->function_declaration.return_type);
 
     // Static prefix for non-public functions
     const char *prefix = !is_public ? "static " : "";
@@ -73,16 +73,13 @@ static void emit_function_declaration(CodeGenerator *generator, const ASTNode *n
     codegen_emit_indent(generator);
     fprintf(generator->output, "%s%s %s(", prefix, return_type, function_name);
 
-    int32_t parameter_count = BUFFER_LENGTH(node->function_declaration.parameters);
+    int32_t parameter_count = BUFFER_LENGTH(node->function_declaration.params);
     if (parameter_count == 0) {
         fprintf(generator->output, "void");
     } else {
         for (int32_t i = 0; i < parameter_count; i++) {
-            const ASTNode *parameter = node->function_declaration.parameters[i];
-            const Type *parameter_type = parameter->type;
-            if (parameter_type == NULL && parameter->parameter.type.kind == AST_TYPE_NAME) {
-                parameter_type = type_from_name(parameter->parameter.type.name);
-            }
+            const TtNode *parameter = node->function_declaration.params[i];
+            const Type *parameter_type = parameter->parameter.param_type;
             if (parameter_type == NULL) {
                 parameter_type = &TYPE_I32_INSTANCE;
             }
@@ -120,9 +117,9 @@ static void emit_preamble(CodeGenerator *generator) {
 }
 
 /** Return true if @p node is a top-level statement. */
-static bool is_top_level_statement(const ASTNode *node) {
-    return node->kind != NODE_MODULE && node->kind != NODE_FUNCTION_DECLARATION &&
-           node->kind != NODE_TYPE_ALIAS;
+static bool is_top_level_statement(const TtNode *node) {
+    return node->kind != TT_MODULE && node->kind != TT_FUNCTION_DECLARATION &&
+           node->kind != TT_TYPE_ALIAS;
 }
 
 /**
@@ -130,7 +127,7 @@ static bool is_top_level_statement(const ASTNode *node) {
  * `_rsg_top_level()`, the user's `main()`, and all zero-parameter
  * `test_*` functions.
  */
-static void emit_entry_point(CodeGenerator *generator, const ASTNode *file,
+static void emit_entry_point(CodeGenerator *generator, const TtNode *file,
                              bool has_top_statements) {
     codegen_emit(generator, "int main(void) {\n");
     generator->indent++;
@@ -140,14 +137,14 @@ static void emit_entry_point(CodeGenerator *generator, const ASTNode *file,
     }
 
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind != NODE_FUNCTION_DECLARATION) {
+        const TtNode *declaration = file->file.declarations[i];
+        if (declaration->kind != TT_FUNCTION_DECLARATION) {
             continue;
         }
         const char *name = declaration->function_declaration.name;
         bool is_main = strcmp(name, "main") == 0;
         bool is_test = strncmp(name, "test_", 5) == 0;
-        bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.parameters) != 0;
+        bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.params) != 0;
         if ((is_main || is_test) && !has_parameters) {
             codegen_emit_line(generator, "%s();", codegen_mangle_function_name(generator, name));
         }
@@ -163,7 +160,7 @@ static void emit_entry_point(CodeGenerator *generator, const ASTNode *file,
  * comment, forward declarations, function definitions, and (if present) a
  * `_rsg_top_level()` wrapper for top-level statements.
  */
-static void emit_file(CodeGenerator *generator, const ASTNode *file) {
+static void emit_file(CodeGenerator *generator, const TtNode *file) {
     emit_preamble(generator);
 
     // Emit source file path constant (used by rsg_assert)
@@ -172,8 +169,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
 
     // Emit module comment
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind == NODE_MODULE) {
+        const TtNode *declaration = file->file.declarations[i];
+        if (declaration->kind == TT_MODULE) {
             generator->module = declaration->module.name;
             codegen_emit(generator, "// module %s\n\n", declaration->module.name);
         }
@@ -186,8 +183,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
 
     // Forward declarations for all functions
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind == NODE_FUNCTION_DECLARATION) {
+        const TtNode *declaration = file->file.declarations[i];
+        if (declaration->kind == TT_FUNCTION_DECLARATION) {
             emit_function_declaration(generator, declaration, true);
         }
     }
@@ -195,8 +192,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
 
     // Full function definitions
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind == NODE_FUNCTION_DECLARATION) {
+        const TtNode *declaration = file->file.declarations[i];
+        if (declaration->kind == TT_FUNCTION_DECLARATION) {
             emit_function_declaration(generator, declaration, false);
         }
     }
@@ -249,6 +246,6 @@ void code_generator_destroy(CodeGenerator *generator) {
     }
 }
 
-void code_generator_emit(CodeGenerator *generator, const ASTNode *file) {
+void code_generator_emit(CodeGenerator *generator, const TtNode *file) {
     emit_file(generator, file);
 }

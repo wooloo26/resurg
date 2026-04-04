@@ -105,21 +105,6 @@ const char *codegen_c_binary_operator(TokenKind op) {
     }
 }
 
-const char *codegen_c_compound_operator(TokenKind op) {
-    switch (op) {
-    case TOKEN_PLUS_EQUAL:
-        return "+=";
-    case TOKEN_MINUS_EQUAL:
-        return "-=";
-    case TOKEN_STAR_EQUAL:
-        return "*=";
-    case TOKEN_SLASH_EQUAL:
-        return "/=";
-    default:
-        return "?=";
-    }
-}
-
 const char *codegen_c_string_escape(const CodeGenerator *generator, const char *source) {
     if (source == NULL) {
         return "";

@@ -173,7 +173,7 @@ static int compile(const CliArgs *args) {
         goto cleanup;
     }
 
-    // Stage 5: Code generation - emit C source from the validated AST.
+    // Stage 5: Code generation - emit C source from the Typed Tree.
     {
         FILE *out = stdout;
         if (args->output_file != NULL) {
@@ -183,7 +183,7 @@ static int compile(const CliArgs *args) {
             }
         }
         code_generator = code_generator_create(out, arena);
-        code_generator_emit(code_generator, file_node);
+        code_generator_emit(code_generator, tt_root);
         if (args->output_file != NULL) {
             fclose(out);
         }

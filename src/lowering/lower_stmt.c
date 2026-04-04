@@ -86,7 +86,16 @@ TtNode *lower_block(Lowering *low, const ASTNode *ast) {
 
     TtNode *result = NULL;
     if (ast->block.result != NULL) {
-        result = lower_expression(low, ast->block.result);
+        // Assignments in result position are side-effect-only statements.
+        if (ast->block.result->kind == NODE_ASSIGN) {
+            TtNode *stmt = lower_assign(low, ast->block.result);
+            BUFFER_PUSH(statements, stmt);
+        } else if (ast->block.result->kind == NODE_COMPOUND_ASSIGN) {
+            TtNode *stmt = lower_compound_assign(low, ast->block.result);
+            BUFFER_PUSH(statements, stmt);
+        } else {
+            result = lower_expression(low, ast->block.result);
+        }
     }
 
     lowering_scope_leave(low);
@@ -181,6 +190,13 @@ static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
                 BUFFER_PUSH(loop_stmts, stmt);
             }
         }
+        // Handle tail expression (block.result) as a statement
+        if (ast->for_loop.body->block.result != NULL) {
+            TtNode *tail = lower_node(low, ast->for_loop.body->block.result);
+            if (tail != NULL) {
+                BUFFER_PUSH(loop_stmts, tail);
+            }
+        }
     }
 
     // var = var + 1
@@ -215,7 +231,17 @@ static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
 }
 
 static TtNode *lower_expression_statement(Lowering *low, const ASTNode *ast) {
-    TtNode *expr = lower_expression(low, ast->expression_statement.expression);
+    const ASTNode *inner = ast->expression_statement.expression;
+
+    // Assignments are statements in TT — unwrap and lower directly.
+    if (inner->kind == NODE_ASSIGN) {
+        return lower_assign(low, inner);
+    }
+    if (inner->kind == NODE_COMPOUND_ASSIGN) {
+        return lower_compound_assign(low, inner);
+    }
+
+    TtNode *expr = lower_expression(low, inner);
     TtNode *node =
         tt_new(low->tt_arena, TT_EXPRESSION_STATEMENT, &TYPE_UNIT_INSTANCE, ast->location);
     node->expression_statement.expression = expr;

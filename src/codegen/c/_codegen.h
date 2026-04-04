@@ -65,8 +65,6 @@ const char *codegen_mangle_function_name(CodeGenerator *generator, const char *n
 
 /** Map Resurg binary operator TokenKind to its C operator string. */
 const char *codegen_c_binary_operator(TokenKind op);
-/** Map Resurg compound-assignment operator to its C string. */
-const char *codegen_c_compound_operator(TokenKind op);
 /** Escape @p source for embedding inside a C string literal. */
 const char *codegen_c_string_escape(const CodeGenerator *generator, const char *source);
 /** Escape a file path for embedding in C (backslash -> forward slash). */
@@ -86,7 +84,7 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type);
 // ── Compound types (codegen_types.c) ───────────────────────────────────
 
 /** Recursively walk @p node collecting all array/tuple types. */
-void codegen_collect_compound_types(CodeGenerator *generator, const ASTNode *node);
+void codegen_collect_compound_types(CodeGenerator *generator, const TtNode *node);
 /** Emit typedef structs for all collected compound types. */
 void codegen_emit_compound_typedefs(CodeGenerator *generator);
 /** Free and reset the compound-type list. */
@@ -95,23 +93,23 @@ void codegen_reset_compound_types(CodeGenerator *generator);
 // ── Expression emission (codegen_expression.c) ─────────────────────────
 
 /** Expression dispatch — returns a C expression string for @p node. */
-const char *codegen_emit_expression(CodeGenerator *generator, const ASTNode *node);
+const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node);
 
 // ── Statement emission (codegen_statement.c) ───────────────────────────
 
 /** Statement dispatch — emits a C statement for @p node. */
-void codegen_emit_statement(CodeGenerator *generator, const ASTNode *node);
+void codegen_emit_statement(CodeGenerator *generator, const TtNode *node);
 /**
  * Emit an if-expression or if-statement.  When @p target is non-NULL the
  * result of each branch is assigned to it; otherwise emitted as a pure
  * statement.
  */
-void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target,
+void codegen_emit_if(CodeGenerator *generator, const TtNode *node, const char *target,
                      bool is_else_if);
 /**
  * Emit the statements of a block (excludes the trailing result expression
  * — the caller is responsible for that).
  */
-void codegen_emit_block_statements(CodeGenerator *generator, const ASTNode *block);
+void codegen_emit_block_statements(CodeGenerator *generator, const TtNode *block);
 
 #endif // RG__CODEGEN_H
