@@ -212,10 +212,13 @@ const Type *check_array_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
 }
 
 const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
-    const Type **element_types = NULL;
+    const Type ** /* buf */ element_types = NULL;
     for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
         const Type *elem = check_node(analyzer, node->tuple_literal.elements[i]);
         BUFFER_PUSH(element_types, elem);
     }
-    return type_create_tuple(analyzer->arena, element_types, BUFFER_LENGTH(element_types));
+    const Type *result =
+        type_create_tuple(analyzer->arena, element_types, BUFFER_LENGTH(element_types));
+    BUFFER_FREE(element_types);
+    return result;
 }
