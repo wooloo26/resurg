@@ -104,18 +104,18 @@ const char *type_name(Arena *arena, const Type *type) {
         return info->rsg_name;
     }
     if (type->kind == TYPE_ARRAY) {
-        return arena_sprintf(arena, "[%d]%s", type->array_size,
-                             type_name(arena, type->array_element));
+        return arena_sprintf(arena, "[%d]%s", type->array.size,
+                             type_name(arena, type->array.element));
     }
     if (type->kind == TYPE_TUPLE) {
         const char *result = "(";
-        for (int32_t i = 0; i < type->tuple_count; i++) {
+        for (int32_t i = 0; i < type->tuple.count; i++) {
             if (i > 0) {
                 result = arena_sprintf(arena, "%s, %s", result,
-                                       type_name(arena, type->tuple_elements[i]));
+                                       type_name(arena, type->tuple.elements[i]));
             } else {
                 result =
-                    arena_sprintf(arena, "%s%s", result, type_name(arena, type->tuple_elements[i]));
+                    arena_sprintf(arena, "%s%s", result, type_name(arena, type->tuple.elements[i]));
             }
         }
         return arena_sprintf(arena, "%s)", result);
@@ -139,14 +139,14 @@ bool type_equal(const Type *a, const Type *b) {
         return false;
     }
     if (a->kind == TYPE_ARRAY) {
-        return a->array_size == b->array_size && type_equal(a->array_element, b->array_element);
+        return a->array.size == b->array.size && type_equal(a->array.element, b->array.element);
     }
     if (a->kind == TYPE_TUPLE) {
-        if (a->tuple_count != b->tuple_count) {
+        if (a->tuple.count != b->tuple.count) {
             return false;
         }
-        for (int32_t i = 0; i < a->tuple_count; i++) {
-            if (!type_equal(a->tuple_elements[i], b->tuple_elements[i])) {
+        for (int32_t i = 0; i < a->tuple.count; i++) {
+            if (!type_equal(a->tuple.elements[i], b->tuple.elements[i])) {
                 return false;
             }
         }
@@ -181,6 +181,30 @@ const Type *type_singleton(TypeKind kind) {
     return info != NULL ? info->instance : &TYPE_ERROR_INSTANCE;
 }
 
+// ── Type accessors ─────────────────────────────────────────────────────
+
+const Type *type_array_element(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_ARRAY);
+    return type->array.element;
+}
+
+int32_t type_array_size(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_ARRAY);
+    return type->array.size;
+}
+
+const Type **type_tuple_elements(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_TUPLE);
+    return type->tuple.elements;
+}
+
+int32_t type_tuple_count(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_TUPLE);
+    return type->tuple.count;
+}
+
+// ── Type constructors ──────────────────────────────────────────────────
+
 static Type *type_create(Arena *arena, TypeKind kind) {
     Type *type = arena_alloc(arena, sizeof(Type));
     memset(type, 0, sizeof(Type));
@@ -190,14 +214,14 @@ static Type *type_create(Arena *arena, TypeKind kind) {
 
 Type *type_create_array(Arena *arena, const Type *element, int32_t size) {
     Type *type = type_create(arena, TYPE_ARRAY);
-    type->array_element = element;
-    type->array_size = size;
+    type->array.element = element;
+    type->array.size = size;
     return type;
 }
 
 Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count) {
     Type *type = type_create(arena, TYPE_TUPLE);
-    type->tuple_elements = elements;
-    type->tuple_count = count;
+    type->tuple.elements = elements;
+    type->tuple.count = count;
     return type;
 }

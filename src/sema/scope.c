@@ -18,12 +18,15 @@ void scope_pop(SemanticAnalyzer *analyzer) {
 }
 
 void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
-                  bool is_function) {
+                  SymbolKind kind) {
     Symbol *symbol = arena_alloc(analyzer->arena, sizeof(Symbol));
     symbol->name = name;
     symbol->type = type;
+    symbol->kind = kind;
     symbol->is_public = is_public;
-    symbol->is_function = is_function;
+    symbol->is_immut = false;
+    symbol->declaration = NULL;
+    symbol->owner = NULL;
     hash_table_insert(&analyzer->current_scope->table, name, symbol);
 }
 

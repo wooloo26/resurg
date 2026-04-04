@@ -74,7 +74,7 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
 
             // Register in scope
             scope_define(analyzer, declaration->function_declaration.name, resolved_return,
-                         declaration->function_declaration.is_public, true);
+                         declaration->function_declaration.is_public, SYM_FUNCTION);
         }
     }
 

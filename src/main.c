@@ -3,6 +3,7 @@
 #include "codegen.h"
 #include "common.h"
 #include "lexer.h"
+#include "lowering.h"
 #include "parser.h"
 #include "sema.h"
 
@@ -52,6 +53,7 @@ static noreturn void usage(void) {
                     "  -o <file>     Output C file (default: stdout)\n"
                     "  --dump-tokens Print token stream and exit\n"
                     "  --dump-ast    Print AST and exit\n"
+                    "  --dump-tt     Print Typed Tree and exit\n"
                     "  --help        Show this message\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
@@ -63,6 +65,7 @@ typedef struct {
     const char *output_file; // -o destination; NULL means stdout.
     bool dump_tokens;        // --dump-tokens: print token stream and exit.
     bool dump_ast;           // --dump-ast: pretty-print AST and exit.
+    bool dump_tt;            // --dump-tt: pretty-print Typed Tree and exit.
 } CliArgs;
 
 /**
@@ -78,6 +81,8 @@ static CliArgs parse_cli_args(int argc, char *argv[]) {
             args.dump_tokens = true;
         } else if (strcmp(argv[i], "--dump-ast") == 0) {
             args.dump_ast = true;
+        } else if (strcmp(argv[i], "--dump-tt") == 0) {
+            args.dump_tt = true;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) {
                 rsg_fatal("-o requires an argument");
@@ -107,10 +112,12 @@ static CliArgs parse_cli_args(int argc, char *argv[]) {
 static int compile(const CliArgs *args) {
     char *source = read_file(args->input_file);
     Arena *arena = arena_create();
+    Arena *tt_arena = arena_create();
     Token *tokens = NULL; /* buf */
     Lexer *lexer = NULL;
     Parser *parser = NULL;
     SemanticAnalyzer *analyzer = NULL;
+    Lowering *lowering = NULL;
     CodeGenerator *code_generator = NULL;
     int status = 0;
 
@@ -157,7 +164,16 @@ static int compile(const CliArgs *args) {
         goto cleanup;
     }
 
-    // Stage 4: Code generation - emit C source from the validated AST.
+    // Stage 4: Lowering - build the Typed Tree from the validated AST.
+    lowering = lowering_create(tt_arena, arena);
+    TtNode *tt_root = lowering_lower(lowering, file_node);
+
+    if (args->dump_tt) {
+        tt_dump(tt_root, 0);
+        goto cleanup;
+    }
+
+    // Stage 5: Code generation - emit C source from the validated AST.
     {
         FILE *out = stdout;
         if (args->output_file != NULL) {
@@ -175,12 +191,14 @@ static int compile(const CliArgs *args) {
 
 cleanup:
     code_generator_destroy(code_generator);
+    lowering_destroy(lowering);
     semantic_analyzer_destroy(analyzer);
     parser_destroy(parser);
     lexer_destroy(lexer);
     BUFFER_FREE(tokens);
     free(source);
     source = NULL;
+    arena_destroy(tt_arena);
     arena_destroy(arena);
     return status;
 }

@@ -282,11 +282,11 @@ static const char *emit_tuple_comparison(CodeGenerator *generator, const Type *t
     const char *join = is_equal ? " && " : " || ";
     const char *cmp = is_equal ? "==" : "!=";
     const char *result = "";
-    for (int32_t i = 0; i < type->tuple_count; i++) {
+    for (int32_t i = 0; i < type->tuple.count; i++) {
         const char *l = arena_sprintf(generator->arena, "%s._%d", left_tmp, i);
         const char *r = arena_sprintf(generator->arena, "%s._%d", right_tmp, i);
         const char *part;
-        if (type->tuple_elements[i]->kind == TYPE_STRING) {
+        if (type->tuple.elements[i]->kind == TYPE_STRING) {
             if (is_equal) {
                 part = arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", l, r);
             } else {

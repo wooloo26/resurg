@@ -13,12 +13,24 @@
 
 // ── Struct definitions ─────────────────────────────────────────────────
 
+/** Discriminator for Symbol entries in the scope table. */
+typedef enum {
+    SYM_VAR,
+    SYM_PARAM,
+    SYM_FUNCTION,
+    SYM_TYPE,
+    SYM_MODULE,
+} SymbolKind;
+
 /** Symbol table entry - one per declared name in a scope. */
 struct Symbol {
     const char *name;
     const Type *type;
+    SymbolKind kind;
     bool is_public;
-    bool is_function;
+    bool is_immut;
+    const ASTNode *declaration;
+    Symbol *owner;
 };
 
 /**
@@ -73,7 +85,7 @@ Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop);
 void scope_pop(SemanticAnalyzer *analyzer);
 /** Define @p name in the current scope. */
 void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
-                  bool is_function);
+                  SymbolKind kind);
 /** Look up @p name in the innermost scope only (for redefinition checks). */
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name);
 /** Walk the scope chain outward to find @p name. */

@@ -16,17 +16,15 @@ static void register_compound_type(CodeGenerator *generator, const Type *type) {
         return;
     }
     if (type->kind == TYPE_ARRAY) {
-        register_compound_type(generator, type->array_element);
+        register_compound_type(generator, type->array.element);
         if (!compound_type_registered(generator, type)) {
-            // NOLINTNEXTLINE(bugprone-sizeof-expression)
             BUFFER_PUSH(generator->compound_types, type);
         }
     } else if (type->kind == TYPE_TUPLE) {
-        for (int32_t i = 0; i < type->tuple_count; i++) {
-            register_compound_type(generator, type->tuple_elements[i]);
+        for (int32_t i = 0; i < type->tuple.count; i++) {
+            register_compound_type(generator, type->tuple.elements[i]);
         }
         if (!compound_type_registered(generator, type)) {
-            // NOLINTNEXTLINE(bugprone-sizeof-expression)
             BUFFER_PUSH(generator->compound_types, type);
         }
     }
@@ -138,13 +136,13 @@ void codegen_emit_compound_typedefs(CodeGenerator *generator) {
         const char *name = codegen_c_type_for(generator, type);
         if (type->kind == TYPE_ARRAY) {
             codegen_emit_line(generator, "typedef struct { %s _data[%d]; } %s;",
-                              codegen_c_type_for(generator, type->array_element), type->array_size,
+                              codegen_c_type_for(generator, type->array.element), type->array.size,
                               name);
         } else if (type->kind == TYPE_TUPLE) {
             codegen_emit_indent(generator);
             fprintf(generator->output, "typedef struct {");
-            for (int32_t j = 0; j < type->tuple_count; j++) {
-                const char *elem_type = codegen_c_type_for(generator, type->tuple_elements[j]);
+            for (int32_t j = 0; j < type->tuple.count; j++) {
+                const char *elem_type = codegen_c_type_for(generator, type->tuple.elements[j]);
                 fprintf(generator->output, " %s _%d;", elem_type, j);
             }
             fprintf(generator->output, " } %s;\n", name);

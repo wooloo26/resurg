@@ -62,8 +62,8 @@ const Type *check_block(SemanticAnalyzer *analyzer, ASTNode *node) {
 static bool promote_array_elements(ASTNode *init, const Type *declared) {
     for (int32_t i = 0; i < BUFFER_LENGTH(init->array_literal.elements); i++) {
         ASTNode *elem = init->array_literal.elements[i];
-        if (promote_literal(elem, declared->array_element) == NULL && elem->type != NULL &&
-            !type_equal(elem->type, declared->array_element)) {
+        if (promote_literal(elem, declared->array.element) == NULL && elem->type != NULL &&
+            !type_equal(elem->type, declared->array.element)) {
             return false;
         }
     }
@@ -125,7 +125,7 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
 
     is_reserved_identifier(analyzer, node->location, node->variable_declaration.name);
 
-    scope_define(analyzer, node->variable_declaration.name, variable_type, false, false);
+    scope_define(analyzer, node->variable_declaration.name, variable_type, false, SYM_VAR);
     return variable_type;
 }
 
@@ -144,7 +144,7 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
         }
         parameter->type = parameter_type;
         is_reserved_identifier(analyzer, parameter->location, parameter->parameter.name);
-        scope_define(analyzer, parameter->parameter.name, parameter_type, false, false);
+        scope_define(analyzer, parameter->parameter.name, parameter_type, false, SYM_PARAM);
     }
 
     // Check body
@@ -296,7 +296,7 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         check_node(analyzer, node->for_loop.end);
         scope_push(analyzer, true);
         is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-        scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, false);
+        scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR);
         check_node(analyzer, node->for_loop.body);
         scope_pop(analyzer);
         break;

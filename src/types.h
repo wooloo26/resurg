@@ -36,13 +36,28 @@ typedef struct Type Type;
 
 struct Type {
     TypeKind kind;
-    // TYPE_ARRAY fields
-    const Type *array_element;
-    int32_t array_size;
-    // TYPE_TUPLE fields
-    const Type **tuple_elements; /* buf */
-    int32_t tuple_count;
+    union {
+        struct {
+            const Type *element;
+            int32_t size;
+        } array;
+        struct {
+            const Type **elements;
+            int32_t count;
+        } tuple;
+    };
 };
+
+// ── Type accessors (never access union members directly) ───────────────
+
+/** Return the element type of an array type.  Asserts kind == TYPE_ARRAY. */
+const Type *type_array_element(const Type *type);
+/** Return the fixed size of an array type.  Asserts kind == TYPE_ARRAY. */
+int32_t type_array_size(const Type *type);
+/** Return the element types of a tuple type.  Asserts kind == TYPE_TUPLE. */
+const Type **type_tuple_elements(const Type *type);
+/** Return the element count of a tuple type.  Asserts kind == TYPE_TUPLE. */
+int32_t type_tuple_count(const Type *type);
 
 /** Singleton type instances (avoids heap allocation for primitives). */
 extern const Type TYPE_BOOL_INSTANCE;

@@ -246,13 +246,13 @@ const char *codegen_c_char_escape(const CodeGenerator *generator, uint32_t c) {
 static const char *type_tag(CodeGenerator *gen, const Type *type) {
     switch (type->kind) {
     case TYPE_ARRAY:
-        return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array_element),
-                             type->array_size);
+        return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array.element),
+                             type->array.size);
     case TYPE_TUPLE: {
         const char *result = "Tup";
-        for (int32_t i = 0; i < type->tuple_count; i++) {
+        for (int32_t i = 0; i < type->tuple.count; i++) {
             result =
-                arena_sprintf(gen->arena, "%s_%s", result, type_tag(gen, type->tuple_elements[i]));
+                arena_sprintf(gen->arena, "%s_%s", result, type_tag(gen, type->tuple.elements[i]));
         }
         return result;
     }

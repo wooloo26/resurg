@@ -141,7 +141,7 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         }
 
         Symbol *symbol = scope_lookup(analyzer, function_name);
-        if (symbol != NULL && symbol->is_function) {
+        if (symbol != NULL && symbol->kind == SYM_FUNCTION) {
             return symbol->type;
         }
         if (symbol == NULL) {
@@ -157,8 +157,8 @@ const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (object_type != NULL && object_type->kind == TYPE_TUPLE) {
         char *end = NULL;
         long index = strtol(node->member.member, &end, 10);
-        if (end != NULL && *end == '\0' && index >= 0 && index < object_type->tuple_count) {
-            return object_type->tuple_elements[index];
+        if (end != NULL && *end == '\0' && index >= 0 && index < object_type->tuple.count) {
+            return object_type->tuple.elements[index];
         }
     }
     return &TYPE_ERROR_INSTANCE;
@@ -168,7 +168,7 @@ const Type *check_index(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *object_type = check_node(analyzer, node->index_access.object);
     check_node(analyzer, node->index_access.index);
     if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
-        return object_type->array_element;
+        return object_type->array.element;
     }
     return &TYPE_ERROR_INSTANCE;
 }

@@ -101,12 +101,12 @@ typedef struct {
 
 // __typeof__ is a reserved-namespace extension supported by GCC/Clang;
 // it avoids an unsafe (void *) cast for multi-level pointers.
-// NOLINTNEXTLINE(bugprone-sizeof-expression)
 #define BUFFER_FIT(buffer, needed)                                                                 \
     ((needed) <= BUFFER_CAPACITY(buffer)                                                           \
          ? 0                                                                                       \
-         : ((buffer) = (__typeof__(buffer))buffer__grow((const void *)(buffer), (needed),          \
-                                                        sizeof(*(buffer)))))
+         : ((buffer) = (__typeof__(buffer))buffer__grow(                                           \
+                (const void *)(buffer), (needed),                                                  \
+                sizeof(*(buffer))))) /* NOLINT(bugprone-sizeof-expression) */
 
 #define BUFFER_PUSH(buffer, value)                                                                 \
     do {                                                                                           \
