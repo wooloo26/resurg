@@ -32,6 +32,15 @@ static void register_compound_type(const Type *type) {
     }
 }
 
+static void collect_compound_types_recurse(const ASTNode *node);
+
+/** Recurse over each element of a stretchy buffer of ASTNode pointers. */
+static void recurse_children(ASTNode **children, int32_t count) {
+    for (int32_t i = 0; i < count; i++) {
+        collect_compound_types_recurse(children[i]);
+    }
+}
+
 /** Recursively walk @p node collecting all array/tuple types. */
 static void collect_compound_types_recurse(const ASTNode *node) {
     if (node == NULL) {
@@ -42,20 +51,15 @@ static void collect_compound_types_recurse(const ASTNode *node) {
     }
     switch (node->kind) {
     case NODE_FILE:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->file.declarations); i++) {
-            collect_compound_types_recurse(node->file.declarations[i]);
-        }
+        recurse_children(node->file.declarations, BUFFER_LENGTH(node->file.declarations));
         break;
     case NODE_FUNCTION_DECLARATION:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->function_declaration.parameters); i++) {
-            collect_compound_types_recurse(node->function_declaration.parameters[i]);
-        }
+        recurse_children(node->function_declaration.parameters,
+                         BUFFER_LENGTH(node->function_declaration.parameters));
         collect_compound_types_recurse(node->function_declaration.body);
         break;
     case NODE_BLOCK:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
-            collect_compound_types_recurse(node->block.statements[i]);
-        }
+        recurse_children(node->block.statements, BUFFER_LENGTH(node->block.statements));
         collect_compound_types_recurse(node->block.result);
         break;
     case NODE_VARIABLE_DECLARATION:
@@ -73,9 +77,7 @@ static void collect_compound_types_recurse(const ASTNode *node) {
         break;
     case NODE_CALL:
         collect_compound_types_recurse(node->call.callee);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
-            collect_compound_types_recurse(node->call.arguments[i]);
-        }
+        recurse_children(node->call.arguments, BUFFER_LENGTH(node->call.arguments));
         break;
     case NODE_IF:
         collect_compound_types_recurse(node->if_expression.condition);
@@ -91,14 +93,10 @@ static void collect_compound_types_recurse(const ASTNode *node) {
         collect_compound_types_recurse(node->compound_assign.value);
         break;
     case NODE_ARRAY_LITERAL:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
-            collect_compound_types_recurse(node->array_literal.elements[i]);
-        }
+        recurse_children(node->array_literal.elements, BUFFER_LENGTH(node->array_literal.elements));
         break;
     case NODE_TUPLE_LITERAL:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
-            collect_compound_types_recurse(node->tuple_literal.elements[i]);
-        }
+        recurse_children(node->tuple_literal.elements, BUFFER_LENGTH(node->tuple_literal.elements));
         break;
     case NODE_INDEX:
         collect_compound_types_recurse(node->index_access.object);
@@ -111,9 +109,8 @@ static void collect_compound_types_recurse(const ASTNode *node) {
         collect_compound_types_recurse(node->member.object);
         break;
     case NODE_STRING_INTERPOLATION:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->string_interpolation.parts); i++) {
-            collect_compound_types_recurse(node->string_interpolation.parts[i]);
-        }
+        recurse_children(node->string_interpolation.parts,
+                         BUFFER_LENGTH(node->string_interpolation.parts));
         break;
     case NODE_LOOP:
         collect_compound_types_recurse(node->loop.body);
@@ -138,12 +135,14 @@ void codegen_emit_compound_typedefs(CodeGenerator *generator) {
         const char *name = codegen_c_type_for(generator, type);
         if (type->kind == TYPE_ARRAY) {
             codegen_emit_line(generator, "typedef struct { %s _data[%d]; } %s;",
-                              codegen_c_type_for(generator, type->array_element), type->array_size, name);
+                              codegen_c_type_for(generator, type->array_element), type->array_size,
+                              name);
         } else if (type->kind == TYPE_TUPLE) {
             codegen_emit_indent(generator);
             fprintf(generator->output, "typedef struct {");
             for (int32_t j = 0; j < type->tuple_count; j++) {
-                fprintf(generator->output, " %s _%d;", codegen_c_type_for(generator, type->tuple_elements[j]), j);
+                const char *elem_type = codegen_c_type_for(generator, type->tuple_elements[j]);
+                fprintf(generator->output, " %s _%d;", elem_type, j);
             }
             fprintf(generator->output, " } %s;\n", name);
         }

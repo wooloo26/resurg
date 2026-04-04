@@ -2,7 +2,7 @@ BasedOnStyle: LLVM
 Language: Cpp
 Standard: Latest
 IndentWidth: 4
-ColumnLimit: 120
+ColumnLimit: 100
 LineEnding: LF
 
 # Braces: always use braces, else on same line as closing brace

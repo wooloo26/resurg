@@ -24,12 +24,15 @@ static void emit_branch(CodeGenerator *generator, const ASTNode *body, const cha
     }
 }
 
-void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target, bool is_else_if) {
+void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target,
+                     bool is_else_if) {
     const char *condition_value = codegen_emit_expression(generator, node->if_expression.condition);
 
     // Wrap in parentheses unless already parenthesized
-    const char *wrapped =
-        (condition_value[0] == '(') ? condition_value : arena_sprintf(generator->arena, "(%s)", condition_value);
+    const char *wrapped = condition_value;
+    if (condition_value[0] != '(') {
+        wrapped = arena_sprintf(generator->arena, "(%s)", condition_value);
+    }
     if (is_else_if) {
         fprintf(generator->output, "if %s {\n", wrapped);
     } else {
@@ -82,8 +85,8 @@ static void emit_block_body(CodeGenerator *generator, const ASTNode *block) {
 
 static void emit_variable_declaration_statement(CodeGenerator *generator, const ASTNode *node) {
     const Type *type = node->type;
-    if (type == NULL) {
-        type = node->variable_declaration.initializer != NULL ? node->variable_declaration.initializer->type : NULL;
+    if (type == NULL && node->variable_declaration.initializer != NULL) {
+        type = node->variable_declaration.initializer->type;
     }
     if (type == NULL && node->variable_declaration.type.kind == AST_TYPE_NAME) {
         type = type_from_name(node->variable_declaration.type.name);
@@ -136,7 +139,8 @@ static void emit_assign_statement(CodeGenerator *generator, const ASTNode *node)
 static void emit_compound_assign_statement(CodeGenerator *generator, const ASTNode *node) {
     const char *target = resolve_assign_target(generator, node->compound_assign.target);
     const char *value = codegen_emit_expression(generator, node->compound_assign.value);
-    codegen_emit_line(generator, "%s %s %s;", target, codegen_c_compound_operator(node->compound_assign.op), value);
+    const char *op = codegen_c_compound_operator(node->compound_assign.op);
+    codegen_emit_line(generator, "%s %s %s;", target, op, value);
 }
 
 static void emit_loop_statement(CodeGenerator *generator, const ASTNode *node) {
@@ -151,8 +155,8 @@ static void emit_for_statement(CodeGenerator *generator, const ASTNode *node) {
     const char *start = codegen_emit_expression(generator, node->for_loop.start);
     const char *end = codegen_emit_expression(generator, node->for_loop.end);
     const char *c_variable_name = codegen_variable_define(generator, node->for_loop.variable_name);
-    codegen_emit_line(generator, "for (int32_t %s = %s; %s < %s; %s++) {", c_variable_name, start, c_variable_name, end,
-                      c_variable_name);
+    codegen_emit_line(generator, "for (int32_t %s = %s; %s < %s; %s++) {", c_variable_name, start,
+                      c_variable_name, end, c_variable_name);
     generator->indent++;
     emit_block_body(generator, node->for_loop.body);
     generator->indent--;

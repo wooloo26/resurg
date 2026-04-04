@@ -137,7 +137,8 @@ void *rsg_realloc(void *pointer, size_t size) {
 static int32_t g_error_count = 0;
 
 /** Emit "label: msg\n" to @p stream with a location prefix. */
-static void emit_located_diagnostic(SourceLocation location, const char *label, const char *format, va_list arguments) {
+static void emit_located_diagnostic(SourceLocation location, const char *label, const char *format,
+                                    va_list arguments) {
     fprintf(stderr, "%s:%d:%d: %s: ", location.file, location.line, location.column, label);
     vfprintf(stderr, format, arguments);
     fputc('\n', stderr);

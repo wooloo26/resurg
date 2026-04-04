@@ -49,9 +49,10 @@ const char *codegen_variable_lookup(const CodeGenerator *generator, const char *
 }
 
 const char *codegen_variable_define(CodeGenerator *generator, const char *name) {
-    const char *c_name = (variable_find(generator, name) >= 0)
-                             ? arena_sprintf(generator->arena, "%s__%d", name, generator->shadow_variable_counter++)
-                             : name;
+    bool already_defined = (variable_find(generator, name) >= 0);
+    const char *c_name = already_defined ? arena_sprintf(generator->arena, "%s__%d", name,
+                                                         generator->shadow_variable_counter++)
+                                         : name;
     VariableEntry entry = {name, c_name};
     BUFFER_PUSH(generator->variables, entry);
     return c_name;
@@ -188,7 +189,8 @@ const char *codegen_c_escape_file_path(const CodeGenerator *generator, const cha
     return buffer;
 }
 
-static const char *format_float(const CodeGenerator *generator, double value, int32_t precision, const char *suffix) {
+static const char *format_float(const CodeGenerator *generator, double value, int32_t precision,
+                                const char *suffix) {
     char buffer[64];
     int32_t length = snprintf(buffer, sizeof(buffer), "%.*g", precision, value);
     bool has_dot = false;
@@ -241,11 +243,13 @@ const char *codegen_c_char_escape(const CodeGenerator *generator, char c) {
 static const char *type_tag(CodeGenerator *gen, const Type *type) {
     switch (type->kind) {
     case TYPE_ARRAY:
-        return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array_element), type->array_size);
+        return arena_sprintf(gen->arena, "Arr_%s_%d", type_tag(gen, type->array_element),
+                             type->array_size);
     case TYPE_TUPLE: {
         const char *result = "Tup";
         for (int32_t i = 0; i < type->tuple_count; i++) {
-            result = arena_sprintf(gen->arena, "%s_%s", result, type_tag(gen, type->tuple_elements[i]));
+            result =
+                arena_sprintf(gen->arena, "%s_%s", result, type_tag(gen, type->tuple_elements[i]));
         }
         return result;
     }

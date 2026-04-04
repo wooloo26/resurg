@@ -36,6 +36,18 @@ const Type *check_block(SemanticAnalyzer *analyzer, ASTNode *node) {
     return result_type;
 }
 
+/** Promote array literal elements to match the declared element type. */
+static bool promote_array_elements(ASTNode *init, const Type *declared) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(init->array_literal.elements); i++) {
+        ASTNode *elem = init->array_literal.elements[i];
+        if (promote_literal(elem, declared->array_element) == NULL && elem->type != NULL &&
+            !type_equal(elem->type, declared->array_element)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *init_type = NULL;
     if (node->variable_declaration.initializer != NULL) {
@@ -54,18 +66,11 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
 
             // Promote array literal elements to match declared element type
             ASTNode *init = node->variable_declaration.initializer;
-            if (init->kind == NODE_ARRAY_LITERAL && declared->kind == TYPE_ARRAY && init_type->kind == TYPE_ARRAY &&
-                !type_equal(declared, init_type)) {
-                bool promoted = true;
-                for (int32_t i = 0; i < BUFFER_LENGTH(init->array_literal.elements); i++) {
-                    if (promote_literal(init->array_literal.elements[i], declared->array_element) == NULL &&
-                        init->array_literal.elements[i]->type != NULL &&
-                        !type_equal(init->array_literal.elements[i]->type, declared->array_element)) {
-                        promoted = false;
-                        break;
-                    }
-                }
-                if (promoted) {
+            bool is_array_mismatch =
+                init->kind == NODE_ARRAY_LITERAL && declared->kind == TYPE_ARRAY &&
+                init_type->kind == TYPE_ARRAY && !type_equal(declared, init_type);
+            if (is_array_mismatch) {
+                if (promote_array_elements(init, declared)) {
                     init->type = declared;
                     init_type = declared;
                 }
@@ -75,20 +80,22 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
             init_type = node->variable_declaration.initializer->type;
         }
         // Check for type mismatch between declared and initializer (non-literal)
-        if (init_type != NULL && !type_equal(declared, init_type) && init_type->kind != TYPE_ERROR &&
-            declared->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "type mismatch: expected '%s', got '%s'", type_name(declared),
-                       type_name(init_type));
+        if (init_type != NULL && !type_equal(declared, init_type) &&
+            init_type->kind != TYPE_ERROR && declared->kind != TYPE_ERROR) {
+            SEMA_ERROR(analyzer, node->location, "type mismatch: expected '%s', got '%s'",
+                       type_name(declared), type_name(init_type));
         }
     } else if (init_type != NULL) {
         variable_type = init_type;
     } else {
-        SEMA_ERROR(analyzer, node->location, "cannot infer type for '%s'", node->variable_declaration.name);
+        SEMA_ERROR(analyzer, node->location, "cannot infer type for '%s'",
+                   node->variable_declaration.name);
         variable_type = &TYPE_ERROR_INSTANCE;
     }
 
     if (scope_lookup_current(analyzer, node->variable_declaration.name) != NULL) {
-        SEMA_ERROR(analyzer, node->location, "redefinition of '%s' in the same scope", node->variable_declaration.name);
+        SEMA_ERROR(analyzer, node->location, "redefinition of '%s' in the same scope",
+                   node->variable_declaration.name);
     } else if (scope_lookup(analyzer, node->variable_declaration.name) != NULL) {
         SEMA_ERROR(analyzer, node->location, "variable '%s' shadows an existing binding",
                    node->variable_declaration.name);
@@ -117,7 +124,8 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
         const Type *body_type = check_node(analyzer, function_node->function_declaration.body);
 
         // If return type not declared, infer from body
-        const Type *resolved_return = resolve_ast_type(analyzer, &function_node->function_declaration.return_type);
+        const Type *resolved_return =
+            resolve_ast_type(analyzer, &function_node->function_declaration.return_type);
         if (resolved_return == NULL) {
             resolved_return = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
         }
@@ -130,7 +138,8 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
         }
 
         // Update g_function_signatures
-        FunctionSignature *signature = find_function_signature(function_node->function_declaration.name);
+        FunctionSignature *signature =
+            find_function_signature(function_node->function_declaration.name);
         if (signature != NULL && signature->return_type->kind == TYPE_UNIT) {
             signature->return_type = resolved_return;
         }
@@ -140,7 +149,8 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
 }
 
 /** Shared logic for simple and compound assignment type-checking. */
-static const Type *check_assignment_common(SemanticAnalyzer *analyzer, ASTNode *target, ASTNode *value) {
+static const Type *check_assignment_common(SemanticAnalyzer *analyzer, ASTNode *target,
+                                           ASTNode *value) {
     const Type *target_type = check_node(analyzer, target);
     check_node(analyzer, value);
     promote_literal(value, target_type);
@@ -152,7 +162,8 @@ const Type *check_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
 }
 
 const Type *check_compound_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
-    return check_assignment_common(analyzer, node->compound_assign.target, node->compound_assign.value);
+    return check_assignment_common(analyzer, node->compound_assign.target,
+                                   node->compound_assign.value);
 }
 
 // ── Node dispatch ──────────────────────────────────────────────────────

@@ -55,7 +55,8 @@ static void emit_function_body(CodeGenerator *generator, const ASTNode *function
     }
 }
 
-static void emit_function_declaration(CodeGenerator *generator, const ASTNode *node, bool forward_only) {
+static void emit_function_declaration(CodeGenerator *generator, const ASTNode *node,
+                                      bool forward_only) {
     bool is_public = node->function_declaration.is_public;
 
     // Return type
@@ -65,7 +66,8 @@ static void emit_function_declaration(CodeGenerator *generator, const ASTNode *n
     const char *prefix = !is_public ? "static " : "";
 
     // Mangled function name
-    const char *function_name = codegen_mangle_function_name(generator, node->function_declaration.name);
+    const char *function_name =
+        codegen_mangle_function_name(generator, node->function_declaration.name);
 
     // Parameters
     codegen_emit_indent(generator);
@@ -117,9 +119,43 @@ static void emit_preamble(CodeGenerator *generator) {
     codegen_emit(generator, "#include \"runtime.h\"\n\n");
 }
 
-/** Return true if @p node is a top-level statement (not a module, function, or type alias). */
+/** Return true if @p node is a top-level statement. */
 static bool is_top_level_statement(const ASTNode *node) {
-    return node->kind != NODE_MODULE && node->kind != NODE_FUNCTION_DECLARATION && node->kind != NODE_TYPE_ALIAS;
+    return node->kind != NODE_MODULE && node->kind != NODE_FUNCTION_DECLARATION &&
+           node->kind != NODE_TYPE_ALIAS;
+}
+
+/**
+ * Emit the auto-generated `main()` entry point that calls
+ * `_rsg_top_level()`, the user's `main()`, and all zero-parameter
+ * `test_*` functions.
+ */
+static void emit_entry_point(CodeGenerator *generator, const ASTNode *file,
+                             bool has_top_statements) {
+    codegen_emit(generator, "int main(void) {\n");
+    generator->indent++;
+
+    if (has_top_statements) {
+        codegen_emit_line(generator, "_rsg_top_level();");
+    }
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        const ASTNode *declaration = file->file.declarations[i];
+        if (declaration->kind != NODE_FUNCTION_DECLARATION) {
+            continue;
+        }
+        const char *name = declaration->function_declaration.name;
+        bool is_main = strcmp(name, "main") == 0;
+        bool is_test = strncmp(name, "test_", 5) == 0;
+        bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.parameters) != 0;
+        if ((is_main || is_test) && !has_parameters) {
+            codegen_emit_line(generator, "%s();", codegen_mangle_function_name(generator, name));
+        }
+    }
+
+    codegen_emit_line(generator, "return 0;");
+    generator->indent--;
+    codegen_emit(generator, "}\n");
 }
 
 /**
@@ -185,32 +221,7 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
         codegen_emit(generator, "}\n\n");
     }
 
-    // Auto-generated entry point — calls _rsg_top_level(), user main(),
-    // and all zero-parameter test_* functions.
-    codegen_emit(generator, "int main(void) {\n");
-    generator->indent++;
-
-    if (has_top_statements) {
-        codegen_emit_line(generator, "_rsg_top_level();");
-    }
-
-    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
-        const ASTNode *declaration = file->file.declarations[i];
-        if (declaration->kind != NODE_FUNCTION_DECLARATION) {
-            continue;
-        }
-        const char *name = declaration->function_declaration.name;
-        bool is_main = strcmp(name, "main") == 0;
-        bool is_test = strncmp(name, "test_", 5) == 0;
-        bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.parameters) != 0;
-        if ((is_main || is_test) && !has_parameters) {
-            codegen_emit_line(generator, "%s();", codegen_mangle_function_name(generator, name));
-        }
-    }
-
-    codegen_emit_line(generator, "return 0;");
-    generator->indent--;
-    codegen_emit(generator, "}\n");
+    emit_entry_point(generator, file, has_top_statements);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────

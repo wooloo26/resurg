@@ -17,7 +17,8 @@ Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop) {
     scope->symbols = NULL;
     scope->parent = analyzer->current_scope;
     scope->is_loop = is_loop;
-    scope->module_name = analyzer->current_scope != NULL ? analyzer->current_scope->module_name : NULL;
+    scope->module_name =
+        analyzer->current_scope != NULL ? analyzer->current_scope->module_name : NULL;
     analyzer->current_scope = scope;
     return scope;
 }
@@ -26,7 +27,8 @@ void scope_pop(SemanticAnalyzer *analyzer) {
     analyzer->current_scope = analyzer->current_scope->parent;
 }
 
-void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public, bool is_function) {
+void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
+                  bool is_function) {
     Symbol *symbol = arena_alloc(analyzer->arena, sizeof(Symbol));
     symbol->name = name;
     symbol->type = type;

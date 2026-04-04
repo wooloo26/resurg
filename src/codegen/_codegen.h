@@ -105,7 +105,8 @@ void codegen_emit_statement(CodeGenerator *generator, const ASTNode *node);
  * result of each branch is assigned to it; otherwise emitted as a pure
  * statement.
  */
-void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target, bool is_else_if);
+void codegen_emit_if(CodeGenerator *generator, const ASTNode *node, const char *target,
+                     bool is_else_if);
 /**
  * Emit the statements of a block (excludes the trailing result expression
  * — the caller is responsible for that).

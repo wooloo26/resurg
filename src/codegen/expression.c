@@ -63,6 +63,14 @@ static bool is_simple_ternary(const ASTNode *node) {
 
 // ── String conversion for interpolation ────────────────────────────────
 
+/** Wrap @p value with a cast and a conversion call: `func((cast)(value))`. */
+static const char *convert_with_cast(CodeGenerator *generator, const char *value, const char *cast,
+                                     const char *func) {
+    const char *argument =
+        cast != NULL ? arena_sprintf(generator->arena, "(%s)(%s)", cast, value) : value;
+    return arena_sprintf(generator->arena, "%s(%s)", func, argument);
+}
+
 /**
  * Convert an expression node to an RsgString value for interpolation,
  * wrapping non-string types with the appropriate rsg_string_from_* call.
@@ -70,42 +78,50 @@ static bool is_simple_ternary(const ASTNode *node) {
 static const char *string_convert_expression(CodeGenerator *generator, const ASTNode *node) {
     const char *value = codegen_emit_expression(generator, node);
     const Type *type = node->type;
-    if (type == NULL) {
+    if (type == NULL || type->kind == TYPE_STRING) {
         return value;
     }
     switch (type->kind) {
-    case TYPE_STRING:
-        return value;
     case TYPE_BOOL:
-        return arena_sprintf(generator->arena, "rsg_string_from_bool(%s)", value);
+        return convert_with_cast(generator, value, NULL, "rsg_string_from_bool");
     case TYPE_I8:
     case TYPE_I16:
     case TYPE_I32:
-        return arena_sprintf(generator->arena, "rsg_string_from_i32((int32_t)(%s))", value);
+        return convert_with_cast(generator, value, "int32_t", "rsg_string_from_i32");
     case TYPE_I64:
     case TYPE_I128:
     case TYPE_ISIZE:
-        return arena_sprintf(generator->arena, "rsg_string_from_i64((int64_t)(%s))", value);
+        return convert_with_cast(generator, value, "int64_t", "rsg_string_from_i64");
     case TYPE_U8:
     case TYPE_U16:
     case TYPE_U32:
-        return arena_sprintf(generator->arena, "rsg_string_from_u32((uint32_t)(%s))", value);
+        return convert_with_cast(generator, value, "uint32_t", "rsg_string_from_u32");
     case TYPE_U64:
     case TYPE_U128:
     case TYPE_USIZE:
-        return arena_sprintf(generator->arena, "rsg_string_from_u64((uint64_t)(%s))", value);
+        return convert_with_cast(generator, value, "uint64_t", "rsg_string_from_u64");
     case TYPE_F32:
-        return arena_sprintf(generator->arena, "rsg_string_from_f32(%s)", value);
+        return convert_with_cast(generator, value, NULL, "rsg_string_from_f32");
     case TYPE_F64:
-        return arena_sprintf(generator->arena, "rsg_string_from_f64(%s)", value);
+        return convert_with_cast(generator, value, NULL, "rsg_string_from_f64");
     case TYPE_CHAR:
-        return arena_sprintf(generator->arena, "rsg_string_from_char(%s)", value);
+        return convert_with_cast(generator, value, NULL, "rsg_string_from_char");
     default:
-        return arena_sprintf(generator->arena, "rsg_string_from_i32((int32_t)(%s))", value);
+        return convert_with_cast(generator, value, "int32_t", "rsg_string_from_i32");
     }
 }
 
 // ── Per-node expression emitters ───────────────────────────────────────
+
+/** Emit a comma-separated list of expressions from @p nodes into a single string. */
+static const char *join_expressions(CodeGenerator *generator, ASTNode **nodes, int32_t count) {
+    const char *result = "";
+    for (int32_t i = 0; i < count; i++) {
+        const char *elem = codegen_emit_expression(generator, nodes[i]);
+        result = (i == 0) ? elem : arena_sprintf(generator->arena, "%s, %s", result, elem);
+    }
+    return result;
+}
 
 static const char *emit_literal_expression(CodeGenerator *generator, const ASTNode *node) {
     switch (node->literal.kind) {
@@ -114,19 +130,23 @@ static const char *emit_literal_expression(CodeGenerator *generator, const ASTNo
     case LITERAL_I8:
     case LITERAL_I16:
     case LITERAL_I32:
-        return arena_sprintf(generator->arena, "%lld", (long long)(int64_t)node->literal.integer_value);
+        return arena_sprintf(generator->arena, "%lld",
+                             (long long)(int64_t)node->literal.integer_value);
     case LITERAL_I64:
     case LITERAL_I128:
     case LITERAL_ISIZE:
-        return arena_sprintf(generator->arena, "%lldLL", (long long)(int64_t)node->literal.integer_value);
+        return arena_sprintf(generator->arena, "%lldLL",
+                             (long long)(int64_t)node->literal.integer_value);
     case LITERAL_U8:
     case LITERAL_U16:
     case LITERAL_U32:
-        return arena_sprintf(generator->arena, "%lluU", (unsigned long long)node->literal.integer_value);
+        return arena_sprintf(generator->arena, "%lluU",
+                             (unsigned long long)node->literal.integer_value);
     case LITERAL_U64:
     case LITERAL_U128:
     case LITERAL_USIZE:
-        return arena_sprintf(generator->arena, "%lluULL", (unsigned long long)node->literal.integer_value);
+        return arena_sprintf(generator->arena, "%lluULL",
+                             (unsigned long long)node->literal.integer_value);
     case LITERAL_F32:
         return codegen_format_float32(generator, node->literal.float64_value);
     case LITERAL_F64:
@@ -150,7 +170,8 @@ static const char *emit_unary_expression(CodeGenerator *generator, const ASTNode
         switch (literal->literal.kind) {
         case LITERAL_I8:
         case LITERAL_I16:
-            return arena_sprintf(generator->arena, "%lld", -(long long)(int64_t)literal->literal.integer_value);
+            return arena_sprintf(generator->arena, "%lld",
+                                 -(long long)(int64_t)literal->literal.integer_value);
         case LITERAL_I32: {
             int64_t negated = -(int64_t)literal->literal.integer_value;
             if (negated == (int64_t)(-2147483647 - 1)) {
@@ -191,7 +212,8 @@ static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node
     const ASTNode *right_operand = node->binary.right;
 
     bool both_i32 = left_operand->kind == NODE_LITERAL && right_operand->kind == NODE_LITERAL &&
-                    left_operand->literal.kind == LITERAL_I32 && right_operand->literal.kind == LITERAL_I32;
+                    left_operand->literal.kind == LITERAL_I32 &&
+                    right_operand->literal.kind == LITERAL_I32;
     if (!both_i32) {
         return NULL;
     }
@@ -235,6 +257,53 @@ static const char *fold_i32_binary(CodeGenerator *generator, const ASTNode *node
     return arena_sprintf(generator->arena, "%lld", (long long)result);
 }
 
+/** Emit array equality/inequality via memcmp on ._data. */
+static const char *emit_array_comparison(CodeGenerator *generator, const Type *type, TokenKind op,
+                                         const char *left, const char *right) {
+    const char *left_tmp = codegen_next_temporary(generator);
+    const char *right_tmp = codegen_next_temporary(generator);
+    const char *tname = codegen_c_type_for(generator, type);
+    codegen_emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
+    codegen_emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
+    const char *cmp = (op == TOKEN_EQUAL_EQUAL) ? "==" : "!=";
+    return arena_sprintf(generator->arena, "(memcmp(%s._data, %s._data, sizeof(%s._data)) %s 0)",
+                         left_tmp, right_tmp, left_tmp, cmp);
+}
+
+/** Emit tuple equality/inequality via element-wise comparison. */
+static const char *emit_tuple_comparison(CodeGenerator *generator, const Type *type, TokenKind op,
+                                         const char *left, const char *right) {
+    bool is_equal = (op == TOKEN_EQUAL_EQUAL);
+    const char *left_tmp = codegen_next_temporary(generator);
+    const char *right_tmp = codegen_next_temporary(generator);
+    const char *tname = codegen_c_type_for(generator, type);
+    codegen_emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
+    codegen_emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
+    const char *join = is_equal ? " && " : " || ";
+    const char *cmp = is_equal ? "==" : "!=";
+    const char *result = "";
+    for (int32_t i = 0; i < type->tuple_count; i++) {
+        const char *l = arena_sprintf(generator->arena, "%s._%d", left_tmp, i);
+        const char *r = arena_sprintf(generator->arena, "%s._%d", right_tmp, i);
+        const char *part;
+        if (type->tuple_elements[i]->kind == TYPE_STRING) {
+            if (is_equal) {
+                part = arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", l, r);
+            } else {
+                part = arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", l, r);
+            }
+        } else {
+            part = arena_sprintf(generator->arena, "(%s %s %s)", l, cmp, r);
+        }
+        if (i == 0) {
+            result = part;
+        } else {
+            result = arena_sprintf(generator->arena, "%s%s%s", result, join, part);
+        }
+    }
+    return arena_sprintf(generator->arena, "(%s)", result);
+}
+
 static const char *emit_binary_expression(CodeGenerator *generator, const ASTNode *node) {
     const char *folded = fold_i32_binary(generator, node);
     if (folded != NULL) {
@@ -247,77 +316,47 @@ static const char *emit_binary_expression(CodeGenerator *generator, const ASTNod
     const char *right = codegen_emit_expression(generator, right_operand);
 
     const Type *left_type = left_operand->type;
+    TokenKind op = node->binary.op;
 
     // String equality/inequality
     if (left_type != NULL && left_type->kind == TYPE_STRING) {
-        if (node->binary.op == TOKEN_EQUAL_EQUAL) {
+        if (op == TOKEN_EQUAL_EQUAL) {
             return arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", left, right);
         }
-        if (node->binary.op == TOKEN_BANG_EQUAL) {
+        if (op == TOKEN_BANG_EQUAL) {
             return arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", left, right);
         }
     }
 
-    // Array equality/inequality — memcmp on ._data
+    // Array equality/inequality
     if (left_type != NULL && left_type->kind == TYPE_ARRAY &&
-        (node->binary.op == TOKEN_EQUAL_EQUAL || node->binary.op == TOKEN_BANG_EQUAL)) {
-        const char *left_tmp = codegen_next_temporary(generator);
-        const char *right_tmp = codegen_next_temporary(generator);
-        const char *tname = codegen_c_type_for(generator, left_type);
-        codegen_emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
-        codegen_emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
-        const char *cmp = (node->binary.op == TOKEN_EQUAL_EQUAL) ? "==" : "!=";
-        return arena_sprintf(generator->arena, "(memcmp(%s._data, %s._data, sizeof(%s._data)) %s 0)", left_tmp,
-                             right_tmp, left_tmp, cmp);
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        return emit_array_comparison(generator, left_type, op, left, right);
     }
 
-    // Tuple equality/inequality — element-wise comparison
+    // Tuple equality/inequality
     if (left_type != NULL && left_type->kind == TYPE_TUPLE &&
-        (node->binary.op == TOKEN_EQUAL_EQUAL || node->binary.op == TOKEN_BANG_EQUAL)) {
-        bool is_equal = (node->binary.op == TOKEN_EQUAL_EQUAL);
-        const char *left_tmp = codegen_next_temporary(generator);
-        const char *right_tmp = codegen_next_temporary(generator);
-        const char *tname = codegen_c_type_for(generator, left_type);
-        codegen_emit_line(generator, "%s %s = %s;", tname, left_tmp, left);
-        codegen_emit_line(generator, "%s %s = %s;", tname, right_tmp, right);
-        const char *join = is_equal ? " && " : " || ";
-        const char *cmp = is_equal ? "==" : "!=";
-        const char *result = "";
-        for (int32_t i = 0; i < left_type->tuple_count; i++) {
-            const char *l = arena_sprintf(generator->arena, "%s._%d", left_tmp, i);
-            const char *r = arena_sprintf(generator->arena, "%s._%d", right_tmp, i);
-            const char *part;
-            if (left_type->tuple_elements[i]->kind == TYPE_STRING) {
-                if (is_equal) {
-                    part = arena_sprintf(generator->arena, "rsg_string_equal(%s, %s)", l, r);
-                } else {
-                    part = arena_sprintf(generator->arena, "(!rsg_string_equal(%s, %s))", l, r);
-                }
-            } else {
-                part = arena_sprintf(generator->arena, "(%s %s %s)", l, cmp, r);
-            }
-            if (i == 0) {
-                result = part;
-            } else {
-                result = arena_sprintf(generator->arena, "%s%s%s", result, join, part);
-            }
-        }
-        return arena_sprintf(generator->arena, "(%s)", result);
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        return emit_tuple_comparison(generator, left_type, op, left, right);
     }
 
-    const char *op = codegen_c_binary_operator(node->binary.op);
-    return arena_sprintf(generator->arena, "(%s %s %s)", left, op, right);
+    const char *bin_op = codegen_c_binary_operator(op);
+    return arena_sprintf(generator->arena, "(%s %s %s)", left, bin_op, right);
 }
 
 static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *node) {
     int32_t argument_count = BUFFER_LENGTH(node->call.arguments);
-    const char *condition = argument_count > 0 ? codegen_emit_expression(generator, node->call.arguments[0]) : "0";
+    const char *condition = "0";
+    if (argument_count > 0) {
+        condition = codegen_emit_expression(generator, node->call.arguments[0]);
+    }
     const char *message = "NULL";
     if (argument_count > 1) {
         ASTNode *message_node = node->call.arguments[1];
         if (message_node->kind == NODE_LITERAL && message_node->literal.kind == LITERAL_STRING) {
-            message = arena_sprintf(generator->arena, "\"%s\"",
-                                    codegen_c_string_escape(generator, message_node->literal.string_value));
+            message = arena_sprintf(
+                generator->arena, "\"%s\"",
+                codegen_c_string_escape(generator, message_node->literal.string_value));
         } else {
             const char *message_expression = codegen_emit_expression(generator, message_node);
             message = arena_sprintf(generator->arena, "%s.data", message_expression);
@@ -328,7 +367,9 @@ static const char *emit_assert_call(CodeGenerator *generator, const ASTNode *nod
 }
 
 static const char *emit_call_expression(CodeGenerator *generator, const ASTNode *node) {
-    if (node->call.callee->kind == NODE_IDENTIFIER && strcmp(node->call.callee->identifier.name, "assert") == 0) {
+    bool is_assert = node->call.callee->kind == NODE_IDENTIFIER &&
+                     strcmp(node->call.callee->identifier.name, "assert") == 0;
+    if (is_assert) {
         return emit_assert_call(generator, node);
     }
     const char *callee;
@@ -337,15 +378,8 @@ static const char *emit_call_expression(CodeGenerator *generator, const ASTNode 
     } else {
         callee = codegen_emit_expression(generator, node->call.callee);
     }
-    const char *argument_list = "";
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
-        const char *argument = codegen_emit_expression(generator, node->call.arguments[i]);
-        if (i == 0) {
-            argument_list = argument;
-        } else {
-            argument_list = arena_sprintf(generator->arena, "%s, %s", argument_list, argument);
-        }
-    }
+    const char *argument_list =
+        join_expressions(generator, node->call.arguments, BUFFER_LENGTH(node->call.arguments));
     return arena_sprintf(generator->arena, "%s(%s)", callee, argument_list);
 }
 
@@ -377,7 +411,8 @@ static const char *emit_block_expression(CodeGenerator *generator, const ASTNode
     return "(void)0";
 }
 
-static const char *emit_string_interpolation_expression(CodeGenerator *generator, const ASTNode *node) {
+static const char *emit_string_interpolation_expression(CodeGenerator *generator,
+                                                        const ASTNode *node) {
     int32_t part_count = BUFFER_LENGTH(node->string_interpolation.parts);
     const char **string_parts = NULL;
     for (int32_t i = 0; i < part_count; i++) {
@@ -401,8 +436,8 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
         return result;
     }
     if (count == 2) {
-        const char *result =
-            arena_sprintf(generator->arena, "rsg_string_concat(%s, %s)", string_parts[0], string_parts[1]);
+        const char *result = arena_sprintf(generator->arena, "rsg_string_concat(%s, %s)",
+                                           string_parts[0], string_parts[1]);
         BUFFER_FREE(string_parts);
         return result;
     }
@@ -411,31 +446,25 @@ static const char *emit_string_interpolation_expression(CodeGenerator *generator
     codegen_emit_line(generator, "RsgStringBuilder %s;", builder);
     codegen_emit_line(generator, "rsg_string_builder_init(&%s);", builder);
     for (int32_t i = 0; i < count; i++) {
-        codegen_emit_line(generator, "rsg_string_builder_append_string(&%s, %s);", builder, string_parts[i]);
+        codegen_emit_line(generator, "rsg_string_builder_append_string(&%s, %s);", builder,
+                          string_parts[i]);
     }
     BUFFER_FREE(string_parts);
     const char *temporary = codegen_next_temporary(generator);
-    codegen_emit_line(generator, "RsgString %s = rsg_string_builder_finish(&%s);", temporary, builder);
+    codegen_emit_line(generator, "RsgString %s = rsg_string_builder_finish(&%s);", temporary,
+                      builder);
     return temporary;
 }
 
 static const char *emit_array_literal_expression(CodeGenerator *generator, const ASTNode *node) {
-    const Type *type = node->type;
-    const char *tname = codegen_c_type_for(generator, type);
-    const char *result = arena_sprintf(generator->arena, "(%s){ ._data = { ", tname);
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->array_literal.elements); i++) {
-        if (i > 0) {
-            result = arena_sprintf(generator->arena, "%s, ", result);
-        }
-        const char *elem = codegen_emit_expression(generator, node->array_literal.elements[i]);
-        result = arena_sprintf(generator->arena, "%s%s", result, elem);
-    }
-    return arena_sprintf(generator->arena, "%s } }", result);
+    const char *tname = codegen_c_type_for(generator, node->type);
+    const char *elements = join_expressions(generator, node->array_literal.elements,
+                                            BUFFER_LENGTH(node->array_literal.elements));
+    return arena_sprintf(generator->arena, "(%s){ ._data = { %s } }", tname, elements);
 }
 
 static const char *emit_tuple_literal_expression(CodeGenerator *generator, const ASTNode *node) {
-    const Type *type = node->type;
-    const char *tname = codegen_c_type_for(generator, type);
+    const char *tname = codegen_c_type_for(generator, node->type);
     const char *result = arena_sprintf(generator->arena, "(%s){ ", tname);
     for (int32_t i = 0; i < BUFFER_LENGTH(node->tuple_literal.elements); i++) {
         if (i > 0) {

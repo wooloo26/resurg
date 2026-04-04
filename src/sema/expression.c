@@ -32,10 +32,10 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *right = check_node(analyzer, node->binary.right);
 
     if (left == NULL || right == NULL || left->kind == TYPE_ERROR || right->kind == TYPE_ERROR) {
-        return (node->binary.op >= TOKEN_EQUAL_EQUAL && node->binary.op <= TOKEN_GREATER_EQUAL) ||
-                       node->binary.op == TOKEN_AMPERSAND_AMPERSAND || node->binary.op == TOKEN_PIPE_PIPE
-                   ? &TYPE_BOOL_INSTANCE
-                   : &TYPE_ERROR_INSTANCE;
+        bool is_boolean_result =
+            (node->binary.op >= TOKEN_EQUAL_EQUAL && node->binary.op <= TOKEN_GREATER_EQUAL) ||
+            node->binary.op == TOKEN_AMPERSAND_AMPERSAND || node->binary.op == TOKEN_PIPE_PIPE;
+        return is_boolean_result ? &TYPE_BOOL_INSTANCE : &TYPE_ERROR_INSTANCE;
     }
 
     // Promote integer/float literals to match the other side's type
@@ -54,7 +54,8 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     // Check for type mismatch after promotion
     if (!type_equal(left, right)) {
         if (left->kind != TYPE_ERROR && right->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "type mismatch: '%s' and '%s'", type_name(left), type_name(right));
+            SEMA_ERROR(analyzer, node->location, "type mismatch: '%s' and '%s'", type_name(left),
+                       type_name(right));
         }
     }
 
@@ -105,18 +106,20 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         if (signature != NULL) {
             int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
             if (arg_count != signature->parameter_count) {
-                SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d", signature->parameter_count,
-                           arg_count);
+                SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d",
+                           signature->parameter_count, arg_count);
             } else {
                 for (int32_t i = 0; i < arg_count; i++) {
                     ASTNode *arg = node->call.arguments[i];
                     const Type *param_type = signature->parameter_types[i];
                     promote_literal(arg, param_type);
                     const Type *arg_type = arg->type;
-                    if (arg_type != NULL && param_type != NULL && !type_equal(arg_type, param_type) &&
-                        arg_type->kind != TYPE_ERROR && param_type->kind != TYPE_ERROR) {
-                        SEMA_ERROR(analyzer, arg->location, "type mismatch: expected '%s', got '%s'",
-                                   type_name(param_type), type_name(arg_type));
+                    if (arg_type != NULL && param_type != NULL &&
+                        !type_equal(arg_type, param_type) && arg_type->kind != TYPE_ERROR &&
+                        param_type->kind != TYPE_ERROR) {
+                        SEMA_ERROR(analyzer, arg->location,
+                                   "type mismatch: expected '%s', got '%s'", type_name(param_type),
+                                   type_name(arg_type));
                     }
                 }
             }

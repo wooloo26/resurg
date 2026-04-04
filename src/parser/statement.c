@@ -117,7 +117,8 @@ ASTNode *parser_parse_statement(Parser *parser) {
     }
 
     // `ident :=` - inferred variable declaration
-    bool is_inferred_declaration = parser_check(parser, TOKEN_IDENTIFIER) && parser->position + 1 < parser->count &&
+    bool is_inferred_declaration = parser_check(parser, TOKEN_IDENTIFIER) &&
+                                   parser->position + 1 < parser->count &&
                                    parser->tokens[parser->position + 1].kind == TOKEN_COLON_EQUAL;
     if (is_inferred_declaration) {
         parser_advance(parser); // consume IDENT

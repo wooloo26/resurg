@@ -63,15 +63,16 @@ typedef struct {
 #define BUFFER_FREE(buffer) ((buffer) != NULL ? (free(BUFFER__HEADER(buffer)), (buffer) = NULL) : 0)
 
 // NOLINTNEXTLINE(bugprone-sizeof-expression)
-#define BUFFER_FIT(buffer, needed)                                                                                     \
-    ((needed) <= BUFFER_CAPACITY(buffer)                                                                               \
-         ? 0                                                                                                           \
-         : ((buffer) = (__typeof__(buffer))buffer__grow((const void *)(buffer), (needed), sizeof(*(buffer)))))
+#define BUFFER_FIT(buffer, needed)                                                                 \
+    ((needed) <= BUFFER_CAPACITY(buffer)                                                           \
+         ? 0                                                                                       \
+         : ((buffer) = (__typeof__(buffer))buffer__grow((const void *)(buffer), (needed),          \
+                                                        sizeof(*(buffer)))))
 
-#define BUFFER_PUSH(buffer, value)                                                                                     \
-    do {                                                                                                               \
-        BUFFER_FIT((buffer), BUFFER_LENGTH(buffer) + 1);                                                               \
-        (buffer)[BUFFER__HEADER(buffer)->length++] = (value);                                                          \
+#define BUFFER_PUSH(buffer, value)                                                                 \
+    do {                                                                                           \
+        BUFFER_FIT((buffer), BUFFER_LENGTH(buffer) + 1);                                           \
+        (buffer)[BUFFER__HEADER(buffer)->length++] = (value);                                      \
     } while (0)
 
 /** Internal growth routine for stretchy buffers - do not call directly. */

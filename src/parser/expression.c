@@ -85,10 +85,13 @@ static ASTNode *parse_array_literal(Parser *parser) {
 
     // Check if this is [N]T[values] (typed array literal)
     // Pattern: INTEGER_LITERAL, ']', type-keyword-or-identifier
-    if (parser_check(parser, TOKEN_INTEGER_LITERAL) && parser->position + 1 < parser->count &&
-        parser->tokens[parser->position + 1].kind == TOKEN_RIGHT_BRACKET && parser->position + 2 < parser->count &&
-        (token_is_type_keyword(parser->tokens[parser->position + 2].kind) ||
-         parser->tokens[parser->position + 2].kind == TOKEN_IDENTIFIER)) {
+    bool has_size_and_bracket = parser_check(parser, TOKEN_INTEGER_LITERAL) &&
+                                parser->position + 1 < parser->count &&
+                                parser->tokens[parser->position + 1].kind == TOKEN_RIGHT_BRACKET;
+    bool has_type_after = has_size_and_bracket && parser->position + 2 < parser->count &&
+                          (token_is_type_keyword(parser->tokens[parser->position + 2].kind) ||
+                           parser->tokens[parser->position + 2].kind == TOKEN_IDENTIFIER);
+    if (has_type_after) {
         int32_t size = (int32_t)parser_current_token(parser)->literal_value.integer_value;
         parser_advance(parser); // consume size
         parser_advance(parser); // consume ']'
@@ -170,7 +173,8 @@ static ASTNode *parse_primary(Parser *parser) {
     }
 
     // Typed literal syntax: type_keyword(expr) e.g. i64(100), f32(3.14)
-    if (token_is_type_keyword(parser_current_token(parser)->kind) && parser->position + 1 < parser->count &&
+    if (token_is_type_keyword(parser_current_token(parser)->kind) &&
+        parser->position + 1 < parser->count &&
         parser->tokens[parser->position + 1].kind == TOKEN_LEFT_PAREN) {
         ASTNode *node = ast_new(parser->arena, NODE_TYPE_CONVERSION, location);
         node->type_conversion.target_type.kind = AST_TYPE_NAME;
@@ -218,7 +222,8 @@ static ASTNode *parse_primary(Parser *parser) {
     if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         return parser_parse_block(parser);
     }
-    rsg_error(location, "expected expression, got '%s'", token_kind_string(parser_current_token(parser)->kind));
+    const char *token_name = token_kind_string(parser_current_token(parser)->kind);
+    rsg_error(location, "expected expression, got '%s'", token_name);
     parser_advance(parser);
     return ast_new(parser->arena, NODE_LITERAL, location); // error recovery
 }
@@ -256,9 +261,9 @@ static ASTNode *parse_postfix(Parser *parser) {
             if (parser_check(parser, TOKEN_INTEGER_LITERAL)) {
                 ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
                 node->member.object = left;
-                node->member.member =
-                    arena_sprintf(parser->arena, "%llu",
-                                  (unsigned long long)parser_current_token(parser)->literal_value.integer_value);
+                unsigned long long index_value =
+                    (unsigned long long)parser_current_token(parser)->literal_value.integer_value;
+                node->member.member = arena_sprintf(parser->arena, "%llu", index_value);
                 parser_advance(parser);
                 left = node;
             } else {
@@ -309,7 +314,9 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
         }
 
         // Compound assignment
-        if (op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL || op == TOKEN_SLASH_EQUAL) {
+        bool is_compound_assign = op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL ||
+                                  op == TOKEN_STAR_EQUAL || op == TOKEN_SLASH_EQUAL;
+        if (is_compound_assign) {
             ASTNode *node = ast_new(parser->arena, NODE_COMPOUND_ASSIGN, location);
             node->compound_assign.op = op;
             node->compound_assign.target = left;

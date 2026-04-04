@@ -109,8 +109,11 @@ static int compile(const CliArgs *args) {
     if (args->dump_tokens) {
         for (int32_t i = 0; i < BUFFER_LENGTH(tokens); i++) {
             Token *token = &tokens[i];
-            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->location.line, token->location.column,
-                    token_kind_string(token->kind), token->length, token->lexeme);
+            int32_t line = token->location.line;
+            int32_t column = token->location.column;
+            const char *kind = token_kind_string(token->kind);
+            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", line, column, kind, token->length,
+                    token->lexeme);
         }
         goto cleanup;
     }

@@ -69,14 +69,17 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOKEN_MODULE}, {"pub", TOKEN_PUBLIC},        {"fn", TOKEN_FUNCTION}, {"var", TOKEN_VARIABLE},
-    {"if", TOKEN_IF},         {"else", TOKEN_ELSE},         {"loop", TOKEN_LOOP},   {"for", TOKEN_FOR},
-    {"break", TOKEN_BREAK},   {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},   {"false", TOKEN_FALSE},
-    {"type", TOKEN_TYPE},     {"bool", TOKEN_BOOL},         {"i8", TOKEN_I8},       {"i16", TOKEN_I16},
-    {"i32", TOKEN_I32},       {"i64", TOKEN_I64},           {"i128", TOKEN_I128},   {"u8", TOKEN_U8},
-    {"u16", TOKEN_U16},       {"u32", TOKEN_U32},           {"u64", TOKEN_U64},     {"u128", TOKEN_U128},
-    {"isize", TOKEN_ISIZE},   {"usize", TOKEN_USIZE},       {"f32", TOKEN_F32},     {"f64", TOKEN_F64},
-    {"char", TOKEN_CHAR},     {"str", TOKEN_STRING},        {"unit", TOKEN_UNIT},
+    {"module", TOKEN_MODULE},     {"pub", TOKEN_PUBLIC},  {"fn", TOKEN_FUNCTION},
+    {"var", TOKEN_VARIABLE},      {"if", TOKEN_IF},       {"else", TOKEN_ELSE},
+    {"loop", TOKEN_LOOP},         {"for", TOKEN_FOR},     {"break", TOKEN_BREAK},
+    {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},   {"false", TOKEN_FALSE},
+    {"type", TOKEN_TYPE},         {"bool", TOKEN_BOOL},   {"i8", TOKEN_I8},
+    {"i16", TOKEN_I16},           {"i32", TOKEN_I32},     {"i64", TOKEN_I64},
+    {"i128", TOKEN_I128},         {"u8", TOKEN_U8},       {"u16", TOKEN_U16},
+    {"u32", TOKEN_U32},           {"u64", TOKEN_U64},     {"u128", TOKEN_U128},
+    {"isize", TOKEN_ISIZE},       {"usize", TOKEN_USIZE}, {"f32", TOKEN_F32},
+    {"f64", TOKEN_F64},           {"char", TOKEN_CHAR},   {"str", TOKEN_STRING},
+    {"unit", TOKEN_UNIT},
 };
 
 static const int32_t KEYWORD_COUNT = (int32_t)(sizeof(KEYWORDS) / sizeof(KEYWORDS[0]));
@@ -128,7 +131,8 @@ static Token scan_number(Lexer *lexer, SourceLocation location) {
     }
 
     int32_t length = (int32_t)(lexer->source + lexer->position - start);
-    Token token = make_token(lexer, is_float ? TOKEN_FLOAT_LITERAL : TOKEN_INTEGER_LITERAL, start, length, location);
+    TokenKind number_kind = is_float ? TOKEN_FLOAT_LITERAL : TOKEN_INTEGER_LITERAL;
+    Token token = make_token(lexer, number_kind, start, length, location);
 
     // Strip underscores and parse value
     char buffer[64];
@@ -250,7 +254,8 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
     }
 
     // Interpolated string: produce token sequence into pending buffer
-    // Pattern: STRING_LITERAL [INTERPOLATION_START expr_tokens... INTERPOLATION_END STRING_LITERAL]*
+    // Pattern: STRING_LITERAL [INTERPOLATION_START expr_tokens... INTERPOLATION_END
+    // STRING_LITERAL]*
     lexer->pending = NULL;
     lexer->pending_position = 0;
 
@@ -278,7 +283,9 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
             advance(lexer); // consume '{'
 
             // Emit INTERPOLATION_START
-            BUFFER_PUSH(lexer->pending, make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_location(lexer)));
+            Token interp_start =
+                make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_location(lexer));
+            BUFFER_PUSH(lexer->pending, interp_start);
 
             // Lex expression tokens until matching '}'
             int32_t brace_depth = 1;
@@ -312,12 +319,15 @@ static Token scan_string(Lexer *lexer, SourceLocation location) {
             }
 
             // Emit INTERPOLATION_END
-            BUFFER_PUSH(lexer->pending, make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_location(lexer)));
+            Token interp_end =
+                make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_location(lexer));
+            BUFFER_PUSH(lexer->pending, interp_end);
         }
     }
 
     // If the string ends with an interpolation, emit a trailing empty STRING_LITERAL
-    // so the parser always sees: STRING_LITERAL [INTERPOLATION_START expr INTERPOLATION_END STRING_LITERAL]*
+    // so the parser always sees: STRING_LITERAL [INTERPOLATION_START expr INTERPOLATION_END
+    // STRING_LITERAL]*
     if (BUFFER_LENGTH(lexer->pending) > 0 &&
         lexer->pending[BUFFER_LENGTH(lexer->pending) - 1].kind == TOKEN_INTERPOLATION_END) {
         BUFFER_PUSH(lexer->pending, make_string_token(lexer, "", current_location(lexer)));
