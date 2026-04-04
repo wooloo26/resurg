@@ -155,4 +155,6 @@ Language completeness, tooling, and ecosystem.
 - [ ] Async / concurrency primitives
 - [ ] REPL / interpreter mode
 - [ ] Playground (web-based)
+- [ ] Multi-file compilation
+- [ ] Direct C import
 - [ ] Self-hosting compiler (Resurg-in-Resurg)
