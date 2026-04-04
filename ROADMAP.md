@@ -60,6 +60,9 @@ Pointer semantics and garbage collection.
 - [ ] `mut` pointer parameters (declaration + call site)
 - [ ] `immut` bindings and fields
 - [ ] `immut` return values
+
+## v0.4.1 — Tracing Garbage Collector
+
 - [ ] Tracing GC integration
 
 ## v0.5.0 — Enums & Pattern Matching
@@ -86,6 +89,9 @@ Null safety and error handling.
 - [ ] Optional chaining (`?.`)
 - [ ] Postfix `!` error propagation
 - [ ] Default `None` for `var x: ?T`
+
+## v0.6.1 — Control Flow, defer & Panic/Recovery
+
 - [ ] `defer` (LIFO cleanup on scope exit)
 - [ ] `while` loop
 - [ ] `if` pattern binding (`if Some(x) := expr { … }`)
@@ -109,13 +115,36 @@ Dynamic-length data.
 
 Abstraction and polymorphism.
 
+- [ ] Generic functions (`fn max<T: Ord>(…)`)
+- [ ] Pact-bounded type parameters
+- [ ] Generic pacts (`pact B<T> { Into<T>; Clone }`)
+
+## v0.8.0 — Pacts & Conformance
+
 - [ ] Pact (interface) definition with required fields and methods
 - [ ] Default method implementations in pacts
 - [ ] Explicit conformance (`struct Foo: Pact1 + Pact2`)
-- [ ] Generic functions (`fn max<T: Ord>(…)`)
-- [ ] Pact-bounded type parameters
-- [ ] Constraint aliases (`pact A { Ord; Display }`)
+- [ ] Constraint aliases (`pact A { Ord; Display } or pact A = Ord + Display`)
+
+## v0.8.1 — Generics Core
+
+- [ ] Generic function syntax (`fn max<T: Ord>(a: T, b: T) -> T`)
+- [ ] Pact-bounded type parameters (`T: Ord + Display`)
+- [ ] Multiple generic parameters with mixed bounds (`fn merge<T: Ord, U: Clone>(...)`)
 - [ ] Generic pacts (`pact B<T> { Into<T>; Clone }`)
+- [ ] Compile-time monomorphization
+- [ ] Constraint alias expansion in type inference
+
+## v0.8.2 — Generic ADTs & Extensions
+
+Parametric polymorphism for types and surface APIs.
+
+- [ ] Generic structs: `struct Pair<T, U> { first: T, second: U }`
+- [ ] Generic methods on types: `fn map<V>(…) -> Pair<V, U>`
+- [ ] Generic enums: `enum Either<L, R> { Left(L), Right(R) }`
+- [ ] Methods on generic enums with self-references: `fn unwrap_left(*e) -> L`
+- [ ] Generic type aliases: `type Callback<T> = fn(T) -> bool`
+- [ ] Type argument inference at call/instantiation site: `Pair { ... }` or `max(a, b)`
 
 ## v0.9.0 — Closures, Extensions & Modules
 
@@ -125,25 +154,41 @@ Higher-order programming and code organization.
 - [ ] Closure variable capture
 - [ ] Function types (`fn(i32) -> bool`)
 - [ ] First-class functions (pass, return, store)
+- [ ] Pipe operator (`|>` first-arg forwarding)
+
+## v0.9.1 — Extensions & Module System
+
 - [ ] Extension methods (`ext User { … }`, `ext str { … }`)
 - [ ] `use` imports (path, selective, aliased)
 - [ ] Private-by-default module resolution
 - [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
-
+- [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
+  
 ## v1.0.0 — Stable Release
 
 Language completeness, tooling, and ecosystem.
 
-- [ ] Pipe operator (`|>` first-arg forwarding)
-- [ ] Full specification freeze
-- [ ] Comprehensive standard library (`std/io`, `std/collections`, …)
-- [ ] Compiler diagnostics (clear error messages with source spans)
 - [ ] Language server (LSP) for editor support
-- [ ] Formatter (`resurgfmt`)
-- [ ] Package manager (dependency resolution, versioning)
-- [ ] Documentation generator
+- [ ] Compiler diagnostics (clear error messages with source spans)
+
+## v1.0.1 — Core Tooling
+
+- [ ] Formatter (`rsg-fmt`)
 - [ ] Test framework (`test` blocks or attribute)
+
+## v1.0.2 — Ecosystem & Runtime
+
+- [ ] Comprehensive standard library (`std/io`, …)
+
+## v1.0.3 — Package manager
+
+- [ ] Package manager (dependency resolution, versioning)
+
+## v1.0.4 — Utilities
+
 - [ ] Benchmark support
+- [ ] Documentation generator
+- [ ] Full specification freeze
 
 ## Future — Post-1.0
 
@@ -158,3 +203,4 @@ Language completeness, tooling, and ecosystem.
 - [ ] Multi-file compilation
 - [ ] Direct C import
 - [ ] Self-hosting compiler (Resurg-in-Resurg)
+- [ ] Generics: F-bounded polymorphism, `immut`-aware generic constraints
