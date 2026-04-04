@@ -71,7 +71,7 @@ extern const Type TYPE_ERROR_INSTANCE;
  */
 const Type *type_from_name(const char *name);
 /** Return the Resurg-language name for @p type (e.g. "i32"). */
-const char *type_name(const Type *type);
+const char *type_name(Arena *arena, const Type *type);
 /** Return the C type string used during code generation (e.g. "int32_t"). */
 const char *c_type_string(const Type *type);
 /** Return true if both types are non-NULL and structurally equal. */

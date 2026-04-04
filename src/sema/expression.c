@@ -54,8 +54,8 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     // Check for type mismatch after promotion
     if (!type_equal(left, right)) {
         if (left->kind != TYPE_ERROR && right->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "type mismatch: '%s' and '%s'", type_name(left),
-                       type_name(right));
+            SEMA_ERROR(analyzer, node->location, "type mismatch: '%s' and '%s'",
+                       type_name(analyzer->arena, left), type_name(analyzer->arena, right));
         }
     }
 
@@ -118,8 +118,9 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
                         !type_equal(arg_type, param_type) && arg_type->kind != TYPE_ERROR &&
                         param_type->kind != TYPE_ERROR) {
                         SEMA_ERROR(analyzer, arg->location,
-                                   "type mismatch: expected '%s', got '%s'", type_name(param_type),
-                                   type_name(arg_type));
+                                   "type mismatch: expected '%s', got '%s'",
+                                   type_name(analyzer->arena, param_type),
+                                   type_name(analyzer->arena, arg_type));
                     }
                 }
             }

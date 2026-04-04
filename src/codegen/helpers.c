@@ -256,7 +256,7 @@ static const char *type_tag(CodeGenerator *gen, const Type *type) {
     case TYPE_ERROR:
         return "err";
     default:
-        return type_name(type);
+        return type_name(gen->arena, type);
     }
 }
 

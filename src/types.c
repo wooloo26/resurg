@@ -95,7 +95,7 @@ const Type *type_from_name(const char *name) {
     return NULL;
 }
 
-const char *type_name(const Type *type) {
+const char *type_name(Arena *arena, const Type *type) {
     if (type == NULL) {
         return "<unknown>";
     }
@@ -104,24 +104,21 @@ const char *type_name(const Type *type) {
         return info->rsg_name;
     }
     if (type->kind == TYPE_ARRAY) {
-        static char array_name_buffer[128];
-        snprintf(array_name_buffer, sizeof(array_name_buffer), "[%d]%s", type->array_size,
-                 type_name(type->array_element));
-        return array_name_buffer;
+        return arena_sprintf(arena, "[%d]%s", type->array_size,
+                             type_name(arena, type->array_element));
     }
     if (type->kind == TYPE_TUPLE) {
-        static char tuple_name_buffer[256];
-        int32_t offset = snprintf(tuple_name_buffer, sizeof(tuple_name_buffer), "(");
+        const char *result = "(";
         for (int32_t i = 0; i < type->tuple_count; i++) {
             if (i > 0) {
-                offset +=
-                    snprintf(tuple_name_buffer + offset, sizeof(tuple_name_buffer) - offset, ", ");
+                result = arena_sprintf(arena, "%s, %s", result,
+                                       type_name(arena, type->tuple_elements[i]));
+            } else {
+                result =
+                    arena_sprintf(arena, "%s%s", result, type_name(arena, type->tuple_elements[i]));
             }
-            offset += snprintf(tuple_name_buffer + offset, sizeof(tuple_name_buffer) - offset, "%s",
-                               type_name(type->tuple_elements[i]));
         }
-        snprintf(tuple_name_buffer + offset, sizeof(tuple_name_buffer) - offset, ")");
-        return tuple_name_buffer;
+        return arena_sprintf(arena, "%s)", result);
     }
     return "<unknown>";
 }

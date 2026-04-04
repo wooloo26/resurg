@@ -83,7 +83,7 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
         if (init_type != NULL && !type_equal(declared, init_type) &&
             init_type->kind != TYPE_ERROR && declared->kind != TYPE_ERROR) {
             SEMA_ERROR(analyzer, node->location, "type mismatch: expected '%s', got '%s'",
-                       type_name(declared), type_name(init_type));
+                       type_name(analyzer->arena, declared), type_name(analyzer->arena, init_type));
         }
     } else if (init_type != NULL) {
         variable_type = init_type;
