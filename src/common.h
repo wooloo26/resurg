@@ -42,7 +42,7 @@ char *arena_sprintf(Arena *arena, const char *format, ...);
 
 /** Entry in an open-addressed hash table. */
 typedef struct {
-    const char *key; // NULL = empty slot
+    const char *key; // NULL = empty slot, HASH_TABLE_TOMBSTONE = deleted
     void *value;
 } HashEntry;
 
@@ -68,6 +68,8 @@ void hash_table_destroy(HashTable *table);
 void hash_table_insert(HashTable *table, const char *key, void *value);
 /** Look up @p key.  Returns the stored value or NULL. */
 void *hash_table_lookup(const HashTable *table, const char *key);
+/** Remove @p key from the table.  Returns true if the key was found. */
+bool hash_table_remove(HashTable *table, const char *key);
 
 // ── Stretchy buffer ────────────────────────────────────────────────────
 
@@ -97,6 +99,8 @@ typedef struct {
 #define BUFFER_END(buffer) ((buffer) + BUFFER_LENGTH(buffer))
 #define BUFFER_FREE(buffer) ((buffer) != NULL ? (free(BUFFER__HEADER(buffer)), (buffer) = NULL) : 0)
 
+// __typeof__ is a reserved-namespace extension supported by GCC/Clang;
+// it avoids an unsafe (void *) cast for multi-level pointers.
 // NOLINTNEXTLINE(bugprone-sizeof-expression)
 #define BUFFER_FIT(buffer, needed)                                                                 \
     ((needed) <= BUFFER_CAPACITY(buffer)                                                           \

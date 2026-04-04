@@ -88,6 +88,9 @@ void arena_destroy(Arena *arena) {
 
 #define HASH_TABLE_INITIAL_CAPACITY 16
 
+/** Tombstone marker for deleted slots (invalid pointer, never dereferenced). */
+static const char *const HASH_TABLE_TOMBSTONE = (const char *)(uintptr_t)1;
+
 /** FNV-1a hash for NUL-terminated strings. */
 static uint32_t hash_string(const char *key) {
     uint32_t hash = 2166136261u;
@@ -115,7 +118,7 @@ static void hash_table__resize(HashTable *table, int32_t new_capacity) {
     uint32_t mask = (uint32_t)(new_capacity - 1);
 
     for (int32_t i = 0; i < table->capacity; i++) {
-        if (table->entries[i].key != NULL) {
+        if (table->entries[i].key != NULL && table->entries[i].key != HASH_TABLE_TOMBSTONE) {
             uint32_t index = hash_string(table->entries[i].key) & mask;
             while (new_entries[index].key != NULL) {
                 index = (index + 1) & mask;
@@ -156,13 +159,22 @@ void hash_table_insert(HashTable *table, const char *key, void *value) {
 
     uint32_t mask = (uint32_t)(table->capacity - 1);
     uint32_t index = hash_string(key) & mask;
+    int32_t first_tombstone = -1;
 
     while (table->entries[index].key != NULL) {
-        if (strcmp(table->entries[index].key, key) == 0) {
+        if (table->entries[index].key == HASH_TABLE_TOMBSTONE) {
+            if (first_tombstone < 0) {
+                first_tombstone = (int32_t)index;
+            }
+        } else if (strcmp(table->entries[index].key, key) == 0) {
             table->entries[index].value = value;
             return;
         }
         index = (index + 1) & mask;
+    }
+
+    if (first_tombstone >= 0) {
+        index = (uint32_t)first_tombstone;
     }
 
     table->entries[index].key = key;
@@ -179,12 +191,34 @@ void *hash_table_lookup(const HashTable *table, const char *key) {
     uint32_t index = hash_string(key) & mask;
 
     while (table->entries[index].key != NULL) {
-        if (strcmp(table->entries[index].key, key) == 0) {
+        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
+            strcmp(table->entries[index].key, key) == 0) {
             return table->entries[index].value;
         }
         index = (index + 1) & mask;
     }
     return NULL;
+}
+
+bool hash_table_remove(HashTable *table, const char *key) {
+    if (table->capacity == 0) {
+        return false;
+    }
+
+    uint32_t mask = (uint32_t)(table->capacity - 1);
+    uint32_t index = hash_string(key) & mask;
+
+    while (table->entries[index].key != NULL) {
+        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
+            strcmp(table->entries[index].key, key) == 0) {
+            table->entries[index].key = HASH_TABLE_TOMBSTONE;
+            table->entries[index].value = NULL;
+            table->count--;
+            return true;
+        }
+        index = (index + 1) & mask;
+    }
+    return false;
 }
 
 /**
@@ -193,6 +227,9 @@ void *hash_table_lookup(const HashTable *table, const char *key) {
  * before it).
  */
 void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
+    static_assert(sizeof(size_t) >= sizeof(int32_t),
+                  "BUFFER_LENGTH assumes size_t is at least as wide as int32_t");
+
     size_t new_capacity = BUFFER_CAPACITY(buffer) ? BUFFER_CAPACITY(buffer) * 2 : 16;
     if (new_capacity < new_length) {
         new_capacity = new_length;
