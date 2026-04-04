@@ -10,6 +10,10 @@ FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, con
     return hash_table_lookup(&analyzer->function_table, name);
 }
 
+StructDefinition *find_struct_definition(const SemanticAnalyzer *analyzer, const char *name) {
+    return hash_table_lookup(&analyzer->struct_table, name);
+}
+
 // ── AST type resolution ────────────────────────────────────────────────
 
 const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type) {

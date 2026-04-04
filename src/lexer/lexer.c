@@ -30,16 +30,22 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOKEN_MODULE},     {"pub", TOKEN_PUBLIC},  {"fn", TOKEN_FUNCTION},
-    {"var", TOKEN_VARIABLE},      {"if", TOKEN_IF},       {"else", TOKEN_ELSE},
-    {"loop", TOKEN_LOOP},         {"for", TOKEN_FOR},     {"break", TOKEN_BREAK},
-    {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},   {"false", TOKEN_FALSE},
-    {"type", TOKEN_TYPE},         {"bool", TOKEN_BOOL},   {"i8", TOKEN_I8},
-    {"i16", TOKEN_I16},           {"i32", TOKEN_I32},     {"i64", TOKEN_I64},
-    {"i128", TOKEN_I128},         {"u8", TOKEN_U8},       {"u16", TOKEN_U16},
-    {"u32", TOKEN_U32},           {"u64", TOKEN_U64},     {"u128", TOKEN_U128},
-    {"isize", TOKEN_ISIZE},       {"usize", TOKEN_USIZE}, {"f32", TOKEN_F32},
-    {"f64", TOKEN_F64},           {"char", TOKEN_CHAR},   {"str", TOKEN_STRING},
+    {"module", TOKEN_MODULE}, {"pub", TOKEN_PUBLIC},
+    {"fn", TOKEN_FUNCTION},   {"var", TOKEN_VARIABLE},
+    {"if", TOKEN_IF},         {"else", TOKEN_ELSE},
+    {"loop", TOKEN_LOOP},     {"for", TOKEN_FOR},
+    {"break", TOKEN_BREAK},   {"continue", TOKEN_CONTINUE},
+    {"true", TOKEN_TRUE},     {"false", TOKEN_FALSE},
+    {"type", TOKEN_TYPE},     {"struct", TOKEN_STRUCT},
+    {"mut", TOKEN_MUT},       {"bool", TOKEN_BOOL},
+    {"i8", TOKEN_I8},         {"i16", TOKEN_I16},
+    {"i32", TOKEN_I32},       {"i64", TOKEN_I64},
+    {"i128", TOKEN_I128},     {"u8", TOKEN_U8},
+    {"u16", TOKEN_U16},       {"u32", TOKEN_U32},
+    {"u64", TOKEN_U64},       {"u128", TOKEN_U128},
+    {"isize", TOKEN_ISIZE},   {"usize", TOKEN_USIZE},
+    {"f32", TOKEN_F32},       {"f64", TOKEN_F64},
+    {"char", TOKEN_CHAR},     {"str", TOKEN_STRING},
     {"unit", TOKEN_UNIT},
 };
 
@@ -118,8 +124,8 @@ static Token scan_number(Lexer *lexer, SourceLocation location) {
 
 /** Reserved keywords that cannot be used as identifiers. */
 static const char *const RESERVED_KEYWORDS[] = {
-    "async", "await", "comptime", "defer", "enum",   "immut", "macro", "match",
-    "mut",   "pact",  "return",   "spawn", "struct", "use",   "where", "while",
+    "async", "await", "comptime", "defer", "enum", "immut", "macro",
+    "match", "pact",  "return",   "spawn", "use",  "where", "while",
 };
 
 static const int32_t RESERVED_KEYWORD_COUNT =

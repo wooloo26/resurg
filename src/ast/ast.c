@@ -250,5 +250,25 @@ void ast_dump(const ASTNode *node, int32_t level) {
     case NODE_TYPE_ALIAS:
         fprintf(stderr, "TypeAlias(%s)\n", node->type_alias.name);
         break;
+    case NODE_STRUCT_DECLARATION:
+        fprintf(stderr, "StructDecl(%s)\n", node->struct_declaration.name);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
+            ast_dump(node->struct_declaration.methods[i], level + 1);
+        }
+        break;
+    case NODE_STRUCT_LITERAL:
+        fprintf(stderr, "StructLiteral(%s)\n", node->struct_literal.name);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_literal.field_values); i++) {
+            ast_dump(node->struct_literal.field_values[i], level + 1);
+        }
+        break;
+    case NODE_STRUCT_DESTRUCTURE:
+        fprintf(stderr, "StructDestructure\n");
+        ast_dump(node->struct_destructure.value, level + 1);
+        break;
+    case NODE_TUPLE_DESTRUCTURE:
+        fprintf(stderr, "TupleDestructure%s\n", node->tuple_destructure.has_rest ? " [..]" : "");
+        ast_dump(node->tuple_destructure.value, level + 1);
+        break;
     }
 }

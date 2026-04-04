@@ -94,6 +94,12 @@ typedef enum {
     TT_IF,
     TT_BLOCK,
     TT_LOOP,
+
+    // Struct-related
+    TT_STRUCT_DECLARATION,
+    TT_STRUCT_LITERAL,
+    TT_STRUCT_FIELD_ACCESS,
+    TT_METHOD_CALL,
 } TtNodeKind;
 
 // ── TtNode ─────────────────────────────────────────────────────────────
@@ -143,6 +149,8 @@ struct TtNode {
             TtSymbol *symbol;
             const char *name;
             const Type *param_type;
+            bool is_receiver;
+            bool is_mut_receiver;
         } parameter;
 
         // TT_VARIABLE_DECLARATION
@@ -272,6 +280,32 @@ struct TtNode {
         struct {
             TtNode *body;
         } loop;
+
+        // TT_STRUCT_DECLARATION
+        struct {
+            const char *name;
+            const Type *struct_type;
+        } struct_decl;
+
+        // TT_STRUCT_LITERAL
+        struct {
+            const char **field_names; /* buf */
+            TtNode **field_values;    /* buf */
+        } struct_literal;
+
+        // TT_STRUCT_FIELD_ACCESS
+        struct {
+            TtNode *object;
+            const char *field;
+            bool via_pointer;
+        } struct_field_access;
+
+        // TT_METHOD_CALL
+        struct {
+            TtNode *receiver;
+            const char *mangled_name;
+            TtNode **arguments; /* buf */
+        } method_call;
     };
 };
 

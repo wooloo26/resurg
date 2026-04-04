@@ -87,6 +87,67 @@ static void parse_comma_separated(Parser *parser, ASTNode ***buf) {
 }
 
 /**
+ * Parse a struct literal body: { field = expr, ... }.
+ * The struct name identifier has already been consumed and passed as @p name_node.
+ */
+static ASTNode *parse_struct_literal(Parser *parser, ASTNode *name_node) {
+    SourceLocation location = name_node->location;
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+
+    ASTNode *node = ast_new(parser->arena, NODE_STRUCT_LITERAL, location);
+    node->struct_literal.name = name_node->identifier.name;
+    node->struct_literal.field_names = NULL;
+    node->struct_literal.field_values = NULL;
+
+    if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+        do {
+            parser_skip_newlines(parser);
+            const char *field_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            parser_expect(parser, TOKEN_EQUAL);
+            ASTNode *value = parser_parse_expression(parser);
+            BUFFER_PUSH(node->struct_literal.field_names, field_name);
+            BUFFER_PUSH(node->struct_literal.field_values, value);
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
+}
+
+/** Return true if current position looks like a struct literal: IDENT { }  or IDENT { IDENT = ... }
+ */
+static bool is_struct_literal_ahead(const Parser *parser) {
+    if (!parser_check(parser, TOKEN_LEFT_BRACE)) {
+        return false;
+    }
+    int32_t pos = parser->position + 1;
+    // Skip newlines
+    while (pos < parser->count && parser->tokens[pos].kind == TOKEN_NEWLINE) {
+        pos++;
+    }
+    if (pos >= parser->count) {
+        return false;
+    }
+    // Empty struct literal: { }
+    if (parser->tokens[pos].kind == TOKEN_RIGHT_BRACE) {
+        return true;
+    }
+    // Named field: IDENT =
+    if (parser->tokens[pos].kind == TOKEN_IDENTIFIER && pos + 1 < parser->count) {
+        // Skip newlines after IDENT
+        int32_t eq_pos = pos + 1;
+        while (eq_pos < parser->count && parser->tokens[eq_pos].kind == TOKEN_NEWLINE) {
+            eq_pos++;
+        }
+        if (eq_pos < parser->count && parser->tokens[eq_pos].kind == TOKEN_EQUAL) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Parse an array literal: [expr, ...] or [N]T[expr, ...].
  * The opening '[' has NOT been consumed yet.
  */
@@ -236,12 +297,37 @@ static ASTNode *parse_postfix(Parser *parser) {
     ASTNode *left = parse_primary(parser);
     for (;;) {
         SourceLocation location = parser_current_location(parser);
+
+        // Struct literal: Identifier { field = expr, ... }
+        if (left->kind == NODE_IDENTIFIER && is_struct_literal_ahead(parser)) {
+            left = parse_struct_literal(parser, left);
+            continue;
+        }
+
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
             ASTNode *node = ast_new(parser->arena, NODE_CALL, location);
             node->call.callee = left;
             node->call.arguments = NULL;
+            node->call.arg_names = NULL;
             if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-                parse_comma_separated(parser, &node->call.arguments);
+                do {
+                    parser_skip_newlines(parser);
+                    // Check for named argument: IDENT =
+                    bool is_named_arg = parser_check(parser, TOKEN_IDENTIFIER) &&
+                                        parser->position + 1 < parser->count &&
+                                        parser->tokens[parser->position + 1].kind == TOKEN_EQUAL;
+                    if (is_named_arg) {
+                        const char *arg_name = parser_advance(parser)->lexeme;
+                        parser_advance(parser); // consume '='
+                        ASTNode *value = parser_parse_expression(parser);
+                        BUFFER_PUSH(node->call.arguments, value);
+                        BUFFER_PUSH(node->call.arg_names, arg_name);
+                    } else {
+                        ASTNode *arg = parser_parse_expression(parser);
+                        BUFFER_PUSH(node->call.arguments, arg);
+                        BUFFER_PUSH(node->call.arg_names, (const char *)NULL);
+                    }
+                } while (parser_match(parser, TOKEN_COMMA));
             }
             parser_expect(parser, TOKEN_RIGHT_PAREN);
             left = node;

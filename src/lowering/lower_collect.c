@@ -23,6 +23,13 @@ static void register_compound_type(Lowering *low, const Type *type) {
         for (int32_t i = 0; i < type->tuple.count; i++) {
             register_compound_type(low, type->tuple.elements[i]);
         }
+    } else if (type->kind == TYPE_STRUCT) {
+        for (int32_t i = 0; i < type->struct_type.embed_count; i++) {
+            register_compound_type(low, type->struct_type.embedded[i]);
+        }
+        for (int32_t i = 0; i < type->struct_type.field_count; i++) {
+            register_compound_type(low, type->struct_type.fields[i].type);
+        }
     } else {
         return;
     }
@@ -61,6 +68,8 @@ Lowering *lowering_create(Arena *tt_arena, Arena *sema_arena) {
     low->temp_counter = 0;
     low->shadow_counter = 0;
     low->compound_types = NULL;
+    low->current_receiver = NULL;
+    low->current_receiver_name = NULL;
     return low;
 }
 

@@ -27,12 +27,19 @@ typedef enum {
     TYPE_CHAR,
     TYPE_STRING,
     TYPE_UNIT,
-    TYPE_ARRAY, // [N]T
-    TYPE_TUPLE, // (A, B, ...)
-    TYPE_ERROR, // sentinel for continued checking after type errors
+    TYPE_ARRAY,  // [N]T
+    TYPE_TUPLE,  // (A, B, ...)
+    TYPE_STRUCT, // struct { fields }
+    TYPE_ERROR,  // sentinel for continued checking after type errors
 } TypeKind;
 
 typedef struct Type Type;
+
+/** A field in a struct type. */
+typedef struct {
+    const char *name;
+    const Type *type;
+} StructField;
 
 struct Type {
     TypeKind kind;
@@ -45,6 +52,13 @@ struct Type {
             const Type **elements;
             int32_t count;
         } tuple;
+        struct {
+            const char *name;
+            StructField *fields;
+            int32_t field_count;
+            const Type **embedded;
+            int32_t embed_count;
+        } struct_type;
     };
 };
 
@@ -109,5 +123,18 @@ const Type *type_singleton(TypeKind kind);
 Type *type_create_array(Arena *arena, const Type *element, int32_t size);
 /** Create a tuple type from an array of element types. */
 Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count);
+
+/** Create a struct type with the given fields and embedded types. */
+Type *type_create_struct(Arena *arena, const char *name, StructField *fields, int32_t field_count,
+                         const Type **embedded, int32_t embed_count);
+
+/** Return the struct name.  Asserts kind == TYPE_STRUCT. */
+const char *type_struct_name(const Type *type);
+/** Return the fields of a struct type.  Asserts kind == TYPE_STRUCT. */
+const StructField *type_struct_fields(const Type *type);
+/** Return the field count of a struct type.  Asserts kind == TYPE_STRUCT. */
+int32_t type_struct_field_count(const Type *type);
+/** Look up a field by name in a struct type.  Returns NULL if not found. */
+const StructField *type_struct_find_field(const Type *type, const char *name);
 
 #endif // RG_TYPES_H

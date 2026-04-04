@@ -251,6 +251,41 @@ static const char *emit_module_access_expression(CodeGenerator *generator, const
     return arena_sprintf(generator->arena, "%s._%s", object, node->module_access.member);
 }
 
+static const char *emit_struct_literal_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *tname = codegen_c_type_for(generator, node->type);
+    const char *result = arena_sprintf(generator->arena, "(%s){ ", tname);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_literal.field_names); i++) {
+        if (i > 0) {
+            result = arena_sprintf(generator->arena, "%s, ", result);
+        }
+        const char *value =
+            codegen_emit_expression(generator, node->struct_literal.field_values[i]);
+        result = arena_sprintf(generator->arena, "%s.%s = %s", result,
+                               node->struct_literal.field_names[i], value);
+    }
+    return arena_sprintf(generator->arena, "%s }", result);
+}
+
+static const char *emit_struct_field_access_expression(CodeGenerator *generator,
+                                                       const TtNode *node) {
+    const char *object = codegen_emit_expression(generator, node->struct_field_access.object);
+    if (node->struct_field_access.via_pointer) {
+        return arena_sprintf(generator->arena, "%s->%s", object, node->struct_field_access.field);
+    }
+    return arena_sprintf(generator->arena, "%s.%s", object, node->struct_field_access.field);
+}
+
+static const char *emit_method_call_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *receiver = codegen_emit_expression(generator, node->method_call.receiver);
+    int32_t arg_count = BUFFER_LENGTH(node->method_call.arguments);
+    if (arg_count > 0) {
+        const char *args = join_expressions(generator, node->method_call.arguments, arg_count);
+        return arena_sprintf(generator->arena, "%s(&(%s), %s)", node->method_call.mangled_name,
+                             receiver, args);
+    }
+    return arena_sprintf(generator->arena, "%s(&(%s))", node->method_call.mangled_name, receiver);
+}
+
 // ── Expression dispatch ────────────────────────────────────────────────
 
 const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node) {
@@ -294,6 +329,12 @@ const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node
         return emit_tuple_literal_expression(generator, node);
     case TT_TYPE_CONVERSION:
         return emit_type_conversion_expression(generator, node);
+    case TT_STRUCT_LITERAL:
+        return emit_struct_literal_expression(generator, node);
+    case TT_STRUCT_FIELD_ACCESS:
+        return emit_struct_field_access_expression(generator, node);
+    case TT_METHOD_CALL:
+        return emit_method_call_expression(generator, node);
     default:
         return "0";
     }

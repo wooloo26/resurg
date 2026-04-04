@@ -100,7 +100,94 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (node->call.callee->kind == NODE_IDENTIFIER) {
         function_name = node->call.callee->identifier.name;
     } else if (node->call.callee->kind == NODE_MEMBER) {
-        function_name = node->call.callee->member.member;
+        // Could be a method call — check the object's type
+        const Type *obj_type = check_node(analyzer, node->call.callee->member.object);
+        const char *method_name = node->call.callee->member.member;
+
+        if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
+            // Look up method on this struct (or promoted from embedded)
+            const char *method_key =
+                arena_sprintf(analyzer->arena, "%s.%s", obj_type->struct_type.name, method_name);
+            FunctionSignature *sig = find_function_signature(analyzer, method_key);
+
+            // If not found directly, check embedded structs for promoted methods
+            if (sig == NULL) {
+                StructDefinition *sdef =
+                    find_struct_definition(analyzer, obj_type->struct_type.name);
+                if (sdef != NULL) {
+                    for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
+                        const char *embed_key = arena_sprintf(analyzer->arena, "%s.%s",
+                                                              sdef->embedded[ei], method_name);
+                        sig = find_function_signature(analyzer, embed_key);
+                        if (sig != NULL) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (sig != NULL) {
+                // Check method arguments (excluding receiver)
+                for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
+                    check_node(analyzer, node->call.arguments[i]);
+                }
+                int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+
+                // Handle named arguments: reorder to match parameter positions
+                if (node->call.arg_names != NULL && arg_count > 0) {
+                    ASTNode **reordered = NULL;
+                    for (int32_t i = 0; i < sig->parameter_count; i++) {
+                        BUFFER_PUSH(reordered, (ASTNode *)NULL);
+                    }
+                    for (int32_t i = 0; i < arg_count; i++) {
+                        const char *aname = node->call.arg_names[i];
+                        if (aname != NULL) {
+                            int32_t idx = -1;
+                            for (int32_t j = 0; j < sig->parameter_count; j++) {
+                                if (strcmp(sig->parameter_names[j], aname) == 0) {
+                                    idx = j;
+                                    break;
+                                }
+                            }
+                            if (idx < 0) {
+                                SEMA_ERROR(analyzer, node->call.arguments[i]->location,
+                                           "no parameter named '%s'", aname);
+                            } else {
+                                reordered[idx] = node->call.arguments[i];
+                            }
+                        } else if (i < BUFFER_LENGTH(reordered)) {
+                            reordered[i] = node->call.arguments[i];
+                        }
+                    }
+                    node->call.arguments = reordered;
+                    node->call.arg_names = NULL;
+                }
+
+                if (arg_count != sig->parameter_count) {
+                    SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d",
+                               sig->parameter_count, arg_count);
+                } else {
+                    for (int32_t i = 0; i < arg_count; i++) {
+                        if (node->call.arguments[i] == NULL) {
+                            continue;
+                        }
+                        promote_literal(node->call.arguments[i], sig->parameter_types[i]);
+                        const Type *at = node->call.arguments[i]->type;
+                        if (at != NULL && sig->parameter_types[i] != NULL &&
+                            !type_equal(at, sig->parameter_types[i]) && at->kind != TYPE_ERROR &&
+                            sig->parameter_types[i]->kind != TYPE_ERROR) {
+                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
+                                       "type mismatch: expected '%s', got '%s'",
+                                       type_name(analyzer->arena, sig->parameter_types[i]),
+                                       type_name(analyzer->arena, at));
+                        }
+                    }
+                }
+                node->type = sig->return_type;
+                return sig->return_type;
+            }
+        }
+        function_name = method_name;
     }
 
     // Check arguments
@@ -118,6 +205,37 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         FunctionSignature *signature = find_function_signature(analyzer, function_name);
         if (signature != NULL) {
             int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+
+            // Handle named arguments: reorder to match parameter positions
+            if (node->call.arg_names != NULL && arg_count > 0) {
+                ASTNode **reordered = NULL;
+                for (int32_t i = 0; i < signature->parameter_count; i++) {
+                    BUFFER_PUSH(reordered, (ASTNode *)NULL);
+                }
+                for (int32_t i = 0; i < arg_count; i++) {
+                    const char *aname = node->call.arg_names[i];
+                    if (aname != NULL) {
+                        int32_t idx = -1;
+                        for (int32_t j = 0; j < signature->parameter_count; j++) {
+                            if (strcmp(signature->parameter_names[j], aname) == 0) {
+                                idx = j;
+                                break;
+                            }
+                        }
+                        if (idx < 0) {
+                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
+                                       "no parameter named '%s'", aname);
+                        } else {
+                            reordered[idx] = node->call.arguments[i];
+                        }
+                    } else if (i < BUFFER_LENGTH(reordered)) {
+                        reordered[i] = node->call.arguments[i];
+                    }
+                }
+                node->call.arguments = reordered;
+                node->call.arg_names = NULL;
+            }
+
             if (arg_count != signature->parameter_count) {
                 SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d",
                            signature->parameter_count, arg_count);
@@ -160,6 +278,35 @@ const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
         if (end != NULL && *end == '\0' && index >= 0 && index < object_type->tuple.count) {
             return object_type->tuple.elements[index];
         }
+    }
+    // Struct field access
+    if (object_type != NULL && object_type->kind == TYPE_STRUCT) {
+        const char *field_name = node->member.member;
+
+        // Check own fields (including embedded struct fields by name, e.g., e.Base)
+        const StructField *sf = type_struct_find_field(object_type, field_name);
+        if (sf != NULL) {
+            return sf->type;
+        }
+
+        // Check promoted fields from embedded structs
+        StructDefinition *sdef = find_struct_definition(analyzer, object_type->struct_type.name);
+        if (sdef != NULL) {
+            for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
+                StructDefinition *embed_def = find_struct_definition(analyzer, sdef->embedded[ei]);
+                if (embed_def != NULL) {
+                    for (int32_t fi = 0; fi < BUFFER_LENGTH(embed_def->fields); fi++) {
+                        if (strcmp(embed_def->fields[fi].name, field_name) == 0) {
+                            return embed_def->fields[fi].type;
+                        }
+                    }
+                }
+            }
+        }
+
+        SEMA_ERROR(analyzer, node->location, "no field '%s' on type '%s'", field_name,
+                   object_type->struct_type.name);
+        return &TYPE_ERROR_INSTANCE;
     }
     return &TYPE_ERROR_INSTANCE;
 }
@@ -220,4 +367,79 @@ const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *result =
         type_create_tuple(analyzer->arena, element_types, BUFFER_LENGTH(element_types));
     return result;
+}
+
+const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const char *struct_name = node->struct_literal.name;
+    StructDefinition *sdef = find_struct_definition(analyzer, struct_name);
+    if (sdef == NULL) {
+        SEMA_ERROR(analyzer, node->location, "unknown struct '%s'", struct_name);
+        return &TYPE_ERROR_INSTANCE;
+    }
+
+    // Check that all provided fields exist and have the right types
+    int32_t provided_count = BUFFER_LENGTH(node->struct_literal.field_names);
+    for (int32_t i = 0; i < provided_count; i++) {
+        const char *fname = node->struct_literal.field_names[i];
+        ASTNode *fvalue = node->struct_literal.field_values[i];
+        check_node(analyzer, fvalue);
+
+        // Look up the field in the struct definition
+        bool found = false;
+        for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
+            if (strcmp(sdef->fields[j].name, fname) == 0) {
+                found = true;
+                promote_literal(fvalue, sdef->fields[j].type);
+                const Type *ftype = fvalue->type;
+                if (ftype != NULL && sdef->fields[j].type != NULL &&
+                    !type_equal(ftype, sdef->fields[j].type) && ftype->kind != TYPE_ERROR &&
+                    sdef->fields[j].type->kind != TYPE_ERROR) {
+                    SEMA_ERROR(analyzer, fvalue->location, "type mismatch: expected '%s', got '%s'",
+                               type_name(analyzer->arena, sdef->fields[j].type),
+                               type_name(analyzer->arena, ftype));
+                }
+                break;
+            }
+        }
+        if (!found) {
+            SEMA_ERROR(analyzer, node->location, "no field '%s' on struct '%s'", fname,
+                       struct_name);
+        }
+    }
+
+    // Check that all required fields (no default) are provided
+    for (int32_t i = 0; i < BUFFER_LENGTH(sdef->fields); i++) {
+        if (sdef->fields[i].default_value == NULL) {
+            bool provided = false;
+            for (int32_t j = 0; j < provided_count; j++) {
+                if (strcmp(node->struct_literal.field_names[j], sdef->fields[i].name) == 0) {
+                    provided = true;
+                    break;
+                }
+            }
+            if (!provided) {
+                SEMA_ERROR(analyzer, node->location, "missing field '%s' in struct '%s'",
+                           sdef->fields[i].name, struct_name);
+            }
+        }
+    }
+
+    // Fill in default values for unprovided fields
+    for (int32_t i = 0; i < BUFFER_LENGTH(sdef->fields); i++) {
+        if (sdef->fields[i].default_value != NULL) {
+            bool provided = false;
+            for (int32_t j = 0; j < BUFFER_LENGTH(node->struct_literal.field_names); j++) {
+                if (strcmp(node->struct_literal.field_names[j], sdef->fields[i].name) == 0) {
+                    provided = true;
+                    break;
+                }
+            }
+            if (!provided) {
+                BUFFER_PUSH(node->struct_literal.field_names, sdef->fields[i].name);
+                BUFFER_PUSH(node->struct_literal.field_values, sdef->fields[i].default_value);
+            }
+        }
+    }
+
+    return sdef->type;
 }

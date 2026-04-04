@@ -310,6 +310,55 @@ static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
         return lower_assert_call(low, ast);
     }
 
+    // Method call: obj.method(args)
+    if (ast->call.callee->kind == NODE_MEMBER) {
+        const ASTNode *member_ast = ast->call.callee;
+        const Type *obj_type = member_ast->member.object->type;
+
+        if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
+            const char *method_name = member_ast->member.member;
+            TtNode *receiver = lower_expression(low, member_ast->member.object);
+
+            bool via_pointer = false;
+            if (low->current_receiver != NULL && receiver->kind == TT_VARIABLE_REFERENCE &&
+                receiver->variable_reference.symbol == low->current_receiver) {
+                via_pointer = true;
+            }
+
+            // Look up method — direct first, then promoted from embedded
+            const char *key =
+                arena_sprintf(low->tt_arena, "%s.%s", obj_type->struct_type.name, method_name);
+            TtSymbol *method_sym = lowering_scope_find(low, key);
+
+            if (method_sym == NULL) {
+                for (int32_t i = 0; i < obj_type->struct_type.embed_count; i++) {
+                    const Type *embed_type = obj_type->struct_type.embedded[i];
+                    const char *embed_key = arena_sprintf(
+                        low->tt_arena, "%s.%s", embed_type->struct_type.name, method_name);
+                    method_sym = lowering_scope_find(low, embed_key);
+                    if (method_sym != NULL) {
+                        TtNode *embed_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS,
+                                                      embed_type, receiver->location);
+                        embed_access->struct_field_access.object = receiver;
+                        embed_access->struct_field_access.field = embed_type->struct_type.name;
+                        embed_access->struct_field_access.via_pointer = via_pointer;
+                        receiver = embed_access;
+                        break;
+                    }
+                }
+            }
+
+            if (method_sym != NULL) {
+                TtNode **args = lower_element_list(low, ast->call.arguments);
+                TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
+                node->method_call.receiver = receiver;
+                node->method_call.mangled_name = method_sym->mangled_name;
+                node->method_call.arguments = args;
+                return node;
+            }
+        }
+    }
+
     TtNode *callee = lower_expression(low, ast->call.callee);
     TtNode **args = lower_element_list(low, ast->call.arguments);
     TtNode *node = tt_new(low->tt_arena, TT_CALL, ast->type, ast->location);
@@ -331,6 +380,53 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
             node->tuple_index.element_index = (int32_t)index;
             return node;
         }
+    }
+
+    // Struct field access
+    if (object->type != NULL && object->type->kind == TYPE_STRUCT) {
+        const char *field_name = ast->member.member;
+        bool via_pointer = false;
+
+        if (low->current_receiver != NULL && object->kind == TT_VARIABLE_REFERENCE &&
+            object->variable_reference.symbol == low->current_receiver) {
+            via_pointer = true;
+        }
+
+        // Direct field
+        const StructField *sf = type_struct_find_field(object->type, field_name);
+        if (sf != NULL) {
+            TtNode *node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
+            node->struct_field_access.object = object;
+            node->struct_field_access.field = field_name;
+            node->struct_field_access.via_pointer = via_pointer;
+            return node;
+        }
+
+        // Promoted field from embedded struct
+        for (int32_t i = 0; i < object->type->struct_type.embed_count; i++) {
+            const Type *embed_type = object->type->struct_type.embedded[i];
+            if (type_struct_find_field(embed_type, field_name) != NULL) {
+                TtNode *embed_access =
+                    tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, ast->location);
+                embed_access->struct_field_access.object = object;
+                embed_access->struct_field_access.field = embed_type->struct_type.name;
+                embed_access->struct_field_access.via_pointer = via_pointer;
+
+                TtNode *field_node =
+                    tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
+                field_node->struct_field_access.object = embed_access;
+                field_node->struct_field_access.field = field_name;
+                field_node->struct_field_access.via_pointer = false;
+                return field_node;
+            }
+        }
+
+        // Fallback (shouldn't reach after sema)
+        TtNode *node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
+        node->struct_field_access.object = object;
+        node->struct_field_access.field = field_name;
+        node->struct_field_access.via_pointer = via_pointer;
+        return node;
     }
 
     // Module access
@@ -373,6 +469,86 @@ static TtNode *lower_tuple_literal(Lowering *low, const ASTNode *ast) {
 
 // String interpolation lowering is in lower_string.c
 
+static TtNode *lower_struct_literal(Lowering *low, const ASTNode *ast) {
+    const Type *struct_type = ast->type;
+    if (struct_type == NULL || struct_type->kind != TYPE_STRUCT) {
+        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_ERROR_INSTANCE, ast->location);
+    }
+
+    const char **field_names = NULL;
+    TtNode **field_values = NULL;
+
+    for (int32_t fi = 0; fi < struct_type->struct_type.field_count; fi++) {
+        const StructField *sf = &struct_type->struct_type.fields[fi];
+
+        // Check if this field is an embedded struct
+        bool is_embedded = false;
+        for (int32_t ei = 0; ei < struct_type->struct_type.embed_count; ei++) {
+            if (strcmp(struct_type->struct_type.embedded[ei]->struct_type.name, sf->name) == 0) {
+                is_embedded = true;
+                break;
+            }
+        }
+
+        if (is_embedded && sf->type->kind == TYPE_STRUCT) {
+            // Check if directly provided as "Base = Base { ... }"
+            bool directly_provided = false;
+            for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names); ai++) {
+                if (strcmp(ast->struct_literal.field_names[ai], sf->name) == 0) {
+                    BUFFER_PUSH(field_names, sf->name);
+                    BUFFER_PUSH(field_values,
+                                lower_expression(low, ast->struct_literal.field_values[ai]));
+                    directly_provided = true;
+                    break;
+                }
+            }
+            if (!directly_provided) {
+                // Collect promoted fields from AST that belong to this embedded type
+                const Type *embed_type = sf->type;
+                const char **sub_names = NULL;
+                TtNode **sub_values = NULL;
+
+                for (int32_t ej = 0; ej < embed_type->struct_type.field_count; ej++) {
+                    const char *embed_field = embed_type->struct_type.fields[ej].name;
+                    for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names);
+                         ai++) {
+                        if (strcmp(ast->struct_literal.field_names[ai], embed_field) == 0) {
+                            BUFFER_PUSH(sub_names, embed_field);
+                            BUFFER_PUSH(sub_values, lower_expression(
+                                                        low, ast->struct_literal.field_values[ai]));
+                            break;
+                        }
+                    }
+                }
+
+                if (BUFFER_LENGTH(sub_names) > 0) {
+                    TtNode *sub =
+                        tt_new(low->tt_arena, TT_STRUCT_LITERAL, embed_type, ast->location);
+                    sub->struct_literal.field_names = sub_names;
+                    sub->struct_literal.field_values = sub_values;
+                    BUFFER_PUSH(field_names, sf->name);
+                    BUFFER_PUSH(field_values, sub);
+                }
+            }
+        } else {
+            // Regular field — look it up in the AST
+            for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names); ai++) {
+                if (strcmp(ast->struct_literal.field_names[ai], sf->name) == 0) {
+                    BUFFER_PUSH(field_names, sf->name);
+                    BUFFER_PUSH(field_values,
+                                lower_expression(low, ast->struct_literal.field_values[ai]));
+                    break;
+                }
+            }
+        }
+    }
+
+    TtNode *node = tt_new(low->tt_arena, TT_STRUCT_LITERAL, struct_type, ast->location);
+    node->struct_literal.field_names = field_names;
+    node->struct_literal.field_values = field_values;
+    return node;
+}
+
 TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -404,6 +580,8 @@ TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
         return lower_tuple_literal(low, ast);
     case NODE_STRING_INTERPOLATION:
         return lower_string_interpolation(low, ast);
+    case NODE_STRUCT_LITERAL:
+        return lower_struct_literal(low, ast);
     default:
         break;
     }

@@ -106,6 +106,14 @@ static const char *resolve_assign_target(CodeGenerator *generator, const TtNode 
         const char *idx = codegen_emit_expression(generator, target->index_access.index);
         return arena_sprintf(generator->arena, "%s._data[%s]", obj, idx);
     }
+    if (target->kind == TT_STRUCT_FIELD_ACCESS) {
+        const char *obj = resolve_assign_target(generator, target->struct_field_access.object);
+        if (target->struct_field_access.via_pointer) {
+            return arena_sprintf(generator->arena, "%s->%s", obj,
+                                 target->struct_field_access.field);
+        }
+        return arena_sprintf(generator->arena, "%s.%s", obj, target->struct_field_access.field);
+    }
     return codegen_emit_expression(generator, target);
 }
 

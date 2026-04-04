@@ -91,6 +91,150 @@ ASTNode *parser_parse_block(Parser *parser) {
 
 // ── Statement dispatch ─────────────────────────────────────────────────
 
+/** Return true if current position looks like struct destructuring:
+ *  { IDENT [: IDENT] (, IDENT [: IDENT])* } := */
+static bool is_struct_destructure(const Parser *parser) {
+    if (!parser_check(parser, TOKEN_LEFT_BRACE)) {
+        return false;
+    }
+    int32_t pos = parser->position + 1;
+    while (pos < parser->count) {
+        // Skip newlines
+        while (pos < parser->count && parser->tokens[pos].kind == TOKEN_NEWLINE) {
+            pos++;
+        }
+        if (pos >= parser->count || parser->tokens[pos].kind != TOKEN_IDENTIFIER) {
+            return false;
+        }
+        pos++;
+        // Skip newlines
+        while (pos < parser->count && parser->tokens[pos].kind == TOKEN_NEWLINE) {
+            pos++;
+        }
+        if (pos >= parser->count) {
+            return false;
+        }
+        // Optional alias: `: IDENT`
+        if (parser->tokens[pos].kind == TOKEN_COLON) {
+            pos++;
+            // Skip newlines
+            while (pos < parser->count && parser->tokens[pos].kind == TOKEN_NEWLINE) {
+                pos++;
+            }
+            if (pos >= parser->count || parser->tokens[pos].kind != TOKEN_IDENTIFIER) {
+                return false;
+            }
+            pos++;
+            // Skip newlines
+            while (pos < parser->count && parser->tokens[pos].kind == TOKEN_NEWLINE) {
+                pos++;
+            }
+            if (pos >= parser->count) {
+                return false;
+            }
+        }
+        if (parser->tokens[pos].kind == TOKEN_RIGHT_BRACE) {
+            return pos + 1 < parser->count && parser->tokens[pos + 1].kind == TOKEN_COLON_EQUAL;
+        }
+        if (parser->tokens[pos].kind == TOKEN_COMMA) {
+            pos++;
+            continue;
+        }
+        return false;
+    }
+    return false;
+}
+
+/** Return true if current position looks like tuple destructuring: ( IDENT|.. (, IDENT|..)* ) := */
+static bool is_tuple_destructure(const Parser *parser) {
+    if (!parser_check(parser, TOKEN_LEFT_PAREN)) {
+        return false;
+    }
+    int32_t pos = parser->position + 1;
+    int32_t name_count = 0;
+    while (pos < parser->count) {
+        if (parser->tokens[pos].kind == TOKEN_DOT_DOT ||
+            parser->tokens[pos].kind == TOKEN_IDENTIFIER) {
+            pos++;
+            name_count++;
+        } else {
+            return false;
+        }
+        if (pos >= parser->count) {
+            return false;
+        }
+        if (parser->tokens[pos].kind == TOKEN_RIGHT_PAREN) {
+            return name_count >= 1 && pos + 1 < parser->count &&
+                   parser->tokens[pos + 1].kind == TOKEN_COLON_EQUAL;
+        }
+        if (parser->tokens[pos].kind == TOKEN_COMMA) {
+            pos++;
+            continue;
+        }
+        return false;
+    }
+    return false;
+}
+
+static ASTNode *parse_struct_destructure(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+
+    ASTNode *node = ast_new(parser->arena, NODE_STRUCT_DESTRUCTURE, location);
+    node->struct_destructure.field_names = NULL;
+    node->struct_destructure.aliases = NULL;
+
+    do {
+        parser_skip_newlines(parser);
+        const char *name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        BUFFER_PUSH(node->struct_destructure.field_names, name);
+        // Optional alias: `name: alias`
+        if (parser_match(parser, TOKEN_COLON)) {
+            const char *alias = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            BUFFER_PUSH(node->struct_destructure.aliases, alias);
+        } else {
+            BUFFER_PUSH(node->struct_destructure.aliases, (const char *)NULL);
+        }
+    } while (parser_match(parser, TOKEN_COMMA));
+
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    parser_expect(parser, TOKEN_COLON_EQUAL);
+    node->struct_destructure.value = parser_parse_expression(parser);
+    return node;
+}
+
+static ASTNode *parse_tuple_destructure(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_LEFT_PAREN);
+
+    ASTNode *node = ast_new(parser->arena, NODE_TUPLE_DESTRUCTURE, location);
+    node->tuple_destructure.names = NULL;
+    node->tuple_destructure.has_rest = false;
+    node->tuple_destructure.rest_position = -1;
+
+    int32_t index = 0;
+    do {
+        if (parser_match(parser, TOKEN_DOT_DOT)) {
+            if (node->tuple_destructure.has_rest) {
+                rsg_error(parser_current_location(parser),
+                          "only one '..' allowed in tuple destructure");
+            }
+            node->tuple_destructure.has_rest = true;
+            node->tuple_destructure.rest_position = index;
+        } else {
+            const char *name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            BUFFER_PUSH(node->tuple_destructure.names, name);
+            index++;
+        }
+    } while (parser_match(parser, TOKEN_COMMA));
+
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    parser_expect(parser, TOKEN_COLON_EQUAL);
+    node->tuple_destructure.value = parser_parse_expression(parser);
+    return node;
+}
+
 ASTNode *parser_parse_statement(Parser *parser) {
     parser_skip_newlines(parser);
 
@@ -114,6 +258,16 @@ ASTNode *parser_parse_statement(Parser *parser) {
         SourceLocation location = parser_current_location(parser);
         parser_advance(parser); // consume 'continue'
         return ast_new(parser->arena, NODE_CONTINUE, location);
+    }
+
+    // Struct destructuring: {a, b} := expr
+    if (is_struct_destructure(parser)) {
+        return parse_struct_destructure(parser);
+    }
+
+    // Tuple destructuring: (a, b) := expr
+    if (is_tuple_destructure(parser)) {
+        return parse_tuple_destructure(parser);
     }
 
     // `ident :=` - inferred variable declaration

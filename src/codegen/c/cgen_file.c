@@ -71,8 +71,20 @@ static void emit_function_signature(CodeGenerator *generator, const TtNode *node
             if (i > 0) {
                 fprintf(generator->output, ", ");
             }
-            fprintf(generator->output, "%s %s", codegen_c_type_for(generator, parameter_type),
-                    parameter->parameter.symbol->mangled_name);
+            if (parameter->parameter.is_receiver) {
+                if (parameter->parameter.is_mut_receiver) {
+                    fprintf(generator->output, "%s *%s",
+                            codegen_c_type_for(generator, parameter_type),
+                            parameter->parameter.symbol->mangled_name);
+                } else {
+                    fprintf(generator->output, "const %s *%s",
+                            codegen_c_type_for(generator, parameter_type),
+                            parameter->parameter.symbol->mangled_name);
+                }
+            } else {
+                fprintf(generator->output, "%s %s", codegen_c_type_for(generator, parameter_type),
+                        parameter->parameter.symbol->mangled_name);
+            }
         }
     }
 }
@@ -107,7 +119,7 @@ static void emit_preamble(CodeGenerator *generator) {
 /** Return true if @p node is a top-level statement. */
 static bool is_top_level_statement(const TtNode *node) {
     return node->kind != TT_MODULE && node->kind != TT_FUNCTION_DECLARATION &&
-           node->kind != TT_TYPE_ALIAS;
+           node->kind != TT_TYPE_ALIAS && node->kind != TT_STRUCT_DECLARATION;
 }
 
 /**

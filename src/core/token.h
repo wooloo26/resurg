@@ -33,6 +33,8 @@ typedef enum {
     TOKEN_BREAK,    // break
     TOKEN_CONTINUE, // continue
     TOKEN_TYPE,     // type
+    TOKEN_STRUCT,   // struct
+    TOKEN_MUT,      // mut
 
     // Type keywords
     TOKEN_BOOL,   // bool

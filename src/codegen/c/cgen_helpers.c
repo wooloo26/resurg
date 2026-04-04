@@ -159,6 +159,8 @@ static const char *type_tag(CodeGenerator *gen, const Type *type) {
     }
     case TYPE_ERROR:
         return "err";
+    case TYPE_STRUCT:
+        return arena_sprintf(gen->arena, "_%s", type->struct_type.name);
     default:
         return type_name(gen->arena, type);
     }
@@ -170,6 +172,9 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type) {
     }
     if (type->kind == TYPE_ARRAY || type->kind == TYPE_TUPLE) {
         return arena_sprintf(gen->arena, "_Rsg%s", type_tag(gen, type));
+    }
+    if (type->kind == TYPE_STRUCT) {
+        return arena_sprintf(gen->arena, "_Rsg_%s", type->struct_type.name);
     }
     return c_type_string(type);
 }

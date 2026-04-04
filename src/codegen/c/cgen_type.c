@@ -18,6 +18,15 @@ void codegen_emit_compound_typedefs(CodeGenerator *generator) {
                 fprintf(generator->output, " %s _%d;", elem_type, j);
             }
             fprintf(generator->output, " } %s;\n", name);
+        } else if (type->kind == TYPE_STRUCT) {
+            codegen_emit_indent(generator);
+            fprintf(generator->output, "typedef struct {");
+            for (int32_t j = 0; j < type->struct_type.field_count; j++) {
+                const char *field_type =
+                    codegen_c_type_for(generator, type->struct_type.fields[j].type);
+                fprintf(generator->output, " %s %s;", field_type, type->struct_type.fields[j].name);
+            }
+            fprintf(generator->output, " } %s;\n", name);
         }
     }
     if (BUFFER_LENGTH(generator->compound_types) > 0) {

@@ -36,6 +36,13 @@ struct ASTType {
     ASTType **tuple_elements; /* buf */
 };
 
+/** A field definition in a struct declaration. */
+typedef struct {
+    const char *name;
+    ASTType type;
+    ASTNode *default_value; // may be NULL
+} ASTStructField;
+
 /** Discriminator for the ASTNode tagged union. */
 typedef enum {
     // Top-level
@@ -47,6 +54,7 @@ typedef enum {
     NODE_FUNCTION_DECLARATION, // function declaration
     NODE_VARIABLE_DECLARATION, // variable declaration (:= or var)
     NODE_PARAMETER,            // function parameter
+    NODE_STRUCT_DECLARATION,   // struct definition
 
     // Statements
     NODE_EXPRESSION_STATEMENT, // expression used as statement
@@ -71,6 +79,9 @@ typedef enum {
     NODE_ARRAY_LITERAL,        // [1, 2, 3] or [3]i32[1, 2, 3]
     NODE_TUPLE_LITERAL,        // (1, true, "hi")
     NODE_TYPE_CONVERSION,      // i64(100), f32(3.14)
+    NODE_STRUCT_LITERAL,       // Point { x = 1.0, y = 2.0 }
+    NODE_STRUCT_DESTRUCTURE,   // {x, y} := expr
+    NODE_TUPLE_DESTRUCTURE,    // (a, b) := expr
 } NodeKind;
 
 /** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
@@ -129,6 +140,10 @@ struct ASTNode {
             ASTNode **parameters; /* buf */
             ASTType return_type;
             ASTNode *body;
+            // Method-specific fields (NULL / false for regular functions)
+            const char *receiver_name;
+            bool is_mut_receiver;
+            const char *owner_struct;
         } function_declaration;
 
         // NODE_PARAMETER
@@ -196,7 +211,8 @@ struct ASTNode {
         // NODE_CALL
         struct {
             ASTNode *callee;
-            ASTNode **arguments; /* buf */
+            ASTNode **arguments;    /* buf */
+            const char **arg_names; /* buf - NULL entry = positional */
         } call;
 
         // NODE_MEMBER
@@ -259,6 +275,36 @@ struct ASTNode {
             ASTType target_type;
             ASTNode *operand;
         } type_conversion;
+
+        // NODE_STRUCT_DECLARATION
+        struct {
+            const char *name;
+            ASTStructField *fields; /* buf */
+            ASTNode **methods;      /* buf - NODE_FUNCTION_DECLARATION */
+            const char **embedded;  /* buf - embedded struct names */
+        } struct_declaration;
+
+        // NODE_STRUCT_LITERAL
+        struct {
+            const char *name;
+            const char **field_names; /* buf */
+            ASTNode **field_values;   /* buf */
+        } struct_literal;
+
+        // NODE_STRUCT_DESTRUCTURE
+        struct {
+            const char **field_names; /* buf */
+            const char **aliases;     /* buf - NULL entry = use field name */
+            ASTNode *value;
+        } struct_destructure;
+
+        // NODE_TUPLE_DESTRUCTURE
+        struct {
+            const char **names; /* buf */
+            ASTNode *value;
+            bool has_rest;         // true when `..` appears in pattern
+            int32_t rest_position; // index of `..` in pattern (-1 if none)
+        } tuple_destructure;
     };
 };
 

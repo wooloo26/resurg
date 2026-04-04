@@ -21,6 +21,8 @@ const char *token_kind_string(TokenKind kind) {
         [TOKEN_BREAK] = "break",
         [TOKEN_CONTINUE] = "continue",
         [TOKEN_TYPE] = "type",
+        [TOKEN_STRUCT] = "struct",
+        [TOKEN_MUT] = "mut",
         [TOKEN_BOOL] = "bool",
         [TOKEN_I8] = "i8",
         [TOKEN_I16] = "i16",

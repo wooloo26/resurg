@@ -120,6 +120,9 @@ const char *type_name(Arena *arena, const Type *type) {
         }
         return arena_sprintf(arena, "%s)", result);
     }
+    if (type->kind == TYPE_STRUCT) {
+        return type->struct_type.name;
+    }
     return "<unknown>";
 }
 
@@ -151,6 +154,9 @@ bool type_equal(const Type *a, const Type *b) {
             }
         }
         return true;
+    }
+    if (a->kind == TYPE_STRUCT) {
+        return strcmp(a->struct_type.name, b->struct_type.name) == 0;
     }
     return true;
 }
@@ -224,4 +230,40 @@ Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count) {
     type->tuple.elements = elements;
     type->tuple.count = count;
     return type;
+}
+
+Type *type_create_struct(Arena *arena, const char *name, StructField *fields, int32_t field_count,
+                         const Type **embedded, int32_t embed_count) {
+    Type *type = type_create(arena, TYPE_STRUCT);
+    type->struct_type.name = name;
+    type->struct_type.fields = fields;
+    type->struct_type.field_count = field_count;
+    type->struct_type.embedded = embedded;
+    type->struct_type.embed_count = embed_count;
+    return type;
+}
+
+const char *type_struct_name(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_STRUCT);
+    return type->struct_type.name;
+}
+
+const StructField *type_struct_fields(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_STRUCT);
+    return type->struct_type.fields;
+}
+
+int32_t type_struct_field_count(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_STRUCT);
+    return type->struct_type.field_count;
+}
+
+const StructField *type_struct_find_field(const Type *type, const char *name) {
+    assert(type != NULL && type->kind == TYPE_STRUCT);
+    for (int32_t i = 0; i < type->struct_type.field_count; i++) {
+        if (strcmp(type->struct_type.fields[i].name, name) == 0) {
+            return &type->struct_type.fields[i];
+        }
+    }
+    return NULL;
 }

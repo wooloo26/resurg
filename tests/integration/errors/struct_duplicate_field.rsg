@@ -1,0 +1,12 @@
+// TEST: compile_error
+// EXPECT-ERROR: duplicate field 'x'
+module test_err
+
+struct Bad {
+    x: i32 = 0
+    x: i32 = 1
+}
+
+fn main() {
+    b := Bad {}
+}

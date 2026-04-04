@@ -104,6 +104,14 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Block";
     case TT_LOOP:
         return "Loop";
+    case TT_STRUCT_DECLARATION:
+        return "StructDecl";
+    case TT_STRUCT_LITERAL:
+        return "StructLit";
+    case TT_STRUCT_FIELD_ACCESS:
+        return "StructFieldAccess";
+    case TT_METHOD_CALL:
+        return "MethodCall";
     }
     return "?";
 }
@@ -312,6 +320,29 @@ void tt_dump(const TtNode *node, int32_t indent) {
         fprintf(stderr, "\n");
         tt_dump(node->loop.body, indent + 1);
         break;
+
+    case TT_STRUCT_DECLARATION:
+        fprintf(stderr, " \"%s\"\n", node->struct_decl.name);
+        break;
+
+    case TT_STRUCT_LITERAL:
+        fprintf(stderr, "\n");
+        tt_dump_children(node->struct_literal.field_values,
+                         BUFFER_LENGTH(node->struct_literal.field_values), indent + 1);
+        break;
+
+    case TT_STRUCT_FIELD_ACCESS:
+        fprintf(stderr, " .%s%s\n", node->struct_field_access.field,
+                node->struct_field_access.via_pointer ? " (ptr)" : "");
+        tt_dump(node->struct_field_access.object, indent + 1);
+        break;
+
+    case TT_METHOD_CALL:
+        fprintf(stderr, " %s\n", node->method_call.mangled_name);
+        tt_dump(node->method_call.receiver, indent + 1);
+        tt_dump_children(node->method_call.arguments, BUFFER_LENGTH(node->method_call.arguments),
+                         indent + 1);
+        break;
     }
 }
 
@@ -407,6 +438,20 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
         break;
     case TT_LOOP:
         visitor(context, &node->loop.body);
+        break;
+    case TT_STRUCT_DECLARATION:
+        break;
+    case TT_STRUCT_LITERAL:
+        visit_buffer(visitor, context, node->struct_literal.field_values,
+                     BUFFER_LENGTH(node->struct_literal.field_values));
+        break;
+    case TT_STRUCT_FIELD_ACCESS:
+        visitor(context, &node->struct_field_access.object);
+        break;
+    case TT_METHOD_CALL:
+        visitor(context, &node->method_call.receiver);
+        visit_buffer(visitor, context, node->method_call.arguments,
+                     BUFFER_LENGTH(node->method_call.arguments));
         break;
     default:
         break;

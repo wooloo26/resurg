@@ -1,0 +1,13 @@
+// TEST: compile_error
+// EXPECT-ERROR: no field 'z'
+module test_err
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+fn main() {
+    p := Point {}
+    z := p.z
+}

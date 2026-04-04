@@ -1,0 +1,142 @@
+// v0.3.0 — Methods with * receiver
+module test_methods
+
+// ── read-only and mutating methods ──
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+
+    fn get_x(*p) -> f64 {
+        p.x
+    }
+
+    fn get_y(*p) -> f64 {
+        p.y
+    }
+
+    fn sum(*p) -> f64 {
+        p.x + p.y
+    }
+
+    fn distance_squared(*p) -> f64 {
+        p.x * p.x + p.y * p.y
+    }
+
+    fn set_x(mut *p, x: f64) {
+        p.x = x
+    }
+
+    fn set_y(mut *p, y: f64) {
+        p.y = y
+    }
+
+    fn translate(mut *p, dx: f64, dy: f64) {
+        p.x = p.x + dx
+        p.y = p.y + dy
+    }
+}
+
+// ── read-only method ──
+fn test_readonly_method() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.get_x() == 3.0)
+    assert(p.get_y() == 4.0)
+}
+
+// ── method with computation ──
+fn test_computed_method() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.sum() == 7.0)
+    assert(p.distance_squared() == 25.0)
+}
+
+// ── mutating method ──
+fn test_mutating_method() {
+    p := Point { x = 1.0, y = 2.0 }
+    p.set_x(10.0)
+    assert(p.x == 10.0)
+    assert(p.y == 2.0)
+}
+
+// ── method with multiple params ──
+fn test_method_multi_params() {
+    p := Point { x = 1.0, y = 2.0 }
+    p.translate(3.0, 4.0)
+    assert(p.x == 4.0)
+    assert(p.y == 6.0)
+}
+
+// ── multiple methods on another struct ──
+struct Rectangle {
+    width: f64 = 0.0
+    height: f64 = 0.0
+
+    fn area(*r) -> f64 {
+        r.width * r.height
+    }
+
+    fn perimeter(*r) -> f64 {
+        2.0 * (r.width + r.height)
+    }
+
+    fn is_square(*r) -> bool {
+        r.width == r.height
+    }
+
+    fn scale(mut *r, factor: f64) {
+        r.width = r.width * factor
+        r.height = r.height * factor
+    }
+}
+
+fn test_rectangle_area() {
+    r := Rectangle { width = 4.0, height = 3.0 }
+    assert(r.area() == 12.0)
+}
+
+fn test_rectangle_perimeter() {
+    r := Rectangle { width = 4.0, height = 3.0 }
+    assert(r.perimeter() == 14.0)
+}
+
+fn test_rectangle_is_square() {
+    r1 := Rectangle { width = 4.0, height = 3.0 }
+    assert(r1.is_square() == false)
+    r2 := Rectangle { width = 5.0, height = 5.0 }
+    assert(r2.is_square() == true)
+}
+
+fn test_rectangle_scale() {
+    r := Rectangle { width = 2.0, height = 3.0 }
+    r.scale(2.0)
+    assert(r.width == 4.0)
+    assert(r.height == 6.0)
+}
+
+// ── expression-bodied method ──
+struct Counter {
+    value: i32 = 0
+
+    fn get(*c) = c.value
+
+    fn increment(mut *c) {
+        c.value = c.value + 1
+    }
+}
+
+fn test_expression_body_method() {
+    c := Counter {}
+    assert(c.get() == 0)
+    c.increment()
+    assert(c.get() == 1)
+    c.increment()
+    c.increment()
+    assert(c.get() == 3)
+}
+
+// ── method return value used in expression ──
+fn test_method_in_expression() {
+    r := Rectangle { width = 3.0, height = 4.0 }
+    total := r.area() + r.perimeter()
+    assert(total == 26.0)
+}

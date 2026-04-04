@@ -63,7 +63,13 @@ y := f32(3.14)           // typed literal — equivalent to var y: f32 = 3.14
 var num: ?i32             // defaults to None
 
 {name, age} := user           // destructure struct
+{name: n, age: a} := user    // destructure struct with aliases
 (first, second) := get_pair() // destructure tuple
+{name} := user                // partial struct destructure
+(_, second) := pair           // ignore element with _
+(first, ..) := triple         // ignore trailing elements with ..
+(.., last) := triple          // ignore leading elements with ..
+(first, .., last) := quad     // ignore middle elements with ..
 ```
 
 No return annotation implies `unit`. Variable redefinition in the same scope is forbidden — no shadowing.

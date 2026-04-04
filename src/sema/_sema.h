@@ -58,9 +58,34 @@ typedef struct FunctionSignature {
     const char *name;
     const Type *return_type;
     const Type **parameter_types; /* buf */
+    const char **parameter_names; /* buf */
     int32_t parameter_count;
     bool is_public;
 } FunctionSignature;
+
+/** A field definition with its default value expression. */
+typedef struct {
+    const char *name;
+    const Type *type;
+    ASTNode *default_value; // may be NULL (field is required)
+} StructFieldInfo;
+
+/** A method definition inside a struct. */
+typedef struct {
+    const char *name;
+    bool is_mut_receiver;
+    const char *receiver_name;
+    ASTNode *declaration;
+} StructMethodInfo;
+
+/** Struct definition — registered during the first pass. */
+typedef struct {
+    const char *name;
+    StructFieldInfo *fields;   /* buf */
+    StructMethodInfo *methods; /* buf */
+    const char **embedded;     /* buf */
+    const Type *type;          // resolved TYPE_STRUCT
+} StructDefinition;
 
 struct SemanticAnalyzer {
     Arena *arena;
@@ -68,6 +93,7 @@ struct SemanticAnalyzer {
     int32_t error_count;
     HashTable type_alias_table; // name → const Type*
     HashTable function_table;   // name → FunctionSignature*
+    HashTable struct_table;     // name → StructDefinition*
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */
@@ -99,6 +125,8 @@ bool in_loop(const SemanticAnalyzer *analyzer);
 const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up a function signature by name. */
 FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name);
+/** Look up a struct definition by name. */
+StructDefinition *find_struct_definition(const SemanticAnalyzer *analyzer, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an error and returns TYPE_ERROR for unknown names.
@@ -132,6 +160,7 @@ const Type *check_type_conversion(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_string_interpolation(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_array_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node);
+const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 
 // ── Statement checking (statement.c) ───────────────────────────────────
 

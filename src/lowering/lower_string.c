@@ -10,15 +10,15 @@ static const char *string_conversion_builtin(const Type *type) {
     static const struct {
         TypeKind kind;
         const char *name;
-    } CONVERSIONS[] = {
+    } conversions[] = {
         {TYPE_I32, "rsg_string_from_i32"},   {TYPE_U32, "rsg_string_from_u32"},
         {TYPE_I64, "rsg_string_from_i64"},   {TYPE_U64, "rsg_string_from_u64"},
         {TYPE_F32, "rsg_string_from_f32"},   {TYPE_F64, "rsg_string_from_f64"},
         {TYPE_BOOL, "rsg_string_from_bool"}, {TYPE_CHAR, "rsg_string_from_char"},
     };
-    for (size_t i = 0; i < sizeof(CONVERSIONS) / sizeof(CONVERSIONS[0]); i++) {
-        if (type->kind == CONVERSIONS[i].kind) {
-            return CONVERSIONS[i].name;
+    for (size_t i = 0; i < sizeof(conversions) / sizeof(conversions[0]); i++) {
+        if (type->kind == conversions[i].kind) {
+            return conversions[i].name;
         }
     }
     return NULL;

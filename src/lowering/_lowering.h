@@ -30,6 +30,8 @@ struct Lowering {
     int32_t temp_counter;
     int32_t shadow_counter;
     const Type **compound_types; /* buf */
+    TtSymbol *current_receiver;  // non-NULL inside method body
+    const char *current_receiver_name;
 };
 
 // ── Scope manipulation ────────────────────────────────────────────────
@@ -75,5 +77,8 @@ TtNode *lower_statement_if(Lowering *low, const ASTNode *ast);
 TtNode *lower_string_interpolation(Lowering *low, const ASTNode *ast);
 /** Lower a NODE_FUNCTION_DECLARATION. */
 TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast);
+/** Lower a method declaration inside a struct. */
+TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *struct_name,
+                                 const Type *struct_type);
 
 #endif // RG__LOWERING_H

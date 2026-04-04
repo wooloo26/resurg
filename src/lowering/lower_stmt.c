@@ -62,6 +62,123 @@ static TtNode *lower_compound_assign(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
+/** Expand a struct destructure into variable declarations in @p stmts. */
+static void lower_struct_destructure_into(Lowering *low, const ASTNode *ast, TtNode ***stmts) {
+    TtNode *value = lower_expression(low, ast->struct_destructure.value);
+    const Type *struct_type = value->type;
+
+    const char *tmp_name = lowering_make_temp_name(low);
+    TtSymbol *tmp_sym =
+        lowering_make_symbol(low, TT_SYMBOL_VARIABLE, tmp_name, struct_type, false, ast->location);
+    lowering_scope_add(low, tmp_name, tmp_sym);
+    BUFFER_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, tmp_name, struct_type, value, false,
+                                               ast->location));
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(ast->struct_destructure.field_names); i++) {
+        const char *fname = ast->struct_destructure.field_names[i];
+        const char *alias = (ast->struct_destructure.aliases != NULL &&
+                             i < BUFFER_LENGTH(ast->struct_destructure.aliases))
+                                ? ast->struct_destructure.aliases[i]
+                                : NULL;
+        const char *var_name = (alias != NULL) ? alias : fname;
+        const Type *field_type = NULL;
+        TtNode *field_access = NULL;
+
+        // Check direct fields
+        const StructField *sf = type_struct_find_field(struct_type, fname);
+        if (sf != NULL) {
+            field_type = sf->type;
+            field_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, field_type, ast->location);
+            field_access->struct_field_access.object =
+                lowering_make_var_ref(low, tmp_sym, ast->location);
+            field_access->struct_field_access.field = fname;
+            field_access->struct_field_access.via_pointer = false;
+        } else {
+            // Check promoted fields
+            for (int32_t ei = 0; ei < struct_type->struct_type.embed_count; ei++) {
+                const Type *et = struct_type->struct_type.embedded[ei];
+                sf = type_struct_find_field(et, fname);
+                if (sf != NULL) {
+                    field_type = sf->type;
+                    TtNode *embed =
+                        tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, et, ast->location);
+                    embed->struct_field_access.object =
+                        lowering_make_var_ref(low, tmp_sym, ast->location);
+                    embed->struct_field_access.field = et->struct_type.name;
+                    embed->struct_field_access.via_pointer = false;
+
+                    field_access =
+                        tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, field_type, ast->location);
+                    field_access->struct_field_access.object = embed;
+                    field_access->struct_field_access.field = fname;
+                    field_access->struct_field_access.via_pointer = false;
+                    break;
+                }
+            }
+        }
+
+        if (field_type == NULL) {
+            field_type = &TYPE_ERROR_INSTANCE;
+        }
+
+        TtSymbol *var_sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, var_name, field_type,
+                                                 false, ast->location);
+        lowering_scope_add(low, var_name, var_sym);
+        BUFFER_PUSH(*stmts, lowering_make_var_decl(low, var_sym, var_name, field_type, field_access,
+                                                   false, ast->location));
+    }
+}
+
+/** Expand a tuple destructure into variable declarations in @p stmts. */
+static void lower_tuple_destructure_into(Lowering *low, const ASTNode *ast, TtNode ***stmts) {
+    TtNode *value = lower_expression(low, ast->tuple_destructure.value);
+    const Type *tuple_type = value->type;
+
+    const char *tmp_name = lowering_make_temp_name(low);
+    TtSymbol *tmp_sym =
+        lowering_make_symbol(low, TT_SYMBOL_VARIABLE, tmp_name, tuple_type, false, ast->location);
+    lowering_scope_add(low, tmp_name, tmp_sym);
+    BUFFER_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, tmp_name, tuple_type, value, false,
+                                               ast->location));
+
+    int32_t name_count = BUFFER_LENGTH(ast->tuple_destructure.names);
+    bool has_rest = ast->tuple_destructure.has_rest;
+    int32_t rest_pos = ast->tuple_destructure.rest_position;
+    int32_t tuple_count =
+        (tuple_type != NULL && tuple_type->kind == TYPE_TUPLE) ? tuple_type->tuple.count : 0;
+    int32_t skipped = has_rest ? (tuple_count - name_count) : 0;
+
+    for (int32_t i = 0; i < name_count; i++) {
+        const char *vname = ast->tuple_destructure.names[i];
+
+        // Compute the element index, accounting for `..`
+        int32_t elem_idx = i;
+        if (has_rest && i >= rest_pos) {
+            elem_idx = i + skipped;
+        }
+
+        const Type *elem_type = &TYPE_ERROR_INSTANCE;
+        if (tuple_type != NULL && tuple_type->kind == TYPE_TUPLE && elem_idx < tuple_count) {
+            elem_type = tuple_type->tuple.elements[elem_idx];
+        }
+
+        // Skip variable creation for `_` or `_`-prefixed names
+        if (vname[0] == '_') {
+            continue;
+        }
+
+        TtNode *idx_access = tt_new(low->tt_arena, TT_TUPLE_INDEX, elem_type, ast->location);
+        idx_access->tuple_index.object = lowering_make_var_ref(low, tmp_sym, ast->location);
+        idx_access->tuple_index.element_index = elem_idx;
+
+        TtSymbol *var_sym =
+            lowering_make_symbol(low, TT_SYMBOL_VARIABLE, vname, elem_type, false, ast->location);
+        lowering_scope_add(low, vname, var_sym);
+        BUFFER_PUSH(*stmts, lowering_make_var_decl(low, var_sym, vname, elem_type, idx_access,
+                                                   false, ast->location));
+    }
+}
+
 TtNode *lower_block(Lowering *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -71,9 +188,16 @@ TtNode *lower_block(Lowering *low, const ASTNode *ast) {
 
     TtNode **statements = NULL;
     for (int32_t i = 0; i < BUFFER_LENGTH(ast->block.statements); i++) {
-        TtNode *stmt = lower_node(low, ast->block.statements[i]);
-        if (stmt != NULL) {
-            BUFFER_PUSH(statements, stmt);
+        const ASTNode *stmt = ast->block.statements[i];
+        if (stmt->kind == NODE_STRUCT_DESTRUCTURE) {
+            lower_struct_destructure_into(low, stmt, &statements);
+        } else if (stmt->kind == NODE_TUPLE_DESTRUCTURE) {
+            lower_tuple_destructure_into(low, stmt, &statements);
+        } else {
+            TtNode *s = lower_node(low, stmt);
+            if (s != NULL) {
+                BUFFER_PUSH(statements, s);
+            }
         }
     }
 
@@ -295,15 +419,30 @@ static TtNode *lower_expression_statement(Lowering *low, const ASTNode *ast) {
 static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
     for (int32_t i = 0; i < BUFFER_LENGTH(file_ast->file.declarations); i++) {
         const ASTNode *decl = file_ast->file.declarations[i];
-        if (decl->kind != NODE_FUNCTION_DECLARATION) {
-            continue;
+        if (decl->kind == NODE_FUNCTION_DECLARATION) {
+            const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INSTANCE;
+            TtSymbol *sym =
+                lowering_make_symbol(low, TT_SYMBOL_FUNCTION, decl->function_declaration.name, ret,
+                                     false, decl->location);
+            sym->mangled_name =
+                arena_sprintf(low->tt_arena, "rsgu_%s", decl->function_declaration.name);
+            lowering_scope_add(low, decl->function_declaration.name, sym);
         }
-        const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INSTANCE;
-        TtSymbol *sym = lowering_make_symbol(
-            low, TT_SYMBOL_FUNCTION, decl->function_declaration.name, ret, false, decl->location);
-        sym->mangled_name =
-            arena_sprintf(low->tt_arena, "rsgu_%s", decl->function_declaration.name);
-        lowering_scope_add(low, decl->function_declaration.name, sym);
+        if (decl->kind == NODE_STRUCT_DECLARATION) {
+            const char *struct_name = decl->struct_declaration.name;
+            for (int32_t j = 0; j < BUFFER_LENGTH(decl->struct_declaration.methods); j++) {
+                const ASTNode *method = decl->struct_declaration.methods[j];
+                const char *method_name = method->function_declaration.name;
+                const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
+                const char *key = arena_sprintf(low->tt_arena, "%s.%s", struct_name, method_name);
+                const char *mangled =
+                    arena_sprintf(low->tt_arena, "rsgu_%s_%s", struct_name, method_name);
+                TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false,
+                                                     method->location);
+                sym->mangled_name = mangled;
+                lowering_scope_add(low, key, sym);
+            }
+        }
     }
 }
 
@@ -314,7 +453,29 @@ static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
 
     TtNode **declarations = NULL;
     for (int32_t i = 0; i < BUFFER_LENGTH(ast->file.declarations); i++) {
-        TtNode *decl = lower_node(low, ast->file.declarations[i]);
+        const ASTNode *decl_ast = ast->file.declarations[i];
+
+        if (decl_ast->kind == NODE_STRUCT_DECLARATION) {
+            // Emit struct type declaration
+            TtNode *struct_decl = tt_new(low->tt_arena, TT_STRUCT_DECLARATION, &TYPE_UNIT_INSTANCE,
+                                         decl_ast->location);
+            struct_decl->struct_decl.name = decl_ast->struct_declaration.name;
+            struct_decl->struct_decl.struct_type = decl_ast->type;
+            BUFFER_PUSH(declarations, struct_decl);
+
+            // Emit each method as a function declaration
+            for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->struct_declaration.methods); j++) {
+                TtNode *method =
+                    lower_method_declaration(low, decl_ast->struct_declaration.methods[j],
+                                             decl_ast->struct_declaration.name, decl_ast->type);
+                if (method != NULL) {
+                    BUFFER_PUSH(declarations, method);
+                }
+            }
+            continue;
+        }
+
+        TtNode *decl = lower_node(low, decl_ast);
         if (decl != NULL) {
             BUFFER_PUSH(declarations, decl);
         }
@@ -352,6 +513,15 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
 
     case NODE_FUNCTION_DECLARATION:
         return lower_function_declaration(low, ast);
+
+    case NODE_STRUCT_DECLARATION: {
+        // Handled primarily in lower_file; fallback for other contexts
+        TtNode *node =
+            tt_new(low->tt_arena, TT_STRUCT_DECLARATION, &TYPE_UNIT_INSTANCE, ast->location);
+        node->struct_decl.name = ast->struct_declaration.name;
+        node->struct_decl.struct_type = ast->type;
+        return node;
+    }
 
     case NODE_VARIABLE_DECLARATION:
         return lower_variable_declaration(low, ast);

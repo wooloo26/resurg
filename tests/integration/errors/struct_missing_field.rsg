@@ -1,0 +1,12 @@
+// TEST: compile_error
+// EXPECT-ERROR: missing field 'age'
+module test_err
+
+struct User {
+    name: str
+    age: i32
+}
+
+fn main() {
+    u := User { name = "Alice" }
+}
