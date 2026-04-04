@@ -28,13 +28,11 @@ static char *read_file(const char *path) {
         rsg_fatal("cannot open '%s'", path);
     }
 
-    fseek(file_handle, 0, SEEK_END);
-    long size = ftell(file_handle);
+    long size = (long)file_stat.st_size;
     if (size < 0 || size > MAX_SOURCE_SIZE) {
         fclose(file_handle);
         rsg_fatal("cannot read '%s' (size error or file too large)", path);
     }
-    fseek(file_handle, 0, SEEK_SET);
 
     char *buffer = rsg_calloc((size_t)size + 1, 1);
     size_t bytes_read = fread(buffer, 1, (size_t)size, file_handle);
