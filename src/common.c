@@ -197,6 +197,9 @@ void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
     if (new_capacity < new_length) {
         new_capacity = new_length;
     }
+    if (new_capacity > INT32_MAX) {
+        rsg_fatal("buffer capacity exceeds INT32_MAX");
+    }
 
     size_t new_size = sizeof(BufferHeader) + new_capacity * element_size;
     BufferHeader *header;

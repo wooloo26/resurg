@@ -90,6 +90,8 @@ typedef struct {
 } BufferHeader;
 
 #define BUFFER__HEADER(buffer) ((BufferHeader *)((char *)(buffer) - sizeof(BufferHeader)))
+// Cast to int32_t: enables signed loop idioms (e.g. reverse iteration).
+// Overflow is guarded at growth time in buffer__grow().
 #define BUFFER_LENGTH(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->length : 0)
 #define BUFFER_CAPACITY(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->capacity : 0)
 #define BUFFER_END(buffer) ((buffer) + BUFFER_LENGTH(buffer))
