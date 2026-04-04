@@ -174,6 +174,7 @@ Language completeness, tooling, and ecosystem.
 ## v1.0.1 — Core Tooling
 
 - [ ] Formatter (`rsg-fmt`)
+- [ ] Linter (`rsg-lint` / static analysis)
 - [ ] Test framework (`test` blocks or attribute)
 
 ## v1.0.2 — Ecosystem & Runtime
@@ -183,6 +184,7 @@ Language completeness, tooling, and ecosystem.
 ## v1.0.3 — Package manager
 
 - [ ] Package manager (dependency resolution, versioning)
+- [ ] Unified devtool (`rsg` CLI: build/run/test/lint/fmt integration)
 
 ## v1.0.4 — Utilities
 
@@ -192,6 +194,7 @@ Language completeness, tooling, and ecosystem.
 
 ## Future — Post-1.0
 
+- [ ] Debugger & devtool suite (`rsg-debug`, profiler, memory tracker)
 - [ ] C++20 back-end
 - [ ] Go back-end
 - [ ] Typescript back-end
