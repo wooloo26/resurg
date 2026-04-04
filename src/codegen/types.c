@@ -20,6 +20,7 @@ static void register_compound_type(const Type *type) {
     if (type->kind == TYPE_ARRAY) {
         register_compound_type(type->array_element);
         if (!compound_type_registered(type)) {
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
             BUFFER_PUSH(g_compound_types, type);
         }
     } else if (type->kind == TYPE_TUPLE) {
@@ -27,6 +28,7 @@ static void register_compound_type(const Type *type) {
             register_compound_type(type->tuple_elements[i]);
         }
         if (!compound_type_registered(type)) {
+            // NOLINTNEXTLINE(bugprone-sizeof-expression)
             BUFFER_PUSH(g_compound_types, type);
         }
     }
