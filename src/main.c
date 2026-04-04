@@ -27,8 +27,12 @@ static char *read_file(const char *path) {
     fseek(file_handle, 0, SEEK_SET);
 
     char *buffer = rsg_calloc((size_t)size + 1, 1);
-    fread(buffer, 1, (size_t)size, file_handle);
+    size_t bytes_read = fread(buffer, 1, (size_t)size, file_handle);
     fclose(file_handle);
+    if (bytes_read != (size_t)size) {
+        free(buffer);
+        rsg_fatal("failed to read '%s' (expected %ld bytes, got %zu)", path, size, bytes_read);
+    }
     return buffer;
 }
 
