@@ -3,21 +3,11 @@
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
 const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(analyzer->type_aliases); i++) {
-        if (strcmp(analyzer->type_aliases[i].name, name) == 0) {
-            return analyzer->type_aliases[i].underlying;
-        }
-    }
-    return NULL;
+    return hash_table_lookup(&analyzer->type_alias_table, name);
 }
 
 FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(analyzer->function_signatures); i++) {
-        if (strcmp(analyzer->function_signatures[i].name, name) == 0) {
-            return &analyzer->function_signatures[i];
-        }
-    }
-    return NULL;
+    return hash_table_lookup(&analyzer->function_table, name);
 }
 
 // ── AST type resolution ────────────────────────────────────────────────

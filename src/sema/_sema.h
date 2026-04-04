@@ -19,15 +19,14 @@ struct Symbol {
     const Type *type;
     bool is_public;
     bool is_function;
-    struct Symbol *next; // intrusive linked list within a Scope
 };
 
 /**
- * Lexical scope - a linked list of Symbols with a pointer to the
+ * Lexical scope - hash table of Symbols with a pointer to the
  * enclosing scope.
  */
 struct Scope {
-    Symbol *symbols;         // head of the symbol chain (may be NULL)
+    HashTable table;         // name → Symbol* (arena-backed)
     struct Scope *parent;    // enclosing scope (NULL for global)
     bool is_loop;            // true inside loop/for bodies (enables break/continue)
     const char *module_name; // propagated from the module declaration
@@ -55,8 +54,8 @@ struct SemanticAnalyzer {
     Arena *arena;
     Scope *current_scope;
     int32_t error_count;
-    TypeAlias *type_aliases;                /* buf */
-    FunctionSignature *function_signatures; /* buf */
+    HashTable type_alias_table; // name → const Type*
+    HashTable function_table;   // name → FunctionSignature*
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */

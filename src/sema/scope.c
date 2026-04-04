@@ -2,19 +2,9 @@
 
 // ── Scope manipulation ─────────────────────────────────────────────────
 
-/** Search a single scope's symbol list for @p name. */
-static Symbol *find_in_scope(const Scope *scope, const char *name) {
-    for (Symbol *symbol = scope->symbols; symbol != NULL; symbol = symbol->next) {
-        if (strcmp(symbol->name, name) == 0) {
-            return symbol;
-        }
-    }
-    return NULL;
-}
-
 Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop) {
     Scope *scope = arena_alloc(analyzer->arena, sizeof(Scope));
-    scope->symbols = NULL;
+    hash_table_init(&scope->table, analyzer->arena);
     scope->parent = analyzer->current_scope;
     scope->is_loop = is_loop;
     scope->module_name =
@@ -34,17 +24,16 @@ void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type
     symbol->type = type;
     symbol->is_public = is_public;
     symbol->is_function = is_function;
-    symbol->next = analyzer->current_scope->symbols;
-    analyzer->current_scope->symbols = symbol;
+    hash_table_insert(&analyzer->current_scope->table, name, symbol);
 }
 
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name) {
-    return find_in_scope(analyzer->current_scope, name);
+    return hash_table_lookup(&analyzer->current_scope->table, name);
 }
 
 Symbol *scope_lookup(const SemanticAnalyzer *analyzer, const char *name) {
     for (Scope *scope = analyzer->current_scope; scope != NULL; scope = scope->parent) {
-        Symbol *symbol = find_in_scope(scope, name);
+        Symbol *symbol = hash_table_lookup(&scope->table, name);
         if (symbol != NULL) {
             return symbol;
         }

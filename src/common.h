@@ -38,6 +38,39 @@ char *arena_strndup(Arena *arena, const char *source, size_t length);
 /** printf-style formatting into arena-allocated memory. */
 char *arena_sprintf(Arena *arena, const char *format, ...);
 
+// ── Hash table ─────────────────────────────────────────────────────────
+
+/** Entry in an open-addressed hash table. */
+typedef struct {
+    const char *key; // NULL = empty slot
+    void *value;
+} HashEntry;
+
+/**
+ * String-keyed hash table with open addressing and linear probing.
+ *
+ * Entries can live on the heap (arena == NULL) or in an Arena.  Heap-backed
+ * tables must be cleaned up with hash_table_destroy(); arena-backed ones
+ * are freed automatically when the arena is destroyed.
+ */
+typedef struct {
+    HashEntry *entries;
+    int32_t count;
+    int32_t capacity;
+    Arena *arena; // non-NULL → entries arena-allocated
+} HashTable;
+
+/** Initialise an empty table.  Pass NULL for @p arena to use the heap. */
+void hash_table_init(HashTable *table, Arena *arena);
+/** Free heap-allocated entries (no-op when arena-backed). */
+void hash_table_destroy(HashTable *table);
+/** Insert or update @p key → @p value. */
+void hash_table_insert(HashTable *table, const char *key, void *value);
+/** Look up @p key.  Returns the stored value or NULL. */
+void *hash_table_lookup(const HashTable *table, const char *key);
+
+// ── Stretchy buffer ────────────────────────────────────────────────────
+
 /**
  * Stretchy buffer - type-safe dynamic array via macros.
  *

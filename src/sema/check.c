@@ -7,29 +7,25 @@ SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     analyzer->arena = arena;
     analyzer->current_scope = NULL;
     analyzer->error_count = 0;
-    analyzer->type_aliases = NULL;
-    analyzer->function_signatures = NULL;
+    hash_table_init(&analyzer->type_alias_table, NULL);
+    hash_table_init(&analyzer->function_table, NULL);
     return analyzer;
 }
 
 void semantic_analyzer_destroy(SemanticAnalyzer *analyzer) {
     if (analyzer != NULL) {
-        BUFFER_FREE(analyzer->type_aliases);
-        BUFFER_FREE(analyzer->function_signatures);
+        hash_table_destroy(&analyzer->type_alias_table);
+        hash_table_destroy(&analyzer->function_table);
         free(analyzer);
     }
 }
 
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     // Reset tables for each compilation
-    if (analyzer->function_signatures != NULL) {
-        BUFFER_FREE(analyzer->function_signatures);
-        analyzer->function_signatures = NULL;
-    }
-    if (analyzer->type_aliases != NULL) {
-        BUFFER_FREE(analyzer->type_aliases);
-        analyzer->type_aliases = NULL;
-    }
+    hash_table_destroy(&analyzer->function_table);
+    hash_table_init(&analyzer->function_table, NULL);
+    hash_table_destroy(&analyzer->type_alias_table);
+    hash_table_init(&analyzer->type_alias_table, NULL);
 
     scope_push(analyzer, false); // global scope
 
@@ -41,8 +37,8 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
             const Type *underlying =
                 resolve_ast_type(analyzer, &declaration->type_alias.alias_type);
             if (underlying != NULL) {
-                TypeAlias alias = {.name = declaration->type_alias.name, .underlying = underlying};
-                BUFFER_PUSH(analyzer->type_aliases, alias);
+                hash_table_insert(&analyzer->type_alias_table, declaration->type_alias.name,
+                                  (void *)underlying);
             }
         }
 
@@ -58,21 +54,23 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
             }
 
             // Build parameter types
-            FunctionSignature signature;
-            signature.name = declaration->function_declaration.name;
-            signature.return_type = resolved_return;
-            signature.parameter_types = NULL;
-            signature.parameter_count = BUFFER_LENGTH(declaration->function_declaration.parameters);
-            signature.is_public = declaration->function_declaration.is_public;
-            for (int32_t j = 0; j < signature.parameter_count; j++) {
+            FunctionSignature *signature = rsg_malloc(sizeof(*signature));
+            signature->name = declaration->function_declaration.name;
+            signature->return_type = resolved_return;
+            signature->parameter_types = NULL;
+            signature->parameter_count =
+                BUFFER_LENGTH(declaration->function_declaration.parameters);
+            signature->is_public = declaration->function_declaration.is_public;
+            for (int32_t j = 0; j < signature->parameter_count; j++) {
                 ASTNode *parameter = declaration->function_declaration.parameters[j];
                 const Type *parameter_type = resolve_ast_type(analyzer, &parameter->parameter.type);
                 if (parameter_type == NULL) {
                     parameter_type = &TYPE_ERROR_INSTANCE;
                 }
-                BUFFER_PUSH(signature.parameter_types, parameter_type);
+                BUFFER_PUSH(signature->parameter_types, parameter_type);
             }
-            BUFFER_PUSH(analyzer->function_signatures, signature);
+            hash_table_insert(&analyzer->function_table, declaration->function_declaration.name,
+                              signature);
 
             // Register in scope
             scope_define(analyzer, declaration->function_declaration.name, resolved_return,
