@@ -1,7 +1,6 @@
-CC      := clang
-BUILD   := build
-SRC     := src
-RUNTIME := runtime
+CC        := clang
+BUILD     := build
+RUNTIME   := runtime/core
 
 ifeq ($(OS),Windows_NT)
   EXE    := .exe
@@ -18,14 +17,14 @@ CMAKE_CMD := cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
-	cmake --build $(BUILD)
+	@cmake --build $(BUILD)
 
 # CMake configure (re-run when CMakeLists.txt changes)
 $(BUILD)/Makefile: CMakeLists.txt
-	$(CMAKE_CMD)
+	@$(CMAKE_CMD)
 
 configure:
-	$(CMAKE_CMD)
+	@$(CMAKE_CMD)
 
 clean:
 ifeq ($(OS),Windows_NT)
@@ -36,17 +35,17 @@ endif
 
 # Set up git hooks for development
 setup:
-	git config core.hooksPath .githooks
+	@git config core.hooksPath .githooks
 	@echo 'Git hooks configured.'
 
-# Run a .rsg file: make run FILE=tests/v0.1.0/primitives.rsg
+# Run a .rsg file: make run FILE=tests/integration/v0.1.0/primitives.rsg
 run: all
-	$(TARGET) $(FILE) -o $(BUILD)/out.c
-	$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out$(EXE) $(BUILD)/out.c $(RT_LIB)
-	$(BUILD)/out$(EXE)
+	@$(TARGET) $(FILE) -o $(BUILD)/out.c
+	@$(CC) -std=c17 -I$(RUNTIME) -o $(BUILD)/out$(EXE) $(BUILD)/out.c $(RT_LIB)
+	@$(BUILD)/out$(EXE)
 
 # Run all test cases
-TESTS := $(wildcard tests/**/*.rsg)
+TESTS := $(wildcard tests/integration/**/*.rsg)
 TEST_TARGETS := $(patsubst %.rsg,%.test,$(TESTS))
 
 test: all $(TEST_TARGETS)
@@ -61,12 +60,12 @@ endif
 	@echo   PASS  $<
 
 # Format all C sources with clang-format
-ALL_C := $(wildcard $(SRC)/*.c $(SRC)/*.h $(SRC)/codegen/*.c $(SRC)/codegen/*.h $(RUNTIME)/*.c $(RUNTIME)/*.h)
+ALL_C := $(shell find lib include driver -name '*.c' -o -name '*.h') $(wildcard $(RUNTIME)/*.c $(RUNTIME)/*.h)
 format:
-	clang-format -i --style=file $(ALL_C)
+	@clang-format -i --style=file $(ALL_C)
 	@echo 'Formatted $(words $(ALL_C)) file(s).'
 
 # Run clang-tidy on all C sources (uses compile_commands.json)
 TIDY_SRCS := $(filter %.c,$(ALL_C))
 tidy: $(BUILD)/Makefile
-	$(foreach f,$(TIDY_SRCS),clang-tidy --quiet -p $(BUILD) $(f) &&) echo clang-tidy passed.
+	@$(foreach f,$(TIDY_SRCS),clang-tidy --quiet -p $(BUILD) $(f) &&) echo clang-tidy passed.

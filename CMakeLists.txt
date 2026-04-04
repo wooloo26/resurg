@@ -13,18 +13,24 @@ if(WIN32)
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# --- Compiler executable ---
+# --- Compiler library (librsg) ---
 
-file(GLOB COMPILER_SRCS CONFIGURE_DEPENDS src/*.c src/codegen/*.c src/parser/*.c src/sema/*.c)
-file(GLOB COMPILER_HDRS CONFIGURE_DEPENDS src/*.h src/codegen/*.h src/parser/*.h src/sema/*.h)
+file(GLOB_RECURSE LIB_SRCS CONFIGURE_DEPENDS lib/*.c)
+file(GLOB_RECURSE LIB_HDRS CONFIGURE_DEPENDS lib/*.h include/*.h)
 
-add_executable(resurg ${COMPILER_SRCS} ${COMPILER_HDRS})
-target_include_directories(resurg PRIVATE src)
+add_library(rsg STATIC ${LIB_SRCS} ${LIB_HDRS})
+target_include_directories(rsg PUBLIC include PRIVATE lib)
+
+# --- Compiler driver ---
+
+add_executable(resurg driver/main.c)
+target_link_libraries(resurg PRIVATE rsg)
+target_include_directories(resurg PRIVATE lib)
 
 # --- Runtime (static library linked into compiled programs) ---
 
-file(GLOB RUNTIME_SRCS CONFIGURE_DEPENDS runtime/*.c)
-file(GLOB RUNTIME_HDRS CONFIGURE_DEPENDS runtime/*.h)
+file(GLOB_RECURSE RUNTIME_SRCS CONFIGURE_DEPENDS runtime/*.c)
+file(GLOB_RECURSE RUNTIME_HDRS CONFIGURE_DEPENDS runtime/*.h)
 
 add_library(resurg_runtime STATIC ${RUNTIME_SRCS} ${RUNTIME_HDRS})
-target_include_directories(resurg_runtime PRIVATE runtime)
+target_include_directories(resurg_runtime PRIVATE runtime/core)
