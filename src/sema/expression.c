@@ -18,10 +18,23 @@ const Type *check_identifier(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 const Type *check_unary(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *operand = check_node(analyzer, node->unary.operand);
+    if (operand == NULL || operand->kind == TYPE_ERROR) {
+        return &TYPE_ERROR_INSTANCE;
+    }
     if (node->unary.op == TOKEN_BANG) {
+        if (!type_equal(operand, &TYPE_BOOL_INSTANCE)) {
+            SEMA_ERROR(analyzer, node->location, "'!' requires 'bool' operand, got '%s'",
+                       type_name(analyzer->arena, operand));
+            return &TYPE_ERROR_INSTANCE;
+        }
         return &TYPE_BOOL_INSTANCE;
     }
     if (node->unary.op == TOKEN_MINUS) {
+        if (!type_is_numeric(operand)) {
+            SEMA_ERROR(analyzer, node->location, "'-' requires numeric operand, got '%s'",
+                       type_name(analyzer->arena, operand));
+            return &TYPE_ERROR_INSTANCE;
+        }
         return operand;
     }
     return operand;
