@@ -28,6 +28,8 @@ struct Lowering {
     int32_t error_count;
     const char *current_module;
     int32_t temp_counter;
+    int32_t shadow_counter;
+    const Type **compound_types; /* buf */
 };
 
 // ── Scope manipulation ────────────────────────────────────────────────

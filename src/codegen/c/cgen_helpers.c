@@ -32,44 +32,6 @@ const char *codegen_next_string_builder(CodeGenerator *generator) {
     return arena_sprintf(generator->arena, "_rsg_sb_%d", generator->string_builder_counter++);
 }
 
-// ── Variable name tracking ─────────────────────────────────────────────
-
-static int32_t variable_find(const CodeGenerator *generator, const char *name) {
-    for (int32_t i = BUFFER_LENGTH(generator->variables) - 1; i >= 0; i--) {
-        if (strcmp(generator->variables[i].rsg_name, name) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-const char *codegen_variable_lookup(const CodeGenerator *generator, const char *name) {
-    int32_t index = variable_find(generator, name);
-    return (index >= 0) ? generator->variables[index].c_name : name;
-}
-
-const char *codegen_variable_define(CodeGenerator *generator, const char *name) {
-    bool already_defined = (variable_find(generator, name) >= 0);
-    const char *c_name = already_defined ? arena_sprintf(generator->arena, "%s__%d", name,
-                                                         generator->shadow_variable_counter++)
-                                         : name;
-    VariableEntry entry = {name, c_name};
-    BUFFER_PUSH(generator->variables, entry);
-    return c_name;
-}
-
-void codegen_variable_scope_reset(CodeGenerator *generator) {
-    if (generator->variables != NULL) {
-        BUFFER_FREE(generator->variables);
-        generator->variables = NULL;
-    }
-    generator->shadow_variable_counter = 0;
-}
-
-const char *codegen_mangle_function_name(CodeGenerator *generator, const char *name) {
-    return arena_sprintf(generator->arena, "rsgu_%s", name);
-}
-
 // ── C formatting helpers ───────────────────────────────────────────────
 
 const char *codegen_c_binary_operator(TokenKind op) {
@@ -158,19 +120,6 @@ const char *codegen_c_string_escape(const CodeGenerator *generator, const char *
         }
     }
     buffer[write_index] = '\0';
-    return buffer;
-}
-
-const char *codegen_c_escape_file_path(const CodeGenerator *generator, const char *path) {
-    if (path == NULL) {
-        return "";
-    }
-    int32_t length = (int32_t)strlen(path);
-    char *buffer = arena_alloc(generator->arena, length + 1);
-    for (int32_t i = 0; i < length; i++) {
-        buffer[i] = (char)((path[i] == '\\') ? '/' : path[i]);
-    }
-    buffer[length] = '\0';
     return buffer;
 }
 

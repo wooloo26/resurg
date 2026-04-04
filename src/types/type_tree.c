@@ -66,8 +66,6 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Break";
     case TT_CONTINUE:
         return "Continue";
-    case TT_EXPRESSION_STATEMENT:
-        return "ExprStmt";
     case TT_BOOL_LITERAL:
         return "BoolLit";
     case TT_INT_LITERAL:
@@ -218,11 +216,6 @@ void tt_dump(const TtNode *node, int32_t indent) {
 
     case TT_CONTINUE:
         fprintf(stderr, "\n");
-        break;
-
-    case TT_EXPRESSION_STATEMENT:
-        fprintf(stderr, "\n");
-        tt_dump(node->expression_statement.expression, indent + 1);
         break;
 
     case TT_BOOL_LITERAL:

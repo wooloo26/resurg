@@ -67,7 +67,6 @@ typedef enum {
     TT_ASSIGN,
     TT_BREAK,
     TT_CONTINUE,
-    TT_EXPRESSION_STATEMENT,
 
     // Literals
     TT_BOOL_LITERAL,
@@ -113,7 +112,8 @@ struct TtNode {
     union {
         // TT_FILE
         struct {
-            TtNode **declarations; /* buf */
+            TtNode **declarations;       /* buf */
+            const Type **compound_types; /* buf */
         } file;
 
         // TT_MODULE
@@ -169,11 +169,6 @@ struct TtNode {
         struct {
             TtNode *value;
         } break_statement;
-
-        // TT_EXPRESSION_STATEMENT
-        struct {
-            TtNode *expression;
-        } expression_statement;
 
         // TT_BOOL_LITERAL
         struct {

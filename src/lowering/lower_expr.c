@@ -14,6 +14,16 @@ void lowering_scope_leave(Lowering *low) {
 }
 
 void lowering_scope_add(Lowering *low, const char *name, TtSymbol *symbol) {
+    // Detect shadowing: if the name already exists in any scope, mangle it.
+    if (symbol->mangled_name == NULL) {
+        TtSymbol *existing = lowering_scope_find(low, name);
+        if (existing != NULL) {
+            symbol->mangled_name =
+                arena_sprintf(low->tt_arena, "%s__%d", name, low->shadow_counter++);
+        } else {
+            symbol->mangled_name = name;
+        }
+    }
     hash_table_insert(&low->scope->table, name, symbol);
 }
 
@@ -174,17 +184,302 @@ static TtNode *lower_unary(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
+/**
+ * Expand array equality into element-wise comparison.
+ * `arr1 == arr2` → `arr1[0] == arr2[0] && arr1[1] == arr2[1] && ...`
+ * `arr1 != arr2` → `arr1[0] != arr2[0] || arr1[1] != arr2[1] || ...`
+ */
+static TtNode *lower_array_equality(Lowering *low, TtNode *left, TtNode *right, const Type *type,
+                                    TokenKind op, SourceLocation loc) {
+    bool is_equal = (op == TOKEN_EQUAL_EQUAL);
+    TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
+    TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
+    const Type *elem_type = type->array.element;
+    int32_t size = type->array.size;
+
+    // Store operands in temporaries to avoid re-evaluation
+    const char *left_name = lowering_make_temp_name(low);
+    TtSymbol *left_sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, left_name, type, false, loc);
+    lowering_scope_add(low, left_name, left_sym);
+
+    const char *right_name = lowering_make_temp_name(low);
+    TtSymbol *right_sym =
+        lowering_make_symbol(low, TT_SYMBOL_VARIABLE, right_name, type, false, loc);
+    lowering_scope_add(low, right_name, right_sym);
+
+    // Build: left_tmp[i] == right_tmp[i] for each i
+    TtNode *result = NULL;
+    for (int32_t i = 0; i < size; i++) {
+        TtNode *l_ref = lowering_make_var_ref(low, left_sym, loc);
+        TtNode *r_ref = lowering_make_var_ref(low, right_sym, loc);
+        TtNode *idx = lowering_make_int_lit(low, (uint64_t)i, &TYPE_I32_INSTANCE, TYPE_I32, loc);
+        TtNode *l_idx = tt_new(low->tt_arena, TT_INDEX, elem_type, loc);
+        l_idx->index_access.object = l_ref;
+        l_idx->index_access.index = idx;
+        TtNode *idx2 = lowering_make_int_lit(low, (uint64_t)i, &TYPE_I32_INSTANCE, TYPE_I32, loc);
+        TtNode *r_idx = tt_new(low->tt_arena, TT_INDEX, elem_type, loc);
+        r_idx->index_access.object = r_ref;
+        r_idx->index_access.index = idx2;
+
+        TtNode *cmp;
+        if (elem_type->kind == TYPE_STRING) {
+            TtNode **args = NULL;
+            BUFFER_PUSH(args, l_idx);
+            BUFFER_PUSH(args, r_idx);
+            cmp =
+                lowering_make_builtin_call(low, "rsg_string_equal", &TYPE_BOOL_INSTANCE, args, loc);
+            if (!is_equal) {
+                TtNode *neg = tt_new(low->tt_arena, TT_UNARY, &TYPE_BOOL_INSTANCE, loc);
+                neg->unary.op = TOKEN_BANG;
+                neg->unary.operand = cmp;
+                cmp = neg;
+            }
+        } else {
+            cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
+            cmp->binary.op = elem_op;
+            cmp->binary.left = l_idx;
+            cmp->binary.right = r_idx;
+        }
+
+        if (result == NULL) {
+            result = cmp;
+        } else {
+            TtNode *join = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
+            join->binary.op = join_op;
+            join->binary.left = result;
+            join->binary.right = cmp;
+            result = join;
+        }
+    }
+
+    if (result == NULL) {
+        // Empty array: always equal
+        TtNode *lit = tt_new(low->tt_arena, TT_BOOL_LITERAL, &TYPE_BOOL_INSTANCE, loc);
+        lit->bool_literal.value = is_equal;
+        return lit;
+    }
+
+    // Wrap in a block: { var left_tmp = left; var right_tmp = right; result }
+    TtNode *left_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
+    left_decl->variable_declaration.symbol = left_sym;
+    left_decl->variable_declaration.name = left_name;
+    left_decl->variable_declaration.var_type = type;
+    left_decl->variable_declaration.initializer = left;
+    left_decl->variable_declaration.is_mut = false;
+
+    TtNode *right_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
+    right_decl->variable_declaration.symbol = right_sym;
+    right_decl->variable_declaration.name = right_name;
+    right_decl->variable_declaration.var_type = type;
+    right_decl->variable_declaration.initializer = right;
+    right_decl->variable_declaration.is_mut = false;
+
+    TtNode **stmts = NULL;
+    BUFFER_PUSH(stmts, left_decl);
+    BUFFER_PUSH(stmts, right_decl);
+
+    TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_BOOL_INSTANCE, loc);
+    block->block.statements = stmts;
+    block->block.result = result;
+    return block;
+}
+
+/**
+ * Expand tuple equality into element-wise comparison.
+ * `tup1 == tup2` → `tup1.0 == tup2.0 && tup1.1 == tup2.1 && ...`
+ */
+static TtNode *lower_tuple_equality(Lowering *low, TtNode *left, TtNode *right, const Type *type,
+                                    TokenKind op, SourceLocation loc) {
+    bool is_equal = (op == TOKEN_EQUAL_EQUAL);
+    TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
+    TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
+
+    // Store operands in temporaries
+    const char *left_name = lowering_make_temp_name(low);
+    TtSymbol *left_sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, left_name, type, false, loc);
+    lowering_scope_add(low, left_name, left_sym);
+
+    const char *right_name = lowering_make_temp_name(low);
+    TtSymbol *right_sym =
+        lowering_make_symbol(low, TT_SYMBOL_VARIABLE, right_name, type, false, loc);
+    lowering_scope_add(low, right_name, right_sym);
+
+    TtNode *result = NULL;
+    for (int32_t i = 0; i < type->tuple.count; i++) {
+        const Type *elem_type = type->tuple.elements[i];
+        TtNode *l_ref = lowering_make_var_ref(low, left_sym, loc);
+        TtNode *r_ref = lowering_make_var_ref(low, right_sym, loc);
+        TtNode *l_elem = tt_new(low->tt_arena, TT_TUPLE_INDEX, elem_type, loc);
+        l_elem->tuple_index.object = l_ref;
+        l_elem->tuple_index.element_index = i;
+        TtNode *r_elem = tt_new(low->tt_arena, TT_TUPLE_INDEX, elem_type, loc);
+        r_elem->tuple_index.object = r_ref;
+        r_elem->tuple_index.element_index = i;
+
+        TtNode *cmp;
+        if (elem_type->kind == TYPE_STRING) {
+            TtNode **args = NULL;
+            BUFFER_PUSH(args, l_elem);
+            BUFFER_PUSH(args, r_elem);
+            cmp =
+                lowering_make_builtin_call(low, "rsg_string_equal", &TYPE_BOOL_INSTANCE, args, loc);
+            if (!is_equal) {
+                TtNode *neg = tt_new(low->tt_arena, TT_UNARY, &TYPE_BOOL_INSTANCE, loc);
+                neg->unary.op = TOKEN_BANG;
+                neg->unary.operand = cmp;
+                cmp = neg;
+            }
+        } else {
+            cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
+            cmp->binary.op = elem_op;
+            cmp->binary.left = l_elem;
+            cmp->binary.right = r_elem;
+        }
+
+        if (result == NULL) {
+            result = cmp;
+        } else {
+            TtNode *join = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, loc);
+            join->binary.op = join_op;
+            join->binary.left = result;
+            join->binary.right = cmp;
+            result = join;
+        }
+    }
+
+    if (result == NULL) {
+        TtNode *lit = tt_new(low->tt_arena, TT_BOOL_LITERAL, &TYPE_BOOL_INSTANCE, loc);
+        lit->bool_literal.value = is_equal;
+        return lit;
+    }
+
+    TtNode *left_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
+    left_decl->variable_declaration.symbol = left_sym;
+    left_decl->variable_declaration.name = left_name;
+    left_decl->variable_declaration.var_type = type;
+    left_decl->variable_declaration.initializer = left;
+    left_decl->variable_declaration.is_mut = false;
+
+    TtNode *right_decl = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, loc);
+    right_decl->variable_declaration.symbol = right_sym;
+    right_decl->variable_declaration.name = right_name;
+    right_decl->variable_declaration.var_type = type;
+    right_decl->variable_declaration.initializer = right;
+    right_decl->variable_declaration.is_mut = false;
+
+    TtNode **stmts = NULL;
+    BUFFER_PUSH(stmts, left_decl);
+    BUFFER_PUSH(stmts, right_decl);
+
+    TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_BOOL_INSTANCE, loc);
+    block->block.statements = stmts;
+    block->block.result = result;
+    return block;
+}
+
 static TtNode *lower_binary(Lowering *low, const ASTNode *ast) {
     TtNode *left = lower_expression(low, ast->binary.left);
     TtNode *right = lower_expression(low, ast->binary.right);
+    TokenKind op = ast->binary.op;
+    const Type *left_type = left->type;
+
+    // String equality/inequality → rsg_string_equal call
+    if (left_type != NULL && left_type->kind == TYPE_STRING &&
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        TtNode **args = NULL;
+        BUFFER_PUSH(args, left);
+        BUFFER_PUSH(args, right);
+        TtNode *call = lowering_make_builtin_call(low, "rsg_string_equal", &TYPE_BOOL_INSTANCE,
+                                                  args, ast->location);
+        if (op == TOKEN_BANG_EQUAL) {
+            TtNode *neg = tt_new(low->tt_arena, TT_UNARY, &TYPE_BOOL_INSTANCE, ast->location);
+            neg->unary.op = TOKEN_BANG;
+            neg->unary.operand = call;
+            return neg;
+        }
+        return call;
+    }
+
+    // Array equality/inequality → element-wise comparison
+    if (left_type != NULL && left_type->kind == TYPE_ARRAY &&
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        return lower_array_equality(low, left, right, left_type, op, ast->location);
+    }
+
+    // Tuple equality/inequality → element-wise comparison
+    if (left_type != NULL && left_type->kind == TYPE_TUPLE &&
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        return lower_tuple_equality(low, left, right, left_type, op, ast->location);
+    }
+
     TtNode *node = tt_new(low->tt_arena, TT_BINARY, ast->type, ast->location);
-    node->binary.op = ast->binary.op;
+    node->binary.op = op;
     node->binary.left = left;
     node->binary.right = right;
     return node;
 }
 
+/** Return true if the callee AST node resolves to the builtin "assert". */
+static bool is_assert_callee(const ASTNode *callee) {
+    if (callee->kind != NODE_IDENTIFIER) {
+        return false;
+    }
+    return strcmp(callee->identifier.name, "assert") == 0;
+}
+
+/**
+ * Expand assert(cond, msg?) → rsg_assert(cond, msg_or_null, file, line).
+ *
+ * When the message is a string literal, pass its raw value directly as a
+ * TT_STRING_LITERAL so codegen can emit a plain C string.  For non-literal
+ * string expressions, lowering wraps them unchanged — codegen extracts
+ * `.data` from the emitted rsg_string.
+ */
+static TtNode *lower_assert_call(Lowering *low, const ASTNode *ast) {
+    int32_t arg_count = BUFFER_LENGTH(ast->call.arguments);
+    SourceLocation loc = ast->location;
+
+    // Condition (default to false if missing)
+    TtNode *condition;
+    if (arg_count > 0) {
+        condition = lower_expression(low, ast->call.arguments[0]);
+    } else {
+        condition = tt_new(low->tt_arena, TT_BOOL_LITERAL, &TYPE_BOOL_INSTANCE, loc);
+        condition->bool_literal.value = false;
+    }
+
+    // Message (NULL when absent; string literal kept as literal, expression passed through)
+    TtNode *message;
+    if (arg_count > 1) {
+        message = lower_expression(low, ast->call.arguments[1]);
+    } else {
+        // Pass NULL sentinel — codegen emits "NULL" for this
+        message = tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_UNIT_INSTANCE, loc);
+    }
+
+    // File name as string literal
+    TtNode *file_node = tt_new(low->tt_arena, TT_STRING_LITERAL, &TYPE_STRING_INSTANCE, loc);
+    file_node->string_literal.value = loc.file != NULL ? loc.file : "<unknown>";
+
+    // Line number as i32 literal
+    TtNode *line_node =
+        lowering_make_int_lit(low, (uint64_t)loc.line, &TYPE_I32_INSTANCE, TYPE_I32, loc);
+
+    TtNode **args = NULL;
+    BUFFER_PUSH(args, condition);
+    BUFFER_PUSH(args, message);
+    BUFFER_PUSH(args, file_node);
+    BUFFER_PUSH(args, line_node);
+
+    return lowering_make_builtin_call(low, "rsg_assert", &TYPE_UNIT_INSTANCE, args, loc);
+}
+
 static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
+    // Assert expansion: assert(cond, msg?) → rsg_assert(cond, msg, file, line)
+    if (is_assert_callee(ast->call.callee)) {
+        return lower_assert_call(low, ast);
+    }
+
     TtNode *callee = lower_expression(low, ast->call.callee);
     TtNode **args = NULL;
     for (int32_t i = 0; i < BUFFER_LENGTH(ast->call.arguments); i++) {

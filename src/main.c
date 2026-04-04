@@ -6,6 +6,7 @@
 #include "rsg/lowering.h"
 #include "rsg/parser.h"
 #include "rsg/sema.h"
+#include "types/tt_passes.h"
 
 /** Maximum source file size accepted by the compiler (64 MiB). */
 #define MAX_SOURCE_SIZE (64L * 1024 * 1024)
@@ -167,6 +168,9 @@ static int compile(const CliArgs *args) {
     // Stage 4: Lowering - build the Typed Tree from the validated AST.
     lowering = lowering_create(tt_arena, arena);
     TtNode *tt_root = lowering_lower(lowering, file_node);
+
+    // Stage 4.5: TT passes - constant folding, ternary conversion.
+    tt_pass_const_fold(tt_arena, tt_root);
 
     if (args->dump_tt) {
         tt_dump(tt_root, 0);

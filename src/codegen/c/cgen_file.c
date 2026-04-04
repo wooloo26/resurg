@@ -12,12 +12,6 @@ static void emit_function_body(CodeGenerator *generator, const TtNode *function_
     bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
     bool is_main = strcmp(function_node->function_declaration.name, "main") == 0;
 
-    // Register parameters in variable tracking
-    for (int32_t i = 0; i < BUFFER_LENGTH(function_node->function_declaration.params); i++) {
-        const TtNode *parameter = function_node->function_declaration.params[i];
-        codegen_variable_define(generator, parameter->parameter.name);
-    }
-
     if (body != NULL && body->kind == TT_BLOCK) {
         // Block body with optional trailing result
         codegen_emit_block_statements(generator, body);
@@ -66,8 +60,7 @@ static void emit_function_declaration(CodeGenerator *generator, const TtNode *no
     const char *prefix = !is_public ? "static " : "";
 
     // Mangled function name
-    const char *function_name =
-        codegen_mangle_function_name(generator, node->function_declaration.name);
+    const char *function_name = node->function_declaration.symbol->mangled_name;
 
     // Parameters
     codegen_emit_indent(generator);
@@ -87,7 +80,7 @@ static void emit_function_declaration(CodeGenerator *generator, const TtNode *no
                 fprintf(generator->output, ", ");
             }
             fprintf(generator->output, "%s %s", codegen_c_type_for(generator, parameter_type),
-                    parameter->parameter.name);
+                    parameter->parameter.symbol->mangled_name);
         }
     }
 
@@ -98,7 +91,6 @@ static void emit_function_declaration(CodeGenerator *generator, const TtNode *no
 
     fprintf(generator->output, ") {\n");
     generator->indent++;
-    codegen_variable_scope_reset(generator);
     emit_function_body(generator, node);
 
     generator->indent--;
@@ -146,7 +138,8 @@ static void emit_entry_point(CodeGenerator *generator, const TtNode *file,
         bool is_test = strncmp(name, "test_", 5) == 0;
         bool has_parameters = BUFFER_LENGTH(declaration->function_declaration.params) != 0;
         if ((is_main || is_test) && !has_parameters) {
-            codegen_emit_line(generator, "%s();", codegen_mangle_function_name(generator, name));
+            codegen_emit_line(generator, "%s();",
+                              declaration->function_declaration.symbol->mangled_name);
         }
     }
 
@@ -163,10 +156,6 @@ static void emit_entry_point(CodeGenerator *generator, const TtNode *file,
 static void emit_file(CodeGenerator *generator, const TtNode *file) {
     emit_preamble(generator);
 
-    // Emit source file path constant (used by rsg_assert)
-    generator->source_file = codegen_c_escape_file_path(generator, file->location.file);
-    codegen_emit(generator, "static const char *_rsg_file = \"%s\";\n\n", generator->source_file);
-
     // Emit module comment
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         const TtNode *declaration = file->file.declarations[i];
@@ -176,9 +165,11 @@ static void emit_file(CodeGenerator *generator, const TtNode *file) {
         }
     }
 
-    // Collect and emit compound type definitions (arrays, tuples)
+    // Emit compound type definitions (arrays, tuples) from lowering registry
     codegen_reset_compound_types(generator);
-    codegen_collect_compound_types(generator, file);
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.compound_types); i++) {
+        BUFFER_PUSH(generator->compound_types, file->file.compound_types[i]);
+    }
     codegen_emit_compound_typedefs(generator);
 
     // Forward declarations for all functions
@@ -229,11 +220,8 @@ CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
     generator->arena = arena;
     generator->indent = 0;
     generator->module = NULL;
-    generator->source_file = NULL;
     generator->temporary_counter = 0;
     generator->string_builder_counter = 0;
-    generator->variables = NULL;
-    generator->shadow_variable_counter = 0;
     generator->compound_types = NULL;
     return generator;
 }
@@ -241,7 +229,6 @@ CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
 void code_generator_destroy(CodeGenerator *generator) {
     if (generator != NULL) {
         codegen_reset_compound_types(generator);
-        BUFFER_FREE(generator->variables);
         free(generator);
     }
 }
