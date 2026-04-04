@@ -25,15 +25,15 @@ Core compiler infrastructure and minimal language subset.
 
 Compound types and core type checking.
 
-- [ ] Full integer types (`i8`–`i128`, `u8`–`u128`, `isize`, `usize`)
-- [ ] `f32` support
-- [ ] `char` type
-- [ ] Arrays (`[N]T`) — fixed-size value types
-- [ ] Tuples (`(A, B, …)`)
-- [ ] Type aliases (`type ID = u64`)
-- [ ] Explicit type annotations on declarations
-- [ ] No implicit conversions (enforce)
-- [ ] Operator precedence (full table)
+- [x] Full integer types (`i8`–`i128`, `u8`–`u128`, `isize`, `usize`)
+- [x] `f32` support
+- [x] `char` type
+- [x] Arrays (`[N]T`) — fixed-size value types
+- [x] Tuples (`(A, B, …)`)
+- [x] Type aliases (`type ID = u64`)
+- [x] Explicit type annotations on declarations
+- [x] No implicit conversions (enforce)
+- [x] Operator precedence (full table)
 
 ## v0.3.0 — Structs & Methods
 
@@ -149,6 +149,7 @@ Language completeness, tooling, and ecosystem.
 
 - [ ] C++20 back-end
 - [ ] Go back-end
+- [ ] Typescript back-end
 - [ ] Cross-compilation support
 - [ ] Compile-time evaluation (`comptime`)
 - [ ] Async / concurrency primitives
