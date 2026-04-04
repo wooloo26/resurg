@@ -70,14 +70,14 @@ static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE
  * types (TYPE_ARRAY, TYPE_TUPLE) that have no table entry.
  */
 static const TypeInfoEntry *find_type_info(TypeKind kind) {
-    if (kind < 0 || kind >= TYPE_INFO_COUNT || TYPE_INFO[kind].rsg_name == NULL) {
+    if ((int32_t)kind < 0 || (int32_t)kind >= TYPE_INFO_COUNT || TYPE_INFO[kind].rsg_name == NULL) {
         return NULL;
     }
     return &TYPE_INFO[kind];
 }
 
 static uint8_t type_flags(TypeKind kind) {
-    return (kind >= 0 && kind < TYPE_INFO_COUNT) ? TYPE_INFO[kind].flags : 0;
+    return ((int32_t)kind >= 0 && (int32_t)kind < TYPE_INFO_COUNT) ? TYPE_INFO[kind].flags : 0;
 }
 
 // Type utility functions.
