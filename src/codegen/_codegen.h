@@ -29,6 +29,7 @@ struct CodeGenerator {
     int32_t string_builder_counter;  // monotonic counter for _rsg_sb_N
     VariableEntry *variables;        /* buf */
     int32_t shadow_variable_counter; // suffix counter for shadowed renames
+    const Type **compound_types;     /* buf */
 };
 
 // ── Output helpers (codegen_helpers.c) ─────────────────────────────────
@@ -85,11 +86,11 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type);
 // ── Compound types (codegen_types.c) ───────────────────────────────────
 
 /** Recursively walk @p node collecting all array/tuple types. */
-void codegen_collect_compound_types(const ASTNode *node);
+void codegen_collect_compound_types(CodeGenerator *generator, const ASTNode *node);
 /** Emit typedef structs for all collected compound types. */
 void codegen_emit_compound_typedefs(CodeGenerator *generator);
-/** Free and reset the global compound-type list. */
-void codegen_reset_compound_types(void);
+/** Free and reset the compound-type list. */
+void codegen_reset_compound_types(CodeGenerator *generator);
 
 // ── Expression emission (codegen_expression.c) ─────────────────────────
 

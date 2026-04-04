@@ -180,8 +180,8 @@ static void emit_file(CodeGenerator *generator, const ASTNode *file) {
     }
 
     // Collect and emit compound type definitions (arrays, tuples)
-    codegen_reset_compound_types();
-    codegen_collect_compound_types(file);
+    codegen_reset_compound_types(generator);
+    codegen_collect_compound_types(generator, file);
     codegen_emit_compound_typedefs(generator);
 
     // Forward declarations for all functions
@@ -237,11 +237,13 @@ CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
     generator->string_builder_counter = 0;
     generator->variables = NULL;
     generator->shadow_variable_counter = 0;
+    generator->compound_types = NULL;
     return generator;
 }
 
 void code_generator_destroy(CodeGenerator *generator) {
     if (generator != NULL) {
+        codegen_reset_compound_types(generator);
         BUFFER_FREE(generator->variables);
         free(generator);
     }
