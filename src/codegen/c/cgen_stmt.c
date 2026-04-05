@@ -114,6 +114,10 @@ static const char *resolve_assign_target(CodeGenerator *generator, const TtNode 
         }
         return arena_sprintf(generator->arena, "%s.%s", obj, target->struct_field_access.field);
     }
+    if (target->kind == TT_DEREF) {
+        const char *inner = codegen_emit_expression(generator, target->deref.operand);
+        return arena_sprintf(generator->arena, "(*%s)", inner);
+    }
     return codegen_emit_expression(generator, target);
 }
 

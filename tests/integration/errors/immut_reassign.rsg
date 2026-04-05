@@ -1,0 +1,8 @@
+// TEST: compile_error
+// EXPECT-ERROR: cannot assign to immutable
+module test_err
+
+fn main() {
+    immut x := 42
+    x = 100
+}

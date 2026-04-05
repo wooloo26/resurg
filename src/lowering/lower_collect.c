@@ -30,6 +30,9 @@ static void register_compound_type(Lowering *low, const Type *type) {
         for (int32_t i = 0; i < type->struct_type.field_count; i++) {
             register_compound_type(low, type->struct_type.fields[i].type);
         }
+    } else if (type->kind == TYPE_POINTER) {
+        register_compound_type(low, type->pointer.pointee);
+        return;
     } else {
         return;
     }

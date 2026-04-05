@@ -140,6 +140,7 @@ static ASTNode *parse_function_declaration(Parser *parser, bool is_public) {
         do {
             SourceLocation parameter_location = parser_current_location(parser);
             ASTNode *parameter = ast_new(parser->arena, NODE_PARAMETER, parameter_location);
+            parameter->parameter.is_mut = parser_match(parser, TOKEN_MUT);
             parameter->parameter.name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
             parser_expect(parser, TOKEN_COLON);
             parameter->parameter.type = parser_parse_type(parser);

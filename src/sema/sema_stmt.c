@@ -125,6 +125,15 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
     is_reserved_identifier(analyzer, node->location, node->variable_declaration.name);
 
     scope_define(analyzer, node->variable_declaration.name, variable_type, false, SYM_VAR);
+
+    // Mark immutable bindings
+    if (node->variable_declaration.is_immut) {
+        Symbol *sym = scope_lookup_current(analyzer, node->variable_declaration.name);
+        if (sym != NULL) {
+            sym->is_immut = true;
+        }
+    }
+
     return variable_type;
 }
 
@@ -185,6 +194,16 @@ static const Type *check_assignment_common(SemanticAnalyzer *analyzer, ASTNode *
     const Type *target_type = check_node(analyzer, target);
     check_node(analyzer, value);
     promote_literal(value, target_type);
+
+    // Check immutability: cannot assign to immut bindings
+    if (target->kind == NODE_IDENTIFIER) {
+        Symbol *sym = scope_lookup(analyzer, target->identifier.name);
+        if (sym != NULL && sym->is_immut) {
+            SEMA_ERROR(analyzer, target->location, "cannot assign to immutable variable '%s'",
+                       target->identifier.name);
+        }
+    }
+
     return &TYPE_UNIT_INSTANCE;
 }
 
@@ -499,6 +518,14 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_TUPLE_DESTRUCTURE:
         result = check_tuple_destructure(analyzer, node);
+        break;
+
+    case NODE_ADDRESS_OF:
+        result = check_address_of(analyzer, node);
+        break;
+
+    case NODE_DEREF:
+        result = check_deref(analyzer, node);
         break;
     }
 

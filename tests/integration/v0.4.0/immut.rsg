@@ -1,0 +1,41 @@
+// v0.4.0 — Immutable bindings
+module test_immut
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+// ── immutable primitive binding ──
+
+fn test_immut_primitive() {
+    immut x := 42
+    assert(x == 42)
+}
+
+// ── immutable used in expressions ──
+
+fn test_immut_in_expression() {
+    immut a := 10
+    immut b := 20
+    c := a + b
+    assert(c == 30)
+}
+
+// ── immutable value copy: copy is independent, original untouched ──
+
+fn test_immut_value_copy() {
+    immut v := Point { x = 1.0, y = 2.0 }
+    w := v
+    w.x = 99.0
+    assert(v.x == 1.0)
+    assert(w.x == 99.0)
+}
+
+// ── immutable field read access ──
+
+fn test_immut_field_read() {
+    immut p := Point { x = 3.0, y = 4.0 }
+    assert(p.x == 3.0)
+    assert(p.y == 4.0)
+}

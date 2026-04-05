@@ -99,6 +99,11 @@ typedef enum {
     TT_STRUCT_LITERAL,
     TT_STRUCT_FIELD_ACCESS,
     TT_METHOD_CALL,
+
+    // Pointer-related
+    TT_HEAP_ALLOC,
+    TT_ADDRESS_OF,
+    TT_DEREF,
 } TtNodeKind;
 
 // ── TtNode ─────────────────────────────────────────────────────────────
@@ -305,6 +310,21 @@ struct TtNode {
             const char *mangled_name;
             TtNode **arguments; /* buf */
         } method_call;
+
+        // TT_HEAP_ALLOC
+        struct {
+            TtNode *operand;
+        } heap_alloc;
+
+        // TT_ADDRESS_OF
+        struct {
+            TtNode *operand;
+        } address_of;
+
+        // TT_DEREF
+        struct {
+            TtNode *operand;
+        } deref;
     };
 };
 

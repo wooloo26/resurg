@@ -176,5 +176,8 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type) {
     if (type->kind == TYPE_STRUCT) {
         return arena_sprintf(gen->arena, "_Rsg_%s", type->struct_type.name);
     }
+    if (type->kind == TYPE_POINTER) {
+        return arena_sprintf(gen->arena, "%s *", codegen_c_type_for(gen, type->pointer.pointee));
+    }
     return c_type_string(type);
 }

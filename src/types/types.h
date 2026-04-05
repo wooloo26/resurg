@@ -27,10 +27,11 @@ typedef enum {
     TYPE_CHAR,
     TYPE_STRING,
     TYPE_UNIT,
-    TYPE_ARRAY,  // [N]T
-    TYPE_TUPLE,  // (A, B, ...)
-    TYPE_STRUCT, // struct { fields }
-    TYPE_ERROR,  // sentinel for continued checking after type errors
+    TYPE_ARRAY,   // [N]T
+    TYPE_TUPLE,   // (A, B, ...)
+    TYPE_STRUCT,  // struct { fields }
+    TYPE_POINTER, // *T
+    TYPE_ERROR,   // sentinel for continued checking after type errors
 } TypeKind;
 
 typedef struct Type Type;
@@ -59,6 +60,10 @@ struct Type {
             const Type **embedded;
             int32_t embed_count;
         } struct_type;
+        struct {
+            const Type *pointee;
+            bool is_mut;
+        } pointer;
     };
 };
 
@@ -136,5 +141,12 @@ const StructField *type_struct_fields(const Type *type);
 int32_t type_struct_field_count(const Type *type);
 /** Look up a field by name in a struct type.  Returns NULL if not found. */
 const StructField *type_struct_find_field(const Type *type, const char *name);
+
+/** Create a pointer type *pointee. */
+Type *type_create_pointer(Arena *arena, const Type *pointee, bool is_mut);
+/** Return the pointee type of a pointer.  Asserts kind == TYPE_POINTER. */
+const Type *type_pointer_pointee(const Type *type);
+/** Return whether a pointer type is mutable.  Asserts kind == TYPE_POINTER. */
+bool type_pointer_is_mut(const Type *type);
 
 #endif // RG_TYPES_H

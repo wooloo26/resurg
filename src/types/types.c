@@ -123,6 +123,9 @@ const char *type_name(Arena *arena, const Type *type) {
     if (type->kind == TYPE_STRUCT) {
         return type->struct_type.name;
     }
+    if (type->kind == TYPE_POINTER) {
+        return arena_sprintf(arena, "*%s", type_name(arena, type->pointer.pointee));
+    }
     return "<unknown>";
 }
 
@@ -157,6 +160,9 @@ bool type_equal(const Type *a, const Type *b) {
     }
     if (a->kind == TYPE_STRUCT) {
         return strcmp(a->struct_type.name, b->struct_type.name) == 0;
+    }
+    if (a->kind == TYPE_POINTER) {
+        return type_equal(a->pointer.pointee, b->pointer.pointee);
     }
     return true;
 }
@@ -266,4 +272,21 @@ const StructField *type_struct_find_field(const Type *type, const char *name) {
         }
     }
     return NULL;
+}
+
+Type *type_create_pointer(Arena *arena, const Type *pointee, bool is_mut) {
+    Type *type = type_create(arena, TYPE_POINTER);
+    type->pointer.pointee = pointee;
+    type->pointer.is_mut = is_mut;
+    return type;
+}
+
+const Type *type_pointer_pointee(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_POINTER);
+    return type->pointer.pointee;
+}
+
+bool type_pointer_is_mut(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_POINTER);
+    return type->pointer.is_mut;
 }

@@ -270,5 +270,13 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "TupleDestructure%s\n", node->tuple_destructure.has_rest ? " [..]" : "");
         ast_dump(node->tuple_destructure.value, level + 1);
         break;
+    case NODE_ADDRESS_OF:
+        fprintf(stderr, "AddressOf\n");
+        ast_dump(node->address_of.operand, level + 1);
+        break;
+    case NODE_DEREF:
+        fprintf(stderr, "Deref\n");
+        ast_dump(node->deref.operand, level + 1);
+        break;
     }
 }

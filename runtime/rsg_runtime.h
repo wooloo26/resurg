@@ -94,4 +94,7 @@ void rsg_print_u32(uint32_t value);
 void rsg_print_f64(double value);
 void rsg_print_bool(bool value);
 
+/** Allocate @p size bytes on the heap; abort on OOM. */
+void *rsg_heap_alloc(size_t size);
+
 #endif // RG_RUNTIME_H

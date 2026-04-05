@@ -35,6 +35,7 @@ typedef enum {
     TOKEN_TYPE,     // type
     TOKEN_STRUCT,   // struct
     TOKEN_MUT,      // mut
+    TOKEN_IMMUT,    // immut
 
     // Type keywords
     TOKEN_BOOL,   // bool
@@ -72,6 +73,7 @@ typedef enum {
     TOKEN_GREATER_EQUAL, // >=
 
     // Operators - logical
+    TOKEN_AMPERSAND,           // &
     TOKEN_AMPERSAND_AMPERSAND, // &&
     TOKEN_PIPE_PIPE,           // ||
     TOKEN_BANG,                // !

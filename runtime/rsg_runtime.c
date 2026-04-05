@@ -188,3 +188,7 @@ void rsg_print_f64(double value) {
 void rsg_print_bool(bool value) {
     printf("%s", value ? "true" : "false");
 }
+
+void *rsg_heap_alloc(size_t size) {
+    return checked_malloc(size);
+}

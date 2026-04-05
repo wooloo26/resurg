@@ -108,6 +108,11 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
         const Type *obj_type = check_node(analyzer, node->call.callee->member.object);
         const char *method_name = node->call.callee->member.member;
 
+        // Auto-deref for pointer types
+        if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
+            obj_type = obj_type->pointer.pointee;
+        }
+
         if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
             // Look up method on this struct (or promoted from embedded)
             const char *method_key =
@@ -274,6 +279,12 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *object_type = check_node(analyzer, node->member.object);
+
+    // Auto-deref: if object is a pointer, unwrap to pointee
+    if (object_type != NULL && object_type->kind == TYPE_POINTER) {
+        object_type = object_type->pointer.pointee;
+    }
+
     // Tuple field access: .0, .1, .2, ...
     if (object_type != NULL && object_type->kind == TYPE_TUPLE) {
         char *end = NULL;
@@ -445,4 +456,32 @@ const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     }
 
     return sdef->type;
+}
+
+const Type *check_address_of(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *inner_type = check_node(analyzer, node->address_of.operand);
+    if (inner_type == NULL || inner_type->kind == TYPE_ERROR) {
+        return &TYPE_ERROR_INSTANCE;
+    }
+    // Addressability: only variables and struct literals are addressable
+    ASTNode *operand = node->address_of.operand;
+    if (operand->kind != NODE_IDENTIFIER && operand->kind != NODE_STRUCT_LITERAL &&
+        operand->kind != NODE_MEMBER && operand->kind != NODE_INDEX) {
+        SEMA_ERROR(analyzer, node->location, "cannot take address of rvalue");
+        return &TYPE_ERROR_INSTANCE;
+    }
+    return type_create_pointer(analyzer->arena, inner_type, false);
+}
+
+const Type *check_deref(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *inner_type = check_node(analyzer, node->deref.operand);
+    if (inner_type == NULL || inner_type->kind == TYPE_ERROR) {
+        return &TYPE_ERROR_INSTANCE;
+    }
+    if (inner_type->kind != TYPE_POINTER) {
+        SEMA_ERROR(analyzer, node->location, "cannot dereference non-pointer type '%s'",
+                   type_name(analyzer->arena, inner_type));
+        return &TYPE_ERROR_INSTANCE;
+    }
+    return inner_type->pointer.pointee;
 }

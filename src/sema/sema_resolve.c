@@ -39,6 +39,14 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
         }
         return type_create_tuple(analyzer->arena, elements, BUFFER_LENGTH(elements));
     }
+    if (ast_type->kind == AST_TYPE_POINTER) {
+        const Type *pointee = resolve_ast_type(analyzer, ast_type->pointer_element);
+        if (pointee == NULL) {
+            SEMA_ERROR(analyzer, ast_type->location, "pointer element type required");
+            return &TYPE_ERROR_INSTANCE;
+        }
+        return type_create_pointer(analyzer->arena, pointee, false);
+    }
     // AST_TYPE_NAME
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {

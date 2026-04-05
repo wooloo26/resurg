@@ -9,6 +9,18 @@
 static ASTNode *parse_variable_declaration(Parser *parser) {
     SourceLocation location = parser_current_location(parser);
     ASTNode *node = ast_new(parser->arena, NODE_VARIABLE_DECLARATION, location);
+    node->variable_declaration.is_immut = false;
+
+    // `immut x := expr`
+    if (parser_match(parser, TOKEN_IMMUT)) {
+        node->variable_declaration.is_immut = true;
+        node->variable_declaration.is_variable = false;
+        node->variable_declaration.name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        node->variable_declaration.type.kind = AST_TYPE_INFERRED;
+        parser_expect(parser, TOKEN_COLON_EQUAL);
+        node->variable_declaration.initializer = parser_parse_expression(parser);
+        return node;
+    }
 
     // `var x: T = expr` or `x := expr`
     if (parser_match(parser, TOKEN_VARIABLE)) {
@@ -240,6 +252,9 @@ ASTNode *parser_parse_statement(Parser *parser) {
 
     // Keyword-initiated statements
     if (parser_check(parser, TOKEN_VARIABLE)) {
+        return parse_variable_declaration(parser);
+    }
+    if (parser_check(parser, TOKEN_IMMUT)) {
         return parse_variable_declaration(parser);
     }
     if (parser_check(parser, TOKEN_LOOP)) {

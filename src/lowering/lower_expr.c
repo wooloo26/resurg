@@ -315,12 +315,19 @@ static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
         const ASTNode *member_ast = ast->call.callee;
         const Type *obj_type = member_ast->member.object->type;
 
+        // Auto-deref pointer for method calls
+        bool via_pointer = false;
+        if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
+            obj_type = obj_type->pointer.pointee;
+            via_pointer = true;
+        }
+
         if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
             const char *method_name = member_ast->member.member;
             TtNode *receiver = lower_expression(low, member_ast->member.object);
 
-            bool via_pointer = false;
-            if (low->current_receiver != NULL && receiver->kind == TT_VARIABLE_REFERENCE &&
+            if (!via_pointer && low->current_receiver != NULL &&
+                receiver->kind == TT_VARIABLE_REFERENCE &&
                 receiver->variable_reference.symbol == low->current_receiver) {
                 via_pointer = true;
             }
@@ -382,18 +389,26 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
         }
     }
 
-    // Struct field access
-    if (object->type != NULL && object->type->kind == TYPE_STRUCT) {
-        const char *field_name = ast->member.member;
-        bool via_pointer = false;
+    // Auto-deref for pointer types: p.field → p->field
+    bool via_pointer = false;
+    const Type *lookup_type = object->type;
+    if (lookup_type != NULL && lookup_type->kind == TYPE_POINTER) {
+        lookup_type = lookup_type->pointer.pointee;
+        via_pointer = true;
+    }
 
-        if (low->current_receiver != NULL && object->kind == TT_VARIABLE_REFERENCE &&
+    // Struct field access
+    if (lookup_type != NULL && lookup_type->kind == TYPE_STRUCT) {
+        const char *field_name = ast->member.member;
+
+        if (!via_pointer && low->current_receiver != NULL &&
+            object->kind == TT_VARIABLE_REFERENCE &&
             object->variable_reference.symbol == low->current_receiver) {
             via_pointer = true;
         }
 
         // Direct field
-        const StructField *sf = type_struct_find_field(object->type, field_name);
+        const StructField *sf = type_struct_find_field(lookup_type, field_name);
         if (sf != NULL) {
             TtNode *node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
             node->struct_field_access.object = object;
@@ -403,8 +418,8 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
         }
 
         // Promoted field from embedded struct
-        for (int32_t i = 0; i < object->type->struct_type.embed_count; i++) {
-            const Type *embed_type = object->type->struct_type.embedded[i];
+        for (int32_t i = 0; i < lookup_type->struct_type.embed_count; i++) {
+            const Type *embed_type = lookup_type->struct_type.embedded[i];
             if (type_struct_find_field(embed_type, field_name) != NULL) {
                 TtNode *embed_access =
                     tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, ast->location);
@@ -582,6 +597,25 @@ TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
         return lower_string_interpolation(low, ast);
     case NODE_STRUCT_LITERAL:
         return lower_struct_literal(low, ast);
+    case NODE_ADDRESS_OF: {
+        TtNode *operand = lower_expression(low, ast->address_of.operand);
+        // &StructLiteral{} → heap allocation
+        if (ast->address_of.operand->kind == NODE_STRUCT_LITERAL) {
+            TtNode *node = tt_new(low->tt_arena, TT_HEAP_ALLOC, ast->type, ast->location);
+            node->heap_alloc.operand = operand;
+            return node;
+        }
+        // &variable → native address-of
+        TtNode *node = tt_new(low->tt_arena, TT_ADDRESS_OF, ast->type, ast->location);
+        node->address_of.operand = operand;
+        return node;
+    }
+    case NODE_DEREF: {
+        TtNode *operand = lower_expression(low, ast->deref.operand);
+        TtNode *node = tt_new(low->tt_arena, TT_DEREF, ast->type, ast->location);
+        node->deref.operand = operand;
+        return node;
+    }
     default:
         break;
     }

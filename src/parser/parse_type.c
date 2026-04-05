@@ -3,6 +3,16 @@
 ASTType parser_parse_type(Parser *parser) {
     ASTType type = {.kind = AST_TYPE_NAME, .location = parser_current_location(parser)};
 
+    // Pointer type: *T
+    if (parser_check(parser, TOKEN_STAR)) {
+        type.kind = AST_TYPE_POINTER;
+        parser_advance(parser); // consume '*'
+        ASTType *pointee = arena_alloc(parser->arena, sizeof(ASTType));
+        *pointee = parser_parse_type(parser);
+        type.pointer_element = pointee;
+        return type;
+    }
+
     // Array type: [N]T
     if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
         type.kind = AST_TYPE_ARRAY;

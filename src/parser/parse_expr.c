@@ -316,9 +316,12 @@ static ASTNode *parse_postfix(Parser *parser) {
             node->call.callee = left;
             node->call.arguments = NULL;
             node->call.arg_names = NULL;
+            node->call.arg_is_mut = NULL;
             if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
                 do {
                     parser_skip_newlines(parser);
+                    // Check for mut argument: mut expr
+                    bool is_mut_arg = parser_match(parser, TOKEN_MUT);
                     // Check for named argument: IDENT =
                     bool is_named_arg = parser_check(parser, TOKEN_IDENTIFIER) &&
                                         parser->position + 1 < parser->count &&
@@ -329,10 +332,12 @@ static ASTNode *parse_postfix(Parser *parser) {
                         ASTNode *value = parser_parse_expression(parser);
                         BUFFER_PUSH(node->call.arguments, value);
                         BUFFER_PUSH(node->call.arg_names, arg_name);
+                        BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
                     } else {
                         ASTNode *arg = parser_parse_expression(parser);
                         BUFFER_PUSH(node->call.arguments, arg);
                         BUFFER_PUSH(node->call.arg_names, (const char *)NULL);
+                        BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
                     }
                 } while (parser_match(parser, TOKEN_COMMA));
             }
@@ -378,6 +383,22 @@ static ASTNode *parse_unary(Parser *parser) {
         ASTNode *node = ast_new(parser->arena, NODE_UNARY, location);
         node->unary.op = op;
         node->unary.operand = parse_unary(parser);
+        return node;
+    }
+    // Dereference: *expr
+    if (parser_check(parser, TOKEN_STAR)) {
+        SourceLocation location = parser_current_location(parser);
+        parser_advance(parser); // consume '*'
+        ASTNode *node = ast_new(parser->arena, NODE_DEREF, location);
+        node->deref.operand = parse_unary(parser);
+        return node;
+    }
+    // Address-of / heap alloc: &expr
+    if (parser_check(parser, TOKEN_AMPERSAND)) {
+        SourceLocation location = parser_current_location(parser);
+        parser_advance(parser); // consume '&'
+        ASTNode *node = ast_new(parser->arena, NODE_ADDRESS_OF, location);
+        node->address_of.operand = parse_unary(parser);
         return node;
     }
     return parse_postfix(parser);

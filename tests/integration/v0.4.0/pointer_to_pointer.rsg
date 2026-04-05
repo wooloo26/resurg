@@ -1,0 +1,35 @@
+// v0.4.0 — Pointer-to-pointer, address-of variable, dereference
+module test_ptr_to_ptr
+
+struct Node {
+    value: i32 = 0
+}
+
+// ── address-of primitive variable ──
+
+fn test_address_of_primitive() {
+    x := 42
+    px := &x
+    assert(*px == 42)
+}
+
+// ── dereference write ──
+
+fn test_deref_write() {
+    x := 42
+    px := &x
+    *px = 100
+    assert(x == 100)
+}
+
+// ── pointer-to-pointer reassign ──
+
+fn set_node(pp: **Node) {
+    *pp = &Node { value = 99 }
+}
+
+fn test_pointer_to_pointer() {
+    var ptr: *Node = &Node { value = 0 }
+    set_node(&ptr)
+    assert(ptr.value == 99)
+}

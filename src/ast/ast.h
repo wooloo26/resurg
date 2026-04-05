@@ -23,6 +23,7 @@ typedef enum {
     AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
     AST_TYPE_ARRAY,    // [N]T
     AST_TYPE_TUPLE,    // (A, B, ...)
+    AST_TYPE_POINTER,  // *T
 } ASTTypeKind;
 
 struct ASTType {
@@ -34,6 +35,8 @@ struct ASTType {
     int32_t array_size;     // element count N
     // AST_TYPE_TUPLE fields
     ASTType **tuple_elements; /* buf */
+    // AST_TYPE_POINTER fields
+    ASTType *pointer_element; // pointee type
 };
 
 /** A field definition in a struct declaration. */
@@ -82,6 +85,8 @@ typedef enum {
     NODE_STRUCT_LITERAL,       // Point { x = 1.0, y = 2.0 }
     NODE_STRUCT_DESTRUCTURE,   // {x, y} := expr
     NODE_TUPLE_DESTRUCTURE,    // (a, b) := expr
+    NODE_ADDRESS_OF,           // &expr (heap alloc or address-of)
+    NODE_DEREF,                // *expr (pointer dereference)
 } NodeKind;
 
 /** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
@@ -150,6 +155,7 @@ struct ASTNode {
         struct {
             const char *name;
             ASTType type;
+            bool is_mut; // true for `mut name: *T`
         } parameter;
 
         // NODE_VARIABLE_DECLARATION
@@ -158,6 +164,7 @@ struct ASTNode {
             ASTType type;         // may be AST_TYPE_INFERRED
             ASTNode *initializer; // initializer expression
             bool is_variable;     // true for `var x: T = ...`, false for `:=`
+            bool is_immut;        // true for `immut x := ...`
         } variable_declaration;
 
         // NODE_EXPRESSION_STATEMENT
@@ -213,6 +220,7 @@ struct ASTNode {
             ASTNode *callee;
             ASTNode **arguments;    /* buf */
             const char **arg_names; /* buf - NULL entry = positional */
+            bool *arg_is_mut;       /* buf - true = `mut` at call site */
         } call;
 
         // NODE_MEMBER
@@ -305,6 +313,16 @@ struct ASTNode {
             bool has_rest;         // true when `..` appears in pattern
             int32_t rest_position; // index of `..` in pattern (-1 if none)
         } tuple_destructure;
+
+        // NODE_ADDRESS_OF
+        struct {
+            ASTNode *operand;
+        } address_of;
+
+        // NODE_DEREF
+        struct {
+            ASTNode *operand;
+        } deref;
     };
 };
 

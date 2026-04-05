@@ -290,6 +290,26 @@ static const char *emit_method_call_expression(CodeGenerator *generator, const T
     return arena_sprintf(generator->arena, "%s(&(%s))", node->method_call.mangled_name, receiver);
 }
 
+static const char *emit_heap_alloc_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *pointee_type = codegen_c_type_for(generator, node->type->pointer.pointee);
+    const char *tmp = codegen_next_temporary(generator);
+    const char *inner = codegen_emit_expression(generator, node->heap_alloc.operand);
+    codegen_emit_line(generator, "%s *%s = rsg_heap_alloc(sizeof(%s));", pointee_type, tmp,
+                      pointee_type);
+    codegen_emit_line(generator, "*%s = %s;", tmp, inner);
+    return tmp;
+}
+
+static const char *emit_address_of_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *operand = codegen_emit_expression(generator, node->address_of.operand);
+    return arena_sprintf(generator->arena, "&(%s)", operand);
+}
+
+static const char *emit_deref_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *operand = codegen_emit_expression(generator, node->deref.operand);
+    return arena_sprintf(generator->arena, "(*%s)", operand);
+}
+
 // ── Expression dispatch ────────────────────────────────────────────────
 
 const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node) {
@@ -339,6 +359,12 @@ const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node
         return emit_struct_field_access_expression(generator, node);
     case TT_METHOD_CALL:
         return emit_method_call_expression(generator, node);
+    case TT_HEAP_ALLOC:
+        return emit_heap_alloc_expression(generator, node);
+    case TT_ADDRESS_OF:
+        return emit_address_of_expression(generator, node);
+    case TT_DEREF:
+        return emit_deref_expression(generator, node);
     default:
         return "0";
     }

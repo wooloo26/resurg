@@ -114,6 +114,12 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "StructFieldAccess";
     case TT_METHOD_CALL:
         return "MethodCall";
+    case TT_HEAP_ALLOC:
+        return "HeapAlloc";
+    case TT_ADDRESS_OF:
+        return "AddressOf";
+    case TT_DEREF:
+        return "Deref";
     }
     return "?";
 }
@@ -345,6 +351,21 @@ void tt_dump(const TtNode *node, int32_t indent) {
         tt_dump_children(node->method_call.arguments, BUFFER_LENGTH(node->method_call.arguments),
                          indent + 1);
         break;
+
+    case TT_HEAP_ALLOC:
+        fprintf(stderr, "\n");
+        tt_dump(node->heap_alloc.operand, indent + 1);
+        break;
+
+    case TT_ADDRESS_OF:
+        fprintf(stderr, "\n");
+        tt_dump(node->address_of.operand, indent + 1);
+        break;
+
+    case TT_DEREF:
+        fprintf(stderr, "\n");
+        tt_dump(node->deref.operand, indent + 1);
+        break;
     }
 }
 
@@ -454,6 +475,15 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
         visitor(context, &node->method_call.receiver);
         visit_buffer(visitor, context, node->method_call.arguments,
                      BUFFER_LENGTH(node->method_call.arguments));
+        break;
+    case TT_HEAP_ALLOC:
+        visitor(context, &node->heap_alloc.operand);
+        break;
+    case TT_ADDRESS_OF:
+        visitor(context, &node->address_of.operand);
+        break;
+    case TT_DEREF:
+        visitor(context, &node->deref.operand);
         break;
     default:
         break;
