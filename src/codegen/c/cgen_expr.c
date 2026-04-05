@@ -27,6 +27,10 @@ static const char *emit_int_literal(CodeGenerator *generator, const TtNode *node
     case TYPE_I64:
     case TYPE_I128:
     case TYPE_ISIZE:
+        // Avoid C integer overflow: 9223372036854775808LL exceeds LLONG_MAX.
+        if (value == (uint64_t)1 << 63) {
+            return "(-9223372036854775807LL - 1)";
+        }
         return arena_sprintf(generator->arena, "%lldLL", (long long)(int64_t)value);
     case TYPE_U8:
     case TYPE_U16:

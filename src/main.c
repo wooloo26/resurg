@@ -1,5 +1,9 @@
 #include <sys/stat.h>
 
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
+
 #include "core/common.h"
 #include "lexer/lexer.h"
 #include "rsg/codegen.h"
