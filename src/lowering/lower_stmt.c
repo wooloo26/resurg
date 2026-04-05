@@ -89,26 +89,12 @@ static void lower_struct_destructure_into(Lowering *low, const ASTNode *ast, TtN
             field_access->struct_field_access.field = fname;
             field_access->struct_field_access.via_pointer = false;
         } else {
-            // Check promoted fields
-            for (int32_t ei = 0; ei < struct_type->struct_type.embed_count; ei++) {
-                const Type *et = struct_type->struct_type.embedded[ei];
-                sf = type_struct_find_field(et, fname);
-                if (sf != NULL) {
-                    field_type = sf->type;
-                    TtNode *embed =
-                        tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, et, ast->location);
-                    embed->struct_field_access.object =
-                        lowering_make_var_ref(low, tmp_sym, ast->location);
-                    embed->struct_field_access.field = et->struct_type.name;
-                    embed->struct_field_access.via_pointer = false;
-
-                    field_access =
-                        tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, field_type, ast->location);
-                    field_access->struct_field_access.object = embed;
-                    field_access->struct_field_access.field = fname;
-                    field_access->struct_field_access.via_pointer = false;
-                    break;
-                }
+            // Check promoted fields from embedded structs
+            TtNode *tmp_ref = lowering_make_var_ref(low, tmp_sym, ast->location);
+            field_access = lowering_resolve_promoted_field(low, tmp_ref, struct_type, fname, false,
+                                                           ast->location);
+            if (field_access != NULL) {
+                field_type = field_access->type;
             }
         }
 
@@ -424,6 +410,25 @@ static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
     }
 }
 
+/** Emit a struct type declaration and its methods into @p declarations. */
+static void emit_struct_with_methods(Lowering *low, const ASTNode *decl_ast,
+                                     TtNode ***declarations) {
+    TtNode *struct_decl =
+        tt_new(low->tt_arena, TT_STRUCT_DECLARATION, &TYPE_UNIT_INSTANCE, decl_ast->location);
+    struct_decl->struct_decl.name = decl_ast->struct_declaration.name;
+    struct_decl->struct_decl.struct_type = decl_ast->type;
+    BUFFER_PUSH(*declarations, struct_decl);
+
+    for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->struct_declaration.methods); j++) {
+        TtNode *method =
+            lower_method_declaration(low, decl_ast->struct_declaration.methods[j],
+                                     decl_ast->struct_declaration.name, decl_ast->type);
+        if (method != NULL) {
+            BUFFER_PUSH(*declarations, method);
+        }
+    }
+}
+
 /** Lower a NODE_FILE into a TT_FILE with pre-registered function symbols. */
 static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
     lowering_scope_enter(low);
@@ -434,22 +439,7 @@ static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
         const ASTNode *decl_ast = ast->file.declarations[i];
 
         if (decl_ast->kind == NODE_STRUCT_DECLARATION) {
-            // Emit struct type declaration
-            TtNode *struct_decl = tt_new(low->tt_arena, TT_STRUCT_DECLARATION, &TYPE_UNIT_INSTANCE,
-                                         decl_ast->location);
-            struct_decl->struct_decl.name = decl_ast->struct_declaration.name;
-            struct_decl->struct_decl.struct_type = decl_ast->type;
-            BUFFER_PUSH(declarations, struct_decl);
-
-            // Emit each method as a function declaration
-            for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->struct_declaration.methods); j++) {
-                TtNode *method =
-                    lower_method_declaration(low, decl_ast->struct_declaration.methods[j],
-                                             decl_ast->struct_declaration.name, decl_ast->type);
-                if (method != NULL) {
-                    BUFFER_PUSH(declarations, method);
-                }
-            }
+            emit_struct_with_methods(low, decl_ast, &declarations);
             continue;
         }
 

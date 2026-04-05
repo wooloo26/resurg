@@ -414,22 +414,10 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
         }
 
         // Promoted field from embedded struct
-        for (int32_t i = 0; i < lookup_type->struct_type.embed_count; i++) {
-            const Type *embed_type = lookup_type->struct_type.embedded[i];
-            if (type_struct_find_field(embed_type, field_name) != NULL) {
-                TtNode *embed_access =
-                    tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, ast->location);
-                embed_access->struct_field_access.object = object;
-                embed_access->struct_field_access.field = embed_type->struct_type.name;
-                embed_access->struct_field_access.via_pointer = via_pointer;
-
-                TtNode *field_node =
-                    tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
-                field_node->struct_field_access.object = embed_access;
-                field_node->struct_field_access.field = field_name;
-                field_node->struct_field_access.via_pointer = false;
-                return field_node;
-            }
+        TtNode *promoted = lowering_resolve_promoted_field(low, object, lookup_type, field_name,
+                                                           via_pointer, ast->location);
+        if (promoted != NULL) {
+            return promoted;
         }
 
         // Fallback (shouldn't reach after sema)
@@ -480,6 +468,39 @@ static TtNode *lower_tuple_literal(Lowering *low, const ASTNode *ast) {
 
 // String interpolation lowering is in lower_string.c
 
+/** Find a field value in an AST struct literal by name.  Returns the AST index or -1. */
+static int32_t find_ast_field_index(const ASTNode *ast, const char *name) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(ast->struct_literal.field_names); i++) {
+        if (strcmp(ast->struct_literal.field_names[i], name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/** Collect AST-level promoted fields that belong to @p embed_type into a sub-literal. */
+static TtNode *collect_promoted_fields(Lowering *low, const ASTNode *ast, const Type *embed_type) {
+    const char **sub_names = NULL;
+    TtNode **sub_values = NULL;
+
+    for (int32_t i = 0; i < embed_type->struct_type.field_count; i++) {
+        const char *embed_field = embed_type->struct_type.fields[i].name;
+        int32_t ai = find_ast_field_index(ast, embed_field);
+        if (ai >= 0) {
+            BUFFER_PUSH(sub_names, embed_field);
+            BUFFER_PUSH(sub_values, lower_expression(low, ast->struct_literal.field_values[ai]));
+        }
+    }
+
+    if (BUFFER_LENGTH(sub_names) == 0) {
+        return NULL;
+    }
+    TtNode *sub = tt_new(low->tt_arena, TT_STRUCT_LITERAL, embed_type, ast->location);
+    sub->struct_literal.field_names = sub_names;
+    sub->struct_literal.field_values = sub_values;
+    return sub;
+}
+
 static TtNode *lower_struct_literal(Lowering *low, const ASTNode *ast) {
     const Type *struct_type = ast->type;
     if (struct_type == NULL || struct_type->kind != TYPE_STRUCT) {
@@ -502,54 +523,24 @@ static TtNode *lower_struct_literal(Lowering *low, const ASTNode *ast) {
         }
 
         if (is_embedded && sf->type->kind == TYPE_STRUCT) {
-            // Check if directly provided as "Base = Base { ... }"
-            bool directly_provided = false;
-            for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names); ai++) {
-                if (strcmp(ast->struct_literal.field_names[ai], sf->name) == 0) {
-                    BUFFER_PUSH(field_names, sf->name);
-                    BUFFER_PUSH(field_values,
-                                lower_expression(low, ast->struct_literal.field_values[ai]));
-                    directly_provided = true;
-                    break;
-                }
-            }
-            if (!directly_provided) {
-                // Collect promoted fields from AST that belong to this embedded type
-                const Type *embed_type = sf->type;
-                const char **sub_names = NULL;
-                TtNode **sub_values = NULL;
-
-                for (int32_t ej = 0; ej < embed_type->struct_type.field_count; ej++) {
-                    const char *embed_field = embed_type->struct_type.fields[ej].name;
-                    for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names);
-                         ai++) {
-                        if (strcmp(ast->struct_literal.field_names[ai], embed_field) == 0) {
-                            BUFFER_PUSH(sub_names, embed_field);
-                            BUFFER_PUSH(sub_values, lower_expression(
-                                                        low, ast->struct_literal.field_values[ai]));
-                            break;
-                        }
-                    }
-                }
-
-                if (BUFFER_LENGTH(sub_names) > 0) {
-                    TtNode *sub =
-                        tt_new(low->tt_arena, TT_STRUCT_LITERAL, embed_type, ast->location);
-                    sub->struct_literal.field_names = sub_names;
-                    sub->struct_literal.field_values = sub_values;
+            int32_t ai = find_ast_field_index(ast, sf->name);
+            if (ai >= 0) {
+                BUFFER_PUSH(field_names, sf->name);
+                BUFFER_PUSH(field_values,
+                            lower_expression(low, ast->struct_literal.field_values[ai]));
+            } else {
+                TtNode *sub = collect_promoted_fields(low, ast, sf->type);
+                if (sub != NULL) {
                     BUFFER_PUSH(field_names, sf->name);
                     BUFFER_PUSH(field_values, sub);
                 }
             }
         } else {
-            // Regular field — look it up in the AST
-            for (int32_t ai = 0; ai < BUFFER_LENGTH(ast->struct_literal.field_names); ai++) {
-                if (strcmp(ast->struct_literal.field_names[ai], sf->name) == 0) {
-                    BUFFER_PUSH(field_names, sf->name);
-                    BUFFER_PUSH(field_values,
-                                lower_expression(low, ast->struct_literal.field_values[ai]));
-                    break;
-                }
+            int32_t ai = find_ast_field_index(ast, sf->name);
+            if (ai >= 0) {
+                BUFFER_PUSH(field_names, sf->name);
+                BUFFER_PUSH(field_values,
+                            lower_expression(low, ast->struct_literal.field_values[ai]));
             }
         }
     }

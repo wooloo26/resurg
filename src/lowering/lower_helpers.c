@@ -100,6 +100,29 @@ TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, TtNode *initiali
     return node;
 }
 
+TtNode *lowering_resolve_promoted_field(Lowering *low, TtNode *object, const Type *struct_type,
+                                        const char *field_name, bool via_pointer,
+                                        SourceLocation location) {
+    for (int32_t i = 0; i < struct_type->struct_type.embed_count; i++) {
+        const Type *embed_type = struct_type->struct_type.embedded[i];
+        const StructField *sf = type_struct_find_field(embed_type, field_name);
+        if (sf != NULL) {
+            TtNode *embed_access =
+                tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, location);
+            embed_access->struct_field_access.object = object;
+            embed_access->struct_field_access.field = embed_type->struct_type.name;
+            embed_access->struct_field_access.via_pointer = via_pointer;
+
+            TtNode *field_node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, sf->type, location);
+            field_node->struct_field_access.object = embed_access;
+            field_node->struct_field_access.field = field_name;
+            field_node->struct_field_access.via_pointer = false;
+            return field_node;
+        }
+    }
+    return NULL;
+}
+
 TokenKind lowering_compound_to_base_op(TokenKind op) {
     switch (op) {
     case TOKEN_PLUS_EQUAL:

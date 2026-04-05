@@ -1,5 +1,74 @@
 #include "_sema.h"
 
+// ── Named-argument helpers ─────────────────────────────────────────────
+
+/**
+ * Reorder call arguments to match parameter positions using named labels.
+ * Clears @p node->call.arg_names after reordering.
+ */
+static void reorder_named_arguments(SemanticAnalyzer *analyzer, ASTNode *node,
+                                    const FunctionSignature *sig) {
+    int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+    if (node->call.arg_names == NULL || arg_count == 0) {
+        return;
+    }
+    ASTNode **reordered = NULL;
+    for (int32_t i = 0; i < sig->parameter_count; i++) {
+        BUFFER_PUSH(reordered, (ASTNode *)NULL);
+    }
+    for (int32_t i = 0; i < arg_count; i++) {
+        const char *aname = node->call.arg_names[i];
+        if (aname != NULL) {
+            int32_t idx = -1;
+            for (int32_t j = 0; j < sig->parameter_count; j++) {
+                if (strcmp(sig->parameter_names[j], aname) == 0) {
+                    idx = j;
+                    break;
+                }
+            }
+            if (idx < 0) {
+                SEMA_ERROR(analyzer, node->call.arguments[i]->location, "no parameter named '%s'",
+                           aname);
+            } else {
+                reordered[idx] = node->call.arguments[i];
+            }
+        } else if (i < BUFFER_LENGTH(reordered)) {
+            reordered[i] = node->call.arguments[i];
+        }
+    }
+    node->call.arguments = reordered;
+    node->call.arg_names = NULL;
+}
+
+/**
+ * Validate argument count against @p sig and type-check each argument.
+ * Promotes literal arguments to match the corresponding parameter type.
+ */
+static void check_call_arguments(SemanticAnalyzer *analyzer, ASTNode *node,
+                                 const FunctionSignature *sig) {
+    int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+    if (arg_count != sig->parameter_count) {
+        SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d", sig->parameter_count,
+                   arg_count);
+        return;
+    }
+    for (int32_t i = 0; i < arg_count; i++) {
+        ASTNode *arg = node->call.arguments[i];
+        if (arg == NULL) {
+            continue;
+        }
+        const Type *param_type = sig->parameter_types[i];
+        promote_literal(arg, param_type);
+        const Type *arg_type = arg->type;
+        if (arg_type != NULL && param_type != NULL && !type_equal(arg_type, param_type) &&
+            arg_type->kind != TYPE_ERROR && param_type->kind != TYPE_ERROR) {
+            SEMA_ERROR(analyzer, arg->location, "type mismatch: expected '%s', got '%s'",
+                       type_name(analyzer->arena, param_type),
+                       type_name(analyzer->arena, arg_type));
+        }
+    }
+}
+
 // ── Operator classification ────────────────────────────────────────────
 
 static bool binary_op_yields_bool(TokenKind op) {
@@ -135,62 +204,11 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
             }
 
             if (sig != NULL) {
-                // Check method arguments (excluding receiver)
                 for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
                     check_node(analyzer, node->call.arguments[i]);
                 }
-                int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
-
-                // Handle named arguments: reorder to match parameter positions
-                if (node->call.arg_names != NULL && arg_count > 0) {
-                    ASTNode **reordered = NULL;
-                    for (int32_t i = 0; i < sig->parameter_count; i++) {
-                        BUFFER_PUSH(reordered, (ASTNode *)NULL);
-                    }
-                    for (int32_t i = 0; i < arg_count; i++) {
-                        const char *aname = node->call.arg_names[i];
-                        if (aname != NULL) {
-                            int32_t idx = -1;
-                            for (int32_t j = 0; j < sig->parameter_count; j++) {
-                                if (strcmp(sig->parameter_names[j], aname) == 0) {
-                                    idx = j;
-                                    break;
-                                }
-                            }
-                            if (idx < 0) {
-                                SEMA_ERROR(analyzer, node->call.arguments[i]->location,
-                                           "no parameter named '%s'", aname);
-                            } else {
-                                reordered[idx] = node->call.arguments[i];
-                            }
-                        } else if (i < BUFFER_LENGTH(reordered)) {
-                            reordered[i] = node->call.arguments[i];
-                        }
-                    }
-                    node->call.arguments = reordered;
-                    node->call.arg_names = NULL;
-                }
-
-                if (arg_count != sig->parameter_count) {
-                    SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d",
-                               sig->parameter_count, arg_count);
-                } else {
-                    for (int32_t i = 0; i < arg_count; i++) {
-                        if (node->call.arguments[i] == NULL) {
-                            continue;
-                        }
-                        promote_literal(node->call.arguments[i], sig->parameter_types[i]);
-                        const Type *at = node->call.arguments[i]->type;
-                        if (at != NULL && sig->parameter_types[i] != NULL &&
-                            !type_equal(at, sig->parameter_types[i]) && at->kind != TYPE_ERROR &&
-                            sig->parameter_types[i]->kind != TYPE_ERROR) {
-                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
-                                       "type mismatch: expected '%s', got '%s'",
-                                       type_name(analyzer->arena, sig->parameter_types[i]),
-                                       type_name(analyzer->arena, at));
-                        }
-                    }
-                }
+                reorder_named_arguments(analyzer, node, sig);
+                check_call_arguments(analyzer, node, sig);
                 node->type = sig->return_type;
                 return sig->return_type;
             }
@@ -212,57 +230,8 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (function_name != NULL) {
         FunctionSignature *signature = sema_lookup_function(analyzer, function_name);
         if (signature != NULL) {
-            int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
-
-            // Handle named arguments: reorder to match parameter positions
-            if (node->call.arg_names != NULL && arg_count > 0) {
-                ASTNode **reordered = NULL;
-                for (int32_t i = 0; i < signature->parameter_count; i++) {
-                    BUFFER_PUSH(reordered, (ASTNode *)NULL);
-                }
-                for (int32_t i = 0; i < arg_count; i++) {
-                    const char *aname = node->call.arg_names[i];
-                    if (aname != NULL) {
-                        int32_t idx = -1;
-                        for (int32_t j = 0; j < signature->parameter_count; j++) {
-                            if (strcmp(signature->parameter_names[j], aname) == 0) {
-                                idx = j;
-                                break;
-                            }
-                        }
-                        if (idx < 0) {
-                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
-                                       "no parameter named '%s'", aname);
-                        } else {
-                            reordered[idx] = node->call.arguments[i];
-                        }
-                    } else if (i < BUFFER_LENGTH(reordered)) {
-                        reordered[i] = node->call.arguments[i];
-                    }
-                }
-                node->call.arguments = reordered;
-                node->call.arg_names = NULL;
-            }
-
-            if (arg_count != signature->parameter_count) {
-                SEMA_ERROR(analyzer, node->location, "expected %d arguments, got %d",
-                           signature->parameter_count, arg_count);
-            } else {
-                for (int32_t i = 0; i < arg_count; i++) {
-                    ASTNode *arg = node->call.arguments[i];
-                    const Type *param_type = signature->parameter_types[i];
-                    promote_literal(arg, param_type);
-                    const Type *arg_type = arg->type;
-                    if (arg_type != NULL && param_type != NULL &&
-                        !type_equal(arg_type, param_type) && arg_type->kind != TYPE_ERROR &&
-                        param_type->kind != TYPE_ERROR) {
-                        SEMA_ERROR(analyzer, arg->location,
-                                   "type mismatch: expected '%s', got '%s'",
-                                   type_name(analyzer->arena, param_type),
-                                   type_name(analyzer->arena, arg_type));
-                    }
-                }
-            }
+            reorder_named_arguments(analyzer, node, signature);
+            check_call_arguments(analyzer, node, signature);
             return signature->return_type;
         }
 

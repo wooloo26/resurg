@@ -300,6 +300,39 @@ static ASTNode *parse_primary(Parser *parser) {
 
 // ── Postfix / unary / precedence climbing ──────────────────────────────
 
+/** Parse a comma-separated argument list (positional, named, and mut). */
+static ASTNode *parse_call_arguments(Parser *parser, ASTNode *callee, SourceLocation location) {
+    ASTNode *node = ast_new(parser->arena, NODE_CALL, location);
+    node->call.callee = callee;
+    node->call.arguments = NULL;
+    node->call.arg_names = NULL;
+    node->call.arg_is_mut = NULL;
+    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            parser_skip_newlines(parser);
+            bool is_mut_arg = parser_match(parser, TOKEN_MUT);
+            bool is_named_arg = parser_check(parser, TOKEN_IDENTIFIER) &&
+                                parser->position + 1 < parser->count &&
+                                parser->tokens[parser->position + 1].kind == TOKEN_EQUAL;
+            if (is_named_arg) {
+                const char *arg_name = parser_advance(parser)->lexeme;
+                parser_advance(parser); // consume '='
+                ASTNode *value = parser_parse_expression(parser);
+                BUFFER_PUSH(node->call.arguments, value);
+                BUFFER_PUSH(node->call.arg_names, arg_name);
+                BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
+            } else {
+                ASTNode *arg = parser_parse_expression(parser);
+                BUFFER_PUSH(node->call.arguments, arg);
+                BUFFER_PUSH(node->call.arg_names, (const char *)NULL);
+                BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
+            }
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    return node;
+}
+
 static ASTNode *parse_postfix(Parser *parser) {
     ASTNode *left = parse_primary(parser);
     for (;;) {
@@ -312,37 +345,7 @@ static ASTNode *parse_postfix(Parser *parser) {
         }
 
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
-            ASTNode *node = ast_new(parser->arena, NODE_CALL, location);
-            node->call.callee = left;
-            node->call.arguments = NULL;
-            node->call.arg_names = NULL;
-            node->call.arg_is_mut = NULL;
-            if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-                do {
-                    parser_skip_newlines(parser);
-                    // Check for mut argument: mut expr
-                    bool is_mut_arg = parser_match(parser, TOKEN_MUT);
-                    // Check for named argument: IDENT =
-                    bool is_named_arg = parser_check(parser, TOKEN_IDENTIFIER) &&
-                                        parser->position + 1 < parser->count &&
-                                        parser->tokens[parser->position + 1].kind == TOKEN_EQUAL;
-                    if (is_named_arg) {
-                        const char *arg_name = parser_advance(parser)->lexeme;
-                        parser_advance(parser); // consume '='
-                        ASTNode *value = parser_parse_expression(parser);
-                        BUFFER_PUSH(node->call.arguments, value);
-                        BUFFER_PUSH(node->call.arg_names, arg_name);
-                        BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
-                    } else {
-                        ASTNode *arg = parser_parse_expression(parser);
-                        BUFFER_PUSH(node->call.arguments, arg);
-                        BUFFER_PUSH(node->call.arg_names, (const char *)NULL);
-                        BUFFER_PUSH(node->call.arg_is_mut, is_mut_arg);
-                    }
-                } while (parser_match(parser, TOKEN_COMMA));
-            }
-            parser_expect(parser, TOKEN_RIGHT_PAREN);
-            left = node;
+            left = parse_call_arguments(parser, left, location);
             continue;
         }
         if (parser_match(parser, TOKEN_LEFT_BRACKET)) {

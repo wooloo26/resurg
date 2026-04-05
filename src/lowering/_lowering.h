@@ -59,6 +59,13 @@ TtNode *lowering_make_int_lit(Lowering *low, uint64_t value, const Type *type, T
 TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, TtNode *initializer);
 /** Map a compound-assignment TokenKind to its base arithmetic operator. */
 TokenKind lowering_compound_to_base_op(TokenKind op);
+/**
+ * Look up @p field_name in the embedded structs of @p struct_type.
+ * Returns a two-level TT_STRUCT_FIELD_ACCESS chain (embed → field) on hit, or NULL.
+ */
+TtNode *lowering_resolve_promoted_field(Lowering *low, TtNode *object, const Type *struct_type,
+                                        const char *field_name, bool via_pointer,
+                                        SourceLocation location);
 /** Create a TtCall node for a builtin runtime function. */
 TtNode *lowering_make_builtin_call(Lowering *low, const char *name, const Type *return_type,
                                    TtNode **args, SourceLocation location);
