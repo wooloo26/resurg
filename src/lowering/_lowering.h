@@ -23,7 +23,6 @@ struct LoweringScope {
 
 struct Lowering {
     Arena *tt_arena;
-    Arena *sema_arena;
     LoweringScope *scope;
     int32_t error_count;
     const char *current_module;

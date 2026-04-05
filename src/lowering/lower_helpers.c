@@ -41,7 +41,7 @@ TtSymbol *lowering_scope_find(const Lowering *low, const char *name) {
 
 TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *name, const Type *type,
                                bool is_mut, SourceLocation location) {
-    Symbol *sema_sym = arena_alloc(low->sema_arena, sizeof(Symbol));
+    Symbol *sema_sym = arena_alloc(low->tt_arena, sizeof(Symbol));
     memset(sema_sym, 0, sizeof(Symbol));
     sema_sym->name = name;
     sema_sym->type = type;

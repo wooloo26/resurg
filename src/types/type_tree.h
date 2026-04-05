@@ -3,7 +3,6 @@
 
 #include "core/common.h"
 #include "core/token.h"
-#include "sema/_sema.h"
 #include "types/types.h"
 
 /**

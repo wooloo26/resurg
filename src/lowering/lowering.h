@@ -17,7 +17,7 @@ typedef struct ASTNode ASTNode;
 typedef struct Lowering Lowering;
 
 /** Create a lowering context that allocates TT nodes from @p tt_arena. */
-Lowering *lowering_create(Arena *tt_arena, Arena *sema_arena);
+Lowering *lowering_create(Arena *tt_arena);
 /** Destroy the lowering context (does not destroy arenas). */
 void lowering_destroy(Lowering *lowering);
 /**

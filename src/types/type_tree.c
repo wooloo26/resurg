@@ -1,5 +1,7 @@
 #include "types/type_tree.h"
 
+#include "sema/_sema.h"
+
 // ── TtSymbol ───────────────────────────────────────────────────────────
 
 const char *tt_symbol_name(const TtSymbol *symbol) {

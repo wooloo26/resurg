@@ -58,10 +58,9 @@ static void collect_compound_types(Lowering *low, const TtNode *node) {
 
 // ── Public API ─────────────────────────────────────────────────────────
 
-Lowering *lowering_create(Arena *tt_arena, Arena *sema_arena) {
+Lowering *lowering_create(Arena *tt_arena) {
     Lowering *low = rsg_malloc(sizeof(Lowering));
     low->tt_arena = tt_arena;
-    low->sema_arena = sema_arena;
     low->scope = NULL;
     low->error_count = 0;
     low->current_module = NULL;
