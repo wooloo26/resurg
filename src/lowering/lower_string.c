@@ -3,7 +3,7 @@
 // ── String interpolation lowering ──────────────────────────────────────
 
 /** Return the rsg_string_from_* function name for @p type, or NULL. */
-static const char *string_conversion_builtin(const Type *type) {
+static const char *lookup_string_conversion(const Type *type) {
     if (type == NULL) {
         return NULL;
     }
@@ -31,7 +31,7 @@ static TtNode *lower_string_part(Lowering *low, const ASTNode *part) {
         return lowered;
     }
     // Wrap in rsg_string_from_TYPE call
-    const char *builtin = string_conversion_builtin(lowered->type);
+    const char *builtin = lookup_string_conversion(lowered->type);
     if (builtin != NULL) {
         TtNode **args = NULL;
         BUFFER_PUSH(args, lowered);

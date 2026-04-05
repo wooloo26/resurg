@@ -3,7 +3,7 @@
 // ── Compound type collection ──────────────────────────────────────────
 
 /** Return true if @p type is already in the compound type registry. */
-static bool compound_type_registered(const Lowering *low, const Type *type) {
+static bool is_compound_type_registered(const Lowering *low, const Type *type) {
     for (int32_t i = 0; i < BUFFER_LENGTH(low->compound_types); i++) {
         if (type_equal(low->compound_types[i], type)) {
             return true;
@@ -33,7 +33,7 @@ static void register_compound_type(Lowering *low, const Type *type) {
     } else {
         return;
     }
-    if (!compound_type_registered(low, type)) {
+    if (!is_compound_type_registered(low, type)) {
         BUFFER_PUSH(low->compound_types, type);
     }
 }

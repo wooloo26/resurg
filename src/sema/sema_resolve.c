@@ -2,15 +2,15 @@
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
-const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name) {
+const Type *sema_lookup_type_alias(const SemanticAnalyzer *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->type_alias_table, name);
 }
 
-FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name) {
+FunctionSignature *sema_lookup_function(const SemanticAnalyzer *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->function_table, name);
 }
 
-StructDefinition *find_struct_definition(const SemanticAnalyzer *analyzer, const char *name) {
+StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->struct_table, name);
 }
 
@@ -45,7 +45,7 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
         return type;
     }
     // Check type aliases
-    const Type *alias = find_type_alias(analyzer, ast_type->name);
+    const Type *alias = sema_lookup_type_alias(analyzer, ast_type->name);
     if (alias != NULL) {
         return alias;
     }

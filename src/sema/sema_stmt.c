@@ -170,7 +170,7 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
             sig_key = arena_sprintf(analyzer->arena, "%s.%s",
                                     function_node->function_declaration.owner_struct, sig_key);
         }
-        FunctionSignature *signature = find_function_signature(analyzer, sig_key);
+        FunctionSignature *signature = sema_lookup_function(analyzer, sig_key);
         if (signature != NULL && signature->return_type->kind == TYPE_UNIT) {
             signature->return_type = resolved_return;
         }
@@ -222,8 +222,51 @@ static void check_break_continue(SemanticAnalyzer *analyzer, const ASTNode *node
 
 // ── Struct & destructure checkers ───────────────────────────────────────
 
+/** Type-check a single struct method: register receiver + parameters, check body. */
+static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method,
+                                     const char *struct_name, const Type *struct_type) {
+    scope_push(analyzer, false);
+
+    // Register receiver as a parameter with struct type
+    if (method->function_declaration.receiver_name != NULL) {
+        scope_define(analyzer, method->function_declaration.receiver_name, struct_type, false,
+                     SYM_PARAM);
+    }
+
+    // Register method parameters
+    for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters); j++) {
+        ASTNode *param = method->function_declaration.parameters[j];
+        const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+        if (pt == NULL) {
+            pt = &TYPE_ERROR_INSTANCE;
+        }
+        param->type = pt;
+        scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
+    }
+
+    // Check body and infer return type
+    if (method->function_declaration.body != NULL) {
+        const Type *body_type = check_node(analyzer, method->function_declaration.body);
+        const Type *return_type =
+            resolve_ast_type(analyzer, &method->function_declaration.return_type);
+        if (return_type == NULL) {
+            return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
+        }
+        method->type = return_type;
+
+        // Update method signature if return type was inferred
+        const char *method_key =
+            arena_sprintf(analyzer->arena, "%s.%s", struct_name, method->function_declaration.name);
+        FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+        if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
+            sig->return_type = return_type;
+        }
+    }
+    scope_pop(analyzer);
+}
+
 static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
-    StructDefinition *sdef = find_struct_definition(analyzer, node->struct_declaration.name);
+    StructDefinition *sdef = sema_lookup_struct(analyzer, node->struct_declaration.name);
     if (sdef == NULL) {
         return &TYPE_UNIT_INSTANCE;
     }
@@ -231,46 +274,8 @@ static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode 
 
     // Check method bodies in pass 2
     for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
-        ASTNode *method = node->struct_declaration.methods[i];
-        scope_push(analyzer, false);
-
-        // Register receiver as a parameter with struct type
-        if (method->function_declaration.receiver_name != NULL) {
-            scope_define(analyzer, method->function_declaration.receiver_name, sdef->type, false,
-                         SYM_PARAM);
-        }
-
-        // Register method parameters
-        for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters); j++) {
-            ASTNode *param = method->function_declaration.parameters[j];
-            const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERROR_INSTANCE;
-            }
-            param->type = pt;
-            scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
-        }
-
-        // Check body and infer return type
-        if (method->function_declaration.body != NULL) {
-            const Type *body_type = check_node(analyzer, method->function_declaration.body);
-            const Type *return_type =
-                resolve_ast_type(analyzer, &method->function_declaration.return_type);
-            if (return_type == NULL) {
-                return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
-            }
-            method->type = return_type;
-
-            // Update method signature if return type was inferred
-            const char *method_key =
-                arena_sprintf(analyzer->arena, "%s.%s", node->struct_declaration.name,
-                              method->function_declaration.name);
-            FunctionSignature *sig = find_function_signature(analyzer, method_key);
-            if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
-                sig->return_type = return_type;
-            }
-        }
-        scope_pop(analyzer);
+        check_struct_method_body(analyzer, node->struct_declaration.methods[i],
+                                 node->struct_declaration.name, sdef->type);
     }
 
     // Check default value expressions for fields
@@ -296,7 +301,7 @@ static const Type *check_struct_destructure(SemanticAnalyzer *analyzer, ASTNode 
 
             // Look up field in struct definition (includes promoted fields)
             const Type *field_type = NULL;
-            StructDefinition *sdef = find_struct_definition(analyzer, value_type->struct_type.name);
+            StructDefinition *sdef = sema_lookup_struct(analyzer, value_type->struct_type.name);
             if (sdef != NULL) {
                 for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
                     if (strcmp(sdef->fields[j].name, fname) == 0) {

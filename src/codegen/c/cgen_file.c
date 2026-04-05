@@ -166,7 +166,7 @@ static void emit_module_and_types(CodeGenerator *generator, const TtNode *file) 
         }
     }
 
-    codegen_reset_compound_types(generator);
+    codegen_clear_compound_types(generator);
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.compound_types); i++) {
         BUFFER_PUSH(generator->compound_types, file->file.compound_types[i]);
     }
@@ -245,7 +245,7 @@ CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
 
 void code_generator_destroy(CodeGenerator *generator) {
     if (generator != NULL) {
-        codegen_reset_compound_types(generator);
+        codegen_clear_compound_types(generator);
         free(generator);
     }
 }

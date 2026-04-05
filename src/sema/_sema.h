@@ -122,11 +122,11 @@ bool in_loop(const SemanticAnalyzer *analyzer);
 // ── Type resolution (resolve.c) ────────────────────────────────────────
 
 /** Look up a type alias by name.  Returns the underlying type or NULL. */
-const Type *find_type_alias(const SemanticAnalyzer *analyzer, const char *name);
+const Type *sema_lookup_type_alias(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up a function signature by name. */
-FunctionSignature *find_function_signature(const SemanticAnalyzer *analyzer, const char *name);
+FunctionSignature *sema_lookup_function(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up a struct definition by name. */
-StructDefinition *find_struct_definition(const SemanticAnalyzer *analyzer, const char *name);
+StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an error and returns TYPE_ERROR for unknown names.

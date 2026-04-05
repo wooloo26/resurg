@@ -59,11 +59,11 @@ static void register_function_signature(SemanticAnalyzer *analyzer, ASTNode *dec
  * Collect fields for a struct: promoted fields from embedded structs first,
  * then the struct's own fields (with duplicate checking).
  */
-static void collect_struct_fields(SemanticAnalyzer *analyzer, const ASTNode *declaration,
+static void compose_struct_fields(SemanticAnalyzer *analyzer, const ASTNode *declaration,
                                   StructDefinition *def) {
     // Promote fields from embedded structs
     for (int32_t i = 0; i < BUFFER_LENGTH(def->embedded); i++) {
-        StructDefinition *embed_def = find_struct_definition(analyzer, def->embedded[i]);
+        StructDefinition *embed_def = sema_lookup_struct(analyzer, def->embedded[i]);
         if (embed_def == NULL) {
             SEMA_ERROR(analyzer, declaration->location, "unknown embedded struct '%s'",
                        def->embedded[i]);
@@ -118,7 +118,7 @@ static void build_struct_type(SemanticAnalyzer *analyzer, ASTNode *declaration,
 
     // Add embedded struct fields as named fields (e.g., "Base")
     for (int32_t i = 0; i < BUFFER_LENGTH(def->embedded); i++) {
-        StructDefinition *embed_def = find_struct_definition(analyzer, def->embedded[i]);
+        StructDefinition *embed_def = sema_lookup_struct(analyzer, def->embedded[i]);
         if (embed_def != NULL) {
             BUFFER_PUSH(embedded_types, embed_def->type);
             StructField sf = {.name = def->embedded[i], .type = embed_def->type};
@@ -196,7 +196,7 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
     const char *struct_name = declaration->struct_declaration.name;
 
     // Check for duplicate struct definition
-    if (find_struct_definition(analyzer, struct_name) != NULL) {
+    if (sema_lookup_struct(analyzer, struct_name) != NULL) {
         SEMA_ERROR(analyzer, declaration->location, "duplicate struct definition '%s'",
                    struct_name);
         return;
@@ -213,7 +213,7 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
         BUFFER_PUSH(def->embedded, declaration->struct_declaration.embedded[i]);
     }
 
-    collect_struct_fields(analyzer, declaration, def);
+    compose_struct_fields(analyzer, declaration, def);
     build_struct_type(analyzer, declaration, def);
     register_struct_methods(analyzer, declaration, def);
 

@@ -1,5 +1,12 @@
 #include "_parser.h"
 
+// ── Operator classification ─────────────────────────────────────────────
+
+static bool is_compound_assignment_op(TokenKind op) {
+    return op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL ||
+           op == TOKEN_SLASH_EQUAL;
+}
+
 // ── Operator precedence ────────────────────────────────────────────────
 
 /** Operator precedence levels for Pratt-style parsing. */
@@ -17,7 +24,7 @@ typedef enum {
     PRECEDENCE_PRIMARY,    //
 } Precedence;
 
-static Precedence get_precedence(TokenKind kind) {
+static Precedence token_precedence(TokenKind kind) {
     switch (kind) {
     case TOKEN_EQUAL:
     case TOKEN_PLUS_EQUAL:
@@ -381,7 +388,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
 
     for (;;) {
         TokenKind op = parser_current_token(parser)->kind;
-        Precedence precedence = get_precedence(op);
+        Precedence precedence = token_precedence(op);
         if (precedence < minimum_precedence) {
             break;
         }
@@ -399,9 +406,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
         }
 
         // Compound assignment
-        bool is_compound_assign = op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL ||
-                                  op == TOKEN_STAR_EQUAL || op == TOKEN_SLASH_EQUAL;
-        if (is_compound_assign) {
+        if (is_compound_assignment_op(op)) {
             ASTNode *node = ast_new(parser->arena, NODE_COMPOUND_ASSIGN, location);
             node->compound_assign.op = op;
             node->compound_assign.target = left;

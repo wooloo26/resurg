@@ -1,5 +1,12 @@
 #include "_sema.h"
 
+// ── Operator classification ────────────────────────────────────────────
+
+static bool binary_op_yields_bool(TokenKind op) {
+    return (op >= TOKEN_EQUAL_EQUAL && op <= TOKEN_GREATER_EQUAL) ||
+           op == TOKEN_AMPERSAND_AMPERSAND || op == TOKEN_PIPE_PIPE;
+}
+
 // ── Expression checkers ────────────────────────────────────────────────
 
 const Type *check_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -45,10 +52,7 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     const Type *right = check_node(analyzer, node->binary.right);
 
     if (left == NULL || right == NULL || left->kind == TYPE_ERROR || right->kind == TYPE_ERROR) {
-        bool is_boolean_result =
-            (node->binary.op >= TOKEN_EQUAL_EQUAL && node->binary.op <= TOKEN_GREATER_EQUAL) ||
-            node->binary.op == TOKEN_AMPERSAND_AMPERSAND || node->binary.op == TOKEN_PIPE_PIPE;
-        return is_boolean_result ? &TYPE_BOOL_INSTANCE : &TYPE_ERROR_INSTANCE;
+        return binary_op_yields_bool(node->binary.op) ? &TYPE_BOOL_INSTANCE : &TYPE_ERROR_INSTANCE;
     }
 
     // Promote integer/float literals to match the other side's type
@@ -108,17 +112,16 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
             // Look up method on this struct (or promoted from embedded)
             const char *method_key =
                 arena_sprintf(analyzer->arena, "%s.%s", obj_type->struct_type.name, method_name);
-            FunctionSignature *sig = find_function_signature(analyzer, method_key);
+            FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
 
             // If not found directly, check embedded structs for promoted methods
             if (sig == NULL) {
-                StructDefinition *sdef =
-                    find_struct_definition(analyzer, obj_type->struct_type.name);
+                StructDefinition *sdef = sema_lookup_struct(analyzer, obj_type->struct_type.name);
                 if (sdef != NULL) {
                     for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
                         const char *embed_key = arena_sprintf(analyzer->arena, "%s.%s",
                                                               sdef->embedded[ei], method_name);
-                        sig = find_function_signature(analyzer, embed_key);
+                        sig = sema_lookup_function(analyzer, embed_key);
                         if (sig != NULL) {
                             break;
                         }
@@ -202,7 +205,7 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     // Look up function return type and check argument types
     if (function_name != NULL) {
-        FunctionSignature *signature = find_function_signature(analyzer, function_name);
+        FunctionSignature *signature = sema_lookup_function(analyzer, function_name);
         if (signature != NULL) {
             int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
 
@@ -290,10 +293,10 @@ const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
         }
 
         // Check promoted fields from embedded structs
-        StructDefinition *sdef = find_struct_definition(analyzer, object_type->struct_type.name);
+        StructDefinition *sdef = sema_lookup_struct(analyzer, object_type->struct_type.name);
         if (sdef != NULL) {
             for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
-                StructDefinition *embed_def = find_struct_definition(analyzer, sdef->embedded[ei]);
+                StructDefinition *embed_def = sema_lookup_struct(analyzer, sdef->embedded[ei]);
                 if (embed_def != NULL) {
                     for (int32_t fi = 0; fi < BUFFER_LENGTH(embed_def->fields); fi++) {
                         if (strcmp(embed_def->fields[fi].name, field_name) == 0) {
@@ -371,7 +374,7 @@ const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     const char *struct_name = node->struct_literal.name;
-    StructDefinition *sdef = find_struct_definition(analyzer, struct_name);
+    StructDefinition *sdef = sema_lookup_struct(analyzer, struct_name);
     if (sdef == NULL) {
         SEMA_ERROR(analyzer, node->location, "unknown struct '%s'", struct_name);
         return &TYPE_ERROR_INSTANCE;

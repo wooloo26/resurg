@@ -69,7 +69,7 @@ static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE
  * Find the TYPE_INFO entry for @p kind.  Returns NULL for compound
  * types (TYPE_ARRAY, TYPE_TUPLE) that have no table entry.
  */
-static const TypeInfoEntry *find_type_info(TypeKind kind) {
+static const TypeInfoEntry *type_info_lookup(TypeKind kind) {
     if ((int32_t)kind < 0 || (int32_t)kind >= TYPE_INFO_COUNT || TYPE_INFO[kind].rsg_name == NULL) {
         return NULL;
     }
@@ -99,7 +99,7 @@ const char *type_name(Arena *arena, const Type *type) {
     if (type == NULL) {
         return "<unknown>";
     }
-    const TypeInfoEntry *info = find_type_info(type->kind);
+    const TypeInfoEntry *info = type_info_lookup(type->kind);
     if (info != NULL) {
         return info->rsg_name;
     }
@@ -130,7 +130,7 @@ const char *c_type_string(const Type *type) {
     if (type == NULL) {
         return "/* ? */";
     }
-    const TypeInfoEntry *info = find_type_info(type->kind);
+    const TypeInfoEntry *info = type_info_lookup(type->kind);
     return info != NULL ? info->c_name : "/* ? */";
 }
 
@@ -183,7 +183,7 @@ bool type_is_float(const Type *type) {
 }
 
 const Type *type_singleton(TypeKind kind) {
-    const TypeInfoEntry *info = find_type_info(kind);
+    const TypeInfoEntry *info = type_info_lookup(kind);
     return info != NULL ? info->instance : &TYPE_ERROR_INSTANCE;
 }
 

@@ -34,7 +34,7 @@ void codegen_emit_compound_typedefs(CodeGenerator *generator) {
     }
 }
 
-void codegen_reset_compound_types(CodeGenerator *generator) {
+void codegen_clear_compound_types(CodeGenerator *generator) {
     if (generator->compound_types != NULL) {
         BUFFER_FREE(generator->compound_types);
         generator->compound_types = NULL;

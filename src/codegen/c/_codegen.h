@@ -58,7 +58,7 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type);
 /** Emit typedef structs for all collected compound types. */
 void codegen_emit_compound_typedefs(CodeGenerator *generator);
 /** Free and reset the compound-type list. */
-void codegen_reset_compound_types(CodeGenerator *generator);
+void codegen_clear_compound_types(CodeGenerator *generator);
 
 // ── Expression emission (codegen_expression.c) ─────────────────────────
 

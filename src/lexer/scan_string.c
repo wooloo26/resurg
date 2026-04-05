@@ -44,7 +44,7 @@ Token scan_char_literal(Lexer *lexer, SourceLocation location) {
 
 // ── String helpers ─────────────────────────────────────────────────────
 
-static char *extract_string_content(const Lexer *lexer, int32_t from, int32_t to) {
+static char *copy_string_range(const Lexer *lexer, int32_t from, int32_t to) {
     // Copy raw content between positions (escape sequences preserved as-is)
     return arena_strndup(lexer->arena, lexer->source + from, to - from);
 }
@@ -86,7 +86,7 @@ static Token scan_simple_string(Lexer *lexer, int32_t content_start, SourceLocat
                           lexer->position - content_start + 1, location);
     }
 
-    char *value = extract_string_content(lexer, content_start, lexer->position);
+    char *value = copy_string_range(lexer, content_start, lexer->position);
     advance(lexer); // consume '"'
     return make_string_token(lexer, value, location);
 }
@@ -157,7 +157,7 @@ static Token scan_interpolated_string(Lexer *lexer, SourceLocation location) {
         }
 
         // Emit text segment
-        char *text = extract_string_content(lexer, segment_start, lexer->position);
+        char *text = copy_string_range(lexer, segment_start, lexer->position);
         BUFFER_PUSH(lexer->pending, make_string_token(lexer, text, segment_location));
 
         if (peek(lexer) == '{') {
