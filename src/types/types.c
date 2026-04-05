@@ -218,8 +218,7 @@ int32_t type_tuple_count(const Type *type) {
 // ── Type constructors ──────────────────────────────────────────────────
 
 static Type *type_create(Arena *arena, TypeKind kind) {
-    Type *type = arena_alloc(arena, sizeof(Type));
-    memset(type, 0, sizeof(Type));
+    Type *type = arena_alloc_zero(arena, sizeof(Type));
     type->kind = kind;
     return type;
 }

@@ -57,9 +57,7 @@ static TtNode *lower_identifier(Lowering *low, const ASTNode *ast) {
     TtSymbol *symbol = lowering_scope_find(low, name);
     if (symbol == NULL) {
         // Create an unresolved symbol with whatever type sema assigned.
-        symbol =
-            lowering_make_symbol(low, TT_SYMBOL_VARIABLE, name, ast->type, false, ast->location);
-        lowering_scope_add(low, name, symbol);
+        symbol = lowering_add_variable(low, name, ast->type, false, ast->location);
     }
     return lowering_make_var_ref(low, symbol, ast->location);
 }
@@ -87,15 +85,16 @@ static TtNode *make_bool_negate(Lowering *low, TtNode *expr, SourceLocation loc)
  * Otherwise emits a plain binary comparison.
  */
 static TtNode *make_element_comparison(Lowering *low, TtNode *l_elem, TtNode *r_elem,
-                                       const Type *elem_type, TokenKind elem_op, bool is_equal,
-                                       SourceLocation loc) {
+                                       TokenKind elem_op) {
+    SourceLocation loc = l_elem->location;
+    const Type *elem_type = l_elem->type;
     if (elem_type->kind == TYPE_STRING) {
         TtNode **args = NULL;
         BUFFER_PUSH(args, l_elem);
         BUFFER_PUSH(args, r_elem);
         TtNode *cmp =
             lowering_make_builtin_call(low, "rsg_string_equal", &TYPE_BOOL_INSTANCE, args, loc);
-        if (!is_equal) {
+        if (elem_op != TOKEN_EQUAL_EQUAL) {
             cmp = make_bool_negate(low, cmp, loc);
         }
         return cmp;
@@ -147,8 +146,9 @@ static TtNode *make_tuple_element_access(Lowering *low, TtSymbol *sym, int32_t i
  * Array:  `a == b` → `{ var l=a; var r=b; l[0]==r[0] && l[1]==r[1] && ... }`
  * Tuple:  `t == u` → `{ var l=t; var r=u; l.0==r.0 && l.1==r.1 && ... }`
  */
-static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *right,
-                                        const Type *type, TokenKind op, SourceLocation loc) {
+static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *right, TokenKind op,
+                                        SourceLocation loc) {
+    const Type *type = left->type;
     bool is_equal = (op == TOKEN_EQUAL_EQUAL);
     TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
     TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
@@ -157,13 +157,10 @@ static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *rig
 
     // Store operands in temporaries to avoid re-evaluation
     const char *left_name = lowering_make_temp_name(low);
-    TtSymbol *left_sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, left_name, type, false, loc);
-    lowering_scope_add(low, left_name, left_sym);
+    TtSymbol *left_sym = lowering_add_variable(low, left_name, type, false, loc);
 
     const char *right_name = lowering_make_temp_name(low);
-    TtSymbol *right_sym =
-        lowering_make_symbol(low, TT_SYMBOL_VARIABLE, right_name, type, false, loc);
-    lowering_scope_add(low, right_name, right_sym);
+    TtSymbol *right_sym = lowering_add_variable(low, right_name, type, false, loc);
 
     TtNode *result = NULL;
     for (int32_t i = 0; i < count; i++) {
@@ -180,8 +177,7 @@ static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *rig
             r_elem = make_tuple_element_access(low, right_sym, i, elem_type, loc);
         }
 
-        TtNode *cmp =
-            make_element_comparison(low, l_elem, r_elem, elem_type, elem_op, is_equal, loc);
+        TtNode *cmp = make_element_comparison(low, l_elem, r_elem, elem_op);
         result = chain_comparison(low, result, cmp, join_op, loc);
     }
 
@@ -192,8 +188,8 @@ static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *rig
     }
 
     TtNode **stmts = NULL;
-    BUFFER_PUSH(stmts, lowering_make_var_decl(low, left_sym, left_name, type, left, false, loc));
-    BUFFER_PUSH(stmts, lowering_make_var_decl(low, right_sym, right_name, type, right, false, loc));
+    BUFFER_PUSH(stmts, lowering_make_var_decl(low, left_sym, left));
+    BUFFER_PUSH(stmts, lowering_make_var_decl(low, right_sym, right));
 
     TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_BOOL_INSTANCE, loc);
     block->block.statements = stmts;
@@ -230,7 +226,7 @@ static TtNode *lower_binary(Lowering *low, const ASTNode *ast) {
     // Array/Tuple equality/inequality → element-wise comparison
     if (left_type != NULL && (left_type->kind == TYPE_ARRAY || left_type->kind == TYPE_TUPLE) &&
         (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
-        return lower_aggregate_equality(low, left, right, left_type, op, ast->location);
+        return lower_aggregate_equality(low, left, right, op, ast->location);
     }
 
     TtNode *node = tt_new(low->tt_arena, TT_BINARY, ast->type, ast->location);

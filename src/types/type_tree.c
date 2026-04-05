@@ -16,8 +16,7 @@ const Type *tt_symbol_type(const TtSymbol *symbol) {
 
 TtSymbol *tt_symbol_new(Arena *arena, TtSymbolKind kind, Symbol *sema_symbol, bool is_mut,
                         SourceLocation location) {
-    TtSymbol *symbol = arena_alloc(arena, sizeof(TtSymbol));
-    memset(symbol, 0, sizeof(TtSymbol));
+    TtSymbol *symbol = arena_alloc_zero(arena, sizeof(TtSymbol));
     symbol->kind = kind;
     symbol->sema_symbol = sema_symbol;
     symbol->is_mut = is_mut;
@@ -28,8 +27,7 @@ TtSymbol *tt_symbol_new(Arena *arena, TtSymbolKind kind, Symbol *sema_symbol, bo
 // ── TtNode constructors ───────────────────────────────────────────────
 
 TtNode *tt_new(Arena *arena, TtNodeKind kind, const Type *type, SourceLocation location) {
-    TtNode *node = arena_alloc(arena, sizeof(TtNode));
-    memset(node, 0, sizeof(TtNode));
+    TtNode *node = arena_alloc_zero(arena, sizeof(TtNode));
     node->kind = kind;
     node->type = type != NULL ? type : &TYPE_UNIT_INSTANCE;
     node->location = location;

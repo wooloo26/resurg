@@ -31,6 +31,8 @@ Arena *arena_create(void);
 void arena_destroy(Arena *arena);
 /** Allocate @p size bytes from @p arena, 8-byte aligned. */
 void *arena_alloc(Arena *arena, size_t size);
+/** Allocate @p size zero-initialised bytes from @p arena. */
+void *arena_alloc_zero(Arena *arena, size_t size);
 /** Duplicate a NUL-terminated string into @p arena. */
 char *arena_strdup(Arena *arena, const char *source);
 /** Duplicate the first @p length bytes of @p source into @p arena. */

@@ -41,8 +41,7 @@ TtSymbol *lowering_scope_find(const Lowering *low, const char *name) {
 
 TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *name, const Type *type,
                                bool is_mut, SourceLocation location) {
-    Symbol *sema_sym = arena_alloc(low->tt_arena, sizeof(Symbol));
-    memset(sema_sym, 0, sizeof(Symbol));
+    Symbol *sema_sym = arena_alloc_zero(low->tt_arena, sizeof(Symbol));
     sema_sym->name = name;
     sema_sym->type = type;
     switch (kind) {
@@ -65,6 +64,13 @@ TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *nam
     return tt_symbol_new(low->tt_arena, kind, sema_sym, is_mut, location);
 }
 
+TtSymbol *lowering_add_variable(Lowering *low, const char *name, const Type *type, bool is_mut,
+                                SourceLocation location) {
+    TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, name, type, is_mut, location);
+    lowering_scope_add(low, name, sym);
+    return sym;
+}
+
 const char *lowering_make_temp_name(Lowering *low) {
     return arena_sprintf(low->tt_arena, "_tt_tmp_%d", low->temp_counter++);
 }
@@ -83,15 +89,14 @@ TtNode *lowering_make_int_lit(Lowering *low, uint64_t value, const Type *type, T
     return node;
 }
 
-TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, const char *name,
-                               const Type *var_type, TtNode *initializer, bool is_mut,
-                               SourceLocation location) {
-    TtNode *node = tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, location);
+TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, TtNode *initializer) {
+    TtNode *node =
+        tt_new(low->tt_arena, TT_VARIABLE_DECLARATION, &TYPE_UNIT_INSTANCE, symbol->location);
     node->variable_declaration.symbol = symbol;
-    node->variable_declaration.name = name;
-    node->variable_declaration.var_type = var_type;
+    node->variable_declaration.name = tt_symbol_name(symbol);
+    node->variable_declaration.var_type = tt_symbol_type(symbol);
     node->variable_declaration.initializer = initializer;
-    node->variable_declaration.is_mut = is_mut;
+    node->variable_declaration.is_mut = symbol->is_mut;
     return node;
 }
 

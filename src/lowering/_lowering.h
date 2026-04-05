@@ -45,6 +45,9 @@ TtSymbol *lowering_scope_find(const Lowering *low, const char *name);
 /** Create a Sema Symbol and wrap it in a TtSymbol. */
 TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *name, const Type *type,
                                bool is_mut, SourceLocation location);
+/** Create a variable symbol, register it in scope, and return it. */
+TtSymbol *lowering_add_variable(Lowering *low, const char *name, const Type *type, bool is_mut,
+                                SourceLocation location);
 /** Generate a unique temporary name like _tt_tmp_0. */
 const char *lowering_make_temp_name(Lowering *low);
 /** Create a TtVarRef node. */
@@ -52,10 +55,8 @@ TtNode *lowering_make_var_ref(Lowering *low, TtSymbol *symbol, SourceLocation lo
 /** Create a TtIntLit node. */
 TtNode *lowering_make_int_lit(Lowering *low, uint64_t value, const Type *type, TypeKind int_kind,
                               SourceLocation location);
-/** Create a TT_VARIABLE_DECLARATION node with all fields set. */
-TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, const char *name,
-                               const Type *var_type, TtNode *initializer, bool is_mut,
-                               SourceLocation location);
+/** Create a TT_VARIABLE_DECLARATION node — derives name/type/mut from @p symbol. */
+TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, TtNode *initializer);
 /** Map a compound-assignment TokenKind to its base arithmetic operator. */
 TokenKind lowering_compound_to_base_op(TokenKind op);
 /** Create a TtCall node for a builtin runtime function. */

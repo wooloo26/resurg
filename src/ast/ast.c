@@ -111,8 +111,7 @@ static void dump_string_interpolation_node(const ASTNode *node, int32_t level) {
 }
 
 ASTNode *ast_new(Arena *arena, NodeKind kind, SourceLocation location) {
-    ASTNode *node = arena_alloc(arena, sizeof(ASTNode));
-    memset(node, 0, sizeof(ASTNode));
+    ASTNode *node = arena_alloc_zero(arena, sizeof(ASTNode));
     node->kind = kind;
     node->location = location;
     node->type = NULL;

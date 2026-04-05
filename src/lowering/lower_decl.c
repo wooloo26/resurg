@@ -1,5 +1,44 @@
 #include "_lowering.h"
 
+// ── Declaration lowering helpers ──────────────────────────────────────
+
+/** Lower AST parameters into TT parameter nodes and register them in scope. */
+static void lower_parameter_list(Lowering *low, ASTNode *const *param_asts, int32_t count,
+                                 TtNode ***out_params) {
+    for (int32_t i = 0; i < count; i++) {
+        const ASTNode *param_ast = param_asts[i];
+        const char *param_name = param_ast->parameter.name;
+        const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERROR_INSTANCE;
+
+        TtSymbol *param_sym = lowering_make_symbol(low, TT_SYMBOL_PARAMETER, param_name, param_type,
+                                                   false, param_ast->location);
+        lowering_scope_add(low, param_name, param_sym);
+
+        TtNode *param_node = tt_new(low->tt_arena, TT_PARAMETER, param_type, param_ast->location);
+        param_node->parameter.symbol = param_sym;
+        param_node->parameter.name = param_name;
+        param_node->parameter.param_type = param_type;
+        BUFFER_PUSH(*out_params, param_node);
+    }
+}
+
+/** Lower a function body (block or expression-bodied). */
+static TtNode *lower_function_body(Lowering *low, const ASTNode *body_ast) {
+    if (body_ast == NULL) {
+        return NULL;
+    }
+    if (body_ast->kind == NODE_BLOCK) {
+        return lower_block(low, body_ast);
+    }
+    // Expression-bodied function: `fn f() = expr` → wrap in a block with result
+    TtNode *result = lower_expression(low, body_ast);
+    TtNode *body =
+        tt_new(low->tt_arena, TT_BLOCK,
+               body_ast->type != NULL ? body_ast->type : &TYPE_UNIT_INSTANCE, body_ast->location);
+    body->block.result = result;
+    return body;
+}
+
 // ── Declaration lowering ──────────────────────────────────────────────
 
 TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast) {
@@ -14,40 +53,11 @@ TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast) {
 
     lowering_scope_enter(low);
 
-    // Lower parameters
     TtNode **params = NULL;
-    for (int32_t i = 0; i < BUFFER_LENGTH(ast->function_declaration.parameters); i++) {
-        const ASTNode *param_ast = ast->function_declaration.parameters[i];
-        const char *param_name = param_ast->parameter.name;
-        const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERROR_INSTANCE;
+    lower_parameter_list(low, ast->function_declaration.parameters,
+                         BUFFER_LENGTH(ast->function_declaration.parameters), &params);
 
-        TtSymbol *param_sym = lowering_make_symbol(low, TT_SYMBOL_PARAMETER, param_name, param_type,
-                                                   false, param_ast->location);
-        lowering_scope_add(low, param_name, param_sym);
-
-        TtNode *param_node = tt_new(low->tt_arena, TT_PARAMETER, param_type, param_ast->location);
-        param_node->parameter.symbol = param_sym;
-        param_node->parameter.name = param_name;
-        param_node->parameter.param_type = param_type;
-        BUFFER_PUSH(params, param_node);
-    }
-
-    // Lower body
-    TtNode *body = NULL;
-    if (ast->function_declaration.body != NULL) {
-        if (ast->function_declaration.body->kind == NODE_BLOCK) {
-            body = lower_block(low, ast->function_declaration.body);
-        } else {
-            // Expression-bodied function: `fn f() = expr` → wrap in a block with result
-            TtNode *result = lower_expression(low, ast->function_declaration.body);
-            body = tt_new(low->tt_arena, TT_BLOCK,
-                          ast->function_declaration.body->type != NULL
-                              ? ast->function_declaration.body->type
-                              : &TYPE_UNIT_INSTANCE,
-                          ast->function_declaration.body->location);
-            body->block.result = result;
-        }
-    }
+    TtNode *body = lower_function_body(low, ast->function_declaration.body);
 
     lowering_scope_leave(low);
 
@@ -104,37 +114,10 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     low->current_receiver_name = receiver_name;
 
     // Lower other parameters
-    for (int32_t i = 0; i < BUFFER_LENGTH(ast->function_declaration.parameters); i++) {
-        const ASTNode *param_ast = ast->function_declaration.parameters[i];
-        const char *param_name = param_ast->parameter.name;
-        const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERROR_INSTANCE;
+    lower_parameter_list(low, ast->function_declaration.parameters,
+                         BUFFER_LENGTH(ast->function_declaration.parameters), &params);
 
-        TtSymbol *param_sym = lowering_make_symbol(low, TT_SYMBOL_PARAMETER, param_name, param_type,
-                                                   false, param_ast->location);
-        lowering_scope_add(low, param_name, param_sym);
-
-        TtNode *param_node = tt_new(low->tt_arena, TT_PARAMETER, param_type, param_ast->location);
-        param_node->parameter.symbol = param_sym;
-        param_node->parameter.name = param_name;
-        param_node->parameter.param_type = param_type;
-        BUFFER_PUSH(params, param_node);
-    }
-
-    // Lower body
-    TtNode *body = NULL;
-    if (ast->function_declaration.body != NULL) {
-        if (ast->function_declaration.body->kind == NODE_BLOCK) {
-            body = lower_block(low, ast->function_declaration.body);
-        } else {
-            TtNode *result = lower_expression(low, ast->function_declaration.body);
-            body = tt_new(low->tt_arena, TT_BLOCK,
-                          ast->function_declaration.body->type != NULL
-                              ? ast->function_declaration.body->type
-                              : &TYPE_UNIT_INSTANCE,
-                          ast->function_declaration.body->location);
-            body->block.result = result;
-        }
-    }
+    TtNode *body = lower_function_body(low, ast->function_declaration.body);
 
     // Restore receiver context
     low->current_receiver = saved_receiver;

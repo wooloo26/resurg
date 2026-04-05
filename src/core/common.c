@@ -47,6 +47,12 @@ void *arena_alloc(Arena *arena, size_t size) {
     return pointer;
 }
 
+void *arena_alloc_zero(Arena *arena, size_t size) {
+    void *pointer = arena_alloc(arena, size);
+    memset(pointer, 0, size);
+    return pointer;
+}
+
 char *arena_strdup(Arena *arena, const char *source) {
     size_t length = strlen(source);
     char *duplicate = arena_alloc(arena, length + 1);
