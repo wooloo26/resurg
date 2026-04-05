@@ -190,13 +190,41 @@ b[0] = 99               // a[0] is still 10
 var arr: [3]i32 = [1, 2, 3]
 ```
 
+**Addressability.** Outside struct type definitions, all variables (named storage locations) are addressable: `&var` yields a `*T` pointing to the variable's storage. By contrast, rvalues—literals and transient expressions—are not addressable; attempting `&42`, `&[1, 2, 3]`, or `&"hello"` is a compile-time error. To obtain a pointer to such a value, first bind it to a variable, then take the variable's address.
+
+```rsg
+// Variables are addressable
+x := 42
+px := &x                    // *i32
+
+arr := [3]i32[1, 2, 3]
+pa := &arr                  // *[3]i32
+
+// Literals are not addressable
+px := &42                   // ERROR: cannot take address of rvalue
+pa := &[1, 2, 3]            // ERROR: array literal has no storage location
+ps := &"hello"              // ERROR: string literal is not addressable
+
+// Bind first, then take address
+tmp := 42
+px := &tmp                  // OK: *i32
+
+// Struct literals: & means heap-allocate (special syntax)
+root := &Node { value = 0 } // OK: allocates on heap, returns *Node
+// This is NOT taking the address of a literal; it's allocation syntax.
+
+// Optional types: address of variable works
+opt: ?i32 = Some(42)
+po := &opt                  // *?i32
+```
+
 **Slices:** `[]T` is a GC-backed fat pointer (data + length). Array-to-slice copies into GC storage. Sub-slicing shares backing storage.
 
 ```rsg
 arr := [5]i32[1, 2, 3, 4, 5]
 
 // array → slice: copies data into GC storage
-s: []i32 = arr[..] // equals s := []i32[1, 2, 3, 4, 5]
+s: []i32 = arr[..]       // equals s := []i32[1, 2, 3, 4, 5]
 
 // sub-slicing: shares backing storage (no copy)
 t := s[1..4]             // [2, 3, 4]
@@ -205,11 +233,48 @@ v := s[..3]              // [1, 2, 3]
 
 // slices are reference types — aliases see mutations
 x := s[1..4]
-x[0] = 99               // s[1] is now 99 too
+x[0] = 99                // s[1] is now 99 too
 
 // slice of slices
 matrix: [][]*i32 = []
 ```
+
+**Slice pointer `*[]T`:** Points to the *slice header* (fat pointer: data ptr + len). Allows functions to reassign the slice itself (not just mutate elements).
+
+```rsg
+fn extend(mut s: *[]i32) {
+    *s = (*s)[..] + [99]  // reassigns the slice header
+}
+arr := [1, 2, 3]
+slice := arr[..]          // []i32
+extend(mut &slice)        // pass *[]i32
+// slice now includes 99
+```
+
+`*[]T` ≠ `[]*T`: the former is a pointer to a slice; the latter is a slice of pointers.
+
+**Pointer-to-pointer `**T`:** Points to a pointer variable. Enables reassigning the inner pointer from a function.
+
+```rsg
+fn allocate(p: **Node) {
+    *p = &Node{ value = 42 }  // modifies caller's *Node
+}
+
+mut ptr: ?*Node = None
+allocate(&ptr)                // pass **Node
+// ptr now points to the new Node
+```
+
+**Key distinction:**
+
+| Type   | Meaning                 | Typical Use                          |
+| ------ | ----------------------- | ------------------------------------ |
+| `*T`   | Pointer to `T`          | Heap allocation, optional references |
+| `*[]T` | Pointer to slice header | Reassign slice (len/data) in-place   |
+| `**T`  | Pointer to pointer      | Reassign pointer target in-place     |
+| `[]*T` | Slice of pointers       | Collection of heap-allocated items   |
+
+No pointer arithmetic; all indirection is explicit and GC-safe.
 
 ### Mutability (`mut`)
 

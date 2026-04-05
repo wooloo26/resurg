@@ -57,9 +57,11 @@ Pointer semantics and garbage collection.
 - [ ] Auto-deref on field access (`p.field` on `*T`)
 - [ ] Value-type copy semantics on assignment
 - [ ] Pointer copy semantics (aliasing)
+- [ ] Addressability rules (variables addressable, rvalues not)
 - [ ] `mut` pointer parameters (declaration + call site)
 - [ ] `immut` bindings and fields
 - [ ] `immut` return values
+- [ ] Pointer-to-pointer `**T` (reassign inner pointer from callee)
 
 ## v0.4.1 — Tracing Garbage Collector
 
@@ -109,6 +111,7 @@ Dynamic-length data.
 - [ ] Sub-slicing (`s[1..4]`, `s[2..]`, `s[..3]`)
 - [ ] Shared backing storage semantics
 - [ ] Slice of slices (`[][]T`)
+- [ ] Slice pointer `*[]T` (reassign slice header in-place)
 - [ ] `for` over slices with value and index (`|v, i|`)
 
 ## v0.8.0 — Pacts & Generics
