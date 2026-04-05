@@ -55,31 +55,13 @@ static void register_function_signature(SemanticAnalyzer *analyzer, ASTNode *dec
                  declaration->function_declaration.is_public, SYM_FUNCTION);
 }
 
-/** Register a struct definition: build the TYPE_STRUCT, register methods as functions. */
-static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *declaration) {
-    const char *struct_name = declaration->struct_declaration.name;
-
-    // Check for duplicate struct definition
-    if (find_struct_definition(analyzer, struct_name) != NULL) {
-        SEMA_ERROR(analyzer, declaration->location, "duplicate struct definition '%s'",
-                   struct_name);
-        return;
-    }
-
-    StructDefinition *def = rsg_malloc(sizeof(*def));
-    def->name = struct_name;
-    def->fields = NULL;
-    def->methods = NULL;
-    def->embedded = NULL;
-
-    // Collect embedded struct types
-    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.embedded); i++) {
-        BUFFER_PUSH(def->embedded, declaration->struct_declaration.embedded[i]);
-    }
-
-    // Build field list: promoted fields from embedded, then own fields
-    // Resolve embedded types and promote their fields
-    const Type **embedded_types = NULL;
+/**
+ * Collect fields for a struct: promoted fields from embedded structs first,
+ * then the struct's own fields (with duplicate checking).
+ */
+static void collect_struct_fields(SemanticAnalyzer *analyzer, const ASTNode *declaration,
+                                  StructDefinition *def) {
+    // Promote fields from embedded structs
     for (int32_t i = 0; i < BUFFER_LENGTH(def->embedded); i++) {
         StructDefinition *embed_def = find_struct_definition(analyzer, def->embedded[i]);
         if (embed_def == NULL) {
@@ -87,13 +69,9 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
                        def->embedded[i]);
             continue;
         }
-        BUFFER_PUSH(embedded_types, embed_def->type);
-
-        // Add promoted fields from embedded type
         for (int32_t j = 0; j < embed_def->type->struct_type.field_count; j++) {
             const StructField *ef = &embed_def->type->struct_type.fields[j];
             StructFieldInfo fi = {.name = ef->name, .type = ef->type, .default_value = NULL};
-            // Find the default value from the embedded struct definition
             for (int32_t k = 0; k < BUFFER_LENGTH(embed_def->fields); k++) {
                 if (strcmp(embed_def->fields[k].name, ef->name) == 0) {
                     fi.default_value = embed_def->fields[k].default_value;
@@ -104,7 +82,7 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
         }
     }
 
-    // Check for duplicates and add own fields
+    // Add own fields, checking for duplicates against promoted fields
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.fields); i++) {
         ASTStructField *ast_field = &declaration->struct_declaration.fields[i];
         bool duplicate = false;
@@ -127,17 +105,27 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
             BUFFER_PUSH(def->fields, fi);
         }
     }
+}
 
-    // Build StructField array for the type
+/**
+ * Build the Type* for a struct from its collected fields and embedded types,
+ * and assign it to both the definition and the AST declaration node.
+ */
+static void build_struct_type(SemanticAnalyzer *analyzer, ASTNode *declaration,
+                              StructDefinition *def) {
+    const Type **embedded_types = NULL;
     StructField *type_fields = NULL;
-    // Add embedded struct fields as a single named field (e.g., "Base")
+
+    // Add embedded struct fields as named fields (e.g., "Base")
     for (int32_t i = 0; i < BUFFER_LENGTH(def->embedded); i++) {
         StructDefinition *embed_def = find_struct_definition(analyzer, def->embedded[i]);
         if (embed_def != NULL) {
+            BUFFER_PUSH(embedded_types, embed_def->type);
             StructField sf = {.name = def->embedded[i], .type = embed_def->type};
             BUFFER_PUSH(type_fields, sf);
         }
     }
+
     // Add own fields
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.fields); i++) {
         ASTStructField *ast_field = &declaration->struct_declaration.fields[i];
@@ -149,13 +137,20 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
         BUFFER_PUSH(type_fields, sf);
     }
 
-    // Create the struct type
     def->type =
-        type_create_struct(analyzer->arena, struct_name, type_fields, BUFFER_LENGTH(type_fields),
+        type_create_struct(analyzer->arena, def->name, type_fields, BUFFER_LENGTH(type_fields),
                            embedded_types, BUFFER_LENGTH(embedded_types));
     declaration->type = def->type;
+}
 
-    // Register methods
+/**
+ * Register each struct method as a function signature in the analyzer's
+ * function table (keyed as "StructName.method_name").
+ */
+static void register_struct_methods(SemanticAnalyzer *analyzer, const ASTNode *declaration,
+                                    StructDefinition *def) {
+    const char *struct_name = def->name;
+
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.methods); i++) {
         ASTNode *method = declaration->struct_declaration.methods[i];
         StructMethodInfo mi = {.name = method->function_declaration.name,
@@ -164,7 +159,6 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
                                .declaration = method};
         BUFFER_PUSH(def->methods, mi);
 
-        // Register method as function with key "StructName.method_name"
         const char *method_key = arena_sprintf(analyzer->arena, "%s.%s", struct_name, mi.name);
 
         const Type *return_type = &TYPE_UNIT_INSTANCE;
@@ -195,6 +189,33 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
 
         hash_table_insert(&analyzer->function_table, method_key, sig);
     }
+}
+
+/** Register a struct definition: build the TYPE_STRUCT, register methods as functions. */
+static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *declaration) {
+    const char *struct_name = declaration->struct_declaration.name;
+
+    // Check for duplicate struct definition
+    if (find_struct_definition(analyzer, struct_name) != NULL) {
+        SEMA_ERROR(analyzer, declaration->location, "duplicate struct definition '%s'",
+                   struct_name);
+        return;
+    }
+
+    StructDefinition *def = rsg_malloc(sizeof(*def));
+    def->name = struct_name;
+    def->fields = NULL;
+    def->methods = NULL;
+    def->embedded = NULL;
+
+    // Collect embedded struct types
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.embedded); i++) {
+        BUFFER_PUSH(def->embedded, declaration->struct_declaration.embedded[i]);
+    }
+
+    collect_struct_fields(analyzer, declaration, def);
+    build_struct_type(analyzer, declaration, def);
+    register_struct_methods(analyzer, declaration, def);
 
     hash_table_insert(&analyzer->struct_table, struct_name, def);
 

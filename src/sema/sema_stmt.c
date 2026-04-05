@@ -220,6 +220,150 @@ static void check_break_continue(SemanticAnalyzer *analyzer, const ASTNode *node
     }
 }
 
+// ── Struct & destructure checkers ───────────────────────────────────────
+
+static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
+    StructDefinition *sdef = find_struct_definition(analyzer, node->struct_declaration.name);
+    if (sdef == NULL) {
+        return &TYPE_UNIT_INSTANCE;
+    }
+    const Type *result = sdef->type;
+
+    // Check method bodies in pass 2
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
+        ASTNode *method = node->struct_declaration.methods[i];
+        scope_push(analyzer, false);
+
+        // Register receiver as a parameter with struct type
+        if (method->function_declaration.receiver_name != NULL) {
+            scope_define(analyzer, method->function_declaration.receiver_name, sdef->type, false,
+                         SYM_PARAM);
+        }
+
+        // Register method parameters
+        for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters); j++) {
+            ASTNode *param = method->function_declaration.parameters[j];
+            const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERROR_INSTANCE;
+            }
+            param->type = pt;
+            scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
+        }
+
+        // Check body and infer return type
+        if (method->function_declaration.body != NULL) {
+            const Type *body_type = check_node(analyzer, method->function_declaration.body);
+            const Type *return_type =
+                resolve_ast_type(analyzer, &method->function_declaration.return_type);
+            if (return_type == NULL) {
+                return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
+            }
+            method->type = return_type;
+
+            // Update method signature if return type was inferred
+            const char *method_key =
+                arena_sprintf(analyzer->arena, "%s.%s", node->struct_declaration.name,
+                              method->function_declaration.name);
+            FunctionSignature *sig = find_function_signature(analyzer, method_key);
+            if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
+                sig->return_type = return_type;
+            }
+        }
+        scope_pop(analyzer);
+    }
+
+    // Check default value expressions for fields
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.fields); i++) {
+        ASTStructField *f = &node->struct_declaration.fields[i];
+        if (f->default_value != NULL) {
+            check_node(analyzer, f->default_value);
+        }
+    }
+    return result;
+}
+
+static const Type *check_struct_destructure(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *value_type = check_node(analyzer, node->struct_destructure.value);
+    if (value_type != NULL && value_type->kind == TYPE_STRUCT) {
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_destructure.field_names); i++) {
+            const char *fname = node->struct_destructure.field_names[i];
+            const char *alias = (node->struct_destructure.aliases != NULL &&
+                                 i < BUFFER_LENGTH(node->struct_destructure.aliases))
+                                    ? node->struct_destructure.aliases[i]
+                                    : NULL;
+            const char *var_name = (alias != NULL) ? alias : fname;
+
+            // Look up field in struct definition (includes promoted fields)
+            const Type *field_type = NULL;
+            StructDefinition *sdef = find_struct_definition(analyzer, value_type->struct_type.name);
+            if (sdef != NULL) {
+                for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
+                    if (strcmp(sdef->fields[j].name, fname) == 0) {
+                        field_type = sdef->fields[j].type;
+                        break;
+                    }
+                }
+            }
+            if (field_type == NULL) {
+                SEMA_ERROR(analyzer, node->location, "no field '%s' on struct '%s'", fname,
+                           value_type->struct_type.name);
+                field_type = &TYPE_ERROR_INSTANCE;
+            }
+            scope_define(analyzer, var_name, field_type, false, SYM_VAR);
+        }
+    } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
+        SEMA_ERROR(analyzer, node->location, "struct destructuring requires a struct type");
+    }
+    return &TYPE_UNIT_INSTANCE;
+}
+
+static const Type *check_tuple_destructure(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *value_type = check_node(analyzer, node->tuple_destructure.value);
+    if (value_type != NULL && value_type->kind == TYPE_TUPLE) {
+        int32_t name_count = BUFFER_LENGTH(node->tuple_destructure.names);
+        int32_t tuple_count = value_type->tuple.count;
+        bool has_rest = node->tuple_destructure.has_rest;
+
+        if (has_rest) {
+            if (name_count > tuple_count) {
+                SEMA_ERROR(analyzer, node->location,
+                           "too many names in tuple destructure with '..': "
+                           "tuple has %d elements, got %d names",
+                           tuple_count, name_count);
+            }
+        } else {
+            if (name_count != tuple_count) {
+                SEMA_ERROR(analyzer, node->location,
+                           "tuple destructure requires %d names but got %d"
+                           " (use '..' to ignore elements)",
+                           tuple_count, name_count);
+            }
+        }
+
+        int32_t rest_pos = node->tuple_destructure.rest_position;
+        int32_t skipped = has_rest ? (tuple_count - name_count) : 0;
+
+        for (int32_t i = 0; i < name_count && i < tuple_count; i++) {
+            const char *vname = node->tuple_destructure.names[i];
+            int32_t elem_idx = i;
+            if (has_rest && i >= rest_pos) {
+                elem_idx = i + skipped;
+            }
+            if (elem_idx >= tuple_count) {
+                break;
+            }
+            if (vname[0] == '_') {
+                continue;
+            }
+            scope_define(analyzer, vname, value_type->tuple.elements[elem_idx], false, SYM_VAR);
+        }
+    } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
+        SEMA_ERROR(analyzer, node->location, "tuple destructuring requires a tuple type");
+    }
+    return &TYPE_UNIT_INSTANCE;
+}
+
 // ── Node dispatch ──────────────────────────────────────────────────────
 
 const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -336,151 +480,21 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         result = check_type_conversion(analyzer, node);
         break;
 
-    case NODE_STRUCT_DECLARATION: {
-        // Struct was registered in pass 1. Now check method bodies in pass 2.
-        StructDefinition *sdef = find_struct_definition(analyzer, node->struct_declaration.name);
-        if (sdef != NULL) {
-            result = sdef->type;
-            for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
-                ASTNode *method = node->struct_declaration.methods[i];
-                // Open a scope for the method body
-                scope_push(analyzer, false);
-                // Register receiver as a parameter with struct type
-                if (method->function_declaration.receiver_name != NULL) {
-                    scope_define(analyzer, method->function_declaration.receiver_name, sdef->type,
-                                 false, SYM_PARAM);
-                }
-                // Register method parameters
-                for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters);
-                     j++) {
-                    ASTNode *param = method->function_declaration.parameters[j];
-                    const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
-                    if (pt == NULL) {
-                        pt = &TYPE_ERROR_INSTANCE;
-                    }
-                    param->type = pt;
-                    scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
-                }
-                // Check body
-                if (method->function_declaration.body != NULL) {
-                    const Type *body_type = check_node(analyzer, method->function_declaration.body);
-                    const Type *return_type =
-                        resolve_ast_type(analyzer, &method->function_declaration.return_type);
-                    if (return_type == NULL) {
-                        return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
-                    }
-                    method->type = return_type;
-
-                    // Update method signature if return type was inferred
-                    const char *method_key =
-                        arena_sprintf(analyzer->arena, "%s.%s", node->struct_declaration.name,
-                                      method->function_declaration.name);
-                    FunctionSignature *sig = find_function_signature(analyzer, method_key);
-                    if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
-                        sig->return_type = return_type;
-                    }
-                }
-                scope_pop(analyzer);
-            }
-        }
-        // Check default value expressions for fields
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.fields); i++) {
-            ASTStructField *f = &node->struct_declaration.fields[i];
-            if (f->default_value != NULL) {
-                check_node(analyzer, f->default_value);
-            }
-        }
+    case NODE_STRUCT_DECLARATION:
+        result = check_struct_declaration(analyzer, node);
         break;
-    }
 
     case NODE_STRUCT_LITERAL:
         result = check_struct_literal(analyzer, node);
         break;
 
-    case NODE_STRUCT_DESTRUCTURE: {
-        const Type *value_type = check_node(analyzer, node->struct_destructure.value);
-        if (value_type != NULL && value_type->kind == TYPE_STRUCT) {
-            for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_destructure.field_names); i++) {
-                const char *fname = node->struct_destructure.field_names[i];
-                const char *alias = (node->struct_destructure.aliases != NULL &&
-                                     i < BUFFER_LENGTH(node->struct_destructure.aliases))
-                                        ? node->struct_destructure.aliases[i]
-                                        : NULL;
-                const char *var_name = (alias != NULL) ? alias : fname;
-                // Check promoted fields too
-                const Type *field_type = NULL;
-                StructDefinition *sdef =
-                    find_struct_definition(analyzer, value_type->struct_type.name);
-                if (sdef != NULL) {
-                    for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
-                        if (strcmp(sdef->fields[j].name, fname) == 0) {
-                            field_type = sdef->fields[j].type;
-                            break;
-                        }
-                    }
-                }
-                if (field_type == NULL) {
-                    SEMA_ERROR(analyzer, node->location, "no field '%s' on struct '%s'", fname,
-                               value_type->struct_type.name);
-                    field_type = &TYPE_ERROR_INSTANCE;
-                }
-                scope_define(analyzer, var_name, field_type, false, SYM_VAR);
-            }
-        } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "struct destructuring requires a struct type");
-        }
+    case NODE_STRUCT_DESTRUCTURE:
+        result = check_struct_destructure(analyzer, node);
         break;
-    }
 
-    case NODE_TUPLE_DESTRUCTURE: {
-        const Type *value_type = check_node(analyzer, node->tuple_destructure.value);
-        if (value_type != NULL && value_type->kind == TYPE_TUPLE) {
-            int32_t name_count = BUFFER_LENGTH(node->tuple_destructure.names);
-            int32_t tuple_count = value_type->tuple.count;
-            bool has_rest = node->tuple_destructure.has_rest;
-
-            if (has_rest) {
-                // With `..`, name_count must be <= tuple_count
-                if (name_count > tuple_count) {
-                    SEMA_ERROR(analyzer, node->location,
-                               "too many names in tuple destructure with '..': "
-                               "tuple has %d elements, got %d names",
-                               tuple_count, name_count);
-                }
-            } else {
-                // Without `..`, name_count must equal tuple_count exactly
-                if (name_count != tuple_count) {
-                    SEMA_ERROR(analyzer, node->location,
-                               "tuple destructure requires %d names but got %d"
-                               " (use '..' to ignore elements)",
-                               tuple_count, name_count);
-                }
-            }
-
-            // Compute the element index for each name, accounting for `..`
-            int32_t rest_pos = node->tuple_destructure.rest_position;
-            int32_t skipped = has_rest ? (tuple_count - name_count) : 0;
-
-            for (int32_t i = 0; i < name_count && i < tuple_count; i++) {
-                const char *vname = node->tuple_destructure.names[i];
-                int32_t elem_idx = i;
-                if (has_rest && i >= rest_pos) {
-                    elem_idx = i + skipped;
-                }
-                if (elem_idx >= tuple_count) {
-                    break;
-                }
-                // Skip binding for `_` or `_`-prefixed names
-                if (vname[0] == '_') {
-                    continue;
-                }
-                scope_define(analyzer, vname, value_type->tuple.elements[elem_idx], false, SYM_VAR);
-            }
-        } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "tuple destructuring requires a tuple type");
-        }
+    case NODE_TUPLE_DESTRUCTURE:
+        result = check_tuple_destructure(analyzer, node);
         break;
-    }
     }
 
     node->type = result;
