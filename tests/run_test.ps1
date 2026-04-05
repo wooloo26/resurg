@@ -44,7 +44,7 @@ switch ($TestMode) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         [string[]]$rtList = if ($RtObjs) { $RtObjs -split '\s+' } else { @() }
-        & $CC -std=c17 "-I$Runtime" -o "$Build/_test.exe" "$Build/_test.c" @rtList
+        & $CC -std=c17 -Wno-tautological-compare "-I$Runtime" -o "$Build/_test.exe" "$Build/_test.c" @rtList
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         & "$Build/_test.exe"
@@ -74,7 +74,7 @@ switch ($TestMode) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         [string[]]$rtList = if ($RtObjs) { $RtObjs -split '\s+' } else { @() }
-        & $CC -std=c17 "-I$Runtime" -o "$Build/_test.exe" "$Build/_test.c" @rtList
+        & $CC -std=c17 -Wno-tautological-compare "-I$Runtime" -o "$Build/_test.exe" "$Build/_test.c" @rtList
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
         $ErrorActionPreference = 'Continue'

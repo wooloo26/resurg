@@ -1,4 +1,4 @@
-HeaderFilterRegex: '.*'
+HeaderFilterRegex: '^(src|include|runtime|tests|tools|examples)/.*' 
 Checks: >
   -*,
   clang-diagnostic-*,
