@@ -140,22 +140,14 @@ static TtNode *make_tuple_element_access(Lowering *low, TtSymbol *sym, int32_t i
     return elem;
 }
 
-/**
- * Expand array or tuple equality into element-wise comparison.
- *
- * Array:  `a == b` → `{ var l=a; var r=b; l[0]==r[0] && l[1]==r[1] && ... }`
- * Tuple:  `t == u` → `{ var l=t; var r=u; l.0==r.0 && l.1==r.1 && ... }`
- */
-static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *right, TokenKind op,
-                                        SourceLocation loc) {
+/** Expand array equality: `a == b` → `{ var l=a; var r=b; l[0]==r[0] && ... }` */
+static TtNode *lower_array_equality(Lowering *low, TtNode *left, TtNode *right, TokenKind op,
+                                    SourceLocation loc) {
     const Type *type = left->type;
     bool is_equal = (op == TOKEN_EQUAL_EQUAL);
     TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
     TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
-    bool is_array = (type->kind == TYPE_ARRAY);
-    int32_t count = is_array ? type->array.size : type->tuple.count;
 
-    // Store operands in temporaries to avoid re-evaluation
     const char *left_name = lowering_make_temp_name(low);
     TtSymbol *left_sym = lowering_add_variable(low, left_name, type, false, loc);
 
@@ -163,20 +155,49 @@ static TtNode *lower_aggregate_equality(Lowering *low, TtNode *left, TtNode *rig
     TtSymbol *right_sym = lowering_add_variable(low, right_name, type, false, loc);
 
     TtNode *result = NULL;
-    for (int32_t i = 0; i < count; i++) {
-        const Type *elem_type;
-        TtNode *l_elem, *r_elem;
+    for (int32_t i = 0; i < type->array.size; i++) {
+        const Type *elem_type = type->array.element;
+        TtNode *l_elem = make_array_element_access(low, left_sym, i, elem_type, loc);
+        TtNode *r_elem = make_array_element_access(low, right_sym, i, elem_type, loc);
+        TtNode *cmp = make_element_comparison(low, l_elem, r_elem, elem_op);
+        result = chain_comparison(low, result, cmp, join_op, loc);
+    }
 
-        if (is_array) {
-            elem_type = type->array.element;
-            l_elem = make_array_element_access(low, left_sym, i, elem_type, loc);
-            r_elem = make_array_element_access(low, right_sym, i, elem_type, loc);
-        } else {
-            elem_type = type->tuple.elements[i];
-            l_elem = make_tuple_element_access(low, left_sym, i, elem_type, loc);
-            r_elem = make_tuple_element_access(low, right_sym, i, elem_type, loc);
-        }
+    if (result == NULL) {
+        TtNode *lit = tt_new(low->tt_arena, TT_BOOL_LITERAL, &TYPE_BOOL_INSTANCE, loc);
+        lit->bool_literal.value = is_equal;
+        return lit;
+    }
 
+    TtNode **stmts = NULL;
+    BUFFER_PUSH(stmts, lowering_make_var_decl(low, left_sym, left));
+    BUFFER_PUSH(stmts, lowering_make_var_decl(low, right_sym, right));
+
+    TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_BOOL_INSTANCE, loc);
+    block->block.statements = stmts;
+    block->block.result = result;
+    return block;
+}
+
+/** Expand tuple equality: `t == u` → `{ var l=t; var r=u; l.0==r.0 && ... }` */
+static TtNode *lower_tuple_equality(Lowering *low, TtNode *left, TtNode *right, TokenKind op,
+                                    SourceLocation loc) {
+    const Type *type = left->type;
+    bool is_equal = (op == TOKEN_EQUAL_EQUAL);
+    TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
+    TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
+
+    const char *left_name = lowering_make_temp_name(low);
+    TtSymbol *left_sym = lowering_add_variable(low, left_name, type, false, loc);
+
+    const char *right_name = lowering_make_temp_name(low);
+    TtSymbol *right_sym = lowering_add_variable(low, right_name, type, false, loc);
+
+    TtNode *result = NULL;
+    for (int32_t i = 0; i < type->tuple.count; i++) {
+        const Type *elem_type = type->tuple.elements[i];
+        TtNode *l_elem = make_tuple_element_access(low, left_sym, i, elem_type, loc);
+        TtNode *r_elem = make_tuple_element_access(low, right_sym, i, elem_type, loc);
         TtNode *cmp = make_element_comparison(low, l_elem, r_elem, elem_op);
         result = chain_comparison(low, result, cmp, join_op, loc);
     }
@@ -223,10 +244,16 @@ static TtNode *lower_binary(Lowering *low, const ASTNode *ast) {
         return lower_string_equality(low, left, right, op, ast->location);
     }
 
-    // Array/Tuple equality/inequality → element-wise comparison
-    if (left_type != NULL && (left_type->kind == TYPE_ARRAY || left_type->kind == TYPE_TUPLE) &&
+    // Array equality/inequality → element-wise comparison
+    if (left_type != NULL && left_type->kind == TYPE_ARRAY &&
         (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
-        return lower_aggregate_equality(low, left, right, op, ast->location);
+        return lower_array_equality(low, left, right, op, ast->location);
+    }
+
+    // Tuple equality/inequality → element-wise comparison
+    if (left_type != NULL && left_type->kind == TYPE_TUPLE &&
+        (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
+        return lower_tuple_equality(low, left, right, op, ast->location);
     }
 
     TtNode *node = tt_new(low->tt_arena, TT_BINARY, ast->type, ast->location);
@@ -309,88 +336,100 @@ static TtNode *lower_enum_struct_init(Lowering *low, const Type *enum_type,
                                       const char *variant_name, const char **ast_field_names,
                                       ASTNode **ast_field_values, SourceLocation location);
 
+/**
+ * Try to lower a member-callee call as a method call.
+ *
+ * Handles enum variant construction, enum method calls, and struct
+ * method calls (including promoted methods from embedded structs).
+ * Returns NULL when the callee is not a recognized method.
+ */
+static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
+    const ASTNode *member_ast = ast->call.callee;
+    const Type *obj_type = member_ast->member.object->type;
+
+    bool via_pointer = false;
+    if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
+        obj_type = obj_type->pointer.pointee;
+        via_pointer = true;
+    }
+
+    // Enum: tuple variant construction or method call
+    if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
+        const char *variant_name = member_ast->member.member;
+        const EnumVariant *variant = type_enum_find_variant(obj_type, variant_name);
+        if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
+            return lower_enum_tuple_init(low, obj_type, variant_name, ast->call.arguments,
+                                         ast->location);
+        }
+        const char *method_key =
+            arena_sprintf(low->tt_arena, "%s.%s", type_enum_name(obj_type), variant_name);
+        TtSymbol *method_sym = lowering_scope_find(low, method_key);
+        if (method_sym != NULL) {
+            TtNode *receiver = lower_expression(low, member_ast->member.object);
+            TtNode **args = lower_element_list(low, ast->call.arguments);
+            TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
+            node->method_call.receiver = receiver;
+            node->method_call.mangled_name = method_sym->mangled_name;
+            node->method_call.arguments = args;
+            return node;
+        }
+    }
+
+    // Struct: direct method or promoted method from embedded struct
+    if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
+        const char *method_name = member_ast->member.member;
+        TtNode *receiver = lower_expression(low, member_ast->member.object);
+
+        if (!via_pointer && low->current_receiver != NULL &&
+            receiver->kind == TT_VARIABLE_REFERENCE &&
+            receiver->variable_reference.symbol == low->current_receiver) {
+            via_pointer = true;
+        }
+
+        const char *key =
+            arena_sprintf(low->tt_arena, "%s.%s", obj_type->struct_type.name, method_name);
+        TtSymbol *method_sym = lowering_scope_find(low, key);
+
+        if (method_sym == NULL) {
+            for (int32_t i = 0; i < obj_type->struct_type.embed_count; i++) {
+                const Type *embed_type = obj_type->struct_type.embedded[i];
+                const char *embed_key = arena_sprintf(low->tt_arena, "%s.%s",
+                                                      embed_type->struct_type.name, method_name);
+                method_sym = lowering_scope_find(low, embed_key);
+                if (method_sym != NULL) {
+                    TtNode *embed_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type,
+                                                  receiver->location);
+                    embed_access->struct_field_access.object = receiver;
+                    embed_access->struct_field_access.field = embed_type->struct_type.name;
+                    embed_access->struct_field_access.via_pointer = via_pointer;
+                    receiver = embed_access;
+                    break;
+                }
+            }
+        }
+
+        if (method_sym != NULL) {
+            TtNode **args = lower_element_list(low, ast->call.arguments);
+            TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
+            node->method_call.receiver = receiver;
+            node->method_call.mangled_name = method_sym->mangled_name;
+            node->method_call.arguments = args;
+            return node;
+        }
+    }
+
+    return NULL;
+}
+
 static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
-    // Assert expansion: assert(cond, msg?) → rsg_assert(cond, msg, file, line)
     if (is_assert_callee(ast->call.callee)) {
         return lower_assert_call(low, ast);
     }
 
-    // Method call: obj.method(args)
     if (ast->call.callee->kind == NODE_MEMBER) {
-        const ASTNode *member_ast = ast->call.callee;
-        const Type *obj_type = member_ast->member.object->type;
-
-        // Auto-deref pointer for method calls
-        bool via_pointer = false;
-        if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
-            obj_type = obj_type->pointer.pointee;
-            via_pointer = true;
-        }
-
-        // Enum tuple variant construction: Enum.Variant(args)
-        if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
-            const char *variant_name = member_ast->member.member;
-            const EnumVariant *variant = type_enum_find_variant(obj_type, variant_name);
-            if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
-                return lower_enum_tuple_init(low, obj_type, variant_name, ast->call.arguments,
-                                             ast->location);
-            }
-            // Enum method call
-            const char *method_key =
-                arena_sprintf(low->tt_arena, "%s.%s", type_enum_name(obj_type), variant_name);
-            TtSymbol *method_sym = lowering_scope_find(low, method_key);
-            if (method_sym != NULL) {
-                TtNode *receiver = lower_expression(low, member_ast->member.object);
-                TtNode **args = lower_element_list(low, ast->call.arguments);
-                TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
-                node->method_call.receiver = receiver;
-                node->method_call.mangled_name = method_sym->mangled_name;
-                node->method_call.arguments = args;
-                return node;
-            }
-        }
-
-        if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
-            const char *method_name = member_ast->member.member;
-            TtNode *receiver = lower_expression(low, member_ast->member.object);
-
-            if (!via_pointer && low->current_receiver != NULL &&
-                receiver->kind == TT_VARIABLE_REFERENCE &&
-                receiver->variable_reference.symbol == low->current_receiver) {
-                via_pointer = true;
-            }
-
-            // Look up method — direct first, then promoted from embedded
-            const char *key =
-                arena_sprintf(low->tt_arena, "%s.%s", obj_type->struct_type.name, method_name);
-            TtSymbol *method_sym = lowering_scope_find(low, key);
-
-            if (method_sym == NULL) {
-                for (int32_t i = 0; i < obj_type->struct_type.embed_count; i++) {
-                    const Type *embed_type = obj_type->struct_type.embedded[i];
-                    const char *embed_key = arena_sprintf(
-                        low->tt_arena, "%s.%s", embed_type->struct_type.name, method_name);
-                    method_sym = lowering_scope_find(low, embed_key);
-                    if (method_sym != NULL) {
-                        TtNode *embed_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS,
-                                                      embed_type, receiver->location);
-                        embed_access->struct_field_access.object = receiver;
-                        embed_access->struct_field_access.field = embed_type->struct_type.name;
-                        embed_access->struct_field_access.via_pointer = via_pointer;
-                        receiver = embed_access;
-                        break;
-                    }
-                }
-            }
-
-            if (method_sym != NULL) {
-                TtNode **args = lower_element_list(low, ast->call.arguments);
-                TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
-                node->method_call.receiver = receiver;
-                node->method_call.mangled_name = method_sym->mangled_name;
-                node->method_call.arguments = args;
-                return node;
-            }
+        TtNode *method = lower_member_call(low, ast);
+        if (method != NULL) {
+            return method;
         }
     }
 
@@ -719,26 +758,7 @@ static TtNode *lower_pattern_condition(Lowering *low, const ASTPattern *pattern,
         return combined;
     }
 
-    case PATTERN_VARIANT_UNIT: {
-        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
-        if (variant == NULL) {
-            return NULL;
-        }
-        TtNode *tag_access =
-            tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, &TYPE_I32_INSTANCE, location);
-        tag_access->struct_field_access.object = operand_ref;
-        tag_access->struct_field_access.field = "_tag";
-        tag_access->struct_field_access.via_pointer = false;
-
-        TtNode *tag_val = lowering_make_int_lit(low, (uint64_t)variant->discriminant,
-                                                &TYPE_I32_INSTANCE, TYPE_I32, location);
-        TtNode *cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
-        cmp->binary.op = TOKEN_EQUAL_EQUAL;
-        cmp->binary.left = tag_access;
-        cmp->binary.right = tag_val;
-        return cmp;
-    }
-
+    case PATTERN_VARIANT_UNIT:
     case PATTERN_VARIANT_TUPLE:
     case PATTERN_VARIANT_STRUCT: {
         const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
@@ -809,6 +829,84 @@ static void lower_pattern_bindings(Lowering *low, const ASTPattern *pattern, TtS
     }
 }
 
+/**
+ * Build the bindings block for a single match arm.
+ *
+ * Extracts variables from the pattern and initializes them from the
+ * match operand.  Returns NULL when no bindings are needed.
+ */
+static TtNode *lower_arm_bindings_block(Lowering *low, const ASTPattern *pattern,
+                                        TtSymbol *operand_sym, const Type *operand_type,
+                                        SourceLocation loc) {
+    TtNode **bind_stmts = NULL;
+
+    switch (pattern->kind) {
+    case PATTERN_BINDING: {
+        TtSymbol *bsym = lowering_scope_find(low, pattern->name);
+        if (bsym != NULL) {
+            TtNode *init = lowering_make_var_ref(low, operand_sym, loc);
+            BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, init));
+        }
+        break;
+    }
+    case PATTERN_VARIANT_TUPLE: {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            break;
+        }
+        for (int32_t j = 0; j < BUFFER_LENGTH(pattern->sub_patterns); j++) {
+            ASTPattern *sub = pattern->sub_patterns[j];
+            if (sub->kind != PATTERN_BINDING || sub->name == NULL || j >= variant->tuple_count) {
+                continue;
+            }
+            TtSymbol *bsym = lowering_scope_find(low, sub->name);
+            if (bsym == NULL) {
+                continue;
+            }
+            TtNode *data_access =
+                tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, variant->tuple_types[j], loc);
+            data_access->struct_field_access.object = lowering_make_var_ref(low, operand_sym, loc);
+            data_access->struct_field_access.field =
+                arena_sprintf(low->tt_arena, "_data.%s._%d", pattern->name, j);
+            data_access->struct_field_access.via_pointer = false;
+            BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
+        }
+        break;
+    }
+    case PATTERN_VARIANT_STRUCT: {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            break;
+        }
+        for (int32_t j = 0; j < BUFFER_LENGTH(pattern->field_names); j++) {
+            const char *fname = pattern->field_names[j];
+            TtSymbol *bsym = lowering_scope_find(low, fname);
+            if (bsym == NULL) {
+                continue;
+            }
+            const Type *ftype = tt_symbol_type(bsym);
+            TtNode *data_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ftype, loc);
+            data_access->struct_field_access.object = lowering_make_var_ref(low, operand_sym, loc);
+            data_access->struct_field_access.field =
+                arena_sprintf(low->tt_arena, "_data.%s.%s", pattern->name, fname);
+            data_access->struct_field_access.via_pointer = false;
+            BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
+        }
+        break;
+    }
+    default:
+        return NULL;
+    }
+
+    if (BUFFER_LENGTH(bind_stmts) == 0) {
+        return NULL;
+    }
+    TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+    block->block.statements = bind_stmts;
+    block->block.result = NULL;
+    return block;
+}
+
 /** Lower a match expression to TT_MATCH. */
 static TtNode *lower_match(Lowering *low, const ASTNode *ast) {
     TtNode *operand = lower_expression(low, ast->match_expression.operand);
@@ -827,14 +925,12 @@ static TtNode *lower_match(Lowering *low, const ASTNode *ast) {
     for (int32_t i = 0; i < BUFFER_LENGTH(ast->match_expression.arms); i++) {
         const ASTMatchArm *arm = &ast->match_expression.arms[i];
 
-        // Create operand reference for this arm
         TtNode *operand_ref = lowering_make_var_ref(low, match_sym, loc);
 
-        // Pattern condition (tag check, literal comparison, etc.)
         TtNode *condition = lower_pattern_condition(low, arm->pattern, operand_ref, operand_type,
                                                     arm->pattern->location);
 
-        // Guard (lowered separately — bindings must be emitted before guard in codegen)
+        // Guard — bindings must be emitted before guard in codegen
         TtNode *guard = NULL;
         if (arm->guard != NULL) {
             lowering_scope_enter(low);
@@ -846,80 +942,14 @@ static TtNode *lower_match(Lowering *low, const ASTNode *ast) {
         BUFFER_PUSH(arm_conditions, condition);
         BUFFER_PUSH(arm_guards, guard);
 
-        // Bindings block - create a scope with variables extracted from pattern
         lowering_scope_enter(low);
         lower_pattern_bindings(low, arm->pattern, match_sym, operand_type);
 
-        // Body
         TtNode *body = lower_expression(low, arm->body);
         BUFFER_PUSH(arm_bodies, body);
 
-        // Create bindings block if there are bindings
-        TtNode *bindings = NULL;
-        // Binding patterns and variant patterns need variable initialization
-        if (arm->pattern->kind == PATTERN_BINDING) {
-            TtNode **bind_stmts = NULL;
-            TtSymbol *bsym = lowering_scope_find(low, arm->pattern->name);
-            if (bsym != NULL) {
-                TtNode *init = lowering_make_var_ref(low, match_sym, loc);
-                BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, init));
-            }
-            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
-            bindings->block.statements = bind_stmts;
-            bindings->block.result = NULL;
-        } else if (arm->pattern->kind == PATTERN_VARIANT_TUPLE) {
-            TtNode **bind_stmts = NULL;
-            const EnumVariant *variant = type_enum_find_variant(operand_type, arm->pattern->name);
-            if (variant != NULL) {
-                for (int32_t j = 0; j < BUFFER_LENGTH(arm->pattern->sub_patterns); j++) {
-                    ASTPattern *sub = arm->pattern->sub_patterns[j];
-                    if (sub->kind == PATTERN_BINDING && sub->name != NULL &&
-                        j < variant->tuple_count) {
-                        TtSymbol *bsym = lowering_scope_find(low, sub->name);
-                        if (bsym != NULL) {
-                            // Access operand._data.VariantName._N
-                            TtNode *data_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS,
-                                                         variant->tuple_types[j], loc);
-                            data_access->struct_field_access.object =
-                                lowering_make_var_ref(low, match_sym, loc);
-                            data_access->struct_field_access.field =
-                                arena_sprintf(low->tt_arena, "_data.%s._%d", arm->pattern->name, j);
-                            data_access->struct_field_access.via_pointer = false;
-                            BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
-                        }
-                    }
-                }
-            }
-            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
-            bindings->block.statements = bind_stmts;
-            bindings->block.result = NULL;
-        } else if (arm->pattern->kind == PATTERN_VARIANT_STRUCT) {
-            TtNode **bind_stmts = NULL;
-            const EnumVariant *variant = type_enum_find_variant(operand_type, arm->pattern->name);
-            if (variant != NULL) {
-                for (int32_t j = 0; j < BUFFER_LENGTH(arm->pattern->field_names); j++) {
-                    const char *fname = arm->pattern->field_names[j];
-                    TtSymbol *bsym = lowering_scope_find(low, fname);
-                    if (bsym != NULL) {
-                        // Access operand._data.VariantName.field
-                        const Type *ftype = tt_symbol_type(bsym);
-                        TtNode *data_access =
-                            tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ftype, loc);
-                        data_access->struct_field_access.object =
-                            lowering_make_var_ref(low, match_sym, loc);
-                        data_access->struct_field_access.field =
-                            arena_sprintf(low->tt_arena, "_data.%s.%s", arm->pattern->name, fname);
-                        data_access->struct_field_access.via_pointer = false;
-                        BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
-                    }
-                }
-            }
-            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
-            bindings->block.statements = bind_stmts;
-            bindings->block.result = NULL;
-        }
-
-        BUFFER_PUSH(arm_bindings, bindings);
+        BUFFER_PUSH(arm_bindings,
+                    lower_arm_bindings_block(low, arm->pattern, match_sym, operand_type, loc));
         lowering_scope_leave(low);
     }
 
