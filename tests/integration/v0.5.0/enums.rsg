@@ -1,0 +1,149 @@
+// v0.5.0 — Enum declarations: unit, tuple, struct variants, explicit discriminants
+module test_enums
+
+// ── unit variants ──
+
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+// ── tuple variants ──
+
+enum Message {
+    Quit,
+    Write(str),
+    Move { x: i32, y: i32 },
+}
+
+// ── explicit discriminants ──
+
+enum Status {
+    Active = 1,
+    Inactive = 0,
+    Pending = 2,
+}
+
+// ── enum with only unit variants ──
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// ── enum with mixed variant kinds ──
+
+enum Event {
+    Click { x: i32, y: i32 },
+    KeyPress(char),
+    Resize(i32, i32),
+    Close,
+}
+
+// ── instantiate unit variant ──
+
+fn test_unit_variant() {
+    d := Direction.North
+    assert(true)
+}
+
+// ── instantiate tuple variant ──
+
+fn test_tuple_variant() {
+    m := Message.Write("hello")
+    assert(true)
+}
+
+// ── instantiate struct variant ──
+
+fn test_struct_variant() {
+    m := Message.Move { x = 10, y = 20 }
+    assert(true)
+}
+
+// ── instantiate explicit discriminant variant ──
+
+fn test_explicit_discriminant() {
+    s := Status.Active
+    assert(true)
+}
+
+// ── match unit variants exhaustively ──
+
+fn direction_name(d: Direction) -> str {
+    match d {
+        North => "north",
+        South => "south",
+        East => "east",
+        West => "west",
+    }
+}
+
+fn test_match_unit_variants() {
+    assert(direction_name(Direction.North) == "north")
+    assert(direction_name(Direction.South) == "south")
+    assert(direction_name(Direction.East) == "east")
+    assert(direction_name(Direction.West) == "west")
+}
+
+// ── match tuple variants ──
+
+fn describe_message(m: Message) -> str {
+    match m {
+        Quit => "quit",
+        Write(text) => text,
+        Move { x, y } => "move",
+    }
+}
+
+fn test_match_tuple_variant() {
+    assert(describe_message(Message.Quit) == "quit")
+    assert(describe_message(Message.Write("hello")) == "hello")
+    assert(describe_message(Message.Move { x = 1, y = 2 }) == "move")
+}
+
+// ── match struct variant fields ──
+
+fn move_distance(m: Message) -> i32 {
+    match m {
+        Move { x, y } => x + y,
+        _ => 0,
+    }
+}
+
+fn test_match_struct_fields() {
+    assert(move_distance(Message.Move { x = 3, y = 4 }) == 7)
+    assert(move_distance(Message.Quit) == 0)
+    assert(move_distance(Message.Write("hi")) == 0)
+}
+
+// ── match as expression (returns value) ──
+
+fn test_match_expression() {
+    c := Color.Green
+    name := match c {
+        Red => "red",
+        Green => "green",
+        Blue => "blue",
+    }
+    assert(name == "green")
+}
+
+// ── match with explicit discriminant enum ──
+
+fn status_label(s: Status) -> str {
+    match s {
+        Active => "active",
+        Inactive => "inactive",
+        Pending => "pending",
+    }
+}
+
+fn test_match_explicit_discriminant() {
+    assert(status_label(Status.Active) == "active")
+    assert(status_label(Status.Inactive) == "inactive")
+    assert(status_label(Status.Pending) == "pending")
+}

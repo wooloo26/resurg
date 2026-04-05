@@ -70,6 +70,82 @@ static ASTNode *parse_method_declaration(Parser *parser, const char *struct_name
     return node;
 }
 
+// ── Enum declaration ───────────────────────────────────────────────────
+
+static ASTNode *parse_enum_declaration(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_ENUM);
+
+    ASTNode *node = ast_new(parser->arena, NODE_ENUM_DECLARATION, location);
+    node->enum_declaration.name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+    node->enum_declaration.variants = NULL;
+    node->enum_declaration.methods = NULL;
+
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        if (parser_check(parser, TOKEN_FUNCTION)) {
+            // Method declaration inside enum
+            ASTNode *method = parse_method_declaration(parser, node->enum_declaration.name);
+            BUFFER_PUSH(node->enum_declaration.methods, method);
+        } else if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            ASTEnumVariant variant = {0};
+            variant.name = parser_advance(parser)->lexeme;
+            variant.kind = VARIANT_UNIT;
+            variant.tuple_types = NULL;
+            variant.fields = NULL;
+            variant.discriminant = NULL;
+
+            if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+                // Tuple variant: Name(type1, type2, ...)
+                variant.kind = VARIANT_TUPLE;
+                if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+                    do {
+                        ASTType *elem = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                        *elem = parser_parse_type(parser);
+                        BUFFER_PUSH(variant.tuple_types, *elem);
+                    } while (parser_match(parser, TOKEN_COMMA));
+                }
+                parser_expect(parser, TOKEN_RIGHT_PAREN);
+            } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+                // Struct variant: Name { field: type, ... }
+                variant.kind = VARIANT_STRUCT;
+                parser_expect(parser, TOKEN_LEFT_BRACE);
+                parser_skip_newlines(parser);
+                if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+                    do {
+                        parser_skip_newlines(parser);
+                        ASTStructField field = {0};
+                        field.name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+                        parser_expect(parser, TOKEN_COLON);
+                        field.type = parser_parse_type(parser);
+                        field.default_value = NULL;
+                        BUFFER_PUSH(variant.fields, field);
+                    } while (parser_match(parser, TOKEN_COMMA));
+                }
+                parser_skip_newlines(parser);
+                parser_expect(parser, TOKEN_RIGHT_BRACE);
+            } else if (parser_match(parser, TOKEN_EQUAL)) {
+                // Explicit discriminant: Name = expr
+                variant.discriminant = parser_parse_expression(parser);
+            }
+
+            BUFFER_PUSH(node->enum_declaration.variants, variant);
+        } else {
+            rsg_error(parser_current_location(parser), "expected variant or method in enum");
+            parser_advance(parser);
+        }
+        // Consume optional comma and newlines between variants
+        parser_match(parser, TOKEN_COMMA);
+        parser_skip_newlines(parser);
+    }
+
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
+}
+
 // ── Struct declaration ─────────────────────────────────────────────────
 
 static ASTNode *parse_struct_declaration(Parser *parser) {
@@ -186,6 +262,11 @@ ASTNode *parser_parse_declaration(Parser *parser) {
     // struct
     if (parser_check(parser, TOKEN_STRUCT)) {
         return parse_struct_declaration(parser);
+    }
+
+    // enum
+    if (parser_check(parser, TOKEN_ENUM)) {
+        return parse_enum_declaration(parser);
     }
 
     // type alias: type Name = UnderlyingType

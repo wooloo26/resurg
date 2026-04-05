@@ -46,6 +46,54 @@ typedef struct {
     ASTNode *default_value; // may be NULL
 } ASTStructField;
 
+/** Variant kind in an enum declaration. */
+typedef enum {
+    VARIANT_UNIT,   // Quit
+    VARIANT_TUPLE,  // Write(str)
+    VARIANT_STRUCT, // Move { x: i32, y: i32 }
+} ASTVariantKind;
+
+/** A variant in an enum declaration. */
+typedef struct {
+    const char *name;
+    ASTVariantKind kind;
+    ASTType *tuple_types;   /* buf - for VARIANT_TUPLE */
+    ASTStructField *fields; /* buf - for VARIANT_STRUCT */
+    ASTNode *discriminant;  // explicit value (may be NULL)
+} ASTEnumVariant;
+
+/** Pattern kind in a match arm. */
+typedef enum {
+    PATTERN_WILDCARD,       // _
+    PATTERN_BINDING,        // name
+    PATTERN_LITERAL,        // 42, "hello", true
+    PATTERN_RANGE,          // 1..10 or 1..=10
+    PATTERN_VARIANT_UNIT,   // Quit
+    PATTERN_VARIANT_TUPLE,  // Write(text)
+    PATTERN_VARIANT_STRUCT, // Move { x, y }
+} ASTPatternKind;
+
+/** A pattern in a match arm. */
+typedef struct ASTPattern ASTPattern;
+struct ASTPattern {
+    ASTPatternKind kind;
+    SourceLocation location;
+    const char *name;          // binding name or variant name
+    ASTNode *literal;          // for PATTERN_LITERAL
+    ASTNode *range_start;      // for PATTERN_RANGE
+    ASTNode *range_end;        // for PATTERN_RANGE
+    bool range_inclusive;      // true for ..=
+    ASTPattern **sub_patterns; /* buf - for tuple/struct variant */
+    const char **field_names;  /* buf - for struct variant */
+};
+
+/** A single arm in a match expression. */
+typedef struct {
+    ASTPattern *pattern;
+    ASTNode *guard; // may be NULL
+    ASTNode *body;
+} ASTMatchArm;
+
 /** Discriminator for the ASTNode tagged union. */
 typedef enum {
     // Top-level
@@ -58,6 +106,8 @@ typedef enum {
     NODE_VARIABLE_DECLARATION, // variable declaration (:= or var)
     NODE_PARAMETER,            // function parameter
     NODE_STRUCT_DECLARATION,   // struct definition
+    NODE_ENUM_DECLARATION,     // enum definition
+    NODE_RETURN,               // return expr
 
     // Statements
     NODE_EXPRESSION_STATEMENT, // expression used as statement
@@ -87,6 +137,8 @@ typedef enum {
     NODE_TUPLE_DESTRUCTURE,    // (a, b) := expr
     NODE_ADDRESS_OF,           // &expr (heap alloc or address-of)
     NODE_DEREF,                // *expr (pointer dereference)
+    NODE_MATCH,                // match expr { arms }
+    NODE_ENUM_INIT,            // Enum.Variant or Enum.Variant(args) or Enum.Variant { fields }
 } NodeKind;
 
 /** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
@@ -323,6 +375,33 @@ struct ASTNode {
         struct {
             ASTNode *operand;
         } deref;
+
+        // NODE_ENUM_DECLARATION
+        struct {
+            const char *name;
+            ASTEnumVariant *variants; /* buf */
+            ASTNode **methods;        /* buf - NODE_FUNCTION_DECLARATION */
+        } enum_declaration;
+
+        // NODE_MATCH
+        struct {
+            ASTNode *operand;
+            ASTMatchArm *arms; /* buf */
+        } match_expression;
+
+        // NODE_ENUM_INIT
+        struct {
+            const char *enum_name;
+            const char *variant_name;
+            ASTNode **arguments;      /* buf - for tuple variants */
+            const char **field_names; /* buf - for struct variants */
+            ASTNode **field_values;   /* buf - for struct variants */
+        } enum_init;
+
+        // NODE_RETURN
+        struct {
+            ASTNode *value; // may be NULL
+        } return_statement;
     };
 };
 

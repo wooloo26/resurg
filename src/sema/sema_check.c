@@ -10,6 +10,7 @@ SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     hash_table_init(&analyzer->type_alias_table, NULL);
     hash_table_init(&analyzer->function_table, NULL);
     hash_table_init(&analyzer->struct_table, NULL);
+    hash_table_init(&analyzer->enum_table, NULL);
     return analyzer;
 }
 
@@ -18,6 +19,7 @@ void semantic_analyzer_destroy(SemanticAnalyzer *analyzer) {
         hash_table_destroy(&analyzer->type_alias_table);
         hash_table_destroy(&analyzer->function_table);
         hash_table_destroy(&analyzer->struct_table);
+        hash_table_destroy(&analyzer->enum_table);
         free(analyzer);
     }
 }
@@ -226,6 +228,126 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
     scope_define(analyzer, struct_name, def->type, false, SYM_TYPE);
 }
 
+/** Register an enum definition: build the TYPE_ENUM, register methods as functions. */
+static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declaration) {
+    const char *enum_name = declaration->enum_declaration.name;
+
+    if (sema_lookup_enum(analyzer, enum_name) != NULL) {
+        SEMA_ERROR(analyzer, declaration->location, "duplicate enum definition '%s'", enum_name);
+        return;
+    }
+
+    // Build EnumVariant array for the type system
+    EnumVariant *variants = NULL;
+    int32_t auto_discriminant = 0;
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->enum_declaration.variants); i++) {
+        ASTEnumVariant *ast_variant = &declaration->enum_declaration.variants[i];
+        EnumVariant variant = {0};
+        variant.name = ast_variant->name;
+
+        switch (ast_variant->kind) {
+        case VARIANT_UNIT:
+            variant.kind = ENUM_VARIANT_UNIT;
+            break;
+        case VARIANT_TUPLE: {
+            variant.kind = ENUM_VARIANT_TUPLE;
+            variant.tuple_count = BUFFER_LENGTH(ast_variant->tuple_types);
+            variant.tuple_types = (const Type **)arena_alloc_zero(
+                analyzer->arena, variant.tuple_count * sizeof(const Type *));
+            for (int32_t j = 0; j < variant.tuple_count; j++) {
+                variant.tuple_types[j] = resolve_ast_type(analyzer, &ast_variant->tuple_types[j]);
+                if (variant.tuple_types[j] == NULL) {
+                    variant.tuple_types[j] = &TYPE_ERROR_INSTANCE;
+                }
+            }
+            break;
+        }
+        case VARIANT_STRUCT: {
+            variant.kind = ENUM_VARIANT_STRUCT;
+            variant.field_count = BUFFER_LENGTH(ast_variant->fields);
+            variant.fields =
+                arena_alloc_zero(analyzer->arena, variant.field_count * sizeof(StructField));
+            for (int32_t j = 0; j < variant.field_count; j++) {
+                variant.fields[j].name = ast_variant->fields[j].name;
+                variant.fields[j].type = resolve_ast_type(analyzer, &ast_variant->fields[j].type);
+                if (variant.fields[j].type == NULL) {
+                    variant.fields[j].type = &TYPE_ERROR_INSTANCE;
+                }
+            }
+            break;
+        }
+        }
+
+        if (ast_variant->discriminant != NULL) {
+            // Explicit discriminant
+            if (ast_variant->discriminant->kind == NODE_LITERAL &&
+                ast_variant->discriminant->literal.kind == LITERAL_I32) {
+                variant.discriminant = (int32_t)ast_variant->discriminant->literal.integer_value;
+                auto_discriminant = (int32_t)variant.discriminant + 1;
+            }
+        } else {
+            variant.discriminant = auto_discriminant;
+            auto_discriminant++;
+        }
+
+        BUFFER_PUSH(variants, variant);
+    }
+
+    const Type *enum_type =
+        type_create_enum(analyzer->arena, enum_name, variants, BUFFER_LENGTH(variants));
+    declaration->type = enum_type;
+
+    EnumDefinition *def = rsg_malloc(sizeof(*def));
+    def->name = enum_name;
+    def->methods = NULL;
+    def->type = enum_type;
+
+    // Register methods
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->enum_declaration.methods); i++) {
+        ASTNode *method = declaration->enum_declaration.methods[i];
+        StructMethodInfo mi = {.name = method->function_declaration.name,
+                               .is_mut_receiver = method->function_declaration.is_mut_receiver,
+                               .receiver_name = method->function_declaration.receiver_name,
+                               .declaration = method};
+        BUFFER_PUSH(def->methods, mi);
+
+        const char *method_key = arena_sprintf(analyzer->arena, "%s.%s", enum_name, mi.name);
+
+        const Type *return_type = &TYPE_UNIT_INSTANCE;
+        if (method->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
+            return_type = resolve_ast_type(analyzer, &method->function_declaration.return_type);
+            if (return_type == NULL) {
+                return_type = &TYPE_UNIT_INSTANCE;
+            }
+        }
+
+        FunctionSignature *sig = rsg_malloc(sizeof(*sig));
+        sig->name = mi.name;
+        sig->return_type = return_type;
+        sig->parameter_types = NULL;
+        sig->parameter_names = NULL;
+        sig->parameter_count = BUFFER_LENGTH(method->function_declaration.parameters);
+        sig->is_public = false;
+
+        for (int32_t j = 0; j < sig->parameter_count; j++) {
+            ASTNode *param = method->function_declaration.parameters[j];
+            const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERROR_INSTANCE;
+            }
+            BUFFER_PUSH(sig->parameter_types, pt);
+            BUFFER_PUSH(sig->parameter_names, param->parameter.name);
+        }
+
+        hash_table_insert(&analyzer->function_table, method_key, sig);
+    }
+
+    hash_table_insert(&analyzer->enum_table, enum_name, def);
+    hash_table_insert(&analyzer->type_alias_table, enum_name, (void *)enum_type);
+    scope_define(analyzer, enum_name, enum_type, false, SYM_TYPE);
+}
+
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     // Reset tables for each compilation
     hash_table_destroy(&analyzer->function_table);
@@ -234,6 +356,8 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     hash_table_init(&analyzer->type_alias_table, NULL);
     hash_table_destroy(&analyzer->struct_table);
     hash_table_init(&analyzer->struct_table, NULL);
+    hash_table_destroy(&analyzer->enum_table);
+    hash_table_init(&analyzer->enum_table, NULL);
 
     scope_push(analyzer, false); // global scope
 
@@ -243,6 +367,14 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
         ASTNode *declaration = file->file.declarations[i];
         if (declaration->kind == NODE_STRUCT_DECLARATION) {
             register_struct_definition(analyzer, declaration);
+        }
+    }
+
+    // Register enum definitions
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        ASTNode *declaration = file->file.declarations[i];
+        if (declaration->kind == NODE_ENUM_DECLARATION) {
+            register_enum_definition(analyzer, declaration);
         }
     }
 

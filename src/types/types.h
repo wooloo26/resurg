@@ -31,6 +31,7 @@ typedef enum {
     TYPE_TUPLE,   // (A, B, ...)
     TYPE_STRUCT,  // struct { fields }
     TYPE_POINTER, // *T
+    TYPE_ENUM,    // enum { variants }
     TYPE_ERROR,   // sentinel for continued checking after type errors
 } TypeKind;
 
@@ -41,6 +42,24 @@ typedef struct {
     const char *name;
     const Type *type;
 } StructField;
+
+/** Variant kind in an enum type. */
+typedef enum {
+    ENUM_VARIANT_UNIT,
+    ENUM_VARIANT_TUPLE,
+    ENUM_VARIANT_STRUCT,
+} EnumVariantKind;
+
+/** A variant in an enum type. */
+typedef struct {
+    const char *name;
+    EnumVariantKind kind;
+    const Type **tuple_types; // for TUPLE variant (stretchy buf)
+    int32_t tuple_count;
+    StructField *fields; // for STRUCT variant (stretchy buf)
+    int32_t field_count;
+    int32_t discriminant;
+} EnumVariant;
 
 struct Type {
     TypeKind kind;
@@ -64,6 +83,11 @@ struct Type {
             const Type *pointee;
             bool is_mut;
         } pointer;
+        struct {
+            const char *name;
+            EnumVariant *variants;
+            int32_t variant_count;
+        } enum_type;
     };
 };
 
@@ -148,5 +172,17 @@ Type *type_create_pointer(Arena *arena, const Type *pointee, bool is_mut);
 const Type *type_pointer_pointee(const Type *type);
 /** Return whether a pointer type is mutable.  Asserts kind == TYPE_POINTER. */
 bool type_pointer_is_mut(const Type *type);
+
+/** Create an enum type with the given variants. */
+Type *type_create_enum(Arena *arena, const char *name, EnumVariant *variants,
+                       int32_t variant_count);
+/** Return the enum name.  Asserts kind == TYPE_ENUM. */
+const char *type_enum_name(const Type *type);
+/** Return the variants array.  Asserts kind == TYPE_ENUM. */
+const EnumVariant *type_enum_variants(const Type *type);
+/** Return the variant count.  Asserts kind == TYPE_ENUM. */
+int32_t type_enum_variant_count(const Type *type);
+/** Find a variant by name.  Returns NULL if not found. */
+const EnumVariant *type_enum_find_variant(const Type *type, const char *name);
 
 #endif // RG_TYPES_H

@@ -300,6 +300,15 @@ static TtNode **lower_element_list(Lowering *low, ASTNode **ast_elements) {
     return elements;
 }
 
+// Forward declarations for enum init helpers
+static TtNode *lower_enum_unit_init(Lowering *low, const Type *enum_type, const char *variant_name,
+                                    SourceLocation location);
+static TtNode *lower_enum_tuple_init(Lowering *low, const Type *enum_type, const char *variant_name,
+                                     ASTNode **arguments, SourceLocation location);
+static TtNode *lower_enum_struct_init(Lowering *low, const Type *enum_type,
+                                      const char *variant_name, const char **ast_field_names,
+                                      ASTNode **ast_field_values, SourceLocation location);
+
 static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
     // Assert expansion: assert(cond, msg?) → rsg_assert(cond, msg, file, line)
     if (is_assert_callee(ast->call.callee)) {
@@ -316,6 +325,29 @@ static TtNode *lower_call(Lowering *low, const ASTNode *ast) {
         if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
             obj_type = obj_type->pointer.pointee;
             via_pointer = true;
+        }
+
+        // Enum tuple variant construction: Enum.Variant(args)
+        if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
+            const char *variant_name = member_ast->member.member;
+            const EnumVariant *variant = type_enum_find_variant(obj_type, variant_name);
+            if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
+                return lower_enum_tuple_init(low, obj_type, variant_name, ast->call.arguments,
+                                             ast->location);
+            }
+            // Enum method call
+            const char *method_key =
+                arena_sprintf(low->tt_arena, "%s.%s", type_enum_name(obj_type), variant_name);
+            TtSymbol *method_sym = lowering_scope_find(low, method_key);
+            if (method_sym != NULL) {
+                TtNode *receiver = lower_expression(low, member_ast->member.object);
+                TtNode **args = lower_element_list(low, ast->call.arguments);
+                TtNode *node = tt_new(low->tt_arena, TT_METHOD_CALL, ast->type, ast->location);
+                node->method_call.receiver = receiver;
+                node->method_call.mangled_name = method_sym->mangled_name;
+                node->method_call.arguments = args;
+                return node;
+            }
         }
 
         if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
@@ -428,10 +460,99 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
         return node;
     }
 
+    // Enum variant access: EnumType.Variant → enum init
+    if (lookup_type != NULL && lookup_type->kind == TYPE_ENUM) {
+        return lower_enum_unit_init(low, lookup_type, ast->member.member, ast->location);
+    }
+
     // Module access
     TtNode *node = tt_new(low->tt_arena, TT_MODULE_ACCESS, ast->type, ast->location);
     node->module_access.object = object;
     node->module_access.member = ast->member.member;
+    return node;
+}
+
+/** Lower an enum unit variant access: Enum.Variant → struct literal with _tag. */
+static TtNode *lower_enum_unit_init(Lowering *low, const Type *enum_type, const char *variant_name,
+                                    SourceLocation location) {
+    const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
+    if (variant == NULL) {
+        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_ERROR_INSTANCE, location);
+    }
+
+    const char **field_names = NULL;
+    TtNode **field_values = NULL;
+
+    BUFFER_PUSH(field_names, "_tag");
+    BUFFER_PUSH(field_values, lowering_make_int_lit(low, (uint64_t)variant->discriminant,
+                                                    &TYPE_I32_INSTANCE, TYPE_I32, location));
+
+    TtNode *node = tt_new(low->tt_arena, TT_STRUCT_LITERAL, enum_type, location);
+    node->struct_literal.field_names = field_names;
+    node->struct_literal.field_values = field_values;
+
+    // Register enum type as compound
+    BUFFER_PUSH(low->compound_types, enum_type);
+    return node;
+}
+
+/** Lower an enum tuple variant call: Enum.Variant(args) → struct literal with _tag + data. */
+static TtNode *lower_enum_tuple_init(Lowering *low, const Type *enum_type, const char *variant_name,
+                                     ASTNode **arguments, SourceLocation location) {
+    const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
+    if (variant == NULL) {
+        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_ERROR_INSTANCE, location);
+    }
+
+    const char **field_names = NULL;
+    TtNode **field_values = NULL;
+
+    BUFFER_PUSH(field_names, "_tag");
+    BUFFER_PUSH(field_values, lowering_make_int_lit(low, (uint64_t)variant->discriminant,
+                                                    &TYPE_I32_INSTANCE, TYPE_I32, location));
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(arguments); i++) {
+        const char *fname = arena_sprintf(low->tt_arena, "_data.%s._%d", variant_name, i);
+        BUFFER_PUSH(field_names, fname);
+        BUFFER_PUSH(field_values, lower_expression(low, arguments[i]));
+    }
+
+    TtNode *node = tt_new(low->tt_arena, TT_STRUCT_LITERAL, enum_type, location);
+    node->struct_literal.field_names = field_names;
+    node->struct_literal.field_values = field_values;
+
+    BUFFER_PUSH(low->compound_types, enum_type);
+    return node;
+}
+
+/** Lower an enum struct variant init: Enum.Variant { field = val } → struct literal. */
+static TtNode *lower_enum_struct_init(Lowering *low, const Type *enum_type,
+                                      const char *variant_name, const char **ast_field_names,
+                                      ASTNode **ast_field_values, SourceLocation location) {
+    const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
+    if (variant == NULL) {
+        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_ERROR_INSTANCE, location);
+    }
+
+    const char **field_names = NULL;
+    TtNode **field_values = NULL;
+
+    BUFFER_PUSH(field_names, "_tag");
+    BUFFER_PUSH(field_values, lowering_make_int_lit(low, (uint64_t)variant->discriminant,
+                                                    &TYPE_I32_INSTANCE, TYPE_I32, location));
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(ast_field_names); i++) {
+        const char *fname =
+            arena_sprintf(low->tt_arena, "_data.%s.%s", variant_name, ast_field_names[i]);
+        BUFFER_PUSH(field_names, fname);
+        BUFFER_PUSH(field_values, lower_expression(low, ast_field_values[i]));
+    }
+
+    TtNode *node = tt_new(low->tt_arena, TT_STRUCT_LITERAL, enum_type, location);
+    node->struct_literal.field_names = field_names;
+    node->struct_literal.field_values = field_values;
+
+    BUFFER_PUSH(low->compound_types, enum_type);
     return node;
 }
 
@@ -551,6 +672,266 @@ static TtNode *lower_struct_literal(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
+/** Lower a match arm condition from the AST pattern. */
+static TtNode *lower_pattern_condition(Lowering *low, const ASTPattern *pattern,
+                                       TtNode *operand_ref, const Type *operand_type,
+                                       SourceLocation location) {
+    switch (pattern->kind) {
+    case PATTERN_WILDCARD:
+    case PATTERN_BINDING:
+        return NULL; // always matches
+
+    case PATTERN_LITERAL: {
+        TtNode *lit = lower_expression(low, pattern->literal);
+        // String comparison via rsg_string_equal
+        if (operand_type != NULL && operand_type->kind == TYPE_STRING) {
+            TtNode **args = NULL;
+            BUFFER_PUSH(args, operand_ref);
+            BUFFER_PUSH(args, lit);
+            return lowering_make_builtin_call(low, "rsg_string_equal", &TYPE_BOOL_INSTANCE, args,
+                                              location);
+        }
+        TtNode *cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        cmp->binary.op = TOKEN_EQUAL_EQUAL;
+        cmp->binary.left = operand_ref;
+        cmp->binary.right = lit;
+        return cmp;
+    }
+
+    case PATTERN_RANGE: {
+        TtNode *start = lower_expression(low, pattern->range_start);
+        TtNode *end = lower_expression(low, pattern->range_end);
+
+        TtNode *ge = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        ge->binary.op = TOKEN_GREATER_EQUAL;
+        ge->binary.left = operand_ref;
+        ge->binary.right = start;
+
+        TtNode *upper = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        upper->binary.op = pattern->range_inclusive ? TOKEN_LESS_EQUAL : TOKEN_LESS;
+        upper->binary.left = operand_ref;
+        upper->binary.right = end;
+
+        TtNode *combined = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        combined->binary.op = TOKEN_AMPERSAND_AMPERSAND;
+        combined->binary.left = ge;
+        combined->binary.right = upper;
+        return combined;
+    }
+
+    case PATTERN_VARIANT_UNIT: {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            return NULL;
+        }
+        TtNode *tag_access =
+            tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, &TYPE_I32_INSTANCE, location);
+        tag_access->struct_field_access.object = operand_ref;
+        tag_access->struct_field_access.field = "_tag";
+        tag_access->struct_field_access.via_pointer = false;
+
+        TtNode *tag_val = lowering_make_int_lit(low, (uint64_t)variant->discriminant,
+                                                &TYPE_I32_INSTANCE, TYPE_I32, location);
+        TtNode *cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        cmp->binary.op = TOKEN_EQUAL_EQUAL;
+        cmp->binary.left = tag_access;
+        cmp->binary.right = tag_val;
+        return cmp;
+    }
+
+    case PATTERN_VARIANT_TUPLE:
+    case PATTERN_VARIANT_STRUCT: {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            return NULL;
+        }
+        TtNode *tag_access =
+            tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, &TYPE_I32_INSTANCE, location);
+        tag_access->struct_field_access.object = operand_ref;
+        tag_access->struct_field_access.field = "_tag";
+        tag_access->struct_field_access.via_pointer = false;
+
+        TtNode *tag_val = lowering_make_int_lit(low, (uint64_t)variant->discriminant,
+                                                &TYPE_I32_INSTANCE, TYPE_I32, location);
+        TtNode *cmp = tt_new(low->tt_arena, TT_BINARY, &TYPE_BOOL_INSTANCE, location);
+        cmp->binary.op = TOKEN_EQUAL_EQUAL;
+        cmp->binary.left = tag_access;
+        cmp->binary.right = tag_val;
+        return cmp;
+    }
+    }
+    return NULL;
+}
+
+/** Lower match arm bindings: extract variables from variant patterns. */
+static void lower_pattern_bindings(Lowering *low, const ASTPattern *pattern, TtSymbol *operand_sym,
+                                   const Type *operand_type) {
+    (void)operand_sym;
+    if (pattern->kind == PATTERN_BINDING && pattern->name != NULL) {
+        // Bind the entire operand to the pattern variable name
+        TtSymbol *var_sym =
+            lowering_add_variable(low, pattern->name, operand_type, false, pattern->location);
+        (void)var_sym;
+        return;
+    }
+
+    if (pattern->kind == PATTERN_VARIANT_TUPLE && operand_type != NULL &&
+        operand_type->kind == TYPE_ENUM) {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            return;
+        }
+        for (int32_t i = 0; i < BUFFER_LENGTH(pattern->sub_patterns); i++) {
+            ASTPattern *sub = pattern->sub_patterns[i];
+            if (sub->kind == PATTERN_BINDING && sub->name != NULL && i < variant->tuple_count) {
+                lowering_add_variable(low, sub->name, variant->tuple_types[i], false,
+                                      sub->location);
+            }
+        }
+    }
+
+    if (pattern->kind == PATTERN_VARIANT_STRUCT && operand_type != NULL &&
+        operand_type->kind == TYPE_ENUM) {
+        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        if (variant == NULL) {
+            return;
+        }
+        for (int32_t i = 0; i < BUFFER_LENGTH(pattern->field_names); i++) {
+            const char *fname = pattern->field_names[i];
+            for (int32_t j = 0; j < variant->field_count; j++) {
+                if (strcmp(variant->fields[j].name, fname) == 0) {
+                    lowering_add_variable(low, fname, variant->fields[j].type, false,
+                                          pattern->location);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/** Lower a match expression to TT_MATCH. */
+static TtNode *lower_match(Lowering *low, const ASTNode *ast) {
+    TtNode *operand = lower_expression(low, ast->match_expression.operand);
+    const Type *operand_type = operand->type;
+    SourceLocation loc = ast->location;
+
+    // Store operand in a temporary to avoid re-evaluation
+    const char *match_tmp = lowering_make_temp_name(low);
+    TtSymbol *match_sym = lowering_add_variable(low, match_tmp, operand_type, false, loc);
+
+    TtNode **arm_conditions = NULL;
+    TtNode **arm_guards = NULL;
+    TtNode **arm_bodies = NULL;
+    TtNode **arm_bindings = NULL;
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(ast->match_expression.arms); i++) {
+        const ASTMatchArm *arm = &ast->match_expression.arms[i];
+
+        // Create operand reference for this arm
+        TtNode *operand_ref = lowering_make_var_ref(low, match_sym, loc);
+
+        // Pattern condition (tag check, literal comparison, etc.)
+        TtNode *condition = lower_pattern_condition(low, arm->pattern, operand_ref, operand_type,
+                                                    arm->pattern->location);
+
+        // Guard (lowered separately — bindings must be emitted before guard in codegen)
+        TtNode *guard = NULL;
+        if (arm->guard != NULL) {
+            lowering_scope_enter(low);
+            lower_pattern_bindings(low, arm->pattern, match_sym, operand_type);
+            guard = lower_expression(low, arm->guard);
+            lowering_scope_leave(low);
+        }
+
+        BUFFER_PUSH(arm_conditions, condition);
+        BUFFER_PUSH(arm_guards, guard);
+
+        // Bindings block - create a scope with variables extracted from pattern
+        lowering_scope_enter(low);
+        lower_pattern_bindings(low, arm->pattern, match_sym, operand_type);
+
+        // Body
+        TtNode *body = lower_expression(low, arm->body);
+        BUFFER_PUSH(arm_bodies, body);
+
+        // Create bindings block if there are bindings
+        TtNode *bindings = NULL;
+        // Binding patterns and variant patterns need variable initialization
+        if (arm->pattern->kind == PATTERN_BINDING) {
+            TtNode **bind_stmts = NULL;
+            TtSymbol *bsym = lowering_scope_find(low, arm->pattern->name);
+            if (bsym != NULL) {
+                TtNode *init = lowering_make_var_ref(low, match_sym, loc);
+                BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, init));
+            }
+            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+            bindings->block.statements = bind_stmts;
+            bindings->block.result = NULL;
+        } else if (arm->pattern->kind == PATTERN_VARIANT_TUPLE) {
+            TtNode **bind_stmts = NULL;
+            const EnumVariant *variant = type_enum_find_variant(operand_type, arm->pattern->name);
+            if (variant != NULL) {
+                for (int32_t j = 0; j < BUFFER_LENGTH(arm->pattern->sub_patterns); j++) {
+                    ASTPattern *sub = arm->pattern->sub_patterns[j];
+                    if (sub->kind == PATTERN_BINDING && sub->name != NULL &&
+                        j < variant->tuple_count) {
+                        TtSymbol *bsym = lowering_scope_find(low, sub->name);
+                        if (bsym != NULL) {
+                            // Access operand._data.VariantName._N
+                            TtNode *data_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS,
+                                                         variant->tuple_types[j], loc);
+                            data_access->struct_field_access.object =
+                                lowering_make_var_ref(low, match_sym, loc);
+                            data_access->struct_field_access.field =
+                                arena_sprintf(low->tt_arena, "_data.%s._%d", arm->pattern->name, j);
+                            data_access->struct_field_access.via_pointer = false;
+                            BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
+                        }
+                    }
+                }
+            }
+            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+            bindings->block.statements = bind_stmts;
+            bindings->block.result = NULL;
+        } else if (arm->pattern->kind == PATTERN_VARIANT_STRUCT) {
+            TtNode **bind_stmts = NULL;
+            const EnumVariant *variant = type_enum_find_variant(operand_type, arm->pattern->name);
+            if (variant != NULL) {
+                for (int32_t j = 0; j < BUFFER_LENGTH(arm->pattern->field_names); j++) {
+                    const char *fname = arm->pattern->field_names[j];
+                    TtSymbol *bsym = lowering_scope_find(low, fname);
+                    if (bsym != NULL) {
+                        // Access operand._data.VariantName.field
+                        const Type *ftype = tt_symbol_type(bsym);
+                        TtNode *data_access =
+                            tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ftype, loc);
+                        data_access->struct_field_access.object =
+                            lowering_make_var_ref(low, match_sym, loc);
+                        data_access->struct_field_access.field =
+                            arena_sprintf(low->tt_arena, "_data.%s.%s", arm->pattern->name, fname);
+                        data_access->struct_field_access.via_pointer = false;
+                        BUFFER_PUSH(bind_stmts, lowering_make_var_decl(low, bsym, data_access));
+                    }
+                }
+            }
+            bindings = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+            bindings->block.statements = bind_stmts;
+            bindings->block.result = NULL;
+        }
+
+        BUFFER_PUSH(arm_bindings, bindings);
+        lowering_scope_leave(low);
+    }
+
+    TtNode *match_node = tt_new(low->tt_arena, TT_MATCH, ast->type, loc);
+    match_node->match_expr.operand = lowering_make_var_decl(low, match_sym, operand);
+    match_node->match_expr.arm_conditions = arm_conditions;
+    match_node->match_expr.arm_guards = arm_guards;
+    match_node->match_expr.arm_bodies = arm_bodies;
+    match_node->match_expr.arm_bindings = arm_bindings;
+    return match_node;
+}
+
 TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -603,6 +984,12 @@ TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
         node->deref.operand = operand;
         return node;
     }
+    case NODE_MATCH:
+        return lower_match(low, ast);
+    case NODE_ENUM_INIT:
+        return lower_enum_struct_init(low, ast->type, ast->enum_init.variant_name,
+                                      ast->enum_init.field_names, ast->enum_init.field_values,
+                                      ast->location);
     default:
         break;
     }

@@ -35,7 +35,8 @@ static const Keyword KEYWORDS[] = {
     {"loop", TOKEN_LOOP},         {"for", TOKEN_FOR},       {"break", TOKEN_BREAK},
     {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},     {"false", TOKEN_FALSE},
     {"type", TOKEN_TYPE},         {"struct", TOKEN_STRUCT}, {"mut", TOKEN_MUT},
-    {"immut", TOKEN_IMMUT},       {"bool", TOKEN_BOOL},     {"i8", TOKEN_I8},
+    {"immut", TOKEN_IMMUT},       {"enum", TOKEN_ENUM},     {"match", TOKEN_MATCH},
+    {"return", TOKEN_RETURN},     {"bool", TOKEN_BOOL},     {"i8", TOKEN_I8},
     {"i16", TOKEN_I16},           {"i32", TOKEN_I32},       {"i64", TOKEN_I64},
     {"i128", TOKEN_I128},         {"u8", TOKEN_U8},         {"u16", TOKEN_U16},
     {"u32", TOKEN_U32},           {"u64", TOKEN_U64},       {"u128", TOKEN_U128},
@@ -158,6 +159,9 @@ static Token scan_ident(Lexer *lexer, SourceLocation location) {
 static Token scan_comparison_or_logical(Lexer *lexer, char c, SourceLocation location) {
     switch (c) {
     case '=':
+        if (match(lexer, '>')) {
+            return make_token(lexer, TOKEN_FAT_ARROW, "=>", 2, location);
+        }
         return match(lexer, '=') ? make_token(lexer, TOKEN_EQUAL_EQUAL, "==", 2, location)
                                  : make_token(lexer, TOKEN_EQUAL, "=", 1, location);
     case '!':
@@ -218,8 +222,11 @@ static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
         return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
                                  : make_token(lexer, TOKEN_COLON, ":", 1, location);
     case '.':
-        return match(lexer, '.') ? make_token(lexer, TOKEN_DOT_DOT, "..", 2, location)
-                                 : make_token(lexer, TOKEN_DOT, ".", 1, location);
+        if (match(lexer, '.')) {
+            return match(lexer, '=') ? make_token(lexer, TOKEN_DOT_DOT_EQUAL, "..=", 3, location)
+                                     : make_token(lexer, TOKEN_DOT_DOT, "..", 2, location);
+        }
+        return make_token(lexer, TOKEN_DOT, ".", 1, location);
     case '(':
         return make_token(lexer, TOKEN_LEFT_PAREN, "(", 1, location);
     case ')':

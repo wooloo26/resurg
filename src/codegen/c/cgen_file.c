@@ -119,7 +119,8 @@ static void emit_preamble(CodeGenerator *generator) {
 /** Return true if @p node is a top-level statement. */
 static bool is_top_level_statement(const TtNode *node) {
     return node->kind != TT_MODULE && node->kind != TT_FUNCTION_DECLARATION &&
-           node->kind != TT_TYPE_ALIAS && node->kind != TT_STRUCT_DECLARATION;
+           node->kind != TT_TYPE_ALIAS && node->kind != TT_STRUCT_DECLARATION &&
+           node->kind != TT_ENUM_DECLARATION;
 }
 
 /**

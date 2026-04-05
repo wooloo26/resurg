@@ -1,0 +1,183 @@
+// v0.5.0 — Pattern matching: literals, ranges, wildcards, bindings, guards
+module test_patterns
+
+enum Shape {
+    Circle(f64),
+    Rect { w: f64, h: f64 },
+    Point,
+}
+
+// ── literal patterns (integer) ──
+
+fn test_literal_int_pattern() {
+    x := 42
+    result := match x {
+        0 => "zero",
+        1 => "one",
+        42 => "answer",
+        _ => "other",
+    }
+    assert(result == "answer")
+}
+
+// ── literal patterns (string) ──
+
+fn test_literal_string_pattern() {
+    s := "hello"
+    result := match s {
+        "hello" => "greeting",
+        "bye" => "farewell",
+        _ => "unknown",
+    }
+    assert(result == "greeting")
+}
+
+// ── literal patterns (bool) ──
+
+fn test_literal_bool_pattern() {
+    b := true
+    result := match b {
+        true => "yes",
+        false => "no",
+    }
+    assert(result == "yes")
+}
+
+// ── wildcard pattern ──
+
+fn test_wildcard_pattern() {
+    x := 99
+    result := match x {
+        0 => "zero",
+        _ => "something",
+    }
+    assert(result == "something")
+}
+
+// ── binding pattern ──
+
+fn test_binding_pattern() {
+    x := 7
+    result := match x {
+        0 => 0,
+        n => n * 2,
+    }
+    assert(result == 14)
+}
+
+// ── range pattern (exclusive) ──
+
+fn test_range_pattern_exclusive() {
+    code := 404
+    result := match code {
+        200 => "ok",
+        400..500 => "client error",
+        500..600 => "server error",
+        _ => "unknown",
+    }
+    assert(result == "client error")
+}
+
+// ── range pattern (inclusive) ──
+
+fn test_range_pattern_inclusive() {
+    grade := 85
+    result := match grade {
+        90..=100 => "A",
+        80..=89 => "B",
+        70..=79 => "C",
+        _ => "F",
+    }
+    assert(result == "B")
+}
+
+// ── match guard ──
+
+fn test_match_guard() {
+    x := 15
+    result := match x {
+        n if n > 10 && n < 20 => "teen",
+        n if n >= 20 => "adult",
+        _ => "child",
+    }
+    assert(result == "teen")
+}
+
+// ── match guard with variant ──
+
+fn classify_shape(s: Shape) -> str {
+    match s {
+        Circle(r) if r > 10.0 => "big circle",
+        Circle(r) => "small circle",
+        Rect { w, h } if w == h => "square",
+        Rect { w, h } => "rectangle",
+        Point => "point",
+    }
+}
+
+fn test_match_guard_variant() {
+    assert(classify_shape(Shape.Circle(20.0)) == "big circle")
+    assert(classify_shape(Shape.Circle(5.0)) == "small circle")
+    assert(classify_shape(Shape.Rect { w = 4.0, h = 4.0 }) == "square")
+    assert(classify_shape(Shape.Rect { w = 3.0, h = 5.0 }) == "rectangle")
+    assert(classify_shape(Shape.Point) == "point")
+}
+
+// ── match on tuple variant with binding ──
+
+fn circle_area_approx(s: Shape) -> i32 {
+    match s {
+        Circle(r) => i32(r * r * 3),
+        _ => 0,
+    }
+}
+
+fn test_tuple_variant_binding() {
+    assert(circle_area_approx(Shape.Circle(10.0)) == 300)
+    assert(circle_area_approx(Shape.Point) == 0)
+}
+
+// ── match struct variant destructuring ──
+
+fn rect_area(s: Shape) -> f64 {
+    match s {
+        Rect { w, h } => w * h,
+        _ => 0.0,
+    }
+}
+
+fn test_struct_variant_destructuring() {
+    assert(rect_area(Shape.Rect { w = 3.0, h = 4.0 }) == 12.0)
+    assert(rect_area(Shape.Circle(5.0)) == 0.0)
+}
+
+// ── multiple literal arms ──
+
+fn test_multiple_literals() {
+    day := 3
+    name := match day {
+        1 => "Mon",
+        2 => "Tue",
+        3 => "Wed",
+        4 => "Thu",
+        5 => "Fri",
+        6 => "Sat",
+        7 => "Sun",
+        _ => "???",
+    }
+    assert(name == "Wed")
+}
+
+// ── range boundary: edge values ──
+
+fn test_range_boundaries() {
+    // exclusive range: 10..20 includes 10, excludes 20
+    assert(match 10 { 10..20 => true, _ => false })
+    assert(match 19 { 10..20 => true, _ => false })
+    assert(match 20 { 10..20 => false, _ => true })
+
+    // inclusive range: 10..=20 includes both 10 and 20
+    assert(match 10 { 10..=20 => true, _ => false })
+    assert(match 20 { 10..=20 => true, _ => false })
+    assert(match 21 { 10..=20 => false, _ => true })
+}

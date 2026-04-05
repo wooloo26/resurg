@@ -36,6 +36,9 @@ typedef enum {
     TOKEN_STRUCT,   // struct
     TOKEN_MUT,      // mut
     TOKEN_IMMUT,    // immut
+    TOKEN_ENUM,     // enum
+    TOKEN_MATCH,    // match
+    TOKEN_RETURN,   // return
 
     // Type keywords
     TOKEN_BOOL,   // bool
@@ -96,8 +99,10 @@ typedef enum {
     TOKEN_RIGHT_BRACKET, // ]
     TOKEN_COLON,         // :
     TOKEN_COMMA,         // ,
+    TOKEN_DOT_DOT_EQUAL, // ..=
     TOKEN_DOT_DOT,       // ..
     TOKEN_DOT,           // .
+    TOKEN_FAT_ARROW,     // =>
     TOKEN_ARROW,         // ->
     TOKEN_SEMICOLON,     // ; (optional, for future use)
 

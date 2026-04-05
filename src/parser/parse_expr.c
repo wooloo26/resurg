@@ -344,6 +344,35 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
 
+        // Enum struct variant literal: Enum.Variant { field = expr, ... }
+        if (left->kind == NODE_MEMBER && left->member.object->kind == NODE_IDENTIFIER &&
+            is_struct_literal_ahead(parser)) {
+            SourceLocation enum_loc = left->location;
+            ASTNode *node = ast_new(parser->arena, NODE_ENUM_INIT, enum_loc);
+            node->enum_init.enum_name = left->member.object->identifier.name;
+            node->enum_init.variant_name = left->member.member;
+            node->enum_init.arguments = NULL;
+            node->enum_init.field_names = NULL;
+            node->enum_init.field_values = NULL;
+
+            parser_expect(parser, TOKEN_LEFT_BRACE);
+            parser_skip_newlines(parser);
+            if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+                do {
+                    parser_skip_newlines(parser);
+                    const char *field_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+                    parser_expect(parser, TOKEN_EQUAL);
+                    ASTNode *value = parser_parse_expression(parser);
+                    BUFFER_PUSH(node->enum_init.field_names, field_name);
+                    BUFFER_PUSH(node->enum_init.field_values, value);
+                } while (parser_match(parser, TOKEN_COMMA));
+            }
+            parser_skip_newlines(parser);
+            parser_expect(parser, TOKEN_RIGHT_BRACE);
+            left = node;
+            continue;
+        }
+
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
             left = parse_call_arguments(parser, left, location);
             continue;
@@ -450,6 +479,179 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
     return left;
 }
 
+// ── Pattern parsing ────────────────────────────────────────────────────
+
+static ASTPattern *parse_pattern(Parser *parser) {
+    ASTPattern *pattern = arena_alloc_zero(parser->arena, sizeof(ASTPattern));
+    pattern->location = parser_current_location(parser);
+    pattern->sub_patterns = NULL;
+    pattern->field_names = NULL;
+
+    // Wildcard: _
+    if (parser_check(parser, TOKEN_IDENTIFIER) && parser_current_token(parser)->lexeme[0] == '_' &&
+        parser_current_token(parser)->lexeme[1] == '\0') {
+        parser_advance(parser); // consume '_'
+        pattern->kind = PATTERN_WILDCARD;
+        return pattern;
+    }
+
+    // Boolean literals
+    if (parser_match(parser, TOKEN_TRUE)) {
+        pattern->kind = PATTERN_LITERAL;
+        pattern->literal = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+        pattern->literal->literal.kind = LITERAL_BOOL;
+        pattern->literal->literal.boolean_value = true;
+        return pattern;
+    }
+    if (parser_match(parser, TOKEN_FALSE)) {
+        pattern->kind = PATTERN_LITERAL;
+        pattern->literal = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+        pattern->literal->literal.kind = LITERAL_BOOL;
+        pattern->literal->literal.boolean_value = false;
+        return pattern;
+    }
+
+    // String literal
+    if (parser_match(parser, TOKEN_STRING_LITERAL)) {
+        pattern->kind = PATTERN_LITERAL;
+        pattern->literal = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+        pattern->literal->literal.kind = LITERAL_STRING;
+        pattern->literal->literal.string_value =
+            parser_previous_token(parser)->literal_value.string_value;
+        return pattern;
+    }
+
+    // Integer literal (possibly followed by .. or ..= for range)
+    if (parser_match(parser, TOKEN_INTEGER_LITERAL)) {
+        ASTNode *start = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+        start->literal.kind = LITERAL_I32;
+        start->literal.integer_value = parser_previous_token(parser)->literal_value.integer_value;
+
+        // Range pattern: N..M or N..=M
+        if (parser_check(parser, TOKEN_DOT_DOT) || parser_check(parser, TOKEN_DOT_DOT_EQUAL)) {
+            pattern->kind = PATTERN_RANGE;
+            pattern->range_inclusive = parser_current_token(parser)->kind == TOKEN_DOT_DOT_EQUAL;
+            parser_advance(parser); // consume '..' or '..='
+            pattern->range_start = start;
+            ASTNode *end = ast_new(parser->arena, NODE_LITERAL, parser_current_location(parser));
+            end->literal.kind = LITERAL_I32;
+            end->literal.integer_value =
+                parser_expect(parser, TOKEN_INTEGER_LITERAL)->literal_value.integer_value;
+            pattern->range_end = end;
+            return pattern;
+        }
+
+        pattern->kind = PATTERN_LITERAL;
+        pattern->literal = start;
+        return pattern;
+    }
+
+    // Negative integer literal
+    if (parser_match(parser, TOKEN_MINUS)) {
+        if (parser_match(parser, TOKEN_INTEGER_LITERAL)) {
+            ASTNode *lit = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+            lit->literal.kind = LITERAL_I32;
+            lit->literal.integer_value =
+                (uint64_t)(-(int64_t)parser_previous_token(parser)->literal_value.integer_value);
+            pattern->kind = PATTERN_LITERAL;
+            pattern->literal = lit;
+            return pattern;
+        }
+        rsg_error(pattern->location, "expected integer after '-' in pattern");
+    }
+
+    // Float literal
+    if (parser_match(parser, TOKEN_FLOAT_LITERAL)) {
+        pattern->kind = PATTERN_LITERAL;
+        pattern->literal = ast_new(parser->arena, NODE_LITERAL, pattern->location);
+        pattern->literal->literal.kind = LITERAL_F64;
+        pattern->literal->literal.float64_value =
+            parser_previous_token(parser)->literal_value.float_value;
+        return pattern;
+    }
+
+    // Identifier: binding, variant_unit, variant_tuple, or variant_struct
+    if (parser_match(parser, TOKEN_IDENTIFIER)) {
+        pattern->name = parser_previous_token(parser)->lexeme;
+
+        // Tuple variant pattern: Ident(sub, sub, ...)
+        if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+            pattern->kind = PATTERN_VARIANT_TUPLE;
+            if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+                do {
+                    ASTPattern *sub = parse_pattern(parser);
+                    BUFFER_PUSH(pattern->sub_patterns, sub);
+                } while (parser_match(parser, TOKEN_COMMA));
+            }
+            parser_expect(parser, TOKEN_RIGHT_PAREN);
+            return pattern;
+        }
+
+        // Struct variant pattern: Ident { field, field, ... }
+        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+            pattern->kind = PATTERN_VARIANT_STRUCT;
+            parser_expect(parser, TOKEN_LEFT_BRACE);
+            parser_skip_newlines(parser);
+            if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+                do {
+                    parser_skip_newlines(parser);
+                    const char *field_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+                    BUFFER_PUSH(pattern->field_names, field_name);
+                } while (parser_match(parser, TOKEN_COMMA));
+            }
+            parser_skip_newlines(parser);
+            parser_expect(parser, TOKEN_RIGHT_BRACE);
+            return pattern;
+        }
+
+        // Plain identifier: binding (sema resolves to variant_unit if matching)
+        pattern->kind = PATTERN_BINDING;
+        return pattern;
+    }
+
+    rsg_error(pattern->location, "expected pattern");
+    pattern->kind = PATTERN_WILDCARD;
+    return pattern;
+}
+
+// ── Match expression ───────────────────────────────────────────────────
+
+static ASTNode *parse_match(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_MATCH);
+
+    ASTNode *node = ast_new(parser->arena, NODE_MATCH, location);
+    node->match_expression.operand = parser_parse_expression(parser);
+    node->match_expression.arms = NULL;
+
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        ASTMatchArm arm = {0};
+        arm.pattern = parse_pattern(parser);
+
+        // Optional guard: if condition
+        arm.guard = NULL;
+        if (parser_match(parser, TOKEN_IF)) {
+            arm.guard = parser_parse_expression(parser);
+        }
+
+        parser_expect(parser, TOKEN_FAT_ARROW);
+        arm.body = parser_parse_expression(parser);
+
+        BUFFER_PUSH(node->match_expression.arms, arm);
+
+        // Consume optional comma and newlines between arms
+        parser_match(parser, TOKEN_COMMA);
+        parser_skip_newlines(parser);
+    }
+
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
+}
+
 // ── If expression ──────────────────────────────────────────────────────
 
 static ASTNode *parse_if(Parser *parser) {
@@ -476,6 +678,9 @@ static ASTNode *parse_if(Parser *parser) {
 ASTNode *parser_parse_expression(Parser *parser) {
     if (parser_check(parser, TOKEN_IF)) {
         return parse_if(parser);
+    }
+    if (parser_check(parser, TOKEN_MATCH)) {
+        return parse_match(parser);
     }
     return parse_precedence(parser, PRECEDENCE_ASSIGN);
 }

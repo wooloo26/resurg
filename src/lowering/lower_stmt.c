@@ -407,6 +407,22 @@ static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
                 lowering_scope_add(low, key, sym);
             }
         }
+        // Pre-register enum method symbols
+        if (decl->kind == NODE_ENUM_DECLARATION) {
+            const char *enum_name = decl->enum_declaration.name;
+            for (int32_t j = 0; j < BUFFER_LENGTH(decl->enum_declaration.methods); j++) {
+                const ASTNode *method = decl->enum_declaration.methods[j];
+                const char *method_name = method->function_declaration.name;
+                const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
+                const char *key = arena_sprintf(low->tt_arena, "%s.%s", enum_name, method_name);
+                const char *mangled =
+                    arena_sprintf(low->tt_arena, "rsgu_%s_%s", enum_name, method_name);
+                TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false,
+                                                     method->location);
+                sym->mangled_name = mangled;
+                lowering_scope_add(low, key, sym);
+            }
+        }
     }
 }
 
@@ -429,6 +445,26 @@ static void emit_struct_with_methods(Lowering *low, const ASTNode *decl_ast,
     }
 }
 
+/** Emit an enum type declaration and its methods into @p declarations. */
+static void emit_enum_with_methods(Lowering *low, const ASTNode *decl_ast, TtNode ***declarations) {
+    TtNode *enum_decl =
+        tt_new(low->tt_arena, TT_ENUM_DECLARATION, &TYPE_UNIT_INSTANCE, decl_ast->location);
+    enum_decl->enum_decl.name = decl_ast->enum_declaration.name;
+    enum_decl->enum_decl.enum_type = decl_ast->type;
+    BUFFER_PUSH(*declarations, enum_decl);
+
+    // Register enum type as compound for typedef emission
+    BUFFER_PUSH(low->compound_types, decl_ast->type);
+
+    for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->enum_declaration.methods); j++) {
+        TtNode *method = lower_method_declaration(low, decl_ast->enum_declaration.methods[j],
+                                                  decl_ast->enum_declaration.name, decl_ast->type);
+        if (method != NULL) {
+            BUFFER_PUSH(*declarations, method);
+        }
+    }
+}
+
 /** Lower a NODE_FILE into a TT_FILE with pre-registered function symbols. */
 static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
     lowering_scope_enter(low);
@@ -440,6 +476,11 @@ static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
 
         if (decl_ast->kind == NODE_STRUCT_DECLARATION) {
             emit_struct_with_methods(low, decl_ast, &declarations);
+            continue;
+        }
+
+        if (decl_ast->kind == NODE_ENUM_DECLARATION) {
+            emit_enum_with_methods(low, decl_ast, &declarations);
             continue;
         }
 
@@ -489,6 +530,24 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
         node->struct_decl.name = ast->struct_declaration.name;
         node->struct_decl.struct_type = ast->type;
         return node;
+    }
+
+    case NODE_ENUM_DECLARATION: {
+        // Handled primarily in lower_file; fallback for other contexts
+        TtNode *node =
+            tt_new(low->tt_arena, TT_ENUM_DECLARATION, &TYPE_UNIT_INSTANCE, ast->location);
+        node->enum_decl.name = ast->enum_declaration.name;
+        node->enum_decl.enum_type = ast->type;
+        return node;
+    }
+
+    case NODE_RETURN: {
+        // Lower return as a block with the return value as result
+        // (codegen will handle this via function body result)
+        if (ast->return_statement.value != NULL) {
+            return lower_expression(low, ast->return_statement.value);
+        }
+        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_UNIT_INSTANCE, ast->location);
     }
 
     case NODE_VARIABLE_DECLARATION:

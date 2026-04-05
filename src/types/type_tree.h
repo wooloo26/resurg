@@ -104,6 +104,10 @@ typedef enum {
     TT_HEAP_ALLOC,
     TT_ADDRESS_OF,
     TT_DEREF,
+
+    // Enum-related
+    TT_ENUM_DECLARATION,
+    TT_MATCH,
 } TtNodeKind;
 
 // ── TtNode ─────────────────────────────────────────────────────────────
@@ -325,6 +329,21 @@ struct TtNode {
         struct {
             TtNode *operand;
         } deref;
+
+        // TT_ENUM_DECLARATION
+        struct {
+            const char *name;
+            const Type *enum_type;
+        } enum_decl;
+
+        // TT_MATCH
+        struct {
+            TtNode *operand;
+            TtNode **arm_conditions; /* buf - pattern condition per arm */
+            TtNode **arm_guards;     /* buf - guard expression per arm (NULL if none) */
+            TtNode **arm_bodies;     /* buf - body expression per arm */
+            TtNode **arm_bindings;   /* buf - block of binding stmts (NULL if none) */
+        } match_expr;
     };
 };
 

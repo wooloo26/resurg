@@ -87,6 +87,13 @@ typedef struct {
     const Type *type;          // resolved TYPE_STRUCT
 } StructDefinition;
 
+/** Enum definition — registered during the first pass. */
+typedef struct {
+    const char *name;
+    StructMethodInfo *methods; /* buf */
+    const Type *type;          // resolved TYPE_ENUM
+} EnumDefinition;
+
 struct SemanticAnalyzer {
     Arena *arena;
     Scope *current_scope;
@@ -94,6 +101,7 @@ struct SemanticAnalyzer {
     HashTable type_alias_table; // name → const Type*
     HashTable function_table;   // name → FunctionSignature*
     HashTable struct_table;     // name → StructDefinition*
+    HashTable enum_table;       // name → EnumDefinition*
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */
@@ -127,6 +135,8 @@ const Type *sema_lookup_type_alias(const SemanticAnalyzer *analyzer, const char 
 FunctionSignature *sema_lookup_function(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up a struct definition by name. */
 StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const char *name);
+/** Look up an enum definition by name. */
+EnumDefinition *sema_lookup_enum(const SemanticAnalyzer *analyzer, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an error and returns TYPE_ERROR for unknown names.
@@ -163,6 +173,8 @@ const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_address_of(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_deref(SemanticAnalyzer *analyzer, ASTNode *node);
+const Type *check_match(SemanticAnalyzer *analyzer, ASTNode *node);
+const Type *check_enum_init(SemanticAnalyzer *analyzer, ASTNode *node);
 
 // ── Statement checking (statement.c) ───────────────────────────────────
 

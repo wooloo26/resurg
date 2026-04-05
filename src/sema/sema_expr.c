@@ -182,6 +182,44 @@ const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
             obj_type = obj_type->pointer.pointee;
         }
 
+        // Enum tuple variant construction: Enum.Variant(args)
+        if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
+            const EnumVariant *variant = type_enum_find_variant(obj_type, method_name);
+            if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
+                int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+                if (arg_count != variant->tuple_count) {
+                    SEMA_ERROR(analyzer, node->location,
+                               "expected %d arguments for variant '%s', got %d",
+                               variant->tuple_count, method_name, arg_count);
+                } else {
+                    for (int32_t i = 0; i < arg_count; i++) {
+                        promote_literal(node->call.arguments[i], variant->tuple_types[i]);
+                        const Type *arg_type = node->call.arguments[i]->type;
+                        if (arg_type != NULL && !type_equal(arg_type, variant->tuple_types[i]) &&
+                            arg_type->kind != TYPE_ERROR) {
+                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
+                                       "type mismatch: expected '%s', got '%s'",
+                                       type_name(analyzer->arena, variant->tuple_types[i]),
+                                       type_name(analyzer->arena, arg_type));
+                        }
+                    }
+                }
+                node->type = obj_type;
+                return obj_type;
+            }
+
+            // Enum method call: enum_value.method(args)
+            const char *method_key =
+                arena_sprintf(analyzer->arena, "%s.%s", type_enum_name(obj_type), method_name);
+            FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+            if (sig != NULL) {
+                reorder_named_arguments(analyzer, node, sig);
+                check_call_arguments(analyzer, node, sig);
+                node->type = sig->return_type;
+                return sig->return_type;
+            }
+        }
+
         if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
             // Look up method on this struct (or promoted from embedded)
             const char *method_key =
@@ -291,6 +329,18 @@ const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
                    object_type->struct_type.name);
         return &TYPE_ERROR_INSTANCE;
     }
+
+    // Enum variant access: EnumType.Variant
+    if (object_type != NULL && object_type->kind == TYPE_ENUM) {
+        const EnumVariant *variant = type_enum_find_variant(object_type, node->member.member);
+        if (variant != NULL) {
+            return object_type;
+        }
+        SEMA_ERROR(analyzer, node->location, "no variant '%s' on enum '%s'", node->member.member,
+                   type_enum_name(object_type));
+        return &TYPE_ERROR_INSTANCE;
+    }
+
     return &TYPE_ERROR_INSTANCE;
 }
 
@@ -453,4 +503,237 @@ const Type *check_deref(SemanticAnalyzer *analyzer, ASTNode *node) {
         return &TYPE_ERROR_INSTANCE;
     }
     return inner_type->pointer.pointee;
+}
+
+// ── Enum-related checkers ──────────────────────────────────────────────
+
+/** Find the index of a variant by name in an enum type. Returns -1 if not found. */
+static int32_t find_variant_index(const Type *enum_type, const char *name) {
+    const EnumVariant *variants = type_enum_variants(enum_type);
+    int32_t count = type_enum_variant_count(enum_type);
+    for (int32_t i = 0; i < count; i++) {
+        if (strcmp(variants[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/** Check a pattern and bind variables in the current scope. */
+static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const Type *operand_type,
+                          bool *variant_covered, bool *has_wildcard) {
+    switch (pattern->kind) {
+    case PATTERN_WILDCARD:
+        *has_wildcard = true;
+        break;
+
+    case PATTERN_BINDING:
+        // Check if this identifier matches a variant name
+        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
+            int32_t idx = find_variant_index(operand_type, pattern->name);
+            if (idx >= 0) {
+                pattern->kind = PATTERN_VARIANT_UNIT;
+                if (variant_covered != NULL) {
+                    variant_covered[idx] = true;
+                }
+                break;
+            }
+        }
+        // It's a binding - define the variable in current scope
+        if (operand_type != NULL) {
+            scope_define(analyzer, pattern->name, operand_type, false, SYM_VAR);
+        }
+        break;
+
+    case PATTERN_LITERAL:
+        check_node(analyzer, pattern->literal);
+        if (operand_type != NULL) {
+            promote_literal(pattern->literal, operand_type);
+        }
+        break;
+
+    case PATTERN_RANGE:
+        check_node(analyzer, pattern->range_start);
+        check_node(analyzer, pattern->range_end);
+        if (operand_type != NULL) {
+            promote_literal(pattern->range_start, operand_type);
+            promote_literal(pattern->range_end, operand_type);
+        }
+        break;
+
+    case PATTERN_VARIANT_UNIT:
+        if (operand_type != NULL && operand_type->kind == TYPE_ENUM && variant_covered != NULL) {
+            int32_t idx = find_variant_index(operand_type, pattern->name);
+            if (idx >= 0) {
+                variant_covered[idx] = true;
+            }
+        }
+        break;
+
+    case PATTERN_VARIANT_TUPLE:
+        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
+            const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+            if (variant == NULL) {
+                SEMA_ERROR(analyzer, pattern->location, "unknown variant '%s'", pattern->name);
+                break;
+            }
+            if (variant_covered != NULL) {
+                int32_t idx = find_variant_index(operand_type, pattern->name);
+                if (idx >= 0) {
+                    variant_covered[idx] = true;
+                }
+            }
+            // Bind sub-patterns to tuple element types
+            for (int32_t i = 0; i < BUFFER_LENGTH(pattern->sub_patterns); i++) {
+                ASTPattern *sub = pattern->sub_patterns[i];
+                if (sub->kind == PATTERN_BINDING && i < variant->tuple_count) {
+                    scope_define(analyzer, sub->name, variant->tuple_types[i], false, SYM_VAR);
+                } else if (sub->kind == PATTERN_WILDCARD) {
+                    // nothing to bind
+                }
+            }
+        }
+        break;
+
+    case PATTERN_VARIANT_STRUCT:
+        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
+            const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+            if (variant == NULL) {
+                SEMA_ERROR(analyzer, pattern->location, "unknown variant '%s'", pattern->name);
+                break;
+            }
+            if (variant_covered != NULL) {
+                int32_t idx = find_variant_index(operand_type, pattern->name);
+                if (idx >= 0) {
+                    variant_covered[idx] = true;
+                }
+            }
+            // Bind field names to their types
+            for (int32_t i = 0; i < BUFFER_LENGTH(pattern->field_names); i++) {
+                const char *fname = pattern->field_names[i];
+                for (int32_t j = 0; j < variant->field_count; j++) {
+                    if (strcmp(variant->fields[j].name, fname) == 0) {
+                        scope_define(analyzer, fname, variant->fields[j].type, false, SYM_VAR);
+                        break;
+                    }
+                }
+            }
+        }
+        break;
+    }
+}
+
+const Type *check_match(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *operand_type = check_node(analyzer, node->match_expression.operand);
+    const Type *result_type = NULL;
+    bool has_wildcard = false;
+    bool *variant_covered = NULL;
+
+    if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
+        int32_t variant_count = type_enum_variant_count(operand_type);
+        variant_covered = arena_alloc_zero(analyzer->arena, variant_count * sizeof(bool));
+    }
+
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expression.arms); i++) {
+        ASTMatchArm *arm = &node->match_expression.arms[i];
+        scope_push(analyzer, false);
+
+        check_pattern(analyzer, arm->pattern, operand_type, variant_covered, &has_wildcard);
+
+        if (arm->guard != NULL) {
+            const Type *guard_type = check_node(analyzer, arm->guard);
+            if (guard_type != NULL && !type_equal(guard_type, &TYPE_BOOL_INSTANCE) &&
+                guard_type->kind != TYPE_ERROR) {
+                SEMA_ERROR(analyzer, arm->guard->location, "match guard must be 'bool'");
+            }
+        }
+
+        const Type *arm_type = check_node(analyzer, arm->body);
+        if (result_type == NULL && arm_type != NULL && arm_type->kind != TYPE_UNIT) {
+            result_type = arm_type;
+        }
+
+        scope_pop(analyzer);
+    }
+
+    // Exhaustiveness check for enums
+    if (operand_type != NULL && operand_type->kind == TYPE_ENUM && !has_wildcard) {
+        int32_t variant_count = type_enum_variant_count(operand_type);
+        for (int32_t i = 0; i < variant_count; i++) {
+            if (!variant_covered[i]) {
+                SEMA_ERROR(analyzer, node->location, "non-exhaustive match: missing variant '%s'",
+                           type_enum_variants(operand_type)[i].name);
+                break;
+            }
+        }
+    }
+
+    return result_type != NULL ? result_type : &TYPE_UNIT_INSTANCE;
+}
+
+const Type *check_enum_init(SemanticAnalyzer *analyzer, ASTNode *node) {
+    EnumDefinition *edef = sema_lookup_enum(analyzer, node->enum_init.enum_name);
+    if (edef == NULL) {
+        SEMA_ERROR(analyzer, node->location, "unknown enum '%s'", node->enum_init.enum_name);
+        return &TYPE_ERROR_INSTANCE;
+    }
+
+    const EnumVariant *variant = type_enum_find_variant(edef->type, node->enum_init.variant_name);
+    if (variant == NULL) {
+        SEMA_ERROR(analyzer, node->location, "unknown variant '%s' on enum '%s'",
+                   node->enum_init.variant_name, node->enum_init.enum_name);
+        return &TYPE_ERROR_INSTANCE;
+    }
+
+    if (variant->kind != ENUM_VARIANT_STRUCT) {
+        SEMA_ERROR(analyzer, node->location, "variant '%s' is not a struct variant",
+                   node->enum_init.variant_name);
+        return &TYPE_ERROR_INSTANCE;
+    }
+
+    // Check that all provided fields exist and have the right types
+    int32_t provided_count = BUFFER_LENGTH(node->enum_init.field_names);
+    for (int32_t i = 0; i < provided_count; i++) {
+        const char *fname = node->enum_init.field_names[i];
+        ASTNode *fvalue = node->enum_init.field_values[i];
+        check_node(analyzer, fvalue);
+
+        bool found = false;
+        for (int32_t j = 0; j < variant->field_count; j++) {
+            if (strcmp(variant->fields[j].name, fname) == 0) {
+                found = true;
+                promote_literal(fvalue, variant->fields[j].type);
+                const Type *ftype = fvalue->type;
+                if (ftype != NULL && variant->fields[j].type != NULL &&
+                    !type_equal(ftype, variant->fields[j].type) && ftype->kind != TYPE_ERROR &&
+                    variant->fields[j].type->kind != TYPE_ERROR) {
+                    SEMA_ERROR(analyzer, fvalue->location, "type mismatch: expected '%s', got '%s'",
+                               type_name(analyzer->arena, variant->fields[j].type),
+                               type_name(analyzer->arena, ftype));
+                }
+                break;
+            }
+        }
+        if (!found) {
+            SEMA_ERROR(analyzer, node->location, "no field '%s' on variant '%s'", fname,
+                       node->enum_init.variant_name);
+        }
+    }
+
+    // Check that all required fields are provided
+    for (int32_t i = 0; i < variant->field_count; i++) {
+        bool provided = false;
+        for (int32_t j = 0; j < provided_count; j++) {
+            if (strcmp(node->enum_init.field_names[j], variant->fields[i].name) == 0) {
+                provided = true;
+                break;
+            }
+        }
+        if (!provided) {
+            SEMA_ERROR(analyzer, node->location, "missing field '%s' in variant '%s'",
+                       variant->fields[i].name, node->enum_init.variant_name);
+        }
+    }
+
+    return edef->type;
 }

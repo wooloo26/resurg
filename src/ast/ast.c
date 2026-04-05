@@ -277,5 +277,33 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "Deref\n");
         ast_dump(node->deref.operand, level + 1);
         break;
+    case NODE_ENUM_DECLARATION:
+        fprintf(stderr, "EnumDecl(%s)\n", node->enum_declaration.name);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
+            ast_dump(node->enum_declaration.methods[i], level + 1);
+        }
+        break;
+    case NODE_MATCH:
+        fprintf(stderr, "Match\n");
+        ast_dump(node->match_expression.operand, level + 1);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expression.arms); i++) {
+            print_indent(level + 1);
+            fprintf(stderr, "Arm\n");
+            ast_dump(node->match_expression.arms[i].body, level + 2);
+        }
+        break;
+    case NODE_ENUM_INIT:
+        fprintf(stderr, "EnumInit(%s::%s)\n", node->enum_init.enum_name,
+                node->enum_init.variant_name);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_init.arguments); i++) {
+            ast_dump(node->enum_init.arguments[i], level + 1);
+        }
+        break;
+    case NODE_RETURN:
+        fprintf(stderr, "Return\n");
+        if (node->return_statement.value != NULL) {
+            ast_dump(node->return_statement.value, level + 1);
+        }
+        break;
     }
 }

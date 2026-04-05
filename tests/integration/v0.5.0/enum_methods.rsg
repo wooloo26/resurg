@@ -1,0 +1,41 @@
+// v0.5.0 — Enum methods and complex enum usage
+module test_enum_methods
+
+enum Msg {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(str),
+
+    fn is_quit(*m) -> bool {
+        match *m {
+            Quit => true,
+            _ => false,
+        }
+    }
+
+    fn describe(*m) -> str {
+        match *m {
+            Quit => "quit",
+            Move { x, y } => "move",
+            Write(text) => text,
+        }
+    }
+}
+
+fn test_enum_method_call() {
+    q := Msg.Quit
+    assert(q.is_quit())
+    assert(q.describe() == "quit")
+}
+
+fn test_enum_method_on_tuple() {
+    w := Msg.Write("hello")
+    assert(w.is_quit() == false)
+    assert(w.describe() == "hello")
+}
+
+fn test_enum_method_on_struct_variant() {
+    m := Msg.Move { x = 10, y = 20 }
+    assert(m.is_quit() == false)
+    assert(m.describe() == "move")
+}

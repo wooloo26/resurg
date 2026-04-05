@@ -118,6 +118,10 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "AddressOf";
     case TT_DEREF:
         return "Deref";
+    case TT_ENUM_DECLARATION:
+        return "EnumDecl";
+    case TT_MATCH:
+        return "Match";
     }
     return "?";
 }
@@ -364,6 +368,28 @@ void tt_dump(const TtNode *node, int32_t indent) {
         fprintf(stderr, "\n");
         tt_dump(node->deref.operand, indent + 1);
         break;
+
+    case TT_ENUM_DECLARATION:
+        fprintf(stderr, " \"%s\"\n", node->enum_decl.name);
+        break;
+
+    case TT_MATCH:
+        fprintf(stderr, "\n");
+        tt_dump(node->match_expr.operand, indent + 1);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expr.arm_bodies); i++) {
+            dump_indent(indent + 1);
+            fprintf(stderr, "arm %d:\n", i);
+            if (node->match_expr.arm_conditions[i] != NULL) {
+                tt_dump(node->match_expr.arm_conditions[i], indent + 2);
+            }
+            if (node->match_expr.arm_guards[i] != NULL) {
+                dump_indent(indent + 2);
+                fprintf(stderr, "guard:\n");
+                tt_dump(node->match_expr.arm_guards[i], indent + 3);
+            }
+            tt_dump(node->match_expr.arm_bodies[i], indent + 2);
+        }
+        break;
     }
 }
 
@@ -482,6 +508,17 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
         break;
     case TT_DEREF:
         visitor(context, &node->deref.operand);
+        break;
+    case TT_ENUM_DECLARATION:
+        break;
+    case TT_MATCH:
+        visitor(context, &node->match_expr.operand);
+        visit_buffer(visitor, context, node->match_expr.arm_conditions,
+                     BUFFER_LENGTH(node->match_expr.arm_conditions));
+        visit_buffer(visitor, context, node->match_expr.arm_guards,
+                     BUFFER_LENGTH(node->match_expr.arm_guards));
+        visit_buffer(visitor, context, node->match_expr.arm_bodies,
+                     BUFFER_LENGTH(node->match_expr.arm_bodies));
         break;
     default:
         break;

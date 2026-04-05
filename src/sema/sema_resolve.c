@@ -14,6 +14,10 @@ StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const cha
     return hash_table_lookup(&analyzer->struct_table, name);
 }
 
+EnumDefinition *sema_lookup_enum(const SemanticAnalyzer *analyzer, const char *name) {
+    return hash_table_lookup(&analyzer->enum_table, name);
+}
+
 // ── AST type resolution ────────────────────────────────────────────────
 
 const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type) {

@@ -275,6 +275,18 @@ ASTNode *parser_parse_statement(Parser *parser) {
         return ast_new(parser->arena, NODE_CONTINUE, location);
     }
 
+    if (parser_check(parser, TOKEN_RETURN)) {
+        SourceLocation location = parser_current_location(parser);
+        parser_advance(parser); // consume 'return'
+        ASTNode *node = ast_new(parser->arena, NODE_RETURN, location);
+        node->return_statement.value = NULL;
+        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_RIGHT_BRACE) &&
+            !parser_at_end(parser)) {
+            node->return_statement.value = parser_parse_expression(parser);
+        }
+        return node;
+    }
+
     // Struct destructuring: {a, b} := expr
     if (is_struct_destructure(parser)) {
         return parse_struct_destructure(parser);

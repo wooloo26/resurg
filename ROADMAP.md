@@ -39,47 +39,47 @@ Compound types and core type checking.
 
 Data modeling and value semantics.
 
-- [ ] Struct definition with default field values
-- [ ] Struct instantiation and field access
-- [ ] Methods with `*` receiver (self)
-- [ ] Struct embedding and field/method promotion
-- [ ] Method override on embedded types
-- [ ] Destructuring (`{name, age} := user`)
-- [ ] Tuple destructuring (`(a, b) := pair`)
-- [ ] Named arguments at call site
+- [x] Struct definition with default field values
+- [x] Struct instantiation and field access
+- [x] Methods with `*` receiver (self)
+- [x] Struct embedding and field/method promotion
+- [x] Method override on embedded types
+- [x] Destructuring (`{name, age} := user`)
+- [x] Tuple destructuring (`(a, b) := pair`)
+- [x] Named arguments at call site
 
 ## v0.4.0 — Memory Model
 
 Pointer semantics and garbage collection.
 
-- [ ] `&` heap allocation (returns `*T`)
-- [ ] Pointer type `*T` (no arithmetic)
-- [ ] Auto-deref on field access (`p.field` on `*T`)
-- [ ] Value-type copy semantics on assignment
-- [ ] Pointer copy semantics (aliasing)
-- [ ] Addressability rules (variables addressable, rvalues not)
-- [ ] `mut` pointer parameters (declaration + call site)
-- [ ] `immut` bindings and fields
-- [ ] `immut` return values
-- [ ] Pointer-to-pointer `**T` (reassign inner pointer from callee)
+- [x] `&` heap allocation (returns `*T`)
+- [x] Pointer type `*T` (no arithmetic)
+- [x] Auto-deref on field access (`p.field` on `*T`)
+- [x] Value-type copy semantics on assignment
+- [x] Pointer copy semantics (aliasing)
+- [x] Addressability rules (variables addressable, rvalues not)
+- [x] `mut` pointer parameters (declaration + call site)
+- [x] `immut` bindings and fields
+- [x] `immut` return values
+- [x] Pointer-to-pointer `**T` (reassign inner pointer from callee)
 
 ## v0.4.1 — Tracing Garbage Collector
 
-- [ ] Tracing GC integration
+- [x] Tracing GC integration
 
 ## v0.5.0 — Enums & Pattern Matching
 
 Algebraic data types and exhaustive matching.
 
-- [ ] Unit enum variants (`Quit`)
-- [ ] Tuple enum variants (`Write(str)`)
-- [ ] Struct enum variants (`Move { x: i32, y: i32 }`)
-- [ ] Enum with explicit discriminants (`Active = 1`)
-- [ ] `match` expression (exhaustiveness checking)
-- [ ] Literal, range, wildcard, binding patterns
-- [ ] Variant patterns (unit, tuple, fields)
-- [ ] Match guards (`pattern if cond => ...`)
-- [ ] Compile-time rejection of non-exhaustive matches
+- [x] Unit enum variants (`Quit`)
+- [x] Tuple enum variants (`Write(str)`)
+- [x] Struct enum variants (`Move { x: i32, y: i32 }`)
+- [x] Enum with explicit discriminants (`Active = 1`)
+- [x] `match` expression (exhaustiveness checking)
+- [x] Literal, range, wildcard, binding patterns
+- [x] Variant patterns (unit, tuple, fields)
+- [x] Match guards (`pattern if cond => ...`)
+- [x] Compile-time rejection of non-exhaustive matches
 
 ## v0.6.0 — Option & Result
 

@@ -126,6 +126,9 @@ const char *type_name(Arena *arena, const Type *type) {
     if (type->kind == TYPE_POINTER) {
         return arena_sprintf(arena, "*%s", type_name(arena, type->pointer.pointee));
     }
+    if (type->kind == TYPE_ENUM) {
+        return type->enum_type.name;
+    }
     return "<unknown>";
 }
 
@@ -163,6 +166,9 @@ bool type_equal(const Type *a, const Type *b) {
     }
     if (a->kind == TYPE_POINTER) {
         return type_equal(a->pointer.pointee, b->pointer.pointee);
+    }
+    if (a->kind == TYPE_ENUM) {
+        return strcmp(a->enum_type.name, b->enum_type.name) == 0;
     }
     return true;
 }
@@ -288,4 +294,38 @@ const Type *type_pointer_pointee(const Type *type) {
 bool type_pointer_is_mut(const Type *type) {
     assert(type != NULL && type->kind == TYPE_POINTER);
     return type->pointer.is_mut;
+}
+
+Type *type_create_enum(Arena *arena, const char *name, EnumVariant *variants,
+                       int32_t variant_count) {
+    Type *type = type_create(arena, TYPE_ENUM);
+    type->enum_type.name = name;
+    type->enum_type.variants = variants;
+    type->enum_type.variant_count = variant_count;
+    return type;
+}
+
+const char *type_enum_name(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_ENUM);
+    return type->enum_type.name;
+}
+
+const EnumVariant *type_enum_variants(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_ENUM);
+    return type->enum_type.variants;
+}
+
+int32_t type_enum_variant_count(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_ENUM);
+    return type->enum_type.variant_count;
+}
+
+const EnumVariant *type_enum_find_variant(const Type *type, const char *name) {
+    assert(type != NULL && type->kind == TYPE_ENUM);
+    for (int32_t i = 0; i < type->enum_type.variant_count; i++) {
+        if (strcmp(type->enum_type.variants[i].name, name) == 0) {
+            return &type->enum_type.variants[i];
+        }
+    }
+    return NULL;
 }

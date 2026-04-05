@@ -527,6 +527,65 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
     case NODE_DEREF:
         result = check_deref(analyzer, node);
         break;
+
+    case NODE_ENUM_DECLARATION: {
+        // Type already registered in first pass; check method bodies
+        result = node->type; // preserve type set by register_enum_definition
+        EnumDefinition *edef = sema_lookup_enum(analyzer, node->enum_declaration.name);
+        if (edef != NULL) {
+            const Type *ptr_type = type_create_pointer(analyzer->arena, edef->type, false);
+            for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
+                ASTNode *method = node->enum_declaration.methods[i];
+                scope_push(analyzer, false);
+                if (method->function_declaration.receiver_name != NULL) {
+                    scope_define(analyzer, method->function_declaration.receiver_name, ptr_type,
+                                 false, SYM_PARAM);
+                }
+                for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters);
+                     j++) {
+                    ASTNode *param = method->function_declaration.parameters[j];
+                    const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+                    if (pt == NULL) {
+                        pt = &TYPE_ERROR_INSTANCE;
+                    }
+                    param->type = pt;
+                    scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
+                }
+                if (method->function_declaration.body != NULL) {
+                    const Type *body_type = check_node(analyzer, method->function_declaration.body);
+                    const Type *return_type =
+                        resolve_ast_type(analyzer, &method->function_declaration.return_type);
+                    if (return_type == NULL) {
+                        return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
+                    }
+                    method->type = return_type;
+                    const char *method_key =
+                        arena_sprintf(analyzer->arena, "%s.%s", node->enum_declaration.name,
+                                      method->function_declaration.name);
+                    FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+                    if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
+                        sig->return_type = return_type;
+                    }
+                }
+                scope_pop(analyzer);
+            }
+        }
+        break;
+    }
+
+    case NODE_RETURN:
+        if (node->return_statement.value != NULL) {
+            result = check_node(analyzer, node->return_statement.value);
+        }
+        break;
+
+    case NODE_MATCH:
+        result = check_match(analyzer, node);
+        break;
+
+    case NODE_ENUM_INIT:
+        result = check_enum_init(analyzer, node);
+        break;
     }
 
     node->type = result;

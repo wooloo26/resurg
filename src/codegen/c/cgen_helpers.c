@@ -161,6 +161,8 @@ static const char *type_tag(CodeGenerator *gen, const Type *type) {
         return "err";
     case TYPE_STRUCT:
         return arena_sprintf(gen->arena, "_%s", type->struct_type.name);
+    case TYPE_ENUM:
+        return arena_sprintf(gen->arena, "Enum_%s", type->enum_type.name);
     default:
         return type_name(gen->arena, type);
     }
@@ -175,6 +177,9 @@ const char *codegen_c_type_for(CodeGenerator *gen, const Type *type) {
     }
     if (type->kind == TYPE_STRUCT) {
         return arena_sprintf(gen->arena, "_Rsg_%s", type->struct_type.name);
+    }
+    if (type->kind == TYPE_ENUM) {
+        return arena_sprintf(gen->arena, "_RsgEnum_%s", type->enum_type.name);
     }
     if (type->kind == TYPE_POINTER) {
         return arena_sprintf(gen->arena, "%s *", codegen_c_type_for(gen, type->pointer.pointee));

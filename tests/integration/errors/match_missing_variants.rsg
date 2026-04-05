@@ -1,0 +1,16 @@
+// TEST: compile_error
+// EXPECT-ERROR: non-exhaustive
+module test_err
+
+enum Msg {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(str),
+}
+
+fn main() {
+    m := Msg.Quit
+    match m {
+        Quit => "quit",
+    }
+}
