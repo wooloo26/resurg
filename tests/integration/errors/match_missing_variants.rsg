@@ -9,7 +9,7 @@ enum Msg {
 }
 
 fn main() {
-    m := Msg.Quit
+    m := Msg::Quit
     match m {
         Quit => "quit",
     }

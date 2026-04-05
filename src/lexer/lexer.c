@@ -219,6 +219,9 @@ static Token scan_arithmetic(Lexer *lexer, char c, SourceLocation location) {
 static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
     switch (c) {
     case ':':
+        if (match(lexer, ':')) {
+            return make_token(lexer, TOKEN_COLON_COLON, "::", 2, location);
+        }
         return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
                                  : make_token(lexer, TOKEN_COLON, ":", 1, location);
     case '.':

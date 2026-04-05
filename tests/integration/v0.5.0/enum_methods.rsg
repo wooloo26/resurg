@@ -23,19 +23,19 @@ enum Msg {
 }
 
 fn test_enum_method_call() {
-    q := Msg.Quit
+    q := Msg::Quit
     assert(q.is_quit())
     assert(q.describe() == "quit")
 }
 
 fn test_enum_method_on_tuple() {
-    w := Msg.Write("hello")
+    w := Msg::Write("hello")
     assert(w.is_quit() == false)
     assert(w.describe() == "hello")
 }
 
 fn test_enum_method_on_struct_variant() {
-    m := Msg.Move { x = 10, y = 20 }
+    m := Msg::Move { x = 10, y = 20 }
     assert(m.is_quit() == false)
     assert(m.describe() == "move")
 }

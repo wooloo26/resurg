@@ -116,11 +116,11 @@ fn classify_shape(s: Shape) -> str {
 }
 
 fn test_match_guard_variant() {
-    assert(classify_shape(Shape.Circle(20.0)) == "big circle")
-    assert(classify_shape(Shape.Circle(5.0)) == "small circle")
-    assert(classify_shape(Shape.Rect { w = 4.0, h = 4.0 }) == "square")
-    assert(classify_shape(Shape.Rect { w = 3.0, h = 5.0 }) == "rectangle")
-    assert(classify_shape(Shape.Point) == "point")
+    assert(classify_shape(Shape::Circle(20.0)) == "big circle")
+    assert(classify_shape(Shape::Circle(5.0)) == "small circle")
+    assert(classify_shape(Shape::Rect { w = 4.0, h = 4.0 }) == "square")
+    assert(classify_shape(Shape::Rect { w = 3.0, h = 5.0 }) == "rectangle")
+    assert(classify_shape(Shape::Point) == "point")
 }
 
 // ── match on tuple variant with binding ──
@@ -133,8 +133,8 @@ fn circle_area_approx(s: Shape) -> i32 {
 }
 
 fn test_tuple_variant_binding() {
-    assert(circle_area_approx(Shape.Circle(10.0)) == 300)
-    assert(circle_area_approx(Shape.Point) == 0)
+    assert(circle_area_approx(Shape::Circle(10.0)) == 300)
+    assert(circle_area_approx(Shape::Point) == 0)
 }
 
 // ── match struct variant destructuring ──
@@ -147,8 +147,8 @@ fn rect_area(s: Shape) -> f64 {
 }
 
 fn test_struct_variant_destructuring() {
-    assert(rect_area(Shape.Rect { w = 3.0, h = 4.0 }) == 12.0)
-    assert(rect_area(Shape.Circle(5.0)) == 0.0)
+    assert(rect_area(Shape::Rect { w = 3.0, h = 4.0 }) == 12.0)
+    assert(rect_area(Shape::Circle(5.0)) == 0.0)
 }
 
 // ── multiple literal arms ──

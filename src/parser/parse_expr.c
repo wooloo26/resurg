@@ -344,7 +344,7 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
 
-        // Enum struct variant literal: Enum.Variant { field = expr, ... }
+        // Enum struct variant literal: Enum::Variant { field = expr, ... }
         if (left->kind == NODE_MEMBER && left->member.object->kind == NODE_IDENTIFIER &&
             is_struct_literal_ahead(parser)) {
             SourceLocation enum_loc = left->location;
@@ -401,6 +401,14 @@ static ASTNode *parse_postfix(Parser *parser) {
                 node->member.member = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
                 left = node;
             }
+            continue;
+        }
+        // Namespace access: Enum::Variant, Enum::method(args)
+        if (parser_match(parser, TOKEN_COLON_COLON)) {
+            ASTNode *node = ast_new(parser->arena, NODE_MEMBER, location);
+            node->member.object = left;
+            node->member.member = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            left = node;
             continue;
         }
         break;

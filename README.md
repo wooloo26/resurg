@@ -369,7 +369,9 @@ enum Msg {
     Write(str),
     fn get_str(mut *p) { ... }
 }
+any := Msg::Write("any")
 
+enum Color { Red, Green, Blue }
 enum Status { Active = 1, Inactive = 0, Pending = 2 }
 ```
 
@@ -494,9 +496,14 @@ Each `.rsg` file = module. Private by default.
 ```rsg
 module math
 
+use std
+std::io::read(..)
 use std/io
+io::read(..)
 use std/io { read, write }
+read(..)
 use std/io { read as rd }
+rd(..)
 
 pub fn add(a: i32, b: i32) = a + b
 ```
@@ -574,6 +581,7 @@ Conventions: `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` cons
 | Op            | Meaning                     |
 | ------------- | --------------------------- |
 | `:=`          | Variable declaration        |
+| `::`          | Namespace calling           |
 | `!` (postfix) | Error propagation           |
 | `&`           | Address-of / create pointer |
 | `*T` / `?T`   | Pointer / option type       |

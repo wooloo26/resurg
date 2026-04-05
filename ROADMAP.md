@@ -80,6 +80,7 @@ Algebraic data types and exhaustive matching.
 - [x] Variant patterns (unit, tuple, fields)
 - [x] Match guards (`pattern if cond => ...`)
 - [x] Compile-time rejection of non-exhaustive matches
+- [x] `::` namespace operator for enum variant access (`Enum::Variant`)
 
 ## v0.6.0 — Option & Result
 

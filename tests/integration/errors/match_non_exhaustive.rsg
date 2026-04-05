@@ -9,7 +9,7 @@ enum Color {
 }
 
 fn main() {
-    c := Color.Red
+    c := Color::Red
     match c {
         Red => "red",
         Green => "green",

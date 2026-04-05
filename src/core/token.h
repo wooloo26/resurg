@@ -97,6 +97,7 @@ typedef enum {
     TOKEN_RIGHT_BRACE,   // }
     TOKEN_LEFT_BRACKET,  // [
     TOKEN_RIGHT_BRACKET, // ]
+    TOKEN_COLON_COLON,   // ::
     TOKEN_COLON,         // :
     TOKEN_COMMA,         // ,
     TOKEN_DOT_DOT_EQUAL, // ..=

@@ -85,6 +85,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_RIGHT_BRACE] = {"}", 0},
     [TOKEN_LEFT_BRACKET] = {"[", 0},
     [TOKEN_RIGHT_BRACKET] = {"]", 0},
+    [TOKEN_COLON_COLON] = {"::", 0},
     [TOKEN_COLON] = {":", 0},
     [TOKEN_COMMA] = {",", 0},
     [TOKEN_DOT_DOT_EQUAL] = {"..=", 0},
