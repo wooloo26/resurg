@@ -132,6 +132,10 @@ static void emit_entry_point(CodeGenerator *generator, const TtNode *file,
     codegen_emit(generator, "int main(void) {\n");
     generator->indent++;
 
+    // Initialise the tracing GC with the stack bottom anchor.
+    codegen_emit_line(generator, "int _rsg_gc_anchor;");
+    codegen_emit_line(generator, "rsg_gc_init(&_rsg_gc_anchor);");
+
     if (has_top_statements) {
         codegen_emit_line(generator, "_rsg_top_level();");
     }

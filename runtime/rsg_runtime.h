@@ -20,9 +20,9 @@
  * Immutable, reference-counted string.  reference_count == -1 marks a
  * static string literal (no heap allocation).
  *
- * @note Heap-allocated strings are currently never freed.  This is an
- *       intentional simplification until the tracing GC lands (v0.4.0).
- *       Short-lived test programs are unaffected.
+ * @note String data uses its own allocator (not the GC heap).  The
+ *       tracing GC manages struct/value allocations made via
+ *       rsg_heap_alloc(); string data is refcounted separately.
  */
 typedef struct {
     const char *data;
@@ -94,7 +94,31 @@ void rsg_print_u32(uint32_t value);
 void rsg_print_f64(double value);
 void rsg_print_bool(bool value);
 
-/** Allocate @p size bytes on the heap; abort on OOM. */
+/** Allocate @p size bytes on the GC-managed heap; abort on OOM. */
 void *rsg_heap_alloc(size_t size);
+
+/**
+ * Initialise the tracing garbage collector.  Must be called once at the
+ * start of main() with the address of a local variable to mark the stack
+ * bottom.
+ */
+void rsg_gc_init(void *stack_bottom);
+
+/** Run a full mark-and-sweep collection cycle. */
+void rsg_gc_collect(void);
+
+/**
+ * Register @p root as an additional GC root.  @p root must point to a
+ * `void *` slot that holds a GC-managed pointer (or NULL).  The GC will
+ * scan this slot during every collection.  Typical use: global or static
+ * variables that hold heap pointers.
+ */
+void rsg_gc_add_root(void **root);
+
+/**
+ * Remove a previously registered root.  After this call, the GC no longer
+ * considers @p root a source of liveness.
+ */
+void rsg_gc_remove_root(void **root);
 
 #endif // RG_RUNTIME_H
