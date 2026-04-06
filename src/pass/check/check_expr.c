@@ -135,8 +135,8 @@ const Type *check_binary(Sema *sema, ASTNode *node) {
     // Check for type mismatch after promotion
     if (!type_equal(left, right)) {
         if (left->kind != TYPE_ERR && right->kind != TYPE_ERR) {
-            SEMA_ERR(sema, node->loc, "type mismatch: '%s' and '%s'",
-                     type_name(sema->arena, left), type_name(sema->arena, right));
+            SEMA_ERR(sema, node->loc, "type mismatch: '%s' and '%s'", type_name(sema->arena, left),
+                     type_name(sema->arena, right));
         }
     }
 
@@ -171,16 +171,15 @@ static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type
     }
     int32_t arg_count = BUF_LEN(node->call.args);
     if (arg_count != variant->tuple_count) {
-        SEMA_ERR(sema, node->loc, "expected %d args for variant '%s', got %d",
-                 variant->tuple_count, variant_name, arg_count);
+        SEMA_ERR(sema, node->loc, "expected %d args for variant '%s', got %d", variant->tuple_count,
+                 variant_name, arg_count);
     } else {
         for (int32_t i = 0; i < arg_count; i++) {
             promote_lit(node->call.args[i], variant->tuple_types[i]);
             const Type *arg_type = node->call.args[i]->type;
             if (arg_type != NULL && !type_equal(arg_type, variant->tuple_types[i]) &&
                 arg_type->kind != TYPE_ERR) {
-                SEMA_ERR(sema, node->call.args[i]->loc,
-                         "type mismatch: expected '%s', got '%s'",
+                SEMA_ERR(sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
                          type_name(sema->arena, variant->tuple_types[i]),
                          type_name(sema->arena, arg_type));
             }
@@ -470,9 +469,18 @@ static void check_field_match(Sema *sema, ASTNode *value_node, const Type *expec
     if (actual_type != NULL && expected_type != NULL && !type_equal(actual_type, expected_type) &&
         actual_type->kind != TYPE_ERR && expected_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, value_node->loc, "type mismatch: expected '%s', got '%s'",
-                 type_name(sema->arena, expected_type),
-                 type_name(sema->arena, actual_type));
+                 type_name(sema->arena, expected_type), type_name(sema->arena, actual_type));
     }
+}
+
+/** Check if struct lit already provides a field by name. */
+static bool struct_lit_has_field(const ASTNode *node, const char *name) {
+    for (int32_t i = 0; i < BUF_LEN(node->struct_lit.field_names); i++) {
+        if (strcmp(node->struct_lit.field_names[i], name) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 const Type *check_struct_lit(Sema *sema, ASTNode *node) {
@@ -507,16 +515,9 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     // Check that all required fields (no default) are provided
     for (int32_t i = 0; i < BUF_LEN(sdef->fields); i++) {
         if (sdef->fields[i].default_value == NULL) {
-            bool provided = false;
-            for (int32_t j = 0; j < provided_count; j++) {
-                if (strcmp(node->struct_lit.field_names[j], sdef->fields[i].name) == 0) {
-                    provided = true;
-                    break;
-                }
-            }
-            if (!provided) {
-                SEMA_ERR(sema, node->loc, "missing field '%s' in struct '%s'",
-                         sdef->fields[i].name, struct_name);
+            if (!struct_lit_has_field(node, sdef->fields[i].name)) {
+                SEMA_ERR(sema, node->loc, "missing field '%s' in struct '%s'", sdef->fields[i].name,
+                         struct_name);
             }
         }
     }
@@ -524,14 +525,7 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     // Fill in default values for unprovided fields
     for (int32_t i = 0; i < BUF_LEN(sdef->fields); i++) {
         if (sdef->fields[i].default_value != NULL) {
-            bool provided = false;
-            for (int32_t j = 0; j < BUF_LEN(node->struct_lit.field_names); j++) {
-                if (strcmp(node->struct_lit.field_names[j], sdef->fields[i].name) == 0) {
-                    provided = true;
-                    break;
-                }
-            }
-            if (!provided) {
+            if (!struct_lit_has_field(node, sdef->fields[i].name)) {
                 BUF_PUSH(node->struct_lit.field_names, sdef->fields[i].name);
                 BUF_PUSH(node->struct_lit.field_values, sdef->fields[i].default_value);
             }
@@ -746,8 +740,8 @@ const Type *check_enum_init(Sema *sema, ASTNode *node) {
 
     const EnumVariant *variant = type_enum_find_variant(edef->type, node->enum_init.variant_name);
     if (variant == NULL) {
-        SEMA_ERR(sema, node->loc, "unknown variant '%s' on enum '%s'",
-                 node->enum_init.variant_name, node->enum_init.enum_name);
+        SEMA_ERR(sema, node->loc, "unknown variant '%s' on enum '%s'", node->enum_init.variant_name,
+                 node->enum_init.enum_name);
         return &TYPE_ERR_INST;
     }
 
@@ -788,8 +782,8 @@ const Type *check_enum_init(Sema *sema, ASTNode *node) {
             }
         }
         if (!provided) {
-            SEMA_ERR(sema, node->loc, "missing field '%s' in variant '%s'",
-                     variant->fields[i].name, node->enum_init.variant_name);
+            SEMA_ERR(sema, node->loc, "missing field '%s' in variant '%s'", variant->fields[i].name,
+                     node->enum_init.variant_name);
         }
     }
 

@@ -34,10 +34,10 @@ Token scan_char_lit(Lex *lex, SrcLoc loc) {
     }
     if (peek(lex) != '\'') {
         rsg_err(loc, "unterminated character lit");
-        return make_token(lex, TOKEN_ERR, "'", 1, loc);
+        return build_token(lex, TOKEN_ERR, "'", 1, loc);
     }
     advance(lex); // consume closing '\''
-    Token token = make_token(lex, TOKEN_CHAR_LIT, "'", 1, loc);
+    Token token = build_token(lex, TOKEN_CHAR_LIT, "'", 1, loc);
     token.lit_value.char_value = value;
     return token;
 }
@@ -82,7 +82,7 @@ static Token scan_simple_str(Lex *lex, int32_t content_start, SrcLoc loc) {
 
     if (peek(lex) == '\0') {
         rsg_err(loc, "unterminated str lit");
-        return make_token(lex, TOKEN_ERR, lex->src + content_start - 1,
+        return build_token(lex, TOKEN_ERR, lex->src + content_start - 1,
                           lex->pos - content_start + 1, loc);
     }
 
@@ -100,7 +100,7 @@ static Token scan_simple_str(Lex *lex, int32_t content_start, SrcLoc loc) {
 static void scan_interpolation_block(Lex *lex) {
     advance(lex); // consume '{'
 
-    Token interp_start = make_token(lex, TOKEN_INTERPOLATION_START, "{", 1, current_loc(lex));
+    Token interp_start = build_token(lex, TOKEN_INTERPOLATION_START, "{", 1, current_loc(lex));
     BUF_PUSH(lex->pending, interp_start);
 
     int32_t brace_depth = 1;
@@ -130,7 +130,7 @@ static void scan_interpolation_block(Lex *lex) {
         BUF_PUSH(lex->pending, token);
     }
 
-    Token interp_end = make_token(lex, TOKEN_INTERPOLATION_END, "}", 1, current_loc(lex));
+    Token interp_end = build_token(lex, TOKEN_INTERPOLATION_END, "}", 1, current_loc(lex));
     BUF_PUSH(lex->pending, interp_end);
 }
 

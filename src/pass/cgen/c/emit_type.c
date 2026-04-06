@@ -3,8 +3,8 @@
 // ── Per-type typedef emitters ─────────────────────────────────────────
 
 static void emit_array_typedef(CGen *cgen, const Type *type, const char *name) {
-    emit_line(cgen, "typedef struct { %s _data[%d]; } %s;",
-                   c_type_for(cgen, type->array.elem), type->array.size, name);
+    emit_line(cgen, "typedef struct { %s _data[%d]; } %s;", c_type_for(cgen, type->array.elem),
+              type->array.size, name);
 }
 
 static void emit_tuple_typedef(CGen *cgen, const Type *type, const char *name) {
@@ -51,21 +51,23 @@ static void emit_enum_typedef(CGen *cgen, const Type *type, const char *name) {
     fprintf(cgen->output, " } _data; } %s;\n", name);
 }
 
+/** Check if @p type already appears in @p types before index @p limit. */
+static bool type_already_emitted(const Type **types, int32_t limit, const Type *type) {
+    for (int32_t i = 0; i < limit; i++) {
+        if (types[i] == type) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ── Compound type emission ────────────────────────────────────────────
 
 void emit_compound_typedefs(CGen *cgen) {
     for (int32_t i = 0; i < BUF_LEN(cgen->compound_types); i++) {
         const Type *type = cgen->compound_types[i];
 
-        // Skip duplicate types already emitted
-        bool duplicate = false;
-        for (int32_t d = 0; d < i; d++) {
-            if (cgen->compound_types[d] == type) {
-                duplicate = true;
-                break;
-            }
-        }
-        if (duplicate) {
+        if (type_already_emitted(cgen->compound_types, i, type)) {
             continue;
         }
 

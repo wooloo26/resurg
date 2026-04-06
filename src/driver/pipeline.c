@@ -117,9 +117,9 @@ static bool stage_check(Arena *arena, ASTNode *file_node) {
 
 /** Lower the AST to typed tree, run TT passes, and optionally dump.  Returns NULL on early exit. */
 static HirNode *stage_lower(const PipelineOptions *options, Arena *hir_arena, ASTNode *file_node,
-                            Lower **out_lowering) {
-    *out_lowering = lowering_create(hir_arena);
-    HirNode *hir_root = lowering_lower(*out_lowering, file_node);
+                            Lower **out_lower) {
+    *out_lower = lower_create(hir_arena);
+    HirNode *hir_root = lower_lower(*out_lower, file_node);
 
     if (options->dump_tt) {
         hir_dump(hir_root, 0);
@@ -196,7 +196,7 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
     stage_emit(options, pipeline->arena, hir_root);
 
 cleanup:
-    lowering_destroy(lower);
+    lower_destroy(lower);
     BUF_FREE(tokens);
     free(src);
     src = NULL;

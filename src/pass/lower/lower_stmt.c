@@ -22,14 +22,14 @@ static HirNode *lower_var_decl(Lower *low, const ASTNode *ast) {
     bool is_mut = ast->var_decl.is_var;
 
     HirSymSpec var_spec = {HIR_SYM_VAR, name, type, is_mut, ast->loc};
-    HirSym *sym = lowering_add_var(low, &var_spec);
+    HirSym *sym = lower_add_var(low, &var_spec);
 
     HirNode *init = NULL;
     if (ast->var_decl.init != NULL) {
         init = lower_expr(low, ast->var_decl.init);
     }
 
-    return lowering_make_var_decl(low, sym, init);
+    return lower_make_var_decl(low, sym, init);
 }
 
 static HirNode *lower_assign(Lower *low, const ASTNode *ast) {
@@ -47,7 +47,7 @@ static HirNode *lower_compound_assign(Lower *low, const ASTNode *ast) {
     HirNode *value = lower_expr(low, ast->compound_assign.value);
 
     // Build binary: target op value
-    TokenKind base_op = lowering_compound_to_base_op(ast->compound_assign.op);
+    TokenKind base_op = lower_compound_to_base_op(ast->compound_assign.op);
     HirNode *target_read = lower_expr(low, ast->compound_assign.target);
     HirNode *binary = hir_new(low->hir_arena, HIR_BINARY, target->type, ast->loc);
     binary->binary.op = base_op;
@@ -66,10 +66,10 @@ static void lower_struct_destructure_into(Lower *low, const ASTNode *ast, HirNod
     HirNode *value = lower_expr(low, ast->struct_destructure.value);
     const Type *struct_type = value->type;
 
-    const char *tmp_name = lowering_make_temp_name(low);
+    const char *tmp_name = lower_make_temp_name(low);
     HirSymSpec tmp_spec = {HIR_SYM_VAR, tmp_name, struct_type, false, ast->loc};
-    HirSym *tmp_sym = lowering_add_var(low, &tmp_spec);
-    BUF_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, value));
+    HirSym *tmp_sym = lower_add_var(low, &tmp_spec);
+    BUF_PUSH(*stmts, lower_make_var_decl(low, tmp_sym, value));
 
     for (int32_t i = 0; i < BUF_LEN(ast->struct_destructure.field_names); i++) {
         const char *fname = ast->struct_destructure.field_names[i];
@@ -86,15 +86,14 @@ static void lower_struct_destructure_into(Lower *low, const ASTNode *ast, HirNod
         if (sf != NULL) {
             field_type = sf->type;
             field_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, field_type, ast->loc);
-            field_access->struct_field_access.object =
-                lowering_make_var_ref(low, tmp_sym, ast->loc);
+            field_access->struct_field_access.object = lower_make_var_ref(low, tmp_sym, ast->loc);
             field_access->struct_field_access.field = fname;
             field_access->struct_field_access.via_ptr = false;
         } else {
             // Check promoted fields from embedded structs
-            HirNode *tmp_ref = lowering_make_var_ref(low, tmp_sym, ast->loc);
+            HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, ast->loc);
             FieldLookup lookup = {tmp_ref, struct_type, fname, false, ast->loc};
-            field_access = lowering_resolve_promoted_field(low, &lookup);
+            field_access = lower_resolve_promoted_field(low, &lookup);
             if (field_access != NULL) {
                 field_type = field_access->type;
             }
@@ -105,8 +104,8 @@ static void lower_struct_destructure_into(Lower *low, const ASTNode *ast, HirNod
         }
 
         HirSymSpec vspec = {HIR_SYM_VAR, var_name, field_type, false, ast->loc};
-        HirSym *var_sym = lowering_add_var(low, &vspec);
-        BUF_PUSH(*stmts, lowering_make_var_decl(low, var_sym, field_access));
+        HirSym *var_sym = lower_add_var(low, &vspec);
+        BUF_PUSH(*stmts, lower_make_var_decl(low, var_sym, field_access));
     }
 }
 
@@ -115,10 +114,10 @@ static void lower_tuple_destructure_into(Lower *low, const ASTNode *ast, HirNode
     HirNode *value = lower_expr(low, ast->tuple_destructure.value);
     const Type *tuple_type = value->type;
 
-    const char *tmp_name = lowering_make_temp_name(low);
+    const char *tmp_name = lower_make_temp_name(low);
     HirSymSpec tmp_spec2 = {HIR_SYM_VAR, tmp_name, tuple_type, false, ast->loc};
-    HirSym *tmp_sym = lowering_add_var(low, &tmp_spec2);
-    BUF_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, value));
+    HirSym *tmp_sym = lower_add_var(low, &tmp_spec2);
+    BUF_PUSH(*stmts, lower_make_var_decl(low, tmp_sym, value));
 
     int32_t name_count = BUF_LEN(ast->tuple_destructure.names);
     bool has_rest = ast->tuple_destructure.has_rest;
@@ -147,12 +146,12 @@ static void lower_tuple_destructure_into(Lower *low, const ASTNode *ast, HirNode
         }
 
         HirNode *idx_access = hir_new(low->hir_arena, HIR_TUPLE_IDX, elem_type, ast->loc);
-        idx_access->tuple_idx.object = lowering_make_var_ref(low, tmp_sym, ast->loc);
+        idx_access->tuple_idx.object = lower_make_var_ref(low, tmp_sym, ast->loc);
         idx_access->tuple_idx.elem_idx = elem_idx;
 
         HirSymSpec vspec2 = {HIR_SYM_VAR, vname, elem_type, false, ast->loc};
-        HirSym *var_sym = lowering_add_var(low, &vspec2);
-        BUF_PUSH(*stmts, lowering_make_var_decl(low, var_sym, idx_access));
+        HirSym *var_sym = lower_add_var(low, &vspec2);
+        BUF_PUSH(*stmts, lower_make_var_decl(low, var_sym, idx_access));
     }
 }
 
@@ -161,7 +160,7 @@ HirNode *lower_block(Lower *low, const ASTNode *ast) {
         return NULL;
     }
     assert(ast->kind == NODE_BLOCK);
-    lowering_scope_enter(low);
+    lower_scope_enter(low);
 
     HirNode **stmts = NULL;
     for (int32_t i = 0; i < BUF_LEN(ast->block.stmts); i++) {
@@ -192,10 +191,10 @@ HirNode *lower_block(Lower *low, const ASTNode *ast) {
         }
     }
 
-    lowering_scope_leave(low);
+    lower_scope_leave(low);
 
-    HirNode *node =
-        hir_new(low->hir_arena, HIR_BLOCK, ast->type != NULL ? ast->type : &TYPE_UNIT_INST, ast->loc);
+    HirNode *node = hir_new(low->hir_arena, HIR_BLOCK,
+                            ast->type != NULL ? ast->type : &TYPE_UNIT_INST, ast->loc);
     node->block.stmts = stmts;
     node->block.result = result;
     return node;
@@ -213,7 +212,7 @@ static void rewrite_break_values(Lower *low, HirNode **node_ptr, HirSym *result_
 
     if (node->kind == HIR_BREAK && node->break_stmt.value != NULL) {
         HirNode *assign = hir_new(low->hir_arena, HIR_ASSIGN, &TYPE_UNIT_INST, node->loc);
-        assign->assign.target = lowering_make_var_ref(low, result_sym, node->loc);
+        assign->assign.target = lower_make_var_ref(low, result_sym, node->loc);
         assign->assign.value = node->break_stmt.value;
 
         node->break_stmt.value = NULL;
@@ -315,17 +314,17 @@ static HirNode *lower_loop(Lower *low, const ASTNode *ast) {
 
     // Loop expr: desugar break-with-value.
     // { var _result; loop { ... break val → { _result = val; break } ... }; _result }
-    const char *result_name = lowering_make_temp_name(low);
+    const char *result_name = lower_make_temp_name(low);
     HirSymSpec result_spec = {HIR_SYM_VAR, result_name, loop_type, true, ast->loc};
-    HirSym *result_sym = lowering_add_var(low, &result_spec);
-    HirNode *result_decl = lowering_make_var_decl(low, result_sym, NULL);
+    HirSym *result_sym = lower_add_var(low, &result_spec);
+    HirNode *result_decl = lower_make_var_decl(low, result_sym, NULL);
 
     rewrite_break_values(low, &body, result_sym);
 
     HirNode *loop_node = hir_new(low->hir_arena, HIR_LOOP, loop_type, ast->loc);
     loop_node->loop.body = body;
 
-    HirNode *result_ref = lowering_make_var_ref(low, result_sym, ast->loc);
+    HirNode *result_ref = lower_make_var_ref(low, result_sym, ast->loc);
 
     HirNode **outer_stmts = NULL;
     BUF_PUSH(outer_stmts, result_decl);
@@ -341,8 +340,8 @@ static HirNode *lower_loop(Lower *low, const ASTNode *ast) {
 static HirNode *build_for_guard(Lower *low, HirSym *iter_sym, HirSym *end_sym, SrcLoc loc) {
     HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
     cond->binary.op = TOKEN_GREATER_EQUAL;
-    cond->binary.left = lowering_make_var_ref(low, iter_sym, loc);
-    cond->binary.right = lowering_make_var_ref(low, end_sym, loc);
+    cond->binary.left = lower_make_var_ref(low, iter_sym, loc);
+    cond->binary.right = lower_make_var_ref(low, end_sym, loc);
 
     HirNode *break_node = hir_new(low->hir_arena, HIR_BREAK, &TYPE_UNIT_INST, loc);
     HirNode **break_stmts = NULL;
@@ -364,12 +363,11 @@ static HirNode *build_for_increment(Lower *low, HirSym *iter_sym) {
     SrcLoc loc = iter_sym->loc;
     HirNode *increment = hir_new(low->hir_arena, HIR_BINARY, iter_type, loc);
     increment->binary.op = TOKEN_PLUS;
-    increment->binary.left = lowering_make_var_ref(low, iter_sym, loc);
-    increment->binary.right =
-        lowering_make_int_lit(low, &(IntLitSpec){1, iter_type, TYPE_I32, loc});
+    increment->binary.left = lower_make_var_ref(low, iter_sym, loc);
+    increment->binary.right = lower_make_int_lit(low, &(IntLitSpec){1, iter_type, TYPE_I32, loc});
 
     HirNode *assign = hir_new(low->hir_arena, HIR_ASSIGN, &TYPE_UNIT_INST, loc);
-    assign->assign.target = lowering_make_var_ref(low, iter_sym, loc);
+    assign->assign.target = lower_make_var_ref(low, iter_sym, loc);
     assign->assign.value = increment;
     return assign;
 }
@@ -464,7 +462,7 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
 
     // Slice iteration
     if (ast->for_loop.iterable != NULL) {
-        lowering_scope_enter(low);
+        lower_scope_enter(low);
 
         // var _s = iterable
         HirNode *iterable_expr = lower_expr(low, ast->for_loop.iterable);
@@ -473,29 +471,29 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
                                     ? slice_type->slice.elem
                                     : &TYPE_ERR_INST;
 
-        const char *slice_name = lowering_make_temp_name(low);
+        const char *slice_name = lower_make_temp_name(low);
         HirSymSpec slice_spec = {HIR_SYM_VAR, slice_name, slice_type, false, loc};
-        HirSym *slice_sym = lowering_add_var(low, &slice_spec);
-        HirNode *slice_decl = lowering_make_var_decl(low, slice_sym, iterable_expr);
+        HirSym *slice_sym = lower_add_var(low, &slice_spec);
+        HirNode *slice_decl = lower_make_var_decl(low, slice_sym, iterable_expr);
 
         // var _end = _s.len
         HirNode *len_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, iter_type, loc);
-        len_access->struct_field_access.object = lowering_make_var_ref(low, slice_sym, loc);
+        len_access->struct_field_access.object = lower_make_var_ref(low, slice_sym, loc);
         len_access->struct_field_access.field = "len";
         len_access->struct_field_access.via_ptr = false;
 
-        const char *end_name = lowering_make_temp_name(low);
+        const char *end_name = lower_make_temp_name(low);
         HirSymSpec end_spec = {HIR_SYM_VAR, end_name, iter_type, false, loc};
-        HirSym *end_sym = lowering_add_var(low, &end_spec);
-        HirNode *end_decl = lowering_make_var_decl(low, end_sym, len_access);
+        HirSym *end_sym = lower_add_var(low, &end_spec);
+        HirNode *end_decl = lower_make_var_decl(low, end_sym, len_access);
 
         // var _i = 0
-        const char *counter_name = lowering_make_temp_name(low);
+        const char *counter_name = lower_make_temp_name(low);
         HirSymSpec counter_spec = {HIR_SYM_VAR, counter_name, iter_type, true, loc};
-        HirSym *counter_sym = lowering_add_var(low, &counter_spec);
+        HirSym *counter_sym = lower_add_var(low, &counter_spec);
         IntLitSpec zero_spec = {0, iter_type, TYPE_I32, loc};
         HirNode *counter_decl =
-            lowering_make_var_decl(low, counter_sym, lowering_make_int_lit(low, &zero_spec));
+            lower_make_var_decl(low, counter_sym, lower_make_int_lit(low, &zero_spec));
 
         // Build loop body
         HirNode **loop_stmts = NULL;
@@ -505,21 +503,21 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
 
         // var v = _s[_i]
         const char *val_name = ast->for_loop.var_name;
-        HirNode *idx_ref = lowering_make_var_ref(low, counter_sym, loc);
+        HirNode *idx_ref = lower_make_var_ref(low, counter_sym, loc);
         HirNode *elem_access = hir_new(low->hir_arena, HIR_IDX, elem_type, loc);
-        elem_access->idx_access.object = lowering_make_var_ref(low, slice_sym, loc);
+        elem_access->idx_access.object = lower_make_var_ref(low, slice_sym, loc);
         elem_access->idx_access.idx = idx_ref;
 
         HirSymSpec val_spec = {HIR_SYM_VAR, val_name, elem_type, false, loc};
-        HirSym *val_sym = lowering_add_var(low, &val_spec);
-        BUF_PUSH(loop_stmts, lowering_make_var_decl(low, val_sym, elem_access));
+        HirSym *val_sym = lower_add_var(low, &val_spec);
+        BUF_PUSH(loop_stmts, lower_make_var_decl(low, val_sym, elem_access));
 
         // Optional: var idx = _i
         if (ast->for_loop.idx_name != NULL) {
             HirSymSpec idx_spec = {HIR_SYM_VAR, ast->for_loop.idx_name, iter_type, false, loc};
-            HirSym *idx_sym = lowering_add_var(low, &idx_spec);
-            BUF_PUSH(loop_stmts, lowering_make_var_decl(
-                                     low, idx_sym, lowering_make_var_ref(low, counter_sym, loc)));
+            HirSym *idx_sym = lower_add_var(low, &idx_spec);
+            BUF_PUSH(loop_stmts,
+                     lower_make_var_decl(low, idx_sym, lower_make_var_ref(low, counter_sym, loc)));
         }
 
         // User body + continue rewrite + increment
@@ -539,7 +537,7 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
         BUF_PUSH(outer_stmts, counter_decl);
         BUF_PUSH(outer_stmts, loop_node);
 
-        lowering_scope_leave(low);
+        lower_scope_leave(low);
 
         HirNode *outer = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
         outer->block.stmts = outer_stmts;
@@ -548,21 +546,21 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
     }
 
     // Range iteration
-    lowering_scope_enter(low);
+    lower_scope_enter(low);
 
     // var _end = end
     HirNode *end_expr = lower_expr(low, ast->for_loop.end);
-    const char *end_name = lowering_make_temp_name(low);
+    const char *end_name = lower_make_temp_name(low);
     HirSymSpec end_spec = {HIR_SYM_VAR, end_name, iter_type, false, loc};
-    HirSym *end_sym = lowering_add_var(low, &end_spec);
-    HirNode *end_decl = lowering_make_var_decl(low, end_sym, end_expr);
+    HirSym *end_sym = lower_add_var(low, &end_spec);
+    HirNode *end_decl = lower_make_var_decl(low, end_sym, end_expr);
 
     // var i = start
     const char *var_name = ast->for_loop.var_name;
     HirNode *start = lower_expr(low, ast->for_loop.start);
     HirSymSpec iter_spec = {HIR_SYM_VAR, var_name, iter_type, true, loc};
-    HirSym *var_sym = lowering_add_var(low, &iter_spec);
-    HirNode *iter_decl = lowering_make_var_decl(low, var_sym, start);
+    HirSym *var_sym = lower_add_var(low, &iter_spec);
+    HirNode *iter_decl = lower_make_var_decl(low, var_sym, start);
 
     // Build loop body: guard + user body + increment
     HirNode **loop_stmts = NULL;
@@ -583,7 +581,7 @@ static HirNode *lower_for(Lower *low, const ASTNode *ast) {
     BUF_PUSH(outer_stmts, iter_decl);
     BUF_PUSH(outer_stmts, loop_node);
 
-    lowering_scope_leave(low);
+    lower_scope_leave(low);
 
     HirNode *outer = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
     outer->block.stmts = outer_stmts;
@@ -606,8 +604,7 @@ static HirNode *lower_expr_stmt(Lower *low, const ASTNode *ast) {
 }
 
 /** Pre-register method syms for a named type (struct or enum). */
-static void preregister_type_methods(Lower *low, const char *type_name,
-                                     ASTNode *const *methods) {
+static void preregister_type_methods(Lower *low, const char *type_name, ASTNode *const *methods) {
     for (int32_t j = 0; j < BUF_LEN(methods); j++) {
         const ASTNode *method = methods[j];
         const char *method_name = method->fn_decl.name;
@@ -615,9 +612,9 @@ static void preregister_type_methods(Lower *low, const char *type_name,
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
         const char *mangled = arena_sprintf(low->hir_arena, "rsgu_%s_%s", type_name, method_name);
         HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
-        HirSym *sym = lowering_make_sym(low, &sym_spec);
+        HirSym *sym = lower_make_sym(low, &sym_spec);
         sym->mangled_name = mangled;
-        lowering_scope_add(low, key, sym);
+        lower_scope_define(low, key, sym);
     }
 }
 
@@ -628,9 +625,9 @@ static void preregister_fns(Lower *low, const ASTNode *file_ast) {
         if (decl->kind == NODE_FN_DECL) {
             const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
             HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
-            HirSym *sym = lowering_make_sym(low, &fn_spec);
+            HirSym *sym = lower_make_sym(low, &fn_spec);
             sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s", decl->fn_decl.name);
-            lowering_scope_add(low, decl->fn_decl.name, sym);
+            lower_scope_define(low, decl->fn_decl.name, sym);
         }
         if (decl->kind == NODE_STRUCT_DECL) {
             preregister_type_methods(low, decl->struct_decl.name, decl->struct_decl.methods);
@@ -679,7 +676,7 @@ static void emit_enum_with_methods(Lower *low, const ASTNode *decl_ast, HirNode 
 
 /** Lower a NODE_FILE into a HIR_FILE with pre-registered fn syms. */
 static HirNode *lower_file(Lower *low, const ASTNode *ast) {
-    lowering_scope_enter(low);
+    lower_scope_enter(low);
     preregister_fns(low, ast);
 
     HirNode **decls = NULL;
@@ -706,7 +703,7 @@ static HirNode *lower_file(Lower *low, const ASTNode *ast) {
             BUF_PUSH(decls, decl);
         }
     }
-    lowering_scope_leave(low);
+    lower_scope_leave(low);
 
     HirNode *file_node = hir_new(low->hir_arena, HIR_FILE, &TYPE_UNIT_INST, ast->loc);
     file_node->file.decls = decls;
@@ -766,7 +763,7 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
             value = lower_expr(low, ast->return_stmt.value);
         }
         HirNode *node = hir_new(low->hir_arena, HIR_RETURN,
-                              value != NULL ? value->type : &TYPE_UNIT_INST, ast->loc);
+                                value != NULL ? value->type : &TYPE_UNIT_INST, ast->loc);
         node->return_stmt.value = value;
         return node;
     }

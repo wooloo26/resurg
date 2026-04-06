@@ -35,7 +35,7 @@ static HirNode *lower_str_part(Lower *low, const ASTNode *part) {
     if (builtin != NULL) {
         HirNode **args = NULL;
         BUF_PUSH(args, lowered);
-        return lowering_make_builtin_call(
+        return lower_make_builtin_call(
             low, &(BuiltinCallSpec){builtin, &TYPE_STR_INST, args, part->loc});
     }
     return lowered;
@@ -64,7 +64,7 @@ static HirNode *chain_str_concat(Lower *low, HirNode **parts, int32_t count, Src
         HirNode **args = NULL;
         BUF_PUSH(args, result);
         BUF_PUSH(args, parts[i]);
-        result = lowering_make_builtin_call(
+        result = lower_make_builtin_call(
             low, &(BuiltinCallSpec){"rsg_str_concat", &TYPE_STR_INST, args, loc});
     }
     return result;

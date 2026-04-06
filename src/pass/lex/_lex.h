@@ -56,7 +56,7 @@ static inline SrcLoc current_loc(const Lex *lex) {
 
 // ── Token construction ─────────────────────────────────────────────────
 
-Token make_token(const Lex *lex, TokenKind kind, const char *start, int32_t len, SrcLoc loc);
+Token build_token(const Lex *lex, TokenKind kind, const char *start, int32_t len, SrcLoc loc);
 
 // ── Cross-file dispatch ────────────────────────────────────────────────
 

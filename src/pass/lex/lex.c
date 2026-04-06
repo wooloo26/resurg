@@ -13,7 +13,7 @@ static bool is_alnum(char c) {
     return is_alpha(c) || is_digit(c);
 }
 
-Token make_token(const Lex *lex, TokenKind kind, const char *start, int32_t len, SrcLoc loc) {
+Token build_token(const Lex *lex, TokenKind kind, const char *start, int32_t len, SrcLoc loc) {
     return (Token){
         .kind = kind,
         .lexeme = arena_strndup(lex->arena, start, len),
@@ -95,7 +95,7 @@ static Token scan_number(Lex *lex, SrcLoc loc) {
 
     int32_t len = (int32_t)(lex->src + lex->pos - start);
     TokenKind number_kind = is_float ? TOKEN_FLOAT_LIT : TOKEN_INTEGER_LIT;
-    Token token = make_token(lex, number_kind, start, len, loc);
+    Token token = build_token(lex, number_kind, start, len, loc);
 
     // Strip underscores and parse value
     char buf[64];
@@ -148,10 +148,10 @@ static Token scan_ident(Lex *lex, SrcLoc loc) {
 
     if (kind == TOKEN_ID && is_reserved_keyword(start, len)) {
         rsg_err(loc, "'%.*s' is a reserved keyword", len, start);
-        return make_token(lex, TOKEN_ERR, start, len, loc);
+        return build_token(lex, TOKEN_ERR, start, len, loc);
     }
 
-    return make_token(lex, kind, start, len, loc);
+    return build_token(lex, kind, start, len, loc);
 }
 
 /** Dispatch a comparison or logical operator token. */
@@ -159,59 +159,59 @@ static Token scan_comparison_or_logical(Lex *lex, char c, SrcLoc loc) {
     switch (c) {
     case '=':
         if (match(lex, '>')) {
-            return make_token(lex, TOKEN_FAT_ARROW, "=>", 2, loc);
+            return build_token(lex, TOKEN_FAT_ARROW, "=>", 2, loc);
         }
-        return match(lex, '=') ? make_token(lex, TOKEN_EQUAL_EQUAL, "==", 2, loc)
-                               : make_token(lex, TOKEN_EQUAL, "=", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_EQUAL_EQUAL, "==", 2, loc)
+                               : build_token(lex, TOKEN_EQUAL, "=", 1, loc);
     case '!':
-        return match(lex, '=') ? make_token(lex, TOKEN_BANG_EQUAL, "!=", 2, loc)
-                               : make_token(lex, TOKEN_BANG, "!", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_BANG_EQUAL, "!=", 2, loc)
+                               : build_token(lex, TOKEN_BANG, "!", 1, loc);
     case '<':
-        return match(lex, '=') ? make_token(lex, TOKEN_LESS_EQUAL, "<=", 2, loc)
-                               : make_token(lex, TOKEN_LESS, "<", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_LESS_EQUAL, "<=", 2, loc)
+                               : build_token(lex, TOKEN_LESS, "<", 1, loc);
     case '>':
-        return match(lex, '=') ? make_token(lex, TOKEN_GREATER_EQUAL, ">=", 2, loc)
-                               : make_token(lex, TOKEN_GREATER, ">", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_GREATER_EQUAL, ">=", 2, loc)
+                               : build_token(lex, TOKEN_GREATER, ">", 1, loc);
     case '&':
         if (match(lex, '&')) {
-            return make_token(lex, TOKEN_AMPERSAND_AMPERSAND, "&&", 2, loc);
+            return build_token(lex, TOKEN_AMPERSAND_AMPERSAND, "&&", 2, loc);
         }
-        return make_token(lex, TOKEN_AMPERSAND, "&", 1, loc);
+        return build_token(lex, TOKEN_AMPERSAND, "&", 1, loc);
     case '|':
         if (match(lex, '|')) {
-            return make_token(lex, TOKEN_PIPE_PIPE, "||", 2, loc);
+            return build_token(lex, TOKEN_PIPE_PIPE, "||", 2, loc);
         }
-        return make_token(lex, TOKEN_PIPE, "|", 1, loc);
+        return build_token(lex, TOKEN_PIPE, "|", 1, loc);
     default:
         break;
     }
-    return make_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
+    return build_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
 }
 
 /** Dispatch an arithmetic operator token (with optional compound assignment). */
 static Token scan_arithmetic(Lex *lex, char c, SrcLoc loc) {
     switch (c) {
     case '+':
-        return match(lex, '=') ? make_token(lex, TOKEN_PLUS_EQUAL, "+=", 2, loc)
-                               : make_token(lex, TOKEN_PLUS, "+", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_PLUS_EQUAL, "+=", 2, loc)
+                               : build_token(lex, TOKEN_PLUS, "+", 1, loc);
     case '-':
         if (match(lex, '>')) {
-            return make_token(lex, TOKEN_ARROW, "->", 2, loc);
+            return build_token(lex, TOKEN_ARROW, "->", 2, loc);
         }
-        return match(lex, '=') ? make_token(lex, TOKEN_MINUS_EQUAL, "-=", 2, loc)
-                               : make_token(lex, TOKEN_MINUS, "-", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_MINUS_EQUAL, "-=", 2, loc)
+                               : build_token(lex, TOKEN_MINUS, "-", 1, loc);
     case '*':
-        return match(lex, '=') ? make_token(lex, TOKEN_STAR_EQUAL, "*=", 2, loc)
-                               : make_token(lex, TOKEN_STAR, "*", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_STAR_EQUAL, "*=", 2, loc)
+                               : build_token(lex, TOKEN_STAR, "*", 1, loc);
     case '/':
-        return match(lex, '=') ? make_token(lex, TOKEN_SLASH_EQUAL, "/=", 2, loc)
-                               : make_token(lex, TOKEN_SLASH, "/", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_SLASH_EQUAL, "/=", 2, loc)
+                               : build_token(lex, TOKEN_SLASH, "/", 1, loc);
     case '%':
-        return make_token(lex, TOKEN_PERCENT, "%", 1, loc);
+        return build_token(lex, TOKEN_PERCENT, "%", 1, loc);
     default:
         break;
     }
-    return make_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
+    return build_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
 }
 
 /** Dispatch a single- or double-character punctuation / operator token. */
@@ -219,32 +219,32 @@ static Token scan_punctuation(Lex *lex, char c, SrcLoc loc) {
     switch (c) {
     case ':':
         if (match(lex, ':')) {
-            return make_token(lex, TOKEN_COLON_COLON, "::", 2, loc);
+            return build_token(lex, TOKEN_COLON_COLON, "::", 2, loc);
         }
-        return match(lex, '=') ? make_token(lex, TOKEN_COLON_EQUAL, ":=", 2, loc)
-                               : make_token(lex, TOKEN_COLON, ":", 1, loc);
+        return match(lex, '=') ? build_token(lex, TOKEN_COLON_EQUAL, ":=", 2, loc)
+                               : build_token(lex, TOKEN_COLON, ":", 1, loc);
     case '.':
         if (match(lex, '.')) {
-            return match(lex, '=') ? make_token(lex, TOKEN_DOT_DOT_EQUAL, "..=", 3, loc)
-                                   : make_token(lex, TOKEN_DOT_DOT, "..", 2, loc);
+            return match(lex, '=') ? build_token(lex, TOKEN_DOT_DOT_EQUAL, "..=", 3, loc)
+                                   : build_token(lex, TOKEN_DOT_DOT, "..", 2, loc);
         }
-        return make_token(lex, TOKEN_DOT, ".", 1, loc);
+        return build_token(lex, TOKEN_DOT, ".", 1, loc);
     case '(':
-        return make_token(lex, TOKEN_LEFT_PAREN, "(", 1, loc);
+        return build_token(lex, TOKEN_LEFT_PAREN, "(", 1, loc);
     case ')':
-        return make_token(lex, TOKEN_RIGHT_PAREN, ")", 1, loc);
+        return build_token(lex, TOKEN_RIGHT_PAREN, ")", 1, loc);
     case '{':
-        return make_token(lex, TOKEN_LEFT_BRACE, "{", 1, loc);
+        return build_token(lex, TOKEN_LEFT_BRACE, "{", 1, loc);
     case '}':
-        return make_token(lex, TOKEN_RIGHT_BRACE, "}", 1, loc);
+        return build_token(lex, TOKEN_RIGHT_BRACE, "}", 1, loc);
     case '[':
-        return make_token(lex, TOKEN_LEFT_BRACKET, "[", 1, loc);
+        return build_token(lex, TOKEN_LEFT_BRACKET, "[", 1, loc);
     case ']':
-        return make_token(lex, TOKEN_RIGHT_BRACKET, "]", 1, loc);
+        return build_token(lex, TOKEN_RIGHT_BRACKET, "]", 1, loc);
     case ',':
-        return make_token(lex, TOKEN_COMMA, ",", 1, loc);
+        return build_token(lex, TOKEN_COMMA, ",", 1, loc);
     case ';':
-        return make_token(lex, TOKEN_SEMICOLON, ";", 1, loc);
+        return build_token(lex, TOKEN_SEMICOLON, ";", 1, loc);
     case '=':
     case '!':
     case '<':
@@ -262,7 +262,7 @@ static Token scan_punctuation(Lex *lex, char c, SrcLoc loc) {
         break;
     }
     rsg_err(loc, "unexpected character '%c'", c);
-    return make_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
+    return build_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
 }
 
 /**
@@ -284,7 +284,7 @@ Token scan_token(Lex *lex) {
             advance(lex); // consume '\n'
             lex->line++;
             lex->column = 1;
-            return make_token(lex, TOKEN_NEWLINE, "\n", 1, loc);
+            return build_token(lex, TOKEN_NEWLINE, "\n", 1, loc);
         }
 
         // Line comments: skip until end of line.
@@ -302,7 +302,7 @@ Token scan_token(Lex *lex) {
     char c = advance(lex);
 
     if (c == '\0') {
-        return make_token(lex, TOKEN_EOF, "", 0, loc);
+        return build_token(lex, TOKEN_EOF, "", 0, loc);
     }
     if (is_digit(c)) {
         return scan_number(lex, loc);

@@ -11,6 +11,61 @@ static bool parser_peek_is(const Parser *parser, TokenKind kind) {
     return parser->tokens[next].kind == kind;
 }
 
+// ── Shared recv + params parsing ────────────────────────────────
+
+/** Parse trailing params (comma-separated `name: Type`) after receiver. */
+static void parse_trailing_params(Parser *parser, ASTNode *node) {
+    while (parser_match(parser, TOKEN_COMMA)) {
+        SrcLoc ploc = parser_current_loc(parser);
+        ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
+        param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
+        parser_expect(parser, TOKEN_COLON);
+        param->param.type = parser_parse_type(parser);
+        BUF_PUSH(node->fn_decl.params, param);
+    }
+}
+
+/**
+ * Parse method receiver and params between `(` and `)`.
+ *
+ * Recognizes three receiver forms:
+ *   - `*name`      → ptr recv (read-only)
+ *   - `mut *name`  → ptr recv (mutable)
+ *   - `name`       → value recv (id not followed by `:`)
+ *
+ * Falls through to regular param parsing when no receiver is present.
+ */
+static void parse_recv_and_params(Parser *parser, ASTNode *node) {
+    parser_expect(parser, TOKEN_LEFT_PAREN);
+    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        if (parser_check(parser, TOKEN_STAR) || parser_check(parser, TOKEN_MUT)) {
+            bool is_mut = false;
+            if (parser_match(parser, TOKEN_MUT)) {
+                is_mut = true;
+            }
+            parser_expect(parser, TOKEN_STAR);
+            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
+            node->fn_decl.is_mut_recv = is_mut;
+            node->fn_decl.is_ptr_recv = true;
+            parse_trailing_params(parser, node);
+        } else if (parser_check(parser, TOKEN_ID) && !parser_peek_is(parser, TOKEN_COLON)) {
+            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
+            node->fn_decl.is_ptr_recv = false;
+            parse_trailing_params(parser, node);
+        } else {
+            do {
+                SrcLoc ploc = parser_current_loc(parser);
+                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
+                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
+                parser_expect(parser, TOKEN_COLON);
+                param->param.type = parser_parse_type(parser);
+                BUF_PUSH(node->fn_decl.params, param);
+            } while (parser_match(parser, TOKEN_COMMA));
+        }
+    }
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+}
+
 // ── Method decl (inside struct/enum) ────────────────────────────
 
 static ASTNode *parse_method_decl(Parser *parser, const char *struct_name) {
@@ -26,58 +81,7 @@ static ASTNode *parse_method_decl(Parser *parser, const char *struct_name) {
     node->fn_decl.is_mut_recv = false;
     node->fn_decl.is_ptr_recv = false;
 
-    parser_expect(parser, TOKEN_LEFT_PAREN);
-    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-        // First param: check for recv syntax
-        //   *name         → ptr recv (read-only)
-        //   mut *name     → ptr recv (mutable)
-        //   name          → value recv (id not followed by ':')
-        if (parser_check(parser, TOKEN_STAR) || parser_check(parser, TOKEN_MUT)) {
-            bool is_mut = false;
-            if (parser_match(parser, TOKEN_MUT)) {
-                is_mut = true;
-            }
-            parser_expect(parser, TOKEN_STAR);
-            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            node->fn_decl.is_mut_recv = is_mut;
-            node->fn_decl.is_ptr_recv = true;
-
-            // Parse remaining params after recv
-            while (parser_match(parser, TOKEN_COMMA)) {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            }
-        } else if (parser_check(parser, TOKEN_ID) && !parser_peek_is(parser, TOKEN_COLON)) {
-            // Value recv: just an id with no type annotation
-            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            node->fn_decl.is_ptr_recv = false;
-
-            // Parse remaining params after recv
-            while (parser_match(parser, TOKEN_COMMA)) {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            }
-        } else {
-            // Regular params (no recv)
-            do {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            } while (parser_match(parser, TOKEN_COMMA));
-        }
-    }
-    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    parse_recv_and_params(parser, node);
 
     // Return type
     node->fn_decl.return_type.kind = AST_TYPE_INFERRED;
@@ -114,52 +118,7 @@ static ASTNode *parse_pact_method(Parser *parser, const char *pact_name) {
     node->fn_decl.is_mut_recv = false;
     node->fn_decl.is_ptr_recv = false;
 
-    parser_expect(parser, TOKEN_LEFT_PAREN);
-    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-        if (parser_check(parser, TOKEN_STAR) || parser_check(parser, TOKEN_MUT)) {
-            bool is_mut = false;
-            if (parser_match(parser, TOKEN_MUT)) {
-                is_mut = true;
-            }
-            parser_expect(parser, TOKEN_STAR);
-            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            node->fn_decl.is_mut_recv = is_mut;
-            node->fn_decl.is_ptr_recv = true;
-
-            while (parser_match(parser, TOKEN_COMMA)) {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            }
-        } else if (parser_check(parser, TOKEN_ID) && !parser_peek_is(parser, TOKEN_COLON)) {
-            // Value recv: just an id with no type annotation
-            node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            node->fn_decl.is_ptr_recv = false;
-
-            // Parse remaining params after recv
-            while (parser_match(parser, TOKEN_COMMA)) {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            }
-        } else {
-            do {
-                SrcLoc ploc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                parser_expect(parser, TOKEN_COLON);
-                param->param.type = parser_parse_type(parser);
-                BUF_PUSH(node->fn_decl.params, param);
-            } while (parser_match(parser, TOKEN_COMMA));
-        }
-    }
-    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    parse_recv_and_params(parser, node);
 
     node->fn_decl.return_type.kind = AST_TYPE_INFERRED;
     if (parser_match(parser, TOKEN_ARROW)) {

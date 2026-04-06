@@ -15,8 +15,7 @@ static bool is_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
     bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "rsgu_", 5) == 0 ||
                     strncmp(name, "_rsg", 4) == 0 || strncmp(name, "_Rsg", 4) == 0;
     if (reserved) {
-        SEMA_ERR(sema, loc, "identifier '%s' uses a prefix reserved for the runtime",
-                 name);
+        SEMA_ERR(sema, loc, "identifier '%s' uses a prefix reserved for the runtime", name);
     }
     return reserved;
 }
@@ -69,8 +68,8 @@ const Type *check_block(Sema *sema, ASTNode *node) {
     return result_type;
 }
 
-/** Promote array lit elems to match the declared elem type. */
-static bool promote_array_elems(ASTNode *init, const Type *declared) {
+/** Promote array lit elem types to match the declared elem type. */
+static bool promote_array_elem_lits(ASTNode *init, const Type *declared) {
     for (int32_t i = 0; i < BUF_LEN(init->array_lit.elems); i++) {
         ASTNode *elem = init->array_lit.elems[i];
         if (promote_lit(elem, declared->array.elem) == NULL && elem->type != NULL &&
@@ -103,7 +102,7 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
                                      init_type->kind == TYPE_ARRAY &&
                                      !type_equal(declared, init_type);
             if (is_array_mismatch) {
-                if (promote_array_elems(init, declared)) {
+                if (promote_array_elem_lits(init, declared)) {
                     init->type = declared;
                 }
             }
@@ -180,8 +179,7 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
         // Update fn sigs
         const char *sig_key = fn_node->fn_decl.name;
         if (fn_node->fn_decl.owner_struct != NULL) {
-            sig_key =
-                arena_sprintf(sema->arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
+            sig_key = arena_sprintf(sema->arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
         }
         FnSig *sig = sema_lookup_fn(sema, sig_key);
         if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
@@ -214,8 +212,7 @@ const Type *check_assign(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_compound_assign(Sema *sema, ASTNode *node) {
-    return check_assignment_common(sema, node->compound_assign.target,
-                                   node->compound_assign.value);
+    return check_assignment_common(sema, node->compound_assign.target, node->compound_assign.value);
 }
 
 static const Type *check_loop(Sema *sema, ASTNode *node) {
@@ -257,8 +254,7 @@ static void check_for(Sema *sema, ASTNode *node) {
         scope_define(sema, &(SymDef){node->for_loop.var_name, elem_type, false, SYM_VAR});
         if (node->for_loop.idx_name != NULL) {
             is_reserved_id(sema, node->loc, node->for_loop.idx_name);
-            scope_define(sema,
-                         &(SymDef){node->for_loop.idx_name, &TYPE_I32_INST, false, SYM_VAR});
+            scope_define(sema, &(SymDef){node->for_loop.idx_name, &TYPE_I32_INST, false, SYM_VAR});
         }
         check_node(sema, node->for_loop.body);
         scope_pop(sema);
@@ -339,8 +335,7 @@ static const Type *check_enum_decl_body(Sema *sema, ASTNode *node) {
     }
     const Type *ptr_type = type_create_ptr(sema->arena, edef->type, false);
     for (int32_t i = 0; i < BUF_LEN(node->enum_decl.methods); i++) {
-        check_struct_method_body(sema, node->enum_decl.methods[i], node->enum_decl.name,
-                                 ptr_type);
+        check_struct_method_body(sema, node->enum_decl.methods[i], node->enum_decl.name, ptr_type);
     }
     return result;
 }
@@ -448,8 +443,7 @@ static const Type *check_tuple_destructure(Sema *sema, ASTNode *node) {
             if (vname[0] == '_') {
                 continue;
             }
-            scope_define(sema,
-                         &(SymDef){vname, value_type->tuple.elems[elem_idx], false, SYM_VAR});
+            scope_define(sema, &(SymDef){vname, value_type->tuple.elems[elem_idx], false, SYM_VAR});
         }
     } else if (value_type != NULL && value_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, node->loc, "tuple destructuring requires a tuple type");

@@ -90,22 +90,23 @@ const char *c_str_escape(const CGen *cgen, const char *src) {
     return buf;
 }
 
+/** Ensure float representation has decimal notation: append ".0" if missing. */
+static void ensure_float_decimal(char *buf, int32_t *len) {
+    for (int32_t i = 0; i < *len; i++) {
+        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+            return;
+        }
+    }
+    buf[(*len)++] = '.';
+    buf[(*len)++] = '0';
+    buf[*len] = '\0';
+}
+
 static const char *fmt_float(const CGen *cgen, double value, int32_t precision,
                              const char *suffix) {
     char buf[64];
     int32_t len = snprintf(buf, sizeof(buf), "%.*g", precision, value);
-    bool has_dot = false;
-    for (int32_t i = 0; i < len; i++) {
-        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
-            has_dot = true;
-            break;
-        }
-    }
-    if (!has_dot) {
-        buf[len++] = '.';
-        buf[len++] = '0';
-        buf[len] = '\0';
-    }
+    ensure_float_decimal(buf, &len);
     if (suffix[0] != '\0') {
         buf[len++] = suffix[0];
         buf[len] = '\0';

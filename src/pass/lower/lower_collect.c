@@ -65,7 +65,7 @@ static void collect_compound_types(Lower *low, const HirNode *node) {
 
 // ── Public API ─────────────────────────────────────────────────────────
 
-Lower *lowering_create(Arena *hir_arena) {
+Lower *lower_create(Arena *hir_arena) {
     Lower *low = rsg_malloc(sizeof(Lower));
     low->hir_arena = hir_arena;
     low->scope = NULL;
@@ -80,7 +80,7 @@ Lower *lowering_create(Arena *hir_arena) {
     return low;
 }
 
-void lowering_destroy(Lower *lower) {
+void lower_destroy(Lower *lower) {
     if (lower == NULL) {
         return;
     }
@@ -88,7 +88,7 @@ void lowering_destroy(Lower *lower) {
     free(lower);
 }
 
-HirNode *lowering_lower(Lower *lower, const ASTNode *file) {
+HirNode *lower_lower(Lower *lower, const ASTNode *file) {
     HirNode *hir_file = lower_node(lower, file);
     collect_compound_types(lower, hir_file);
     hir_file->file.compound_types = lower->compound_types;

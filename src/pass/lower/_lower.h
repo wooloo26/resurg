@@ -35,10 +35,10 @@ struct Lower {
 
 // ── Scope manipulation ────────────────────────────────────────────────
 
-void lowering_scope_enter(Lower *low);
-void lowering_scope_leave(Lower *low);
-void lowering_scope_add(Lower *low, const char *name, HirSym *sym);
-HirSym *lowering_scope_find(const Lower *low, const char *name);
+void lower_scope_enter(Lower *low);
+void lower_scope_leave(Lower *low);
+void lower_scope_define(Lower *low, const char *name, HirSym *sym);
+HirSym *lower_scope_lookup(const Lower *low, const char *name);
 
 // ── Parameter structs ──────────────────────────────────────────────────
 
@@ -79,26 +79,26 @@ typedef struct {
 // ── Shared helpers ────────────────────────────────────────────────────
 
 /** Create a HirSym from the given spec. */
-HirSym *lowering_make_sym(Lower *low, const HirSymSpec *spec);
+HirSym *lower_make_sym(Lower *low, const HirSymSpec *spec);
 /** Create a var sym, register it in scope, and return it. */
-HirSym *lowering_add_var(Lower *low, const HirSymSpec *spec);
+HirSym *lower_add_var(Lower *low, const HirSymSpec *spec);
 /** Generate a unique temp name like _tt_tmp_0. */
-const char *lowering_make_temp_name(Lower *low);
+const char *lower_make_temp_name(Lower *low);
 /** Create a HirVarRef node. */
-HirNode *lowering_make_var_ref(Lower *low, HirSym *sym, SrcLoc loc);
+HirNode *lower_make_var_ref(Lower *low, HirSym *sym, SrcLoc loc);
 /** Create a HirIntLit node. */
-HirNode *lowering_make_int_lit(Lower *low, const IntLitSpec *spec);
+HirNode *lower_make_int_lit(Lower *low, const IntLitSpec *spec);
 /** Create a HIR_VAR_DECL node — derives name/type/mut from @p sym. */
-HirNode *lowering_make_var_decl(Lower *low, HirSym *sym, HirNode *init);
+HirNode *lower_make_var_decl(Lower *low, HirSym *sym, HirNode *init);
 /** Map a compound-assignment TokenKind to its base arithmetic operator. */
-TokenKind lowering_compound_to_base_op(TokenKind op);
+TokenKind lower_compound_to_base_op(TokenKind op);
 /**
  * Look up a field in the embedded structs of a struct type.
  * Returns a two-level HIR_STRUCT_FIELD_ACCESS chain (embed → field) on hit, or NULL.
  */
-HirNode *lowering_resolve_promoted_field(Lower *low, const FieldLookup *lookup);
+HirNode *lower_resolve_promoted_field(Lower *low, const FieldLookup *lookup);
 /** Create a HirCall node for a builtin runtime fn. */
-HirNode *lowering_make_builtin_call(Lower *low, const BuiltinCallSpec *spec);
+HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec);
 
 // ── Cross-file dispatch ───────────────────────────────────────────────
 

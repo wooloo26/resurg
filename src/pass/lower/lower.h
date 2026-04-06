@@ -17,13 +17,13 @@ typedef struct ASTNode ASTNode;
 typedef struct Lower Lower;
 
 /** Create a lower ctx that allocates TT nodes from @p hir_arena. */
-Lower *lowering_create(Arena *hir_arena);
+Lower *lower_create(Arena *hir_arena);
 /** Destroy the lower ctx (does not destroy arenas). */
-void lowering_destroy(Lower *lower);
+void lower_destroy(Lower *lower);
 /**
  * Lower a type-checked AST file node into a Typed Tree.
  * Returns the root HIR_FILE node.
  */
-HirNode *lowering_lower(Lower *lower, const ASTNode *file);
+HirNode *lower_lower(Lower *lower, const ASTNode *file);
 
 #endif // RSG_LOWER_H

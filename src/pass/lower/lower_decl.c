@@ -11,8 +11,8 @@ static void lower_param_list(Lower *low, ASTNode *const *param_asts, int32_t cou
         const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERR_INST;
 
         HirSymSpec param_spec = {HIR_SYM_PARAM, param_name, param_type, false, param_ast->loc};
-        HirSym *param_sym = lowering_make_sym(low, &param_spec);
-        lowering_scope_add(low, param_name, param_sym);
+        HirSym *param_sym = lower_make_sym(low, &param_spec);
+        lower_scope_define(low, param_name, param_sym);
 
         HirNode *param_node = hir_new(low->hir_arena, HIR_PARAM, param_type, param_ast->loc);
         param_node->param.sym = param_sym;
@@ -32,8 +32,9 @@ static HirNode *lower_fn_body(Lower *low, const ASTNode *body_ast) {
     }
     // Expression-bodied fn: `fn f() = expr` → wrap in a block with result
     HirNode *result = lower_expr(low, body_ast);
-    HirNode *body = hir_new(low->hir_arena, HIR_BLOCK,
-                          body_ast->type != NULL ? body_ast->type : &TYPE_UNIT_INST, body_ast->loc);
+    HirNode *body =
+        hir_new(low->hir_arena, HIR_BLOCK,
+                body_ast->type != NULL ? body_ast->type : &TYPE_UNIT_INST, body_ast->loc);
     body->block.result = result;
     return body;
 }
@@ -46,18 +47,18 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
     const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
 
     HirSymSpec func_spec = {HIR_SYM_FN, name, return_type, false, ast->loc};
-    HirSym *func_sym = lowering_make_sym(low, &func_spec);
+    HirSym *func_sym = lower_make_sym(low, &func_spec);
     func_sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s", name);
-    lowering_scope_add(low, name, func_sym);
+    lower_scope_define(low, name, func_sym);
 
-    lowering_scope_enter(low);
+    lower_scope_enter(low);
 
     HirNode **params = NULL;
     lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);
 
     HirNode *body = lower_fn_body(low, ast->fn_decl.body);
 
-    lowering_scope_leave(low);
+    lower_scope_leave(low);
 
     HirNode *node = hir_new(low->hir_arena, HIR_FN_DECL, &TYPE_UNIT_INST, ast->loc);
     node->fn_decl.name = name;
@@ -70,22 +71,22 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
 }
 
 HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_name,
-                          const Type *struct_type) {
+                           const Type *struct_type) {
     const char *method_name = ast->fn_decl.name;
     const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
     const char *key = arena_sprintf(low->hir_arena, "%s.%s", struct_name, method_name);
 
     // Look up pre-registered sym
-    HirSym *func_sym = lowering_scope_find(low, key);
+    HirSym *func_sym = lower_scope_lookup(low, key);
     if (func_sym == NULL) {
         HirSymSpec method_spec = {HIR_SYM_FN, key, return_type, false, ast->loc};
-        func_sym = lowering_make_sym(low, &method_spec);
+        func_sym = lower_make_sym(low, &method_spec);
         func_sym->mangled_name =
             arena_sprintf(low->hir_arena, "rsgu_%s_%s", struct_name, method_name);
-        lowering_scope_add(low, key, func_sym);
+        lower_scope_define(low, key, func_sym);
     }
 
-    lowering_scope_enter(low);
+    lower_scope_enter(low);
 
     // Lower recv param
     HirNode **params = NULL;
@@ -94,9 +95,9 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     bool is_ptr_recv = ast->fn_decl.is_ptr_recv;
 
     HirSymSpec recv_spec = {HIR_SYM_PARAM, recv_name, struct_type, false, ast->loc};
-    HirSym *recv_sym = lowering_make_sym(low, &recv_spec);
+    HirSym *recv_sym = lower_make_sym(low, &recv_spec);
     recv_sym->is_ptr_recv = is_ptr_recv;
-    lowering_scope_add(low, recv_name, recv_sym);
+    lower_scope_define(low, recv_name, recv_sym);
 
     // Store is_ptr_recv on the method sym for call-site lookup
     func_sym->is_ptr_recv = is_ptr_recv;
@@ -128,7 +129,7 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     low->current_recv_name = saved_name;
     low->current_is_ptr_recv = saved_is_ptr;
 
-    lowering_scope_leave(low);
+    lower_scope_leave(low);
 
     HirNode *node = hir_new(low->hir_arena, HIR_FN_DECL, &TYPE_UNIT_INST, ast->loc);
     node->fn_decl.name = method_name;
