@@ -1,9 +1,8 @@
 #ifndef RSG__LOWER_H
 #define RSG__LOWER_H
 
-#include "repr/ast.h"
 #include "lower.h"
-#include "pass/check/_check.h"
+#include "repr/ast.h"
 
 /**
  * @file _lower.h
@@ -29,7 +28,7 @@ struct Lower {
     int32_t temp_counter;
     int32_t shadow_counter;
     const Type **compound_types; /* buf */
-    HirSym *current_recv;         // non-NULL inside method body
+    HirSym *current_recv;        // non-NULL inside method body
     const char *current_recv_name;
     bool current_is_ptr_recv; // true if current method has ptr recv
 };
@@ -79,7 +78,7 @@ typedef struct {
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
-/** Create a Sema Sym and wrap it in a HirSym. */
+/** Create a HirSym from the given spec. */
 HirSym *lowering_make_sym(Lower *low, const HirSymSpec *spec);
 /** Create a var sym, register it in scope, and return it. */
 HirSym *lowering_add_var(Lower *low, const HirSymSpec *spec);
@@ -119,6 +118,6 @@ HirNode *lower_match(Lower *low, const ASTNode *ast);
 HirNode *lower_fn_decl(Lower *low, const ASTNode *ast);
 /** Lower a method decl inside a struct. */
 HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_name,
-                          const Type *struct_type);
+                           const Type *struct_type);
 
 #endif // RSG__LOWER_H

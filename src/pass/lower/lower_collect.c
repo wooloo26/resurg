@@ -1,4 +1,5 @@
 #include "_lower.h"
+#include "hir_passes.h"
 
 // ── Compound type collection ──────────────────────────────────────────
 
@@ -91,5 +92,8 @@ HirNode *lowering_lower(Lower *lower, const ASTNode *file) {
     HirNode *hir_file = lower_node(lower, file);
     collect_compound_types(lower, hir_file);
     hir_file->file.compound_types = lower->compound_types;
+
+    hir_pass_const_fold(lower->hir_arena, hir_file);
+    hir_pass_escape_analysis(lower->hir_arena, hir_file);
     return hir_file;
 }

@@ -6,12 +6,11 @@
 
 #include "core/common.h"
 #include "pass/lex/lex.h"
-#include "rsg/pass/cgen/cgen.h"
 #include "rsg/driver/pipeline.h"
+#include "rsg/pass/cgen/cgen.h"
+#include "rsg/pass/check/check.h"
 #include "rsg/pass/lower/lower.h"
 #include "rsg/pass/parse/parse.h"
-#include "rsg/pass/check/check.h"
-#include "pass/lower/hir_passes.h"
 
 /**
  * @file pipeline.c
@@ -118,12 +117,9 @@ static bool stage_check(Arena *arena, ASTNode *file_node) {
 
 /** Lower the AST to typed tree, run TT passes, and optionally dump.  Returns NULL on early exit. */
 static HirNode *stage_lower(const PipelineOptions *options, Arena *hir_arena, ASTNode *file_node,
-                           Lower **out_lowering) {
+                            Lower **out_lowering) {
     *out_lowering = lowering_create(hir_arena);
     HirNode *hir_root = lowering_lower(*out_lowering, file_node);
-
-    hir_pass_const_fold(hir_arena, hir_root);
-    hir_pass_escape_analysis(hir_arena, hir_root);
 
     if (options->dump_tt) {
         hir_dump(hir_root, 0);

@@ -1,23 +1,23 @@
 #include "repr/hir.h"
 
-#include "pass/check/_check.h"
-
 // ── HirSym ───────────────────────────────────────────────────────────
 
 const char *hir_sym_name(const HirSym *sym) {
-    assert(sym != NULL && sym->sema_sym != NULL);
-    return sym->sema_sym->name;
+    assert(sym != NULL);
+    return sym->name;
 }
 
 const Type *hir_sym_type(const HirSym *sym) {
-    assert(sym != NULL && sym->sema_sym != NULL);
-    return sym->sema_sym->type;
+    assert(sym != NULL);
+    return sym->type;
 }
 
-HirSym *hir_sym_new(Arena *arena, HirSymKind kind, Sym *sema_sym, bool is_mut, SrcLoc loc) {
+HirSym *hir_sym_new(Arena *arena, HirSymKind kind, const char *name, const Type *type, bool is_mut,
+                    SrcLoc loc) {
     HirSym *sym = arena_alloc_zero(arena, sizeof(HirSym));
     sym->kind = kind;
-    sym->sema_sym = sema_sym;
+    sym->name = name;
+    sym->type = type;
     sym->is_mut = is_mut;
     sym->loc = loc;
     return sym;
@@ -376,7 +376,7 @@ void hir_dump(const HirNode *node, int32_t indent) {
     case HIR_STRUCT_LIT:
         fprintf(stderr, "\n");
         hir_dump_children(node->struct_lit.field_values, BUF_LEN(node->struct_lit.field_values),
-                         indent + 1);
+                          indent + 1);
         break;
 
     case HIR_STRUCT_FIELD_ACCESS:

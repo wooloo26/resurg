@@ -10,11 +10,10 @@
  * @brief Typed Tree — fully typed, desugared intermediate representation.
  *
  * Every Typed Tree node carries a resolved type (never NULL), desugared constructs,
- * scope-resolved ids (HirSym wrapping Sema's Sym), and no
+ * scope-resolved ids (HirSym with owned name and type), and no
  * syntactic sugar.
  */
 
-typedef struct Sym Sym;
 typedef struct HirNode HirNode;
 typedef struct HirSym HirSym;
 
@@ -30,22 +29,22 @@ typedef enum {
 } HirSymKind;
 
 /**
- * TT sym — wraps Sema's Sym with additional lower metadata.
- * HirSym.kind is authoritative in TT/codegen; accessors delegate to
- * Sema for name and type.
+ * TT sym — owns name and type directly.
+ * HirSym.kind is authoritative in TT/codegen.
  */
 struct HirSym {
     HirSymKind kind;
-    Sym *sema_sym;
+    const char *name;
+    const Type *type;
     bool is_mut;
     bool is_ptr_recv; // for method syms: recv is *T
     const char *mangled_name;
     SrcLoc loc;
 };
 
-/** Return the name of a HirSym (delegates to sema_sym). */
+/** Return the name of a HirSym. */
 const char *hir_sym_name(const HirSym *sym);
-/** Return the type of a HirSym (delegates to sema_sym). */
+/** Return the type of a HirSym. */
 const Type *hir_sym_type(const HirSym *sym);
 
 // ── HirNodeKind ─────────────────────────────────────────────────────────
@@ -376,7 +375,8 @@ struct HirNode {
 /** Allocate a zero-initialised HirNode from @p arena. */
 HirNode *hir_new(Arena *arena, HirNodeKind kind, const Type *type, SrcLoc loc);
 /** Allocate a HirSym from @p arena. */
-HirSym *hir_sym_new(Arena *arena, HirSymKind kind, Sym *sema_sym, bool is_mut, SrcLoc loc);
+HirSym *hir_sym_new(Arena *arena, HirSymKind kind, const char *name, const Type *type, bool is_mut,
+                    SrcLoc loc);
 
 // ── TT dump ───────────────────────────────────────────────────────────
 

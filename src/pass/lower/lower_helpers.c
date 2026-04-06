@@ -18,7 +18,8 @@ void lowering_scope_add(Lower *low, const char *name, HirSym *sym) {
     if (sym->mangled_name == NULL) {
         HirSym *existing = lowering_scope_find(low, name);
         if (existing != NULL) {
-            sym->mangled_name = arena_sprintf(low->hir_arena, "%s__%d", name, low->shadow_counter++);
+            sym->mangled_name =
+                arena_sprintf(low->hir_arena, "%s__%d", name, low->shadow_counter++);
         } else {
             sym->mangled_name = name;
         }
@@ -39,27 +40,7 @@ HirSym *lowering_scope_find(const Lower *low, const char *name) {
 // ── Shared helpers ────────────────────────────────────────────────────
 
 HirSym *lowering_make_sym(Lower *low, const HirSymSpec *spec) {
-    Sym *sema_sym = arena_alloc_zero(low->hir_arena, sizeof(Sym));
-    sema_sym->name = spec->name;
-    sema_sym->type = spec->type;
-    switch (spec->kind) {
-    case HIR_SYM_VAR:
-        sema_sym->kind = SYM_VAR;
-        break;
-    case HIR_SYM_PARAM:
-        sema_sym->kind = SYM_PARAM;
-        break;
-    case HIR_SYM_FN:
-        sema_sym->kind = SYM_FN;
-        break;
-    case HIR_SYM_TYPE:
-        sema_sym->kind = SYM_TYPE;
-        break;
-    case HIR_SYM_MODULE:
-        sema_sym->kind = SYM_MODULE;
-        break;
-    }
-    return hir_sym_new(low->hir_arena, spec->kind, sema_sym, spec->is_mut, spec->loc);
+    return hir_sym_new(low->hir_arena, spec->kind, spec->name, spec->type, spec->is_mut, spec->loc);
 }
 
 HirSym *lowering_add_var(Lower *low, const HirSymSpec *spec) {
