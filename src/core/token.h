@@ -37,6 +37,7 @@ typedef enum {
     TOKEN_MUT,      // mut
     TOKEN_IMMUT,    // immut
     TOKEN_ENUM,     // enum
+    TOKEN_PACT,     // pact
     TOKEN_MATCH,    // match
     TOKEN_RETURN,   // return
     TOKEN_WHILE,    // while

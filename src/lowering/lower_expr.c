@@ -373,6 +373,7 @@ static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
             node->method_call.receiver = receiver;
             node->method_call.mangled_name = method_sym->mangled_name;
             node->method_call.arguments = args;
+            node->method_call.is_pointer_receiver = method_sym->is_pointer_receiver;
             return node;
         }
     }
@@ -382,7 +383,7 @@ static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
         const char *method_name = member_ast->member.member;
         TtNode *receiver = lower_expression(low, member_ast->member.object);
 
-        if (!via_pointer && low->current_receiver != NULL &&
+        if (!via_pointer && low->current_receiver != NULL && low->current_is_pointer_receiver &&
             receiver->kind == TT_VARIABLE_REFERENCE &&
             receiver->variable_reference.symbol == low->current_receiver) {
             via_pointer = true;
@@ -402,6 +403,7 @@ static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
             node->method_call.receiver = receiver;
             node->method_call.mangled_name = method_sym->mangled_name;
             node->method_call.arguments = args;
+            node->method_call.is_pointer_receiver = method_sym->is_pointer_receiver;
             return node;
         }
     }
@@ -466,7 +468,7 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
     if (lookup_type != NULL && lookup_type->kind == TYPE_STRUCT) {
         const char *field_name = ast->member.member;
 
-        if (!via_pointer && low->current_receiver != NULL &&
+        if (!via_pointer && low->current_receiver != NULL && low->current_is_pointer_receiver &&
             object->kind == TT_VARIABLE_REFERENCE &&
             object->variable_reference.symbol == low->current_receiver) {
             via_pointer = true;

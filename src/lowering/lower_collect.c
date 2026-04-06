@@ -75,6 +75,7 @@ Lowering *lowering_create(Arena *tt_arena) {
     low->compound_types = NULL;
     low->current_receiver = NULL;
     low->current_receiver_name = NULL;
+    low->current_is_pointer_receiver = false;
     return low;
 }
 

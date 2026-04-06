@@ -74,6 +74,7 @@ typedef struct {
 typedef struct {
     const char *name;
     bool is_mut_receiver;
+    bool is_pointer_receiver;
     const char *receiver_name;
     ASTNode *declaration;
 } StructMethodInfo;
@@ -94,6 +95,14 @@ typedef struct {
     const Type *type;          // resolved TYPE_ENUM
 } EnumDefinition;
 
+/** Pact (interface) definition — registered during the first pass. */
+typedef struct {
+    const char *name;
+    StructFieldInfo *fields;   /* buf - required fields */
+    StructMethodInfo *methods; /* buf - all methods (required + default) */
+    const char **super_pacts;  /* buf - constraint alias references */
+} PactDefinition;
+
 struct SemanticAnalyzer {
     Arena *arena;
     Scope *current_scope;
@@ -103,6 +112,7 @@ struct SemanticAnalyzer {
     HashTable function_table;    // name → FunctionSignature*
     HashTable struct_table;      // name → StructDefinition*
     HashTable enum_table;        // name → EnumDefinition*
+    HashTable pact_table;        // name → PactDefinition*
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */
@@ -145,6 +155,8 @@ FunctionSignature *sema_lookup_function(const SemanticAnalyzer *analyzer, const 
 StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const char *name);
 /** Look up an enum definition by name. */
 EnumDefinition *sema_lookup_enum(const SemanticAnalyzer *analyzer, const char *name);
+/** Look up a pact definition by name. */
+PactDefinition *sema_lookup_pact(const SemanticAnalyzer *analyzer, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an error and returns TYPE_ERROR for unknown names.

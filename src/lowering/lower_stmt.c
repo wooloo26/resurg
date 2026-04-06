@@ -706,6 +706,11 @@ static TtNode *lower_file(Lowering *low, const ASTNode *ast) {
             continue;
         }
 
+        // Pact declarations are compile-time only; skip during lowering
+        if (decl_ast->kind == NODE_PACT_DECLARATION) {
+            continue;
+        }
+
         TtNode *decl = lower_node(low, decl_ast);
         if (decl != NULL) {
             BUFFER_PUSH(declarations, decl);
@@ -762,6 +767,10 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
         node->enum_decl.enum_type = ast->type;
         return node;
     }
+
+    case NODE_PACT_DECLARATION:
+        // Pact declarations are compile-time only; nothing to lower
+        return NULL;
 
     case NODE_RETURN: {
         TtNode *value = NULL;

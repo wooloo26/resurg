@@ -332,6 +332,12 @@ void ast_dump(const ASTNode *node, int32_t level) {
             ast_dump(node->return_statement.value, level + 1);
         }
         break;
+    case NODE_PACT_DECLARATION:
+        fprintf(stderr, "PactDecl(%s)\n", node->pact_declaration.name);
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->pact_declaration.methods); i++) {
+            ast_dump(node->pact_declaration.methods[i], level + 1);
+        }
+        break;
     case NODE_WHILE:
         fprintf(stderr, "While\n");
         ast_dump(node->while_loop.condition, level + 1);

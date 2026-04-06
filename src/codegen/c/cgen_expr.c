@@ -325,12 +325,24 @@ static const char *emit_struct_field_access_expression(CodeGenerator *generator,
 static const char *emit_method_call_expression(CodeGenerator *generator, const TtNode *node) {
     const char *receiver = codegen_emit_expression(generator, node->method_call.receiver);
     int32_t arg_count = BUFFER_LENGTH(node->method_call.arguments);
+    bool receiver_is_pointer = node->method_call.receiver->type != NULL &&
+                               node->method_call.receiver->type->kind == TYPE_POINTER;
+    const char *recv_expr;
+    if (node->method_call.is_pointer_receiver) {
+        // Pointer receiver: needs a pointer
+        recv_expr =
+            receiver_is_pointer ? receiver : arena_sprintf(generator->arena, "&(%s)", receiver);
+    } else {
+        // Value receiver: needs a value (copy)
+        recv_expr =
+            receiver_is_pointer ? arena_sprintf(generator->arena, "(*%s)", receiver) : receiver;
+    }
     if (arg_count > 0) {
         const char *args = join_expressions(generator, node->method_call.arguments, arg_count);
-        return arena_sprintf(generator->arena, "%s(&(%s), %s)", node->method_call.mangled_name,
-                             receiver, args);
+        return arena_sprintf(generator->arena, "%s(%s, %s)", node->method_call.mangled_name,
+                             recv_expr, args);
     }
-    return arena_sprintf(generator->arena, "%s(&(%s))", node->method_call.mangled_name, receiver);
+    return arena_sprintf(generator->arena, "%s(%s)", node->method_call.mangled_name, recv_expr);
 }
 
 static const char *emit_heap_alloc_expression(CodeGenerator *generator, const TtNode *node) {

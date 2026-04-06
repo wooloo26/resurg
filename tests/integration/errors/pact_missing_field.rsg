@@ -1,0 +1,15 @@
+// TEST: compile_error
+// EXPECT-ERROR: missing required field 'name' from pact 'Named'
+module test_err
+
+pact Named {
+    name: str
+}
+
+struct Foo: Named {
+    x: i32 = 0
+}
+
+fn main() {
+    f := Foo { x = 1 }
+}

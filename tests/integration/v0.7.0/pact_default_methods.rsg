@@ -1,0 +1,97 @@
+// v0.7.0 — Default method implementations in pacts
+module test_pact_defaults
+
+// ── pact with default method using receiver ──
+
+pact Labeled {
+    label: str
+    fn display(thing) -> str {
+        "Label: {thing.label}"
+    }
+}
+
+struct Box: Labeled {
+    label: str
+    size: i32 = 0
+}
+
+fn test_default_method_accesses_field() {
+    b := Box { label = "Fragile", size = 10 }
+    assert(b.display() == "Label: Fragile")
+}
+
+// ── override default method ──
+
+pact Describable {
+    name: str
+    fn describe(thing) -> str {
+        thing.name
+    }
+}
+
+struct Product: Describable {
+    name: str
+    price: f64 = 0.0
+
+    fn describe(p) -> str {
+        "{p.name} costs {p.price}"
+    }
+}
+
+struct SimpleItem: Describable {
+    name: str
+}
+
+fn test_override_default() {
+    p := Product { name = "Widget", price = 9.99 }
+    assert(p.describe() == "Widget costs 9.99")
+}
+
+fn test_use_default() {
+    s := SimpleItem { name = "Thing" }
+    assert(s.describe() == "Thing")
+}
+
+// ── default method with mutation ──
+
+pact Counter {
+    count: i32
+    fn increment(mut *c) {
+        c.count = c.count + 1
+    }
+}
+
+struct Tally: Counter {
+    count: i32 = 0
+    name: str = ""
+}
+
+fn test_default_mutating_method() {
+    t := Tally { name = "votes" }
+    assert(t.count == 0)
+    t.increment()
+    assert(t.count == 1)
+    t.increment()
+    assert(t.count == 2)
+}
+
+// ── pact with default method that has extra params ──
+
+pact Animal {
+    name: str
+    fn set_name(mut *animal, new_name: str) {
+        animal.name = new_name
+    }
+}
+
+struct Dog: Animal {
+    name: str
+    breed: str = ""
+}
+
+fn test_default_method_with_params() {
+    d := Dog { name = "Rex", breed = "Labrador" }
+    assert(d.name == "Rex")
+    d.set_name(new_name = "Buddy")
+    assert(d.name == "Buddy")
+}

@@ -12,7 +12,7 @@ Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Type
 
 - No null — `?T` option types
 - No exceptions — `T ! E` result types, postfix `!` propagation
-- Composition over inheritance — struct embedding + pacts (interfaces)
+- Composition over inheritance — struct embedding + pacts
 - Private by default — `pub` to export
 - No implicit conversions
 
@@ -392,13 +392,16 @@ fn create_logger() -> immut *Logger {
 
 ### Structs & Embedding
 
-Value types. `*` is the receiver (self). Embedding promotes fields/methods; override by redefining.
+Value types. Methods use **value receivers** or **pointer receivers** `*`, matching function parameter semantics. Value receivers auto-copy regardless of whether the struct is a value or pointer. Pointer receivers take a reference (`mut` for mutation). Embedding promotes fields/methods; override by redefining.
 
 ```rsg
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
-    fn set_position(mut *point, target: Point) {
+    fn sum(p) -> f64 {             // value receiver — p is a copy
+        p.x + p.y
+    }
+    fn set_position(mut *point, target: Point) {   // pointer receiver — mutates
         point.x = target.x
         point.y = target.y
     }
@@ -413,6 +416,12 @@ struct Point3D {
     }
 }
 ```
+
+| Receiver    | Syntax      | Semantics                          |
+| ----------- | ----------- | ---------------------------------- |
+| Value       | `fn f(p)`   | Copy of struct, cannot mutate      |
+| Pointer     | `fn f(*p)`  | Read-only pointer (`const T *`)    |
+| Mut pointer | `fn f(mut *p)` | Mutable pointer (`T *`)         |
 
 Pointer semantics with `&`:
 
@@ -480,13 +489,16 @@ Supported pattern kinds:
 
 ## 5. Abstraction & Extensibility
 
-### Pacts (Interfaces)
+### Pacts
 
 Can require fields and methods, provide defaults. Explicit conformance via `struct Foo: Pact1 + Pact2`.
 
 ```rsg
+pact A { Ord; Display }       // or: pact A = Ord + Display
+
 pact Animal {
     name: str
+    fn get_name(animal) = animal.name
     fn set_name(mut *animal, name: str) -> unit {
         animal.name = name
     }
@@ -497,15 +509,23 @@ pact Printable {
 }
 
 struct Dog: Animal + Printable {
-    fn to_string(*dog) = "Dog({dog.name})"
+    fn to_string(dog) = "Dog({dog.name})"
 }
 ```
 
 ### Extension Methods
 
 ```rsg
+pact Display {
+    fn join(*s, sep: str) -> str
+}
+
 ext str {
     fn last_char(*s) -> char { s[s.len() - 1] }
+}
+
+ext []Display {
+    fn join(*s, sep: str) -> str { ... }
 }
 ```
 
@@ -520,7 +540,6 @@ fn max<T: Ord>(a: T, b: T) -> T {
     if a > b { a } else { b }
 }
 
-pact A { Ord; Display }       // or: pact A = Ord + Display
 pact B<T> { Into<T>; Clone }
 
 fn complex_merge<T: Ord + Display, U: B<T>>(a: []T, b: []U) -> []T { ... }
@@ -543,10 +562,6 @@ enum Either<L, R> {
 
 type Callback<T> = fn(T) -> bool
 type ListBox = Box<List>
-
-ext []Display {
-    fn join(*s, sep: str) -> str { ... }
-}
 
 ext<T: Display> []T {
     fn join(*s, sep: str) -> str { ... }

@@ -95,11 +95,16 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     TtNode **params = NULL;
     const char *receiver_name = ast->function_declaration.receiver_name;
     bool is_mut_receiver = ast->function_declaration.is_mut_receiver;
+    bool is_pointer_receiver = ast->function_declaration.is_pointer_receiver;
 
     TtSymbolSpec recv_spec = {TT_SYMBOL_PARAMETER, receiver_name, struct_type, false,
                               ast->location};
     TtSymbol *recv_sym = lowering_make_symbol(low, &recv_spec);
+    recv_sym->is_pointer_receiver = is_pointer_receiver;
     lowering_scope_add(low, receiver_name, recv_sym);
+
+    // Store is_pointer_receiver on the method symbol for call-site lookup
+    func_sym->is_pointer_receiver = is_pointer_receiver;
 
     TtNode *recv_param = tt_new(low->tt_arena, TT_PARAMETER, struct_type, ast->location);
     recv_param->parameter.symbol = recv_sym;
@@ -107,13 +112,16 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     recv_param->parameter.param_type = struct_type;
     recv_param->parameter.is_receiver = true;
     recv_param->parameter.is_mut_receiver = is_mut_receiver;
+    recv_param->parameter.is_pointer_receiver = is_pointer_receiver;
     BUFFER_PUSH(params, recv_param);
 
     // Set current receiver for via_pointer detection
     TtSymbol *saved_receiver = low->current_receiver;
     const char *saved_name = low->current_receiver_name;
+    bool saved_is_pointer = low->current_is_pointer_receiver;
     low->current_receiver = recv_sym;
     low->current_receiver_name = receiver_name;
+    low->current_is_pointer_receiver = is_pointer_receiver;
 
     // Lower other parameters
     lower_parameter_list(low, ast->function_declaration.parameters,
@@ -124,6 +132,7 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     // Restore receiver context
     low->current_receiver = saved_receiver;
     low->current_receiver_name = saved_name;
+    low->current_is_pointer_receiver = saved_is_pointer;
 
     lowering_scope_leave(low);
 

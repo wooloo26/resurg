@@ -111,10 +111,11 @@ Dynamic-length data.
 
 ## v0.7.0 — Pacts & Conformance
 
-- [ ] Pact (interface) definition with required fields and methods
-- [ ] Default method implementations in pacts
-- [ ] Explicit conformance (`struct Foo: Pact1 + Pact2`)
-- [ ] Constraint aliases (`pact A { Ord; Display } or pact A = Ord + Display`)
+- [x] Pact (interface) definition with required fields and methods
+- [x] Default method implementations in pacts
+- [x] Explicit conformance (`struct Foo: Pact1 + Pact2`)
+- [x] Constraint aliases (`pact A { Ord; Display } or pact A = Ord + Display`)
+- [x] Value receivers
   
 ## v0.8.0 — Generics Core
 

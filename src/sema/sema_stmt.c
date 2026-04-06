@@ -357,6 +357,13 @@ static const Type *check_enum_declaration_body(SemanticAnalyzer *analyzer, ASTNo
     return result;
 }
 
+/** Pact declarations are validated during pass 1; nothing to check in pass 2. */
+static const Type *check_pact_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
+    (void)analyzer;
+    (void)node;
+    return &TYPE_UNIT_INSTANCE;
+}
+
 static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
     StructDefinition *sdef = sema_lookup_struct(analyzer, node->struct_declaration.name);
     if (sdef == NULL) {
@@ -589,6 +596,10 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_STRUCT_DECLARATION:
         result = check_struct_declaration(analyzer, node);
+        break;
+
+    case NODE_PACT_DECLARATION:
+        result = check_pact_declaration(analyzer, node);
         break;
 
     case NODE_STRUCT_LITERAL:

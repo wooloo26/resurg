@@ -12,6 +12,7 @@ SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     hash_table_init(&analyzer->function_table, NULL);
     hash_table_init(&analyzer->struct_table, NULL);
     hash_table_init(&analyzer->enum_table, NULL);
+    hash_table_init(&analyzer->pact_table, NULL);
     return analyzer;
 }
 
@@ -21,6 +22,7 @@ void semantic_analyzer_destroy(SemanticAnalyzer *analyzer) {
         hash_table_destroy(&analyzer->function_table);
         hash_table_destroy(&analyzer->struct_table);
         hash_table_destroy(&analyzer->enum_table);
+        hash_table_destroy(&analyzer->pact_table);
         free(analyzer);
     }
 }
@@ -154,6 +156,7 @@ static void register_method_signature(SemanticAnalyzer *analyzer, const char *ty
                                       ASTNode *method, StructMethodInfo **methods) {
     StructMethodInfo mi = {.name = method->function_declaration.name,
                            .is_mut_receiver = method->function_declaration.is_mut_receiver,
+                           .is_pointer_receiver = method->function_declaration.is_pointer_receiver,
                            .receiver_name = method->function_declaration.receiver_name,
                            .declaration = method};
     BUFFER_PUSH(*methods, mi);
@@ -324,6 +327,184 @@ static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declar
     scope_define(analyzer, &(SymbolDef){enum_name, enum_type, false, SYM_TYPE});
 }
 
+/**
+ * Collect all required fields from a pact and its super pacts (recursively).
+ * Appends to @p fields buffer.
+ */
+static void collect_pact_fields(SemanticAnalyzer *analyzer, const PactDefinition *pact,
+                                StructFieldInfo **fields, SourceLocation location) {
+    // Recurse into super pacts
+    for (int32_t i = 0; i < BUFFER_LENGTH(pact->super_pacts); i++) {
+        PactDefinition *super = sema_lookup_pact(analyzer, pact->super_pacts[i]);
+        if (super != NULL) {
+            collect_pact_fields(analyzer, super, fields, location);
+        }
+    }
+    // Add this pact's own fields (avoid duplicates)
+    for (int32_t i = 0; i < BUFFER_LENGTH(pact->fields); i++) {
+        bool exists = false;
+        for (int32_t j = 0; j < BUFFER_LENGTH(*fields); j++) {
+            if (strcmp((*fields)[j].name, pact->fields[i].name) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            BUFFER_PUSH(*fields, pact->fields[i]);
+        }
+    }
+}
+
+/**
+ * Collect all required methods from a pact and its super pacts (recursively).
+ * Appends to @p methods buffer.
+ */
+static void collect_pact_methods(SemanticAnalyzer *analyzer, const PactDefinition *pact,
+                                 StructMethodInfo **methods, SourceLocation location) {
+    for (int32_t i = 0; i < BUFFER_LENGTH(pact->super_pacts); i++) {
+        PactDefinition *super = sema_lookup_pact(analyzer, pact->super_pacts[i]);
+        if (super != NULL) {
+            collect_pact_methods(analyzer, super, methods, location);
+        }
+    }
+    for (int32_t i = 0; i < BUFFER_LENGTH(pact->methods); i++) {
+        bool exists = false;
+        for (int32_t j = 0; j < BUFFER_LENGTH(*methods); j++) {
+            if (strcmp((*methods)[j].name, pact->methods[i].name) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            BUFFER_PUSH(*methods, pact->methods[i]);
+        }
+    }
+}
+
+/** Register a pact definition during pass 1. */
+static void register_pact_definition(SemanticAnalyzer *analyzer, ASTNode *declaration) {
+    const char *pact_name = declaration->pact_declaration.name;
+
+    if (sema_lookup_pact(analyzer, pact_name) != NULL) {
+        SEMA_ERROR(analyzer, declaration->location, "duplicate pact definition '%s'", pact_name);
+        return;
+    }
+
+    PactDefinition *def = rsg_malloc(sizeof(*def));
+    def->name = pact_name;
+    def->fields = NULL;
+    def->methods = NULL;
+    def->super_pacts = NULL;
+
+    // Copy super pact references
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->pact_declaration.super_pacts); i++) {
+        BUFFER_PUSH(def->super_pacts, declaration->pact_declaration.super_pacts[i]);
+    }
+
+    // Register required fields
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->pact_declaration.fields); i++) {
+        ASTStructField *ast_field = &declaration->pact_declaration.fields[i];
+        const Type *field_type = resolve_ast_type(analyzer, &ast_field->type);
+        if (field_type == NULL) {
+            field_type = &TYPE_ERROR_INSTANCE;
+        }
+        StructFieldInfo fi = {.name = ast_field->name, .type = field_type, .default_value = NULL};
+        BUFFER_PUSH(def->fields, fi);
+    }
+
+    // Register methods
+    for (int32_t i = 0; i < BUFFER_LENGTH(declaration->pact_declaration.methods); i++) {
+        ASTNode *method = declaration->pact_declaration.methods[i];
+        StructMethodInfo mi = {.name = method->function_declaration.name,
+                               .is_mut_receiver = method->function_declaration.is_mut_receiver,
+                               .is_pointer_receiver =
+                                   method->function_declaration.is_pointer_receiver,
+                               .receiver_name = method->function_declaration.receiver_name,
+                               .declaration = method};
+        BUFFER_PUSH(def->methods, mi);
+    }
+
+    hash_table_insert(&analyzer->pact_table, pact_name, def);
+}
+
+/**
+ * Validate that a struct satisfies all pact conformances.
+ * Checks required fields and methods exist, and injects default methods.
+ */
+static void validate_struct_conformances(SemanticAnalyzer *analyzer, ASTNode *declaration,
+                                         StructDefinition *def) {
+    for (int32_t ci = 0; ci < BUFFER_LENGTH(declaration->struct_declaration.conformances); ci++) {
+        const char *pact_name = declaration->struct_declaration.conformances[ci];
+        PactDefinition *pact = sema_lookup_pact(analyzer, pact_name);
+        if (pact == NULL) {
+            SEMA_ERROR(analyzer, declaration->location, "unknown pact '%s'", pact_name);
+            continue;
+        }
+
+        // Collect all required fields from this pact and its super pacts
+        StructFieldInfo *required_fields = NULL;
+        collect_pact_fields(analyzer, pact, &required_fields, declaration->location);
+
+        // Check required fields exist in struct
+        for (int32_t i = 0; i < BUFFER_LENGTH(required_fields); i++) {
+            bool found = false;
+            for (int32_t j = 0; j < BUFFER_LENGTH(def->fields); j++) {
+                if (strcmp(def->fields[j].name, required_fields[i].name) == 0) {
+                    if (!type_equal(def->fields[j].type, required_fields[i].type)) {
+                        SEMA_ERROR(analyzer, declaration->location,
+                                   "field '%s' has type '%s' but pact '%s' requires type '%s'",
+                                   required_fields[i].name,
+                                   type_name(analyzer->arena, def->fields[j].type), pact_name,
+                                   type_name(analyzer->arena, required_fields[i].type));
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                SEMA_ERROR(analyzer, declaration->location,
+                           "missing required field '%s' from pact '%s'", required_fields[i].name,
+                           pact_name);
+            }
+        }
+        BUFFER_FREE(required_fields);
+
+        // Collect all required methods from this pact and its super pacts
+        StructMethodInfo *pact_methods = NULL;
+        collect_pact_methods(analyzer, pact, &pact_methods, declaration->location);
+
+        // Check required methods exist or inject default implementations
+        for (int32_t i = 0; i < BUFFER_LENGTH(pact_methods); i++) {
+            bool has_body = pact_methods[i].declaration != NULL &&
+                            pact_methods[i].declaration->function_declaration.body != NULL;
+
+            // Check if struct already has this method
+            bool found = false;
+            for (int32_t j = 0; j < BUFFER_LENGTH(def->methods); j++) {
+                if (strcmp(def->methods[j].name, pact_methods[i].name) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                if (has_body) {
+                    // Inject default method into struct
+                    ASTNode *method_ast = pact_methods[i].declaration;
+                    method_ast->function_declaration.owner_struct = def->name;
+                    BUFFER_PUSH(declaration->struct_declaration.methods, method_ast);
+                    register_method_signature(analyzer, def->name, method_ast, &def->methods);
+                } else {
+                    SEMA_ERROR(analyzer, declaration->location,
+                               "missing required method '%s' from pact '%s'", pact_methods[i].name,
+                               pact_name);
+                }
+            }
+        }
+        BUFFER_FREE(pact_methods);
+    }
+}
+
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     // Reset tables for each compilation
     hash_table_destroy(&analyzer->function_table);
@@ -334,15 +515,39 @@ bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {
     hash_table_init(&analyzer->struct_table, NULL);
     hash_table_destroy(&analyzer->enum_table);
     hash_table_init(&analyzer->enum_table, NULL);
+    hash_table_destroy(&analyzer->pact_table);
+    hash_table_init(&analyzer->pact_table, NULL);
 
     scope_push(analyzer, false); // global scope
 
     // First pass: register struct definitions, type aliases, and function signatures
-    // Register structs first (they may be referenced by type aliases and functions)
+
+    // Register pacts first (they must be available when validating struct conformances)
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        ASTNode *declaration = file->file.declarations[i];
+        if (declaration->kind == NODE_PACT_DECLARATION) {
+            register_pact_definition(analyzer, declaration);
+        }
+    }
+
+    // Register structs (they may be referenced by type aliases and functions)
     for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
         ASTNode *declaration = file->file.declarations[i];
         if (declaration->kind == NODE_STRUCT_DECLARATION) {
             register_struct_definition(analyzer, declaration);
+        }
+    }
+
+    // Validate pact conformances after all structs and pacts are registered
+    for (int32_t i = 0; i < BUFFER_LENGTH(file->file.declarations); i++) {
+        ASTNode *declaration = file->file.declarations[i];
+        if (declaration->kind == NODE_STRUCT_DECLARATION &&
+            BUFFER_LENGTH(declaration->struct_declaration.conformances) > 0) {
+            StructDefinition *def =
+                sema_lookup_struct(analyzer, declaration->struct_declaration.name);
+            if (def != NULL) {
+                validate_struct_conformances(analyzer, declaration, def);
+            }
         }
     }
 

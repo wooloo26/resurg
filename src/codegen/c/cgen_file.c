@@ -128,7 +128,12 @@ static void emit_function_signature(CodeGenerator *generator, const TtNode *node
                 fprintf(generator->output, ", ");
             }
             if (parameter->parameter.is_receiver) {
-                if (parameter->parameter.is_mut_receiver) {
+                if (!parameter->parameter.is_pointer_receiver) {
+                    // Value receiver: pass by value (copy)
+                    fprintf(generator->output, "%s %s",
+                            codegen_c_type_for(generator, parameter_type),
+                            parameter->parameter.symbol->mangled_name);
+                } else if (parameter->parameter.is_mut_receiver) {
                     fprintf(generator->output, "%s *%s",
                             codegen_c_type_for(generator, parameter_type),
                             parameter->parameter.symbol->mangled_name);

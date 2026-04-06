@@ -18,6 +18,10 @@ EnumDefinition *sema_lookup_enum(const SemanticAnalyzer *analyzer, const char *n
     return hash_table_lookup(&analyzer->enum_table, name);
 }
 
+PactDefinition *sema_lookup_pact(const SemanticAnalyzer *analyzer, const char *name) {
+    return hash_table_lookup(&analyzer->pact_table, name);
+}
+
 // ── AST type resolution ────────────────────────────────────────────────
 
 const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type) {

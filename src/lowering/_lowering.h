@@ -31,6 +31,7 @@ struct Lowering {
     const Type **compound_types; /* buf */
     TtSymbol *current_receiver;  // non-NULL inside method body
     const char *current_receiver_name;
+    bool current_is_pointer_receiver; // true if current method has pointer receiver
 };
 
 // ── Scope manipulation ────────────────────────────────────────────────

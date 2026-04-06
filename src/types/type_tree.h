@@ -38,6 +38,7 @@ struct TtSymbol {
     TtSymbolKind kind;
     Symbol *sema_symbol;
     bool is_mut;
+    bool is_pointer_receiver; // for method symbols: receiver is *T
     const char *mangled_name;
     SourceLocation location;
 };
@@ -162,6 +163,7 @@ struct TtNode {
             const Type *param_type;
             bool is_receiver;
             bool is_mut_receiver;
+            bool is_pointer_receiver;
         } parameter;
 
         // TT_VARIABLE_DECLARATION
@@ -334,6 +336,7 @@ struct TtNode {
             TtNode *receiver;
             const char *mangled_name;
             TtNode **arguments; /* buf */
+            bool is_pointer_receiver;
         } method_call;
 
         // TT_HEAP_ALLOC

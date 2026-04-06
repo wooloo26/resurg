@@ -37,6 +37,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_MUT] = {"mut", 0},
     [TOKEN_IMMUT] = {"immut", 0},
     [TOKEN_ENUM] = {"enum", 0},
+    [TOKEN_PACT] = {"pact", 0},
     [TOKEN_MATCH] = {"match", 0},
     [TOKEN_RETURN] = {"return", 0},
     [TOKEN_WHILE] = {"while", 0},

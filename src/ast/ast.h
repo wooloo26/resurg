@@ -110,6 +110,7 @@ typedef enum {
     NODE_PARAMETER,            // function parameter
     NODE_STRUCT_DECLARATION,   // struct definition
     NODE_ENUM_DECLARATION,     // enum definition
+    NODE_PACT_DECLARATION,     // pact definition
     NODE_RETURN,               // return expr
     NODE_DEFER,                // defer { ... }
 
@@ -207,6 +208,7 @@ struct ASTNode {
             // Method-specific fields (NULL / false for regular functions)
             const char *receiver_name;
             bool is_mut_receiver;
+            bool is_pointer_receiver;
             const char *owner_struct;
         } function_declaration;
 
@@ -362,9 +364,10 @@ struct ASTNode {
         // NODE_STRUCT_DECLARATION
         struct {
             const char *name;
-            ASTStructField *fields; /* buf */
-            ASTNode **methods;      /* buf - NODE_FUNCTION_DECLARATION */
-            const char **embedded;  /* buf - embedded struct names */
+            ASTStructField *fields;    /* buf */
+            ASTNode **methods;         /* buf - NODE_FUNCTION_DECLARATION */
+            const char **embedded;     /* buf - embedded struct names */
+            const char **conformances; /* buf - pact names */
         } struct_declaration;
 
         // NODE_STRUCT_LITERAL
@@ -420,6 +423,14 @@ struct ASTNode {
             const char **field_names; /* buf - for struct variants */
             ASTNode **field_values;   /* buf - for struct variants */
         } enum_init;
+
+        // NODE_PACT_DECLARATION
+        struct {
+            const char *name;
+            ASTStructField *fields;   /* buf - required fields */
+            ASTNode **methods;        /* buf - required + default methods */
+            const char **super_pacts; /* buf - constraint alias pact names */
+        } pact_declaration;
 
         // NODE_RETURN
         struct {
