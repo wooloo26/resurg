@@ -137,8 +137,14 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
         BUF_PUSH(type_fields, sf);
     }
 
-    def->type = type_create_struct(sema->arena, def->name, type_fields, BUF_LEN(type_fields),
-                                   embedded_types, BUF_LEN(embedded_types));
+    StructTypeSpec struct_spec = {
+        .name = def->name,
+        .fields = type_fields,
+        .field_count = BUF_LEN(type_fields),
+        .embedded = embedded_types,
+        .embed_count = BUF_LEN(embedded_types),
+    };
+    def->type = type_create_struct(sema->arena, &struct_spec);
     decl->type = def->type;
 }
 
@@ -147,7 +153,7 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
  * and append a StructMethodInfo entry to the methods buf.
  */
 static void register_method_sig(Sema *sema, const char *type_name, ASTNode *method,
-                                      StructMethodInfo **methods) {
+                                StructMethodInfo **methods) {
     StructMethodInfo mi = {.name = method->fn_decl.name,
                            .is_mut_recv = method->fn_decl.is_mut_recv,
                            .is_ptr_recv = method->fn_decl.is_ptr_recv,
@@ -257,8 +263,7 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
     case VARIANT_STRUCT: {
         variant.kind = ENUM_VARIANT_STRUCT;
         variant.field_count = BUF_LEN(ast_variant->fields);
-        variant.fields =
-            arena_alloc_zero(sema->arena, variant.field_count * sizeof(StructField));
+        variant.fields = arena_alloc_zero(sema->arena, variant.field_count * sizeof(StructField));
         for (int32_t j = 0; j < variant.field_count; j++) {
             variant.fields[j].name = ast_variant->fields[j].name;
             variant.fields[j].type = resolve_ast_type(sema, &ast_variant->fields[j].type);
@@ -299,8 +304,7 @@ static void register_enum_def(Sema *sema, ASTNode *decl) {
         BUF_PUSH(variants, variant);
     }
 
-    const Type *enum_type =
-        type_create_enum(sema->arena, enum_name, variants, BUF_LEN(variants));
+    const Type *enum_type = type_create_enum(sema->arena, enum_name, variants, BUF_LEN(variants));
     decl->type = enum_type;
 
     EnumDef *def = rsg_malloc(sizeof(*def));

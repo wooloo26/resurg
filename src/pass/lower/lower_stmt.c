@@ -201,24 +201,27 @@ HirNode *lower_block(Lower *low, const ASTNode *ast) {
 }
 
 /**
- * Rewrite HIR_BREAK nodes with values: `break val` → `{ result = val; break; }`.
- * Skips nested HIR_LOOP nodes (their breaks are independent).
+ * Callback that builds a prefix stmt to insert before a target node.
+ * Returns NULL if the node should not be rewritten.
  */
-static void rewrite_break_values(Lower *low, HirNode **node_ptr, HirSym *result_sym) {
+typedef HirNode *(*RewritePrefixFn)(Lower *low, HirNode *node, void *ctx);
+
+/**
+ * Generic recursive rewriter: walks the HIR tree and, for each node where
+ * @p build_prefix returns non-NULL, wraps `{ prefix; node; }` in a block.
+ * Stops at nested HIR_LOOP boundaries.
+ */
+static void rewrite_hir_nodes(Lower *low, HirNode **node_ptr, RewritePrefixFn build_prefix,
+                              void *ctx) {
     HirNode *node = *node_ptr;
     if (node == NULL) {
         return;
     }
 
-    if (node->kind == HIR_BREAK && node->break_stmt.value != NULL) {
-        HirNode *assign = hir_new(low->hir_arena, HIR_ASSIGN, &TYPE_UNIT_INST, node->loc);
-        assign->assign.target = lower_make_var_ref(low, result_sym, node->loc);
-        assign->assign.value = node->break_stmt.value;
-
-        node->break_stmt.value = NULL;
-
+    HirNode *prefix = build_prefix(low, node, ctx);
+    if (prefix != NULL) {
         HirNode **stmts = NULL;
-        BUF_PUSH(stmts, assign);
+        BUF_PUSH(stmts, prefix);
         BUF_PUSH(stmts, node);
 
         HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, node->loc);
@@ -235,19 +238,40 @@ static void rewrite_break_values(Lower *low, HirNode **node_ptr, HirSym *result_
     switch (node->kind) {
     case HIR_BLOCK:
         for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
-            rewrite_break_values(low, &node->block.stmts[i], result_sym);
+            rewrite_hir_nodes(low, &node->block.stmts[i], build_prefix, ctx);
         }
         if (node->block.result != NULL) {
-            rewrite_break_values(low, &node->block.result, result_sym);
+            rewrite_hir_nodes(low, &node->block.result, build_prefix, ctx);
         }
         break;
     case HIR_IF:
-        rewrite_break_values(low, &node->if_expr.then_body, result_sym);
-        rewrite_break_values(low, &node->if_expr.else_body, result_sym);
+        rewrite_hir_nodes(low, &node->if_expr.then_body, build_prefix, ctx);
+        rewrite_hir_nodes(low, &node->if_expr.else_body, build_prefix, ctx);
         break;
     default:
         break;
     }
+}
+
+/** Build an assignment prefix for a break-with-value node. */
+static HirNode *break_value_prefix(Lower *low, HirNode *node, void *ctx) {
+    HirSym *result_sym = ctx;
+    if (node->kind != HIR_BREAK || node->break_stmt.value == NULL) {
+        return NULL;
+    }
+    HirNode *assign = hir_new(low->hir_arena, HIR_ASSIGN, &TYPE_UNIT_INST, node->loc);
+    assign->assign.target = lower_make_var_ref(low, result_sym, node->loc);
+    assign->assign.value = node->break_stmt.value;
+    node->break_stmt.value = NULL;
+    return assign;
+}
+
+/**
+ * Rewrite HIR_BREAK nodes with values: `break val` → `{ result = val; break; }`.
+ * Skips nested HIR_LOOP nodes (their breaks are independent).
+ */
+static void rewrite_break_values(Lower *low, HirNode **node_ptr, HirSym *result_sym) {
+    rewrite_hir_nodes(low, node_ptr, break_value_prefix, result_sym);
 }
 
 /** Desugar `while cond { body }` → `loop { if !cond { break }; body }`. */
@@ -372,6 +396,15 @@ static HirNode *build_for_increment(Lower *low, HirSym *iter_sym) {
     return assign;
 }
 
+/** Build an increment prefix for a continue node inside a for-loop. */
+static HirNode *continue_increment_prefix(Lower *low, HirNode *node, void *ctx) {
+    HirSym *iter_sym = ctx;
+    if (node->kind != HIR_CONTINUE) {
+        return NULL;
+    }
+    return build_for_increment(low, iter_sym);
+}
+
 /**
  * Rewrite HIR_CONTINUE nodes inside a for-loop body to include the
  * iterator increment before the continue.  Skips nested HIR_LOOP nodes
@@ -380,48 +413,7 @@ static HirNode *build_for_increment(Lower *low, HirSym *iter_sym) {
  * Transforms: `continue` → `{ i = i + 1; continue; }`
  */
 static void rewrite_continue_for_increment(Lower *low, HirNode **node_ptr, HirSym *iter_sym) {
-    HirNode *node = *node_ptr;
-    if (node == NULL) {
-        return;
-    }
-
-    if (node->kind == HIR_CONTINUE) {
-        // Build: { i = i + 1; continue; }
-        HirNode *assign = build_for_increment(low, iter_sym);
-
-        HirNode **stmts = NULL;
-        BUF_PUSH(stmts, assign);
-        BUF_PUSH(stmts, node); // the original HIR_CONTINUE
-
-        HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, node->loc);
-        block->block.stmts = stmts;
-        block->block.result = NULL;
-        *node_ptr = block;
-        return;
-    }
-
-    // Do not descend into nested loops — their continue is independent
-    if (node->kind == HIR_LOOP) {
-        return;
-    }
-
-    // Recurse into children
-    switch (node->kind) {
-    case HIR_BLOCK:
-        for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
-            rewrite_continue_for_increment(low, &node->block.stmts[i], iter_sym);
-        }
-        if (node->block.result != NULL) {
-            rewrite_continue_for_increment(low, &node->block.result, iter_sym);
-        }
-        break;
-    case HIR_IF:
-        rewrite_continue_for_increment(low, &node->if_expr.then_body, iter_sym);
-        rewrite_continue_for_increment(low, &node->if_expr.else_body, iter_sym);
-        break;
-    default:
-        break;
-    }
+    rewrite_hir_nodes(low, node_ptr, continue_increment_prefix, iter_sym);
 }
 
 /**

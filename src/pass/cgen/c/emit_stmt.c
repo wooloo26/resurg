@@ -114,16 +114,6 @@ static const char *resolve_assign_target(CGen *cgen, const HirNode *target) {
     if (target->kind == HIR_VAR_REF) {
         return target->var_ref.sym->mangled_name;
     }
-    if (target->kind == HIR_IDX) {
-        const char *obj = emit_expr(cgen, target->idx_access.object);
-        const char *idx = emit_expr(cgen, target->idx_access.idx);
-        const Type *obj_type = target->idx_access.object->type;
-        if (obj_type != NULL && obj_type->kind == TYPE_SLICE) {
-            const char *elem_c = c_type_for(cgen, target->type);
-            return arena_sprintf(cgen->arena, "((%s*)%s.data)[%s]", elem_c, obj, idx);
-        }
-        return arena_sprintf(cgen->arena, "%s._data[%s]", obj, idx);
-    }
     if (target->kind == HIR_STRUCT_FIELD_ACCESS) {
         const char *obj = resolve_assign_target(cgen, target->struct_field_access.object);
         if (target->struct_field_access.via_ptr) {

@@ -42,15 +42,6 @@ HirSym *lower_scope_lookup(const Lower *low, const char *name);
 
 // ── Parameter structs ──────────────────────────────────────────────────
 
-/** Grouped params for creating a HirSym. */
-typedef struct {
-    HirSymKind kind;
-    const char *name;
-    const Type *type;
-    bool is_mut;
-    SrcLoc loc;
-} HirSymSpec;
-
 /** Grouped params for resolving a promoted field. */
 typedef struct {
     HirNode *object;

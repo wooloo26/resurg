@@ -163,9 +163,17 @@ const Type *type_slice_elem(const Type *type);
 /** Create a tuple type from an array of elem types. */
 Type *type_create_tuple(Arena *arena, const Type **elems, int32_t count);
 
-/** Create a struct type with the given fields and embedded types. */
-Type *type_create_struct(Arena *arena, const char *name, StructField *fields, int32_t field_count,
-                         const Type **embedded, int32_t embed_count);
+/** Params for creating a struct type. */
+typedef struct {
+    const char *name;
+    StructField *fields;
+    int32_t field_count;
+    const Type **embedded;
+    int32_t embed_count;
+} StructTypeSpec;
+
+/** Create a struct type with the given spec. */
+Type *type_create_struct(Arena *arena, const StructTypeSpec *spec);
 
 /** Return the struct name.  Asserts kind == TYPE_STRUCT. */
 const char *type_struct_name(const Type *type);

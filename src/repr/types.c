@@ -261,14 +261,13 @@ Type *type_create_tuple(Arena *arena, const Type **elems, int32_t count) {
     return type;
 }
 
-Type *type_create_struct(Arena *arena, const char *name, StructField *fields, int32_t field_count,
-                         const Type **embedded, int32_t embed_count) {
+Type *type_create_struct(Arena *arena, const StructTypeSpec *spec) {
     Type *type = type_create(arena, TYPE_STRUCT);
-    type->struct_type.name = name;
-    type->struct_type.fields = fields;
-    type->struct_type.field_count = field_count;
-    type->struct_type.embedded = embedded;
-    type->struct_type.embed_count = embed_count;
+    type->struct_type.name = spec->name;
+    type->struct_type.fields = spec->fields;
+    type->struct_type.field_count = spec->field_count;
+    type->struct_type.embedded = spec->embedded;
+    type->struct_type.embed_count = spec->embed_count;
     return type;
 }
 

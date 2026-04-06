@@ -374,9 +374,18 @@ struct HirNode {
 
 /** Allocate a zero-initialised HirNode from @p arena. */
 HirNode *hir_new(Arena *arena, HirNodeKind kind, const Type *type, SrcLoc loc);
-/** Allocate a HirSym from @p arena. */
-HirSym *hir_sym_new(Arena *arena, HirSymKind kind, const char *name, const Type *type, bool is_mut,
-                    SrcLoc loc);
+
+/** Grouped params for creating a HirSym. */
+typedef struct {
+    HirSymKind kind;
+    const char *name;
+    const Type *type;
+    bool is_mut;
+    SrcLoc loc;
+} HirSymSpec;
+
+/** Allocate a HirSym from @p arena using grouped @p spec. */
+HirSym *hir_sym_new(Arena *arena, const HirSymSpec *spec);
 
 // ── TT dump ───────────────────────────────────────────────────────────
 

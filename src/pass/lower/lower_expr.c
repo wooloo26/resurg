@@ -343,6 +343,18 @@ static HirSym *find_promoted_method(Lower *low, const Type *struct_type, const c
     return NULL;
 }
 
+/** Build a HIR_METHOD_CALL node from a resolved method sym. */
+static HirNode *build_method_call(Lower *low, const ASTNode *ast, HirNode *recv,
+                                  const HirSym *method_sym) {
+    HirNode **args = lower_elem_list(low, ast->call.args);
+    HirNode *node = hir_new(low->hir_arena, HIR_METHOD_CALL, ast->type, ast->loc);
+    node->method_call.recv = recv;
+    node->method_call.mangled_name = method_sym->mangled_name;
+    node->method_call.args = args;
+    node->method_call.is_ptr_recv = method_sym->is_ptr_recv;
+    return node;
+}
+
 static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
     const ASTNode *member_ast = ast->call.callee;
     const Type *obj_type = member_ast->member.object->type;
@@ -366,13 +378,7 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         HirSym *method_sym = lower_scope_lookup(low, method_key);
         if (method_sym != NULL) {
             HirNode *recv = lower_expr(low, member_ast->member.object);
-            HirNode **args = lower_elem_list(low, ast->call.args);
-            HirNode *node = hir_new(low->hir_arena, HIR_METHOD_CALL, ast->type, ast->loc);
-            node->method_call.recv = recv;
-            node->method_call.mangled_name = method_sym->mangled_name;
-            node->method_call.args = args;
-            node->method_call.is_ptr_recv = method_sym->is_ptr_recv;
-            return node;
+            return build_method_call(low, ast, recv, method_sym);
         }
     }
 
@@ -395,13 +401,7 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         }
 
         if (method_sym != NULL) {
-            HirNode **args = lower_elem_list(low, ast->call.args);
-            HirNode *node = hir_new(low->hir_arena, HIR_METHOD_CALL, ast->type, ast->loc);
-            node->method_call.recv = recv;
-            node->method_call.mangled_name = method_sym->mangled_name;
-            node->method_call.args = args;
-            node->method_call.is_ptr_recv = method_sym->is_ptr_recv;
-            return node;
+            return build_method_call(low, ast, recv, method_sym);
         }
     }
 

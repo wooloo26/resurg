@@ -189,6 +189,14 @@ static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type
     return enum_type;
 }
 
+/** Reorder named args, validate, and apply a resolved fn sig to a call. */
+static const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig) {
+    reorder_named_args(sema, node, sig);
+    check_call_args(sema, node, sig);
+    node->type = sig->return_type;
+    return sig->return_type;
+}
+
 /** Resolve a struct method call, including promoted methods from embedded structs. */
 static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Type *struct_type,
                                             const char *method_name) {
@@ -216,10 +224,7 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
         check_node(sema, node->call.args[i]);
     }
-    reorder_named_args(sema, node, sig);
-    check_call_args(sema, node, sig);
-    node->type = sig->return_type;
-    return sig->return_type;
+    return resolve_call(sema, node, sig);
 }
 
 /** Try to resolve a member call (enum variant, enum method, or struct method). */
@@ -242,10 +247,7 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
             arena_sprintf(sema->arena, "%s.%s", type_enum_name(obj_type), method_name);
         FnSig *sig = sema_lookup_fn(sema, method_key);
         if (sig != NULL) {
-            reorder_named_args(sema, node, sig);
-            check_call_args(sema, node, sig);
-            node->type = sig->return_type;
-            return sig->return_type;
+            return resolve_call(sema, node, sig);
         }
     }
 
@@ -285,9 +287,7 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     if (fn_name != NULL) {
         FnSig *sig = sema_lookup_fn(sema, fn_name);
         if (sig != NULL) {
-            reorder_named_args(sema, node, sig);
-            check_call_args(sema, node, sig);
-            return sig->return_type;
+            return resolve_call(sema, node, sig);
         }
 
         Sym *sym = scope_lookup(sema, fn_name);
@@ -397,20 +397,27 @@ const Type *check_str_interpolation(Sema *sema, ASTNode *node) {
     return &TYPE_STR_INST;
 }
 
-const Type *check_array_lit(Sema *sema, ASTNode *node) {
-    const Type *elem_type = resolve_ast_type(sema, &node->array_lit.elem_type);
-    for (int32_t i = 0; i < BUF_LEN(node->array_lit.elems); i++) {
-        const Type *elem = check_node(sema, node->array_lit.elems[i]);
+/** Infer and unify elem types across all elems in a collection lit. */
+static const Type *check_elem_list(Sema *sema, ASTNode **elems, ASTType *ast_elem_type) {
+    const Type *elem_type = resolve_ast_type(sema, ast_elem_type);
+    for (int32_t i = 0; i < BUF_LEN(elems); i++) {
+        const Type *elem = check_node(sema, elems[i]);
         if (elem_type == NULL && elem != NULL) {
             elem_type = elem;
         }
         if (elem_type != NULL) {
-            promote_lit(node->array_lit.elems[i], elem_type);
+            promote_lit(elems[i], elem_type);
         }
     }
     if (elem_type == NULL) {
         elem_type = &TYPE_I32_INST;
     }
+    return elem_type;
+}
+
+const Type *check_array_lit(Sema *sema, ASTNode *node) {
+    const Type *elem_type =
+        check_elem_list(sema, node->array_lit.elems, &node->array_lit.elem_type);
     int32_t size = node->array_lit.size;
     if (size == 0) {
         size = BUF_LEN(node->array_lit.elems);
@@ -419,19 +426,8 @@ const Type *check_array_lit(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_slice_lit(Sema *sema, ASTNode *node) {
-    const Type *elem_type = resolve_ast_type(sema, &node->slice_lit.elem_type);
-    for (int32_t i = 0; i < BUF_LEN(node->slice_lit.elems); i++) {
-        const Type *elem = check_node(sema, node->slice_lit.elems[i]);
-        if (elem_type == NULL && elem != NULL) {
-            elem_type = elem;
-        }
-        if (elem_type != NULL) {
-            promote_lit(node->slice_lit.elems[i], elem_type);
-        }
-    }
-    if (elem_type == NULL) {
-        elem_type = &TYPE_I32_INST;
-    }
+    const Type *elem_type =
+        check_elem_list(sema, node->slice_lit.elems, &node->slice_lit.elem_type);
     return type_create_slice(sema->arena, elem_type);
 }
 

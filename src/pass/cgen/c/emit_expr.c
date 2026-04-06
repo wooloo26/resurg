@@ -98,8 +98,7 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
     if (msg_node->kind == HIR_UNIT_LIT) {
         msg = "NULL";
     } else if (msg_node->kind == HIR_STR_LIT) {
-        msg =
-            arena_sprintf(cgen->arena, "\"%s\"", c_str_escape(cgen, msg_node->str_lit.value));
+        msg = arena_sprintf(cgen->arena, "\"%s\"", c_str_escape(cgen, msg_node->str_lit.value));
     } else {
         const char *msg_expr = emit_expr(cgen, msg_node);
         msg = arena_sprintf(cgen->arena, "%s.data", msg_expr);
@@ -357,40 +356,58 @@ static const char *emit_deref_expr(CGen *cgen, const HirNode *node) {
 }
 
 /** Emit a match expr as a temp var with an if-else chain. */
+/** Shared context for a single match arm. */
+typedef struct {
+    const HirNode *cond;
+    const HirNode *body;
+    const HirNode *bindings;
+    const char *result;
+} MatchArm;
+
+/** Emit bindings and body/result assignment (shared by both arm styles). */
+static void emit_match_arm_body(CGen *cgen, const MatchArm *arm) {
+    if (arm->bindings != NULL && arm->bindings->kind == HIR_BLOCK) {
+        emit_block_stmts(cgen, arm->bindings);
+    }
+    if (arm->result != NULL) {
+        const char *value = emit_expr(cgen, arm->body);
+        emit_line(cgen, "%s = %s;", arm->result, value);
+    } else {
+        emit_stmt(cgen, arm->body);
+    }
+}
+
+/** Wrap a condition str in parens if not already. */
+static const char *wrap_cond(CGen *cgen, const char *cond_str) {
+    if (cond_str[0] != '(') {
+        return arena_sprintf(cgen->arena, "(%s)", cond_str);
+    }
+    return cond_str;
+}
+
 /** Emit a single guarded match arm (used inside do { } while(0) block). */
-static void emit_match_arm_guarded(CGen *cgen, const HirNode *cond, const HirNode *guard,
-                                   const HirNode *body, const HirNode *bindings, const char *result) {
-    if (cond != NULL) {
-        const char *cond_str = emit_expr(cgen, cond);
-        const char *wrapped = cond_str;
-        if (cond_str[0] != '(') {
-            wrapped = arena_sprintf(cgen->arena, "(%s)", cond_str);
-        }
-        emit_line(cgen, "if %s {", wrapped);
+static void emit_match_arm_guarded(CGen *cgen, const MatchArm *arm, const HirNode *guard) {
+    if (arm->cond != NULL) {
+        emit_line(cgen, "if %s {", wrap_cond(cgen, emit_expr(cgen, arm->cond)));
     } else {
         emit_line(cgen, "{");
     }
     cgen->indent++;
 
-    if (bindings != NULL && bindings->kind == HIR_BLOCK) {
-        emit_block_stmts(cgen, bindings);
+    if (arm->bindings != NULL && arm->bindings->kind == HIR_BLOCK) {
+        emit_block_stmts(cgen, arm->bindings);
     }
 
     if (guard != NULL) {
-        const char *guard_str = emit_expr(cgen, guard);
-        const char *gwrapped = guard_str;
-        if (guard_str[0] != '(') {
-            gwrapped = arena_sprintf(cgen->arena, "(%s)", guard_str);
-        }
-        emit_line(cgen, "if %s {", gwrapped);
+        emit_line(cgen, "if %s {", wrap_cond(cgen, emit_expr(cgen, guard)));
         cgen->indent++;
     }
 
-    if (result != NULL) {
-        const char *value = emit_expr(cgen, body);
-        emit_line(cgen, "%s = %s;", result, value);
+    if (arm->result != NULL) {
+        const char *value = emit_expr(cgen, arm->body);
+        emit_line(cgen, "%s = %s;", arm->result, value);
     } else {
-        emit_stmt(cgen, body);
+        emit_stmt(cgen, arm->body);
     }
     emit_line(cgen, "break;");
 
@@ -403,14 +420,9 @@ static void emit_match_arm_guarded(CGen *cgen, const HirNode *cond, const HirNod
 }
 
 /** Emit a single simple match arm (part of if-else chain, no guards). */
-static void emit_match_arm_simple(CGen *cgen, int32_t arm_idx, const HirNode *cond,
-                                  const HirNode *body, const HirNode *bindings, const char *result) {
-    if (cond != NULL) {
-        const char *cond_str = emit_expr(cgen, cond);
-        const char *wrapped = cond_str;
-        if (cond_str[0] != '(') {
-            wrapped = arena_sprintf(cgen->arena, "(%s)", cond_str);
-        }
+static void emit_match_arm_simple(CGen *cgen, int32_t arm_idx, const MatchArm *arm) {
+    if (arm->cond != NULL) {
+        const char *wrapped = wrap_cond(cgen, emit_expr(cgen, arm->cond));
         if (arm_idx == 0) {
             emit_line(cgen, "if %s {", wrapped);
         } else {
@@ -425,17 +437,7 @@ static void emit_match_arm_simple(CGen *cgen, int32_t arm_idx, const HirNode *co
         }
     }
     cgen->indent++;
-
-    if (bindings != NULL && bindings->kind == HIR_BLOCK) {
-        emit_block_stmts(cgen, bindings);
-    }
-
-    if (result != NULL) {
-        const char *value = emit_expr(cgen, body);
-        emit_line(cgen, "%s = %s;", result, value);
-    } else {
-        emit_stmt(cgen, body);
-    }
+    emit_match_arm_body(cgen, arm);
     cgen->indent--;
 }
 
@@ -465,14 +467,16 @@ static const char *emit_match_expr(CGen *cgen, const HirNode *node) {
     }
 
     for (int32_t i = 0; i < arm_count; i++) {
+        MatchArm arm = {
+            .cond = node->match_expr.arm_conds[i],
+            .body = node->match_expr.arm_bodies[i],
+            .bindings = node->match_expr.arm_bindings[i],
+            .result = result,
+        };
         if (has_any_guard) {
-            emit_match_arm_guarded(cgen, node->match_expr.arm_conds[i],
-                                   node->match_expr.arm_guards[i], node->match_expr.arm_bodies[i],
-                                   node->match_expr.arm_bindings[i], result);
+            emit_match_arm_guarded(cgen, &arm, node->match_expr.arm_guards[i]);
         } else {
-            emit_match_arm_simple(cgen, i, node->match_expr.arm_conds[i],
-                                  node->match_expr.arm_bodies[i], node->match_expr.arm_bindings[i],
-                                  result);
+            emit_match_arm_simple(cgen, i, &arm);
         }
     }
 

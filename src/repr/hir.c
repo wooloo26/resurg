@@ -12,14 +12,13 @@ const Type *hir_sym_type(const HirSym *sym) {
     return sym->type;
 }
 
-HirSym *hir_sym_new(Arena *arena, HirSymKind kind, const char *name, const Type *type, bool is_mut,
-                    SrcLoc loc) {
+HirSym *hir_sym_new(Arena *arena, const HirSymSpec *spec) {
     HirSym *sym = arena_alloc_zero(arena, sizeof(HirSym));
-    sym->kind = kind;
-    sym->name = name;
-    sym->type = type;
-    sym->is_mut = is_mut;
-    sym->loc = loc;
+    sym->kind = spec->kind;
+    sym->name = spec->name;
+    sym->type = spec->type;
+    sym->is_mut = spec->is_mut;
+    sym->loc = spec->loc;
     return sym;
 }
 

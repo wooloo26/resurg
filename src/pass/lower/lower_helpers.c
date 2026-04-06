@@ -40,7 +40,7 @@ HirSym *lower_scope_lookup(const Lower *low, const char *name) {
 // ── Shared helpers ────────────────────────────────────────────────────
 
 HirSym *lower_make_sym(Lower *low, const HirSymSpec *spec) {
-    return hir_sym_new(low->hir_arena, spec->kind, spec->name, spec->type, spec->is_mut, spec->loc);
+    return hir_sym_new(low->hir_arena, spec);
 }
 
 HirSym *lower_add_var(Lower *low, const HirSymSpec *spec) {
