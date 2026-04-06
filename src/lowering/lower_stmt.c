@@ -379,6 +379,22 @@ static TtNode *lower_expression_statement(Lowering *low, const ASTNode *ast) {
     return lower_expression(low, inner);
 }
 
+/** Pre-register method symbols for a named type (struct or enum). */
+static void preregister_type_methods(Lowering *low, const char *type_name,
+                                     ASTNode *const *methods) {
+    for (int32_t j = 0; j < BUFFER_LENGTH(methods); j++) {
+        const ASTNode *method = methods[j];
+        const char *method_name = method->function_declaration.name;
+        const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
+        const char *key = arena_sprintf(low->tt_arena, "%s.%s", type_name, method_name);
+        const char *mangled = arena_sprintf(low->tt_arena, "rsgu_%s_%s", type_name, method_name);
+        TtSymbol *sym =
+            lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false, method->location);
+        sym->mangled_name = mangled;
+        lowering_scope_add(low, key, sym);
+    }
+}
+
 /** Pre-register all function declarations into scope before lowering bodies. */
 static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
     for (int32_t i = 0; i < BUFFER_LENGTH(file_ast->file.declarations); i++) {
@@ -393,35 +409,23 @@ static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
             lowering_scope_add(low, decl->function_declaration.name, sym);
         }
         if (decl->kind == NODE_STRUCT_DECLARATION) {
-            const char *struct_name = decl->struct_declaration.name;
-            for (int32_t j = 0; j < BUFFER_LENGTH(decl->struct_declaration.methods); j++) {
-                const ASTNode *method = decl->struct_declaration.methods[j];
-                const char *method_name = method->function_declaration.name;
-                const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
-                const char *key = arena_sprintf(low->tt_arena, "%s.%s", struct_name, method_name);
-                const char *mangled =
-                    arena_sprintf(low->tt_arena, "rsgu_%s_%s", struct_name, method_name);
-                TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false,
-                                                     method->location);
-                sym->mangled_name = mangled;
-                lowering_scope_add(low, key, sym);
-            }
+            preregister_type_methods(low, decl->struct_declaration.name,
+                                     decl->struct_declaration.methods);
         }
-        // Pre-register enum method symbols
         if (decl->kind == NODE_ENUM_DECLARATION) {
-            const char *enum_name = decl->enum_declaration.name;
-            for (int32_t j = 0; j < BUFFER_LENGTH(decl->enum_declaration.methods); j++) {
-                const ASTNode *method = decl->enum_declaration.methods[j];
-                const char *method_name = method->function_declaration.name;
-                const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
-                const char *key = arena_sprintf(low->tt_arena, "%s.%s", enum_name, method_name);
-                const char *mangled =
-                    arena_sprintf(low->tt_arena, "rsgu_%s_%s", enum_name, method_name);
-                TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false,
-                                                     method->location);
-                sym->mangled_name = mangled;
-                lowering_scope_add(low, key, sym);
-            }
+            preregister_type_methods(low, decl->enum_declaration.name,
+                                     decl->enum_declaration.methods);
+        }
+    }
+}
+
+/** Lower methods and append to @p declarations. */
+static void lower_methods_into(Lowering *low, ASTNode *const *methods, const char *type_name,
+                               const Type *type, TtNode ***declarations) {
+    for (int32_t j = 0; j < BUFFER_LENGTH(methods); j++) {
+        TtNode *method = lower_method_declaration(low, methods[j], type_name, type);
+        if (method != NULL) {
+            BUFFER_PUSH(*declarations, method);
         }
     }
 }
@@ -435,14 +439,8 @@ static void emit_struct_with_methods(Lowering *low, const ASTNode *decl_ast,
     struct_decl->struct_decl.struct_type = decl_ast->type;
     BUFFER_PUSH(*declarations, struct_decl);
 
-    for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->struct_declaration.methods); j++) {
-        TtNode *method =
-            lower_method_declaration(low, decl_ast->struct_declaration.methods[j],
-                                     decl_ast->struct_declaration.name, decl_ast->type);
-        if (method != NULL) {
-            BUFFER_PUSH(*declarations, method);
-        }
-    }
+    lower_methods_into(low, decl_ast->struct_declaration.methods, decl_ast->struct_declaration.name,
+                       decl_ast->type, declarations);
 }
 
 /** Emit an enum type declaration and its methods into @p declarations. */
@@ -456,13 +454,8 @@ static void emit_enum_with_methods(Lowering *low, const ASTNode *decl_ast, TtNod
     // Register enum type as compound for typedef emission
     BUFFER_PUSH(low->compound_types, decl_ast->type);
 
-    for (int32_t j = 0; j < BUFFER_LENGTH(decl_ast->enum_declaration.methods); j++) {
-        TtNode *method = lower_method_declaration(low, decl_ast->enum_declaration.methods[j],
-                                                  decl_ast->enum_declaration.name, decl_ast->type);
-        if (method != NULL) {
-            BUFFER_PUSH(*declarations, method);
-        }
-    }
+    lower_methods_into(low, decl_ast->enum_declaration.methods, decl_ast->enum_declaration.name,
+                       decl_ast->type, declarations);
 }
 
 /** Lower a NODE_FILE into a TT_FILE with pre-registered function symbols. */

@@ -402,6 +402,19 @@ const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     return result;
 }
 
+/** Promote and type-check a field value against an expected type. */
+static void check_field_match(SemanticAnalyzer *analyzer, ASTNode *value_node,
+                              const Type *expected_type) {
+    promote_literal(value_node, expected_type);
+    const Type *actual_type = value_node->type;
+    if (actual_type != NULL && expected_type != NULL && !type_equal(actual_type, expected_type) &&
+        actual_type->kind != TYPE_ERROR && expected_type->kind != TYPE_ERROR) {
+        SEMA_ERROR(analyzer, value_node->location, "type mismatch: expected '%s', got '%s'",
+                   type_name(analyzer->arena, expected_type),
+                   type_name(analyzer->arena, actual_type));
+    }
+}
+
 const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
     const char *struct_name = node->struct_literal.name;
     StructDefinition *sdef = sema_lookup_struct(analyzer, struct_name);
@@ -422,15 +435,7 @@ const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
         for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
             if (strcmp(sdef->fields[j].name, fname) == 0) {
                 found = true;
-                promote_literal(fvalue, sdef->fields[j].type);
-                const Type *ftype = fvalue->type;
-                if (ftype != NULL && sdef->fields[j].type != NULL &&
-                    !type_equal(ftype, sdef->fields[j].type) && ftype->kind != TYPE_ERROR &&
-                    sdef->fields[j].type->kind != TYPE_ERROR) {
-                    SEMA_ERROR(analyzer, fvalue->location, "type mismatch: expected '%s', got '%s'",
-                               type_name(analyzer->arena, sdef->fields[j].type),
-                               type_name(analyzer->arena, ftype));
-                }
+                check_field_match(analyzer, fvalue, sdef->fields[j].type);
                 break;
             }
         }
@@ -702,15 +707,7 @@ const Type *check_enum_init(SemanticAnalyzer *analyzer, ASTNode *node) {
         for (int32_t j = 0; j < variant->field_count; j++) {
             if (strcmp(variant->fields[j].name, fname) == 0) {
                 found = true;
-                promote_literal(fvalue, variant->fields[j].type);
-                const Type *ftype = fvalue->type;
-                if (ftype != NULL && variant->fields[j].type != NULL &&
-                    !type_equal(ftype, variant->fields[j].type) && ftype->kind != TYPE_ERROR &&
-                    variant->fields[j].type->kind != TYPE_ERROR) {
-                    SEMA_ERROR(analyzer, fvalue->location, "type mismatch: expected '%s', got '%s'",
-                               type_name(analyzer->arena, variant->fields[j].type),
-                               type_name(analyzer->arena, ftype));
-                }
+                check_field_match(analyzer, fvalue, variant->fields[j].type);
                 break;
             }
         }

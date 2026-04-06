@@ -146,50 +146,57 @@ static void build_struct_type(SemanticAnalyzer *analyzer, ASTNode *declaration,
 }
 
 /**
+ * Register a method's signature in the function table (keyed as "TypeName.method_name")
+ * and append a StructMethodInfo entry to the methods buffer.
+ */
+static void register_method_signature(SemanticAnalyzer *analyzer, const char *type_name,
+                                      ASTNode *method, StructMethodInfo **methods) {
+    StructMethodInfo mi = {.name = method->function_declaration.name,
+                           .is_mut_receiver = method->function_declaration.is_mut_receiver,
+                           .receiver_name = method->function_declaration.receiver_name,
+                           .declaration = method};
+    BUFFER_PUSH(*methods, mi);
+
+    const char *method_key = arena_sprintf(analyzer->arena, "%s.%s", type_name, mi.name);
+
+    const Type *return_type = &TYPE_UNIT_INSTANCE;
+    if (method->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
+        return_type = resolve_ast_type(analyzer, &method->function_declaration.return_type);
+        if (return_type == NULL) {
+            return_type = &TYPE_UNIT_INSTANCE;
+        }
+    }
+
+    FunctionSignature *sig = rsg_malloc(sizeof(*sig));
+    sig->name = mi.name;
+    sig->return_type = return_type;
+    sig->parameter_types = NULL;
+    sig->parameter_names = NULL;
+    sig->parameter_count = BUFFER_LENGTH(method->function_declaration.parameters);
+    sig->is_public = false;
+
+    for (int32_t j = 0; j < sig->parameter_count; j++) {
+        ASTNode *param = method->function_declaration.parameters[j];
+        const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+        if (pt == NULL) {
+            pt = &TYPE_ERROR_INSTANCE;
+        }
+        BUFFER_PUSH(sig->parameter_types, pt);
+        BUFFER_PUSH(sig->parameter_names, param->parameter.name);
+    }
+
+    hash_table_insert(&analyzer->function_table, method_key, sig);
+}
+
+/**
  * Register each struct method as a function signature in the analyzer's
  * function table (keyed as "StructName.method_name").
  */
 static void register_struct_methods(SemanticAnalyzer *analyzer, const ASTNode *declaration,
                                     StructDefinition *def) {
-    const char *struct_name = def->name;
-
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->struct_declaration.methods); i++) {
-        ASTNode *method = declaration->struct_declaration.methods[i];
-        StructMethodInfo mi = {.name = method->function_declaration.name,
-                               .is_mut_receiver = method->function_declaration.is_mut_receiver,
-                               .receiver_name = method->function_declaration.receiver_name,
-                               .declaration = method};
-        BUFFER_PUSH(def->methods, mi);
-
-        const char *method_key = arena_sprintf(analyzer->arena, "%s.%s", struct_name, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INSTANCE;
-        if (method->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(analyzer, &method->function_declaration.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INSTANCE;
-            }
-        }
-
-        FunctionSignature *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->parameter_types = NULL;
-        sig->parameter_names = NULL;
-        sig->parameter_count = BUFFER_LENGTH(method->function_declaration.parameters);
-        sig->is_public = false;
-
-        for (int32_t j = 0; j < sig->parameter_count; j++) {
-            ASTNode *param = method->function_declaration.parameters[j];
-            const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERROR_INSTANCE;
-            }
-            BUFFER_PUSH(sig->parameter_types, pt);
-            BUFFER_PUSH(sig->parameter_names, param->parameter.name);
-        }
-
-        hash_table_insert(&analyzer->function_table, method_key, sig);
+        register_method_signature(analyzer, def->name, declaration->struct_declaration.methods[i],
+                                  &def->methods);
     }
 }
 
@@ -305,42 +312,8 @@ static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declar
 
     // Register methods
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->enum_declaration.methods); i++) {
-        ASTNode *method = declaration->enum_declaration.methods[i];
-        StructMethodInfo mi = {.name = method->function_declaration.name,
-                               .is_mut_receiver = method->function_declaration.is_mut_receiver,
-                               .receiver_name = method->function_declaration.receiver_name,
-                               .declaration = method};
-        BUFFER_PUSH(def->methods, mi);
-
-        const char *method_key = arena_sprintf(analyzer->arena, "%s.%s", enum_name, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INSTANCE;
-        if (method->function_declaration.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(analyzer, &method->function_declaration.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INSTANCE;
-            }
-        }
-
-        FunctionSignature *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->parameter_types = NULL;
-        sig->parameter_names = NULL;
-        sig->parameter_count = BUFFER_LENGTH(method->function_declaration.parameters);
-        sig->is_public = false;
-
-        for (int32_t j = 0; j < sig->parameter_count; j++) {
-            ASTNode *param = method->function_declaration.parameters[j];
-            const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERROR_INSTANCE;
-            }
-            BUFFER_PUSH(sig->parameter_types, pt);
-            BUFFER_PUSH(sig->parameter_names, param->parameter.name);
-        }
-
-        hash_table_insert(&analyzer->function_table, method_key, sig);
+        register_method_signature(analyzer, enum_name, declaration->enum_declaration.methods[i],
+                                  &def->methods);
     }
 
     hash_table_insert(&analyzer->enum_table, enum_name, def);
