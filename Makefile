@@ -82,6 +82,7 @@ endif
 
 # Format all C sources with clang-format
 ALL_C := $(wildcard src/*.c src/*.h src/*/*.c src/*/*.h src/*/*/*.c src/*/*/*.h \
+                    src/*/*/*/*.c src/*/*/*/*.h \
                     include/*.h include/*/*.h include/*/*/*.h \
                     $(RUNTIME)/*.c $(RUNTIME)/*.h)
 format:

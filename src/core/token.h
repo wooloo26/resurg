@@ -1,14 +1,14 @@
-#ifndef RG_TOKEN_H
-#define RG_TOKEN_H
+#ifndef RSG_TOKEN_H
+#define RSG_TOKEN_H
 
 #include "common.h"
 
 /**
  * @file token.h
- * @brief Token kinds and the Token struct produced by the lexer.
+ * @brief Token kinds and the Token struct produced by the lex.
  */
 
-/** Every lexeme the lexer can produce. */
+/** Every lexeme the lex can produce. */
 typedef enum {
     // Lits
     TOKEN_INTEGER_LIT, // 42, 1_000
@@ -118,18 +118,18 @@ typedef enum {
     // Special
     TOKEN_NEWLINE, // significant newline (stmt terminator)
     TOKEN_EOF,     // end of file
-    TOKEN_ERR,     // lexer err
+    TOKEN_ERR,     // lex err
 } TokenKind;
 
 /**
- * A single lexeme with its kind, source text, loc, and optional
+ * A single lexeme with its kind, src text, loc, and optional
  * parsed lit value.
  */
 typedef struct {
     TokenKind kind;
-    const char *lexeme; // points into arena-duped source or interned str
+    const char *lexeme; // points into arena-duped src or interned str
     int32_t len;
-    SourceLoc loc;
+    SrcLoc loc;
 
     /** Parsed lit payload (valid only for lit token kinds). */
     union {
@@ -146,4 +146,4 @@ const char *token_kind_str(TokenKind kind);
 /** Return true if @p kind is a type keyword (bool, i8, ..., str, unit). */
 bool token_is_type_keyword(TokenKind kind);
 
-#endif // RG_TOKEN_H
+#endif // RSG_TOKEN_H

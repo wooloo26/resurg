@@ -47,17 +47,17 @@ static RsgStr rsg_str_from_fmt(const char *fmt, ...) {
 // and managed by ref counting.  The tracing GC handles struct/value
 // allocs made through rsg_heap_alloc().
 
-RsgStr rsg_str_lit(const char *source) {
+RsgStr rsg_str_lit(const char *src) {
     return (RsgStr){
-        .data = source,
-        .len = (int32_t)strlen(source),
+        .data = src,
+        .len = (int32_t)strlen(src),
         .ref_count = -1, // static
     };
 }
 
-RsgStr rsg_str_new(const char *source, int32_t len) {
+RsgStr rsg_str_new(const char *src, int32_t len) {
     char *buf = checked_malloc(len + 1);
-    memcpy(buf, source, len);
+    memcpy(buf, src, len);
     buf[len] = '\0';
     return (RsgStr){
         .data = buf,
@@ -129,17 +129,17 @@ void rsg_str_builder_init(RsgStrBuilder *builder) {
     builder->buf = checked_malloc(builder->capacity);
 }
 
-void rsg_str_builder_append(RsgStrBuilder *builder, const char *source, int32_t len) {
+void rsg_str_builder_append(RsgStrBuilder *builder, const char *src, int32_t len) {
     while (builder->len + len >= builder->capacity) {
         builder->capacity *= 2;
         builder->buf = checked_realloc(builder->buf, builder->capacity);
     }
-    memcpy(builder->buf + builder->len, source, len);
+    memcpy(builder->buf + builder->len, src, len);
     builder->len += len;
 }
 
-void rsg_str_builder_append_str(RsgStrBuilder *builder, RsgStr source) {
-    rsg_str_builder_append(builder, source.data, source.len);
+void rsg_str_builder_append_str(RsgStrBuilder *builder, RsgStr src) {
+    rsg_str_builder_append(builder, src.data, src.len);
 }
 
 RsgStr rsg_str_builder_finish(RsgStrBuilder *builder) {
@@ -171,8 +171,8 @@ void rsg_assert(bool cond, const char *msg, const char *file, int32_t line) {
 
 // Typed I/O - print values to stdout without a trailing newline.
 
-void rsg_print_str(RsgStr source) {
-    fwrite(source.data, 1, source.len, stdout);
+void rsg_print_str(RsgStr src) {
+    fwrite(src.data, 1, src.len, stdout);
 }
 
 void rsg_print_i32(int32_t value) {

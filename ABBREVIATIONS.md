@@ -57,5 +57,6 @@
 | `deref`     | Dereference                    |
 | `err`       | Error                          |
 | `inst`      | Instance                       |
+| `sig`       | Signature                      |
 | `lsp`       | Language Server Protocol       |
 | `pkg`       | Package                        |

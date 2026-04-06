@@ -6,6 +6,28 @@ Statically typed, compiled. ADTs, pattern matching, value-based errors. **Extens
 
 Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Typescript.
 
+```plain
+Source (.rsg)
+  ↓
+[ pass/lex ]        → Lexer ────────── Tokens (via core/token.h)
+  ↓
+[ pass/parse ]      → Parser ───────── Untyped AST (repr/ast.h)
+  ↓
+[ pass/resolve ]    → Resolver ─────── AST + Symbol Bindings & Scopes
+  ↓
+[ pass/infer ]      → Inferencer ───── AST + Type Equations & Unification
+  ↓
+[ pass/check ]      → Checker ──────── Fully Typed AST + Validated Constraints
+  ↓
+[ pass/mono ]       → Monomorphizer ── Specialized Typed AST (Generics resolved)
+  ↓
+[ pass/lower ]      → Lowering ─────── HIR (repr/hir.h) (Desugared, flat control flow)
+  ↓
+[ optional passes ] → HIR Passes ───── HIR → HIR (Constant folding, CFA, simplifications)
+  ↓
+[ pass/cgen ]       → CodeGen ──────── Target Code (C17, C++, Go, TypeScript)
+```
+
 ---
 
 ## 1. Design Principles
@@ -424,10 +446,10 @@ struct Point3D {
 }
 ```
 
-| Receiver    | Syntax      | Semantics                          |
-| ----------- | ----------- | ---------------------------------- |
-| Value       | `fn f(p)`   | Copy of struct, cannot mutate      |
-| Pointer     | `fn f(*p)`  | Read-only pointer (`const T *`)    |
+| Receiver    | Syntax         | Semantics                       |
+| ----------- | -------------- | ------------------------------- |
+| Value       | `fn f(p)`      | Copy of struct, cannot mutate   |
+| Pointer     | `fn f(*p)`     | Read-only pointer (`const T *`) |
 | Mut pointer | `fn f(mut *p)` | Mutable pointer (`T *`)         |
 
 Pointer semantics with `&`:
@@ -659,7 +681,7 @@ data |> |x| x + 1 |> println
 
 ### Keywords
 
-```
+```plain
 break  continue  defer  else   enum   false  fn
 for    if        loop   match  module mut    pact   pub
 immut  return    struct true   type   use    var    while
@@ -667,7 +689,7 @@ immut  return    struct true   type   use    var    while
 
 **Reserved (future):**
 
-```
+```plain
 async  await  comptime  macro  spawn  where
 ```
 

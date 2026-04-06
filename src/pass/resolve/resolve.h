@@ -1,0 +1,105 @@
+#ifndef RSG_RESOLVE_H
+#define RSG_RESOLVE_H
+
+#include "repr/ast.h"
+#include "repr/types.h"
+
+/**
+ * @file resolve.h
+ * @brief Name resolution — scope management, symbol lookup, and type resolution.
+ *
+ * Provides the scope chain, symbol table helpers, and AST-to-Type
+ * resolution used by the semantic analysis (check) pass.
+ */
+typedef struct Sema Sema;
+typedef struct Sym Sym;
+typedef struct Scope Scope;
+typedef struct FnSig FnSig;
+typedef struct StructDef StructDef;
+typedef struct EnumDef EnumDef;
+typedef struct PactDef PactDef;
+
+// ── Struct defs ─────────────────────────────────────────────────
+
+/** Discriminator for Sym entries in the scope table. */
+typedef enum {
+    SYM_VAR,
+    SYM_PARAM,
+    SYM_FN,
+    SYM_TYPE,
+    SYM_MODULE,
+} SymKind;
+
+/** Sym table entry - one per declared name in a scope. */
+struct Sym {
+    const char *name;
+    const Type *type;
+    SymKind kind;
+    bool is_pub;
+    bool is_immut;
+    const ASTNode *decl;
+    Sym *owner;
+};
+
+/**
+ * Lexical scope - hash table of Syms with a ptr to the
+ * enclosing scope.
+ */
+struct Scope {
+    HashTable table;         // name → Sym* (arena-backed)
+    struct Scope *parent;    // enclosing scope (NULL for global)
+    bool is_loop;            // true inside loop/for bodies (enables break/continue)
+    const char *module_name; // propagated from the module decl
+};
+
+// ── Scope manipulation (resolve_scope.c) ───────────────────────────────
+
+/** Grouped params for defining a sym in a scope. */
+typedef struct {
+    const char *name;
+    const Type *type;
+    bool is_pub;
+    SymKind kind;
+} SymDef;
+
+/** Push a new child scope.  If @p is_loop is true, break/continue are legal inside it. */
+Scope *scope_push(Sema *sema, bool is_loop);
+/** Pop the innermost scope. */
+void scope_pop(Sema *sema);
+/** Define a sym in the current scope. */
+void scope_define(Sema *sema, const SymDef *def);
+/** Look up @p name in the innermost scope only (for redef checks). */
+Sym *scope_lookup_current(const Sema *sema, const char *name);
+/** Walk the scope chain outward to find @p name. */
+Sym *scope_lookup(const Sema *sema, const char *name);
+/** Return true if any enclosing scope has is_loop set. */
+bool in_loop(const Sema *sema);
+
+// ── Type resolution (resolve_type.c) ───────────────────────────────────
+
+/** Look up a type alias by name.  Returns the underlying type or NULL. */
+const Type *sema_lookup_type_alias(const Sema *sema, const char *name);
+/** Look up a fn sig by name. */
+FnSig *sema_lookup_fn(const Sema *sema, const char *name);
+/** Look up a struct def by name. */
+StructDef *sema_lookup_struct(const Sema *sema, const char *name);
+/** Look up an enum def by name. */
+EnumDef *sema_lookup_enum(const Sema *sema, const char *name);
+/** Look up a pact def by name. */
+PactDef *sema_lookup_pact(const Sema *sema, const char *name);
+/**
+ * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
+ * types; emits an err and returns TYPE_ERR for unknown names.
+ */
+const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type);
+/** Map a lit kind to its corresponding type. */
+const Type *lit_kind_to_type(LitKind kind);
+/** Return the LitKind for a given TypeKind. */
+LitKind type_to_lit_kind(TypeKind kind);
+/**
+ * Promote a lit node to match @p target's numeric type.
+ * Returns @p target on success, NULL if no promotion applies.
+ */
+const Type *promote_lit(ASTNode *lit, const Type *target);
+
+#endif // RSG_RESOLVE_H

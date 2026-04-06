@@ -1,5 +1,5 @@
-#ifndef RG_COMMON_H
-#define RG_COMMON_H
+#ifndef RSG_COMMON_H
+#define RSG_COMMON_H
 
 #include <assert.h>
 #include <stdarg.h>
@@ -34,9 +34,9 @@ void *arena_alloc(Arena *arena, size_t size);
 /** Allocate @p size zero-initialised bytes from @p arena. */
 void *arena_alloc_zero(Arena *arena, size_t size);
 /** Duplicate a NUL-terminated str into @p arena. */
-char *arena_strdup(Arena *arena, const char *source);
-/** Duplicate the first @p len bytes of @p source into @p arena. */
-char *arena_strndup(Arena *arena, const char *source, size_t len);
+char *arena_strdup(Arena *arena, const char *src);
+/** Duplicate the first @p len bytes of @p src into @p arena. */
+char *arena_strndup(Arena *arena, const char *src, size_t len);
 /** printf-style fmtting into arena-allocated memory. */
 char *arena_sprintf(Arena *arena, const char *fmt, ...);
 
@@ -124,7 +124,7 @@ typedef struct {
     const char *file;
     int32_t line;
     int32_t column;
-} SourceLoc;
+} SrcLoc;
 
 /** Checked malloc - aborts on OOM. */
 void *rsg_malloc(size_t size);
@@ -136,10 +136,10 @@ void *rsg_realloc(void *ptr, size_t size);
 /**
  * Emit "file:line:col: err: ..." to stderr.
  */
-void rsg_err(SourceLoc loc, const char *fmt, ...);
+void rsg_err(SrcLoc loc, const char *fmt, ...);
 /** Emit "file:line:col: warning: ..." to stderr. */
-void rsg_warn(SourceLoc loc, const char *fmt, ...);
+void rsg_warn(SrcLoc loc, const char *fmt, ...);
 /** Emit "fatal: ..." to stderr and terminate the process. */
 noreturn void rsg_fatal(const char *fmt, ...);
 
-#endif // RG_COMMON_H
+#endif // RSG_COMMON_H

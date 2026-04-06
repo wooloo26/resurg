@@ -1,5 +1,5 @@
-#ifndef RG_RUNTIME_H
-#define RG_RUNTIME_H
+#ifndef RSG_RUNTIME_H
+#define RSG_RUNTIME_H
 
 /**
  * @file runtime.h
@@ -31,9 +31,9 @@ typedef struct {
 } RsgStr;
 
 /** Wrap a C str lit (zero-copy, static refcount). */
-RsgStr rsg_str_lit(const char *source);
-/** Copy @p len bytes from @p source into a new heap-allocated str. */
-RsgStr rsg_str_new(const char *source, int32_t len);
+RsgStr rsg_str_lit(const char *src);
+/** Copy @p len bytes from @p src into a new heap-allocated str. */
+RsgStr rsg_str_new(const char *src, int32_t len);
 /** Concatenate two strs into a new heap-allocated str. */
 RsgStr rsg_str_concat(RsgStr a, RsgStr b);
 /** Return an empty static str. */
@@ -68,10 +68,10 @@ typedef struct {
 
 /** Initialise @p builder with a default capacity. */
 void rsg_str_builder_init(RsgStrBuilder *builder);
-/** Append @p len raw bytes from @p source. */
-void rsg_str_builder_append(RsgStrBuilder *builder, const char *source, int32_t len);
+/** Append @p len raw bytes from @p src. */
+void rsg_str_builder_append(RsgStrBuilder *builder, const char *src, int32_t len);
 /** Append an RsgStr. */
-void rsg_str_builder_append_str(RsgStrBuilder *builder, RsgStr source);
+void rsg_str_builder_append_str(RsgStrBuilder *builder, RsgStr src);
 /**
  * Finalise the builder, return the assembled RsgStr, and free internal
  * storage.
@@ -88,7 +88,7 @@ bool rsg_str_equal(RsgStr a, RsgStr b);
 void rsg_assert(bool cond, const char *msg, const char *file, int32_t line);
 
 /** Print an RsgStr to stdout (no trailing newline). */
-void rsg_print_str(RsgStr source);
+void rsg_print_str(RsgStr src);
 void rsg_print_i32(int32_t value);
 void rsg_print_u32(uint32_t value);
 void rsg_print_f64(double value);
@@ -135,8 +135,8 @@ void rsg_gc_add_root(void **root);
 
 /**
  * Remove a previously registered root.  After this call, the GC no longer
- * considers @p root a source of liveness.
+ * considers @p root a src of liveness.
  */
 void rsg_gc_remove_root(void **root);
 
-#endif // RG_RUNTIME_H
+#endif // RSG_RUNTIME_H

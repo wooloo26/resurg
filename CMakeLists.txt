@@ -17,14 +17,14 @@ endif()
 
 file(GLOB_RECURSE LIB_SRCS CONFIGURE_DEPENDS src/*.c)
 file(GLOB_RECURSE LIB_HDRS CONFIGURE_DEPENDS src/*.h include/*.h)
-list(FILTER LIB_SRCS EXCLUDE REGEX "src/main\\.c$")
+list(FILTER LIB_SRCS EXCLUDE REGEX "src/driver/main\\.c$")
 
 add_library(rsg STATIC ${LIB_SRCS} ${LIB_HDRS})
 target_include_directories(rsg PUBLIC include PRIVATE src)
 
 # --- Compiler driver ---
 
-add_executable(resurg src/main.c)
+add_executable(resurg src/driver/main.c)
 target_link_libraries(resurg PRIVATE rsg)
 target_include_directories(resurg PRIVATE src)
 

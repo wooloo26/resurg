@@ -1,5 +1,5 @@
 // TEST: compile_error
-// EXPECT-ERROR: identifier 'rsg_data' uses a prefix reserved for the compiler/runtime
+// EXPECT-ERROR: identifier 'rsg_data' uses a prefix reserved for the runtime
 module test_err
 
 fn main() {

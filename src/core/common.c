@@ -53,16 +53,16 @@ void *arena_alloc_zero(Arena *arena, size_t size) {
     return ptr;
 }
 
-char *arena_strdup(Arena *arena, const char *source) {
-    size_t len = strlen(source);
+char *arena_strdup(Arena *arena, const char *src) {
+    size_t len = strlen(src);
     char *duplicate = arena_alloc(arena, len + 1);
-    memcpy(duplicate, source, len + 1);
+    memcpy(duplicate, src, len + 1);
     return duplicate;
 }
 
-char *arena_strndup(Arena *arena, const char *source, size_t len) {
+char *arena_strndup(Arena *arena, const char *src, size_t len) {
     char *duplicate = arena_alloc(arena, len + 1);
-    memcpy(duplicate, source, len);
+    memcpy(duplicate, src, len);
     duplicate[len] = '\0';
     return duplicate;
 }
@@ -279,21 +279,20 @@ void *rsg_realloc(void *ptr, size_t size) {
 }
 
 /** Emit "label: msg\n" to @p stream with a loc prefix. */
-static void emit_located_diagnostic(SourceLoc loc, const char *label, const char *fmt,
-                                    va_list args) {
+static void emit_located_diagnostic(SrcLoc loc, const char *label, const char *fmt, va_list args) {
     fprintf(stderr, "%s:%d:%d: %s: ", loc.file, loc.line, loc.column, label);
     vfprintf(stderr, fmt, args);
     fputc('\n', stderr);
 }
 
-void rsg_err(SourceLoc loc, const char *fmt, ...) {
+void rsg_err(SrcLoc loc, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     emit_located_diagnostic(loc, "err", fmt, args);
     va_end(args);
 }
 
-void rsg_warn(SourceLoc loc, const char *fmt, ...) {
+void rsg_warn(SrcLoc loc, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     emit_located_diagnostic(loc, "warning", fmt, args);
