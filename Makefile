@@ -1,3 +1,5 @@
+MAKEFLAGS += --no-print-directory
+
 CC        := clang
 BUILD     := build
 RUNTIME   := runtime
@@ -88,11 +90,7 @@ format:
 
 # Run clang-tidy on all C sources (uses compile_commands.json)
 TIDY_SRCS := $(filter %.c,$(ALL_C))
-TIDY_TARGETS := $(patsubst %.c,%.tidy,$(TIDY_SRCS))
-
-$(TIDY_TARGETS): %.tidy: %.c
-	@clang-tidy --quiet -p $(BUILD) $<
 
 tidy: $(BUILD)/Makefile
-	@"$(MAKE)" --no-print-directory -j$(JOBS) $(TIDY_TARGETS)
+	@printf '%s\n' $(TIDY_SRCS) | xargs -P$(JOBS) -n1 clang-tidy --quiet -p $(BUILD)
 	@echo clang-tidy passed.

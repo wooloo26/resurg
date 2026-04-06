@@ -579,25 +579,35 @@ def main() -> int:
     # ── Print results ──
     print_human(results)
 
-    if args.format == "tap":
-        print(format_tap(results))
-    else:
-        print(format_junit(results))
+    # Only emit structured output (TAP/JUnit) when stdout is piped.
+    if not sys.stdout.isatty():
+        if args.format == "tap":
+            print(format_tap(results))
+        else:
+            print(format_junit(results))
 
     # ── Summary ──
     passed = sum(1 for r in results if r.passed and not r.skipped)
     failed = sum(1 for r in results if not r.passed)
     skipped = sum(1 for r in results if r.skipped)
     cached = sum(1 for r in results if r.cached)
+    total = len(results)
+    elapsed = sum(r.duration for r in results)
 
-    parts = [f"{passed} passed"]
+    bar = "━" * 40
+    parts = []
     if failed:
-        parts.append(f"{failed} failed")
+        parts.append(f"{COLORS['fail']}  {failed} failed{COLORS['reset']}")
+    parts.append(f"{COLORS['pass']}  {passed} passed{COLORS['reset']}")
     if skipped:
-        parts.append(f"{skipped} skipped")
+        parts.append(f"{COLORS['skip']}  {skipped} skipped{COLORS['reset']}")
     if cached:
-        parts.append(f"{cached} cached")
-    print(f"\n{', '.join(parts)} ({len(results)} total)", file=sys.stderr)
+        parts.append(f"  {cached} cached")
+    detail = ",".join(parts)
+    color = COLORS['fail'] if failed else COLORS['pass']
+    print(f"\n{color}{bar}{COLORS['reset']}", file=sys.stderr)
+    print(f"{detail}  ({total} total, {elapsed:.1f}s)", file=sys.stderr)
+    print(f"{color}{bar}{COLORS['reset']}", file=sys.stderr)
 
     return 1 if failed else 0
 
