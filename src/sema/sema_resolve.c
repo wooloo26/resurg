@@ -32,6 +32,14 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
         }
         return type_create_array(analyzer->arena, element, ast_type->array_size);
     }
+    if (ast_type->kind == AST_TYPE_SLICE) {
+        const Type *element = resolve_ast_type(analyzer, ast_type->slice_element);
+        if (element == NULL) {
+            SEMA_ERROR(analyzer, ast_type->location, "slice element type required");
+            return &TYPE_ERROR_INSTANCE;
+        }
+        return type_create_slice(analyzer->arena, element);
+    }
     if (ast_type->kind == AST_TYPE_TUPLE) {
         const Type **elements = NULL;
         for (int32_t i = 0; i < BUFFER_LENGTH(ast_type->tuple_elements); i++) {

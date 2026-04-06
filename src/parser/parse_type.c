@@ -13,10 +13,22 @@ ASTType parser_parse_type(Parser *parser) {
         return type;
     }
 
-    // Array type: [N]T
+    // Array type: [N]T  or  Slice type: []T
     if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
-        type.kind = AST_TYPE_ARRAY;
         parser_advance(parser); // consume '['
+
+        // Slice type: []T (no size)
+        if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            type.kind = AST_TYPE_SLICE;
+            parser_advance(parser); // consume ']'
+            ASTType *element = arena_alloc(parser->arena, sizeof(ASTType));
+            *element = parser_parse_type(parser);
+            type.slice_element = element;
+            return type;
+        }
+
+        // Array type: [N]T
+        type.kind = AST_TYPE_ARRAY;
         if (!parser_check(parser, TOKEN_INTEGER_LITERAL)) {
             rsg_error(parser_current_location(parser), "expected array size");
             type.kind = AST_TYPE_INFERRED;

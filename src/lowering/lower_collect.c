@@ -12,13 +12,16 @@ static bool is_compound_type_registered(const Lowering *low, const Type *type) {
     return false;
 }
 
-/** Register an array or tuple type (and its children) in the lowering registry. */
+/** Register an array, tuple, or slice type (and its children) in the lowering registry. */
 static void register_compound_type(Lowering *low, const Type *type) {
     if (type == NULL) {
         return;
     }
     if (type->kind == TYPE_ARRAY) {
         register_compound_type(low, type->array.element);
+    } else if (type->kind == TYPE_SLICE) {
+        register_compound_type(low, type->slice.element);
+        return; // slices use the generic RsgSlice type, no per-type typedef
     } else if (type->kind == TYPE_TUPLE) {
         for (int32_t i = 0; i < type->tuple.count; i++) {
             register_compound_type(low, type->tuple.elements[i]);

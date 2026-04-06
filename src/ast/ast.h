@@ -22,6 +22,7 @@ typedef enum {
     AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit, user-defined
     AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
     AST_TYPE_ARRAY,    // [N]T
+    AST_TYPE_SLICE,    // []T
     AST_TYPE_TUPLE,    // (A, B, ...)
     AST_TYPE_POINTER,  // *T
 } ASTTypeKind;
@@ -33,6 +34,8 @@ struct ASTType {
     // AST_TYPE_ARRAY fields
     ASTType *array_element; // heap-allocated element type
     int32_t array_size;     // element count N
+    // AST_TYPE_SLICE fields
+    ASTType *slice_element; // heap-allocated element type
     // AST_TYPE_TUPLE fields
     ASTType **tuple_elements; /* buf */
     // AST_TYPE_POINTER fields
@@ -132,6 +135,8 @@ typedef enum {
     NODE_BLOCK,                // { stmts; optional trailing expr }
     NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
     NODE_ARRAY_LITERAL,        // [1, 2, 3] or [3]i32[1, 2, 3]
+    NODE_SLICE_LITERAL,        // []i32[1, 2, 3]
+    NODE_SLICE_EXPR,           // arr[..], s[1..4], s[2..], s[..3]
     NODE_TUPLE_LITERAL,        // (1, true, "hi")
     NODE_TYPE_CONVERSION,      // i64(100), f32(3.14)
     NODE_STRUCT_LITERAL,       // Point { x = 1.0, y = 2.0 }
@@ -304,8 +309,10 @@ struct ASTNode {
         // NODE_FOR
         struct {
             const char *variable_name;
-            ASTNode *start; // range start expression
-            ASTNode *end;   // range end expression
+            const char *index_name; // for |v, i| form (may be NULL)
+            ASTNode *start;         // range start expression (NULL for slice iteration)
+            ASTNode *end;           // range end expression (NULL for slice iteration)
+            ASTNode *iterable;      // slice expression (NULL for range iteration)
             ASTNode *body;
         } for_loop;
 
@@ -326,6 +333,20 @@ struct ASTNode {
             ASTType element_type; // may be inferred
             int32_t size;         // N from [N]T prefix, or element count
         } array_literal;
+
+        // NODE_SLICE_LITERAL
+        struct {
+            ASTNode **elements;   /* buf */
+            ASTType element_type; // from []T prefix
+        } slice_literal;
+
+        // NODE_SLICE_EXPR
+        struct {
+            ASTNode *object; // the array/slice being sliced
+            ASTNode *start;  // may be NULL (s[..3])
+            ASTNode *end;    // may be NULL (s[2..])
+            bool full_range; // true for arr[..]
+        } slice_expr;
 
         // NODE_TUPLE_LITERAL
         struct {

@@ -109,6 +109,9 @@ const char *type_name(Arena *arena, const Type *type) {
         return arena_sprintf(arena, "[%d]%s", type->array.size,
                              type_name(arena, type->array.element));
     }
+    if (type->kind == TYPE_SLICE) {
+        return arena_sprintf(arena, "[]%s", type_name(arena, type->slice.element));
+    }
     if (type->kind == TYPE_TUPLE) {
         const char *result = "(";
         for (int32_t i = 0; i < type->tuple.count; i++) {
@@ -151,6 +154,9 @@ bool type_equal(const Type *a, const Type *b) {
     }
     if (a->kind == TYPE_ARRAY) {
         return a->array.size == b->array.size && type_equal(a->array.element, b->array.element);
+    }
+    if (a->kind == TYPE_SLICE) {
+        return type_equal(a->slice.element, b->slice.element);
     }
     if (a->kind == TYPE_TUPLE) {
         if (a->tuple.count != b->tuple.count) {
@@ -236,6 +242,17 @@ Type *type_create_array(Arena *arena, const Type *element, int32_t size) {
     type->array.element = element;
     type->array.size = size;
     return type;
+}
+
+Type *type_create_slice(Arena *arena, const Type *element) {
+    Type *type = type_create(arena, TYPE_SLICE);
+    type->slice.element = element;
+    return type;
+}
+
+const Type *type_slice_element(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_SLICE);
+    return type->slice.element;
 }
 
 Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count) {

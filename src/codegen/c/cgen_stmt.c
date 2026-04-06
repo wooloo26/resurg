@@ -120,6 +120,11 @@ static const char *resolve_assign_target(CodeGenerator *generator, const TtNode 
     if (target->kind == TT_INDEX) {
         const char *obj = codegen_emit_expression(generator, target->index_access.object);
         const char *idx = codegen_emit_expression(generator, target->index_access.index);
+        const Type *obj_type = target->index_access.object->type;
+        if (obj_type != NULL && obj_type->kind == TYPE_SLICE) {
+            const char *elem_c = codegen_c_type_for(generator, target->type);
+            return arena_sprintf(generator->arena, "((%s*)%s.data)[%s]", elem_c, obj, idx);
+        }
         return arena_sprintf(generator->arena, "%s._data[%s]", obj, idx);
     }
     if (target->kind == TT_STRUCT_FIELD_ACCESS) {

@@ -29,6 +29,7 @@ typedef enum {
     TYPE_UNIT,
     TYPE_NEVER,   // bottom type (never completes)
     TYPE_ARRAY,   // [N]T
+    TYPE_SLICE,   // []T
     TYPE_TUPLE,   // (A, B, ...)
     TYPE_STRUCT,  // struct { fields }
     TYPE_POINTER, // *T
@@ -80,6 +81,9 @@ struct Type {
             const Type **embedded;
             int32_t embed_count;
         } struct_type;
+        struct {
+            const Type *element;
+        } slice;
         struct {
             const Type *pointee;
             bool is_mut;
@@ -152,6 +156,10 @@ const Type *type_singleton(TypeKind kind);
 
 /** Create an array type [size]element. */
 Type *type_create_array(Arena *arena, const Type *element, int32_t size);
+/** Create a slice type []element. */
+Type *type_create_slice(Arena *arena, const Type *element);
+/** Return the element type of a slice type.  Asserts kind == TYPE_SLICE. */
+const Type *type_slice_element(const Type *type);
 /** Create a tuple type from an array of element types. */
 Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count);
 

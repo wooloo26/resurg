@@ -452,13 +452,105 @@ static void build_for_user_body(Lowering *low, const ASTNode *body_ast, TtSymbol
 /**
  * Lower `for var := start..end { body }` into desugared TT_LOOP.
  *
- * Desugaring:
+ * Desugaring (range):
  *   { var _end = end; var i = start; loop { if i >= _end { break } body; i = i + 1 } }
+ *
+ * Desugaring (slice):
+ *   { var _s = slice; var _end = _s.length; var _i = 0;
+ *     loop { if _i >= _end { break }; var v = _s[_i]; [var idx = _i;] body; _i = _i + 1 } }
  */
 static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
     SourceLocation loc = ast->location;
     const Type *iter_type = &TYPE_I32_INSTANCE;
 
+    // Slice iteration
+    if (ast->for_loop.iterable != NULL) {
+        lowering_scope_enter(low);
+
+        // var _s = iterable
+        TtNode *iterable_expr = lower_expression(low, ast->for_loop.iterable);
+        const Type *slice_type = iterable_expr->type;
+        const Type *elem_type = (slice_type != NULL && slice_type->kind == TYPE_SLICE)
+                                    ? slice_type->slice.element
+                                    : &TYPE_ERROR_INSTANCE;
+
+        const char *slice_name = lowering_make_temp_name(low);
+        TtSymbolSpec slice_spec = {TT_SYMBOL_VARIABLE, slice_name, slice_type, false, loc};
+        TtSymbol *slice_sym = lowering_add_variable(low, &slice_spec);
+        TtNode *slice_decl = lowering_make_var_decl(low, slice_sym, iterable_expr);
+
+        // var _end = _s.length
+        TtNode *len_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, iter_type, loc);
+        len_access->struct_field_access.object = lowering_make_var_ref(low, slice_sym, loc);
+        len_access->struct_field_access.field = "length";
+        len_access->struct_field_access.via_pointer = false;
+
+        const char *end_name = lowering_make_temp_name(low);
+        TtSymbolSpec end_spec = {TT_SYMBOL_VARIABLE, end_name, iter_type, false, loc};
+        TtSymbol *end_sym = lowering_add_variable(low, &end_spec);
+        TtNode *end_decl = lowering_make_var_decl(low, end_sym, len_access);
+
+        // var _i = 0
+        const char *counter_name = lowering_make_temp_name(low);
+        TtSymbolSpec counter_spec = {TT_SYMBOL_VARIABLE, counter_name, iter_type, true, loc};
+        TtSymbol *counter_sym = lowering_add_variable(low, &counter_spec);
+        IntLitSpec zero_spec = {0, iter_type, TYPE_I32, loc};
+        TtNode *counter_decl =
+            lowering_make_var_decl(low, counter_sym, lowering_make_int_lit(low, &zero_spec));
+
+        // Build loop body
+        TtNode **loop_stmts = NULL;
+
+        // Guard: if _i >= _end { break }
+        BUFFER_PUSH(loop_stmts, build_for_guard(low, counter_sym, end_sym, loc));
+
+        // var v = _s[_i]
+        const char *val_name = ast->for_loop.variable_name;
+        TtNode *idx_ref = lowering_make_var_ref(low, counter_sym, loc);
+        TtNode *elem_access = tt_new(low->tt_arena, TT_INDEX, elem_type, loc);
+        elem_access->index_access.object = lowering_make_var_ref(low, slice_sym, loc);
+        elem_access->index_access.index = idx_ref;
+
+        TtSymbolSpec val_spec = {TT_SYMBOL_VARIABLE, val_name, elem_type, false, loc};
+        TtSymbol *val_sym = lowering_add_variable(low, &val_spec);
+        BUFFER_PUSH(loop_stmts, lowering_make_var_decl(low, val_sym, elem_access));
+
+        // Optional: var idx = _i
+        if (ast->for_loop.index_name != NULL) {
+            TtSymbolSpec idx_spec = {TT_SYMBOL_VARIABLE, ast->for_loop.index_name, iter_type, false,
+                                     loc};
+            TtSymbol *idx_sym = lowering_add_variable(low, &idx_spec);
+            BUFFER_PUSH(
+                loop_stmts,
+                lowering_make_var_decl(low, idx_sym, lowering_make_var_ref(low, counter_sym, loc)));
+        }
+
+        // User body + continue rewrite + increment
+        build_for_user_body(low, ast->for_loop.body, counter_sym, &loop_stmts);
+        BUFFER_PUSH(loop_stmts, build_for_increment(low, counter_sym));
+
+        TtNode *loop_body = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+        loop_body->block.statements = loop_stmts;
+        loop_body->block.result = NULL;
+
+        TtNode *loop_node = tt_new(low->tt_arena, TT_LOOP, &TYPE_UNIT_INSTANCE, loc);
+        loop_node->loop.body = loop_body;
+
+        TtNode **outer_stmts = NULL;
+        BUFFER_PUSH(outer_stmts, slice_decl);
+        BUFFER_PUSH(outer_stmts, end_decl);
+        BUFFER_PUSH(outer_stmts, counter_decl);
+        BUFFER_PUSH(outer_stmts, loop_node);
+
+        lowering_scope_leave(low);
+
+        TtNode *outer = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+        outer->block.statements = outer_stmts;
+        outer->block.result = NULL;
+        return outer;
+    }
+
+    // Range iteration
     lowering_scope_enter(low);
 
     // var _end = end

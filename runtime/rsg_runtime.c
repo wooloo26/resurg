@@ -446,3 +446,25 @@ void *rsg_heap_alloc(size_t size) {
 
     return gc_object_data(object);
 }
+
+// ── Slice runtime ─────────────────────────────────────────────────────
+
+RsgSlice rsg_slice_new(const void *src, int32_t count, size_t elem_size) {
+    size_t total = (size_t)count * elem_size;
+    void *data = rsg_heap_alloc(total);
+    if (src != NULL && count > 0) {
+        memcpy(data, src, total);
+    }
+    return (RsgSlice){.data = data, .length = count};
+}
+
+RsgSlice rsg_slice_sub(RsgSlice slice, int32_t start, int32_t end, size_t elem_size) {
+    return (RsgSlice){
+        .data = (char *)slice.data + (size_t)start * elem_size,
+        .length = end - start,
+    };
+}
+
+RsgSlice rsg_slice_from_array(const void *array_data, int32_t count, size_t elem_size) {
+    return rsg_slice_new(array_data, count, elem_size);
+}

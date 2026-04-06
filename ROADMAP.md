@@ -101,13 +101,13 @@ Algebraic data types and exhaustive matching.
 
 Dynamic-length data.
 
-- [ ] Slice type `[]T` (fat pointer: data + length)
-- [ ] Array-to-slice conversion (`arr[..]`)
-- [ ] Sub-slicing (`s[1..4]`, `s[2..]`, `s[..3]`)
-- [ ] Shared backing storage semantics
-- [ ] Slice of slices (`[][]T`)
-- [ ] Slice pointer `*[]T` (reassign slice header in-place)
-- [ ] `for` over slices with value and index (`|v, i|`)
+- [x] Slice type `[]T` (fat pointer: data + length)
+- [x] Array-to-slice conversion (`arr[..]`)
+- [x] Sub-slicing (`s[1..4]`, `s[2..]`, `s[..3]`)
+- [x] Shared backing storage semantics
+- [x] Slice of slices (`[][]T`)
+- [x] Slice pointer `*[]T` (reassign slice header in-place)
+- [x] `for` over slices with value and index (`|v, i|`)
 
 ## v0.7.0 — Pacts & Conformance
 
@@ -115,7 +115,7 @@ Dynamic-length data.
 - [ ] Default method implementations in pacts
 - [ ] Explicit conformance (`struct Foo: Pact1 + Pact2`)
 - [ ] Constraint aliases (`pact A { Ord; Display } or pact A = Ord + Display`)
-
+  
 ## v0.8.0 — Generics Core
 
 - [ ] Generic function syntax (`fn max<T: Ord>(a: T, b: T) -> T`)

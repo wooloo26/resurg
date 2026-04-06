@@ -188,6 +188,28 @@ static ASTNode *parse_array_literal(Parser *parser) {
     SourceLocation location = parser_current_location(parser);
     parser_expect(parser, TOKEN_LEFT_BRACKET);
 
+    // Check for slice literal: []T[values]
+    // Pattern: ']', type-keyword-or-identifier, '['
+    if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+        int32_t save_pos = parser->position;
+        parser_advance(parser); // consume ']'
+        if (token_is_type_keyword(parser_current_token(parser)->kind) ||
+            parser_check(parser, TOKEN_IDENTIFIER) || parser_check(parser, TOKEN_LEFT_BRACKET)) {
+            // This is []T[values] — a slice literal
+            ASTNode *node = ast_new(parser->arena, NODE_SLICE_LITERAL, location);
+            node->slice_literal.element_type = parser_parse_type(parser);
+            node->slice_literal.elements = NULL;
+            parser_expect(parser, TOKEN_LEFT_BRACKET);
+            if (!parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+                parse_comma_separated(parser, &node->slice_literal.elements);
+            }
+            parser_expect(parser, TOKEN_RIGHT_BRACKET);
+            return node;
+        }
+        // Not a slice literal, restore position — this is an empty array []
+        parser->position = save_pos;
+    }
+
     // Check if this is [N]T[values] (typed array literal)
     // Pattern: INTEGER_LITERAL, ']', type-keyword-or-identifier
     bool has_size_and_bracket = parser_check(parser, TOKEN_INTEGER_LITERAL) &&
@@ -397,9 +419,46 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
         if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+            // Check for slice expressions: obj[..], obj[start..end], obj[start..], obj[..end]
+            if (parser_check(parser, TOKEN_DOT_DOT)) {
+                // obj[..] or obj[..end]
+                parser_advance(parser); // consume '..'
+                ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, location);
+                node->slice_expr.object = left;
+                node->slice_expr.start = NULL;
+                if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+                    node->slice_expr.end = NULL;
+                    node->slice_expr.full_range = true;
+                } else {
+                    node->slice_expr.end = parser_parse_expression(parser);
+                    node->slice_expr.full_range = false;
+                }
+                parser_expect(parser, TOKEN_RIGHT_BRACKET);
+                left = node;
+                continue;
+            }
+            // Parse index expression; check if it becomes a slice expr
+            ASTNode *index_or_start = parser_parse_expression(parser);
+            if (parser_check(parser, TOKEN_DOT_DOT)) {
+                // obj[start..end] or obj[start..]
+                parser_advance(parser); // consume '..'
+                ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, location);
+                node->slice_expr.object = left;
+                node->slice_expr.start = index_or_start;
+                node->slice_expr.full_range = false;
+                if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+                    node->slice_expr.end = NULL;
+                } else {
+                    node->slice_expr.end = parser_parse_expression(parser);
+                }
+                parser_expect(parser, TOKEN_RIGHT_BRACKET);
+                left = node;
+                continue;
+            }
+            // Regular index access: obj[index]
             ASTNode *node = ast_new(parser->arena, NODE_INDEX, location);
             node->index_access.object = left;
-            node->index_access.index = parser_parse_expression(parser);
+            node->index_access.index = index_or_start;
             parser_expect(parser, TOKEN_RIGHT_BRACKET);
             left = node;
             continue;

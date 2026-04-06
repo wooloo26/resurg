@@ -97,6 +97,24 @@ void rsg_print_bool(bool value);
 /** Allocate @p size bytes on the GC-managed heap; abort on OOM. */
 void *rsg_heap_alloc(size_t size);
 
+// ── Slice runtime ─────────────────────────────────────────────────────
+
+/**
+ * Generic slice header — a fat pointer (data + length).
+ * The data pointer refers to GC-managed storage.
+ */
+typedef struct {
+    void *data;
+    int32_t length;
+} RsgSlice;
+
+/** Create a new slice by copying @p count elements of @p elem_size from @p src. */
+RsgSlice rsg_slice_new(const void *src, int32_t count, size_t elem_size);
+/** Create a sub-slice sharing backing storage (no copy). */
+RsgSlice rsg_slice_sub(RsgSlice slice, int32_t start, int32_t end, size_t elem_size);
+/** Create a slice from an array (copies data into GC storage). */
+RsgSlice rsg_slice_from_array(const void *array_data, int32_t count, size_t elem_size);
+
 /**
  * Initialise the tracing garbage collector.  Must be called once at the
  * start of main() with the address of a local variable to mark the stack

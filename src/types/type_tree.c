@@ -82,6 +82,8 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "UnitLit";
     case TT_ARRAY_LITERAL:
         return "ArrayLit";
+    case TT_SLICE_LITERAL:
+        return "SliceLit";
     case TT_TUPLE_LITERAL:
         return "TupleLit";
     case TT_VARIABLE_REFERENCE:
@@ -90,6 +92,8 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "ModuleAccess";
     case TT_INDEX:
         return "Index";
+    case TT_SLICE_EXPR:
+        return "SliceExpr";
     case TT_TUPLE_INDEX:
         return "TupleIndex";
     case TT_UNARY:
@@ -301,6 +305,12 @@ void tt_dump(const TtNode *node, int32_t indent) {
                          indent + 1);
         break;
 
+    case TT_SLICE_LITERAL:
+        fprintf(stderr, "\n");
+        tt_dump_children(node->slice_literal.elements, BUFFER_LENGTH(node->slice_literal.elements),
+                         indent + 1);
+        break;
+
     case TT_TUPLE_LITERAL:
         fprintf(stderr, "\n");
         tt_dump_children(node->tuple_literal.elements, BUFFER_LENGTH(node->tuple_literal.elements),
@@ -320,6 +330,17 @@ void tt_dump(const TtNode *node, int32_t indent) {
         fprintf(stderr, "\n");
         tt_dump(node->index_access.object, indent + 1);
         tt_dump(node->index_access.index, indent + 1);
+        break;
+
+    case TT_SLICE_EXPR:
+        fprintf(stderr, "%s\n", node->slice_expr.from_array ? " (from_array)" : "");
+        tt_dump(node->slice_expr.object, indent + 1);
+        if (node->slice_expr.start != NULL) {
+            tt_dump(node->slice_expr.start, indent + 1);
+        }
+        if (node->slice_expr.end != NULL) {
+            tt_dump(node->slice_expr.end, indent + 1);
+        }
         break;
 
     case TT_TUPLE_INDEX:
@@ -477,6 +498,10 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
         visit_buffer(visitor, context, node->array_literal.elements,
                      BUFFER_LENGTH(node->array_literal.elements));
         break;
+    case TT_SLICE_LITERAL:
+        visit_buffer(visitor, context, node->slice_literal.elements,
+                     BUFFER_LENGTH(node->slice_literal.elements));
+        break;
     case TT_TUPLE_LITERAL:
         visit_buffer(visitor, context, node->tuple_literal.elements,
                      BUFFER_LENGTH(node->tuple_literal.elements));
@@ -484,6 +509,15 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
     case TT_INDEX:
         visitor(context, &node->index_access.object);
         visitor(context, &node->index_access.index);
+        break;
+    case TT_SLICE_EXPR:
+        visitor(context, &node->slice_expr.object);
+        if (node->slice_expr.start != NULL) {
+            visitor(context, &node->slice_expr.start);
+        }
+        if (node->slice_expr.end != NULL) {
+            visitor(context, &node->slice_expr.end);
+        }
         break;
     case TT_TUPLE_INDEX:
         visitor(context, &node->tuple_index.object);

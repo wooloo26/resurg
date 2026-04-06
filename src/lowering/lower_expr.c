@@ -452,6 +452,16 @@ static TtNode *lower_member(Lowering *low, const ASTNode *ast) {
         via_pointer = true;
     }
 
+    // Slice .len → struct field access on "length" (matches RsgSlice C field)
+    if (lookup_type != NULL && lookup_type->kind == TYPE_SLICE &&
+        strcmp(ast->member.member, "len") == 0) {
+        TtNode *node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, ast->type, ast->location);
+        node->struct_field_access.object = object;
+        node->struct_field_access.field = "length";
+        node->struct_field_access.via_pointer = via_pointer;
+        return node;
+    }
+
     // Struct field access
     if (lookup_type != NULL && lookup_type->kind == TYPE_STRUCT) {
         const char *field_name = ast->member.member;
@@ -598,6 +608,27 @@ static TtNode *lower_array_literal(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
+static TtNode *lower_slice_literal(Lowering *low, const ASTNode *ast) {
+    TtNode **elements = lower_element_list(low, ast->slice_literal.elements);
+    TtNode *node = tt_new(low->tt_arena, TT_SLICE_LITERAL, ast->type, ast->location);
+    node->slice_literal.elements = elements;
+    return node;
+}
+
+static TtNode *lower_slice_expr(Lowering *low, const ASTNode *ast) {
+    TtNode *object = lower_expression(low, ast->slice_expr.object);
+    TtNode *start =
+        ast->slice_expr.start != NULL ? lower_expression(low, ast->slice_expr.start) : NULL;
+    TtNode *end = ast->slice_expr.end != NULL ? lower_expression(low, ast->slice_expr.end) : NULL;
+    bool from_array = object->type != NULL && object->type->kind == TYPE_ARRAY;
+    TtNode *node = tt_new(low->tt_arena, TT_SLICE_EXPR, ast->type, ast->location);
+    node->slice_expr.object = object;
+    node->slice_expr.start = start;
+    node->slice_expr.end = end;
+    node->slice_expr.from_array = from_array;
+    return node;
+}
+
 static TtNode *lower_tuple_literal(Lowering *low, const ASTNode *ast) {
     TtNode **elements = lower_element_list(low, ast->tuple_literal.elements);
     TtNode *node = tt_new(low->tt_arena, TT_TUPLE_LITERAL, ast->type, ast->location);
@@ -717,6 +748,10 @@ TtNode *lower_expression(Lowering *low, const ASTNode *ast) {
         return lower_type_conversion(low, ast);
     case NODE_ARRAY_LITERAL:
         return lower_array_literal(low, ast);
+    case NODE_SLICE_LITERAL:
+        return lower_slice_literal(low, ast);
+    case NODE_SLICE_EXPR:
+        return lower_slice_expr(low, ast);
     case NODE_TUPLE_LITERAL:
         return lower_tuple_literal(low, ast);
     case NODE_STRING_INTERPOLATION:

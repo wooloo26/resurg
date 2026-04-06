@@ -177,6 +177,8 @@ const Type *check_index(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_type_conversion(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_string_interpolation(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_array_literal(SemanticAnalyzer *analyzer, ASTNode *node);
+const Type *check_slice_literal(SemanticAnalyzer *analyzer, ASTNode *node);
+const Type *check_slice_expr(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_struct_literal(SemanticAnalyzer *analyzer, ASTNode *node);
 const Type *check_address_of(SemanticAnalyzer *analyzer, ASTNode *node);

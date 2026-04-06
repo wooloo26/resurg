@@ -80,12 +80,33 @@ static ASTNode *parse_for(Parser *parser) {
     parser_expect(parser, TOKEN_FOR);
 
     ASTNode *node = ast_new(parser->arena, NODE_FOR, location);
-    node->for_loop.start = parser_parse_expression(parser);
-    parser_expect(parser, TOKEN_DOT_DOT);
-    node->for_loop.end = parser_parse_expression(parser);
-    parser_expect(parser, TOKEN_PIPE);
-    node->for_loop.variable_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
-    parser_expect(parser, TOKEN_PIPE);
+    node->for_loop.index_name = NULL;
+    node->for_loop.iterable = NULL;
+    node->for_loop.start = NULL;
+    node->for_loop.end = NULL;
+
+    // Parse the first expression (could be range start or iterable)
+    ASTNode *first = parser_parse_expression(parser);
+
+    if (parser_check(parser, TOKEN_DOT_DOT)) {
+        // Range form: for start..end |i| { body }
+        parser_advance(parser); // consume '..'
+        node->for_loop.start = first;
+        node->for_loop.end = parser_parse_expression(parser);
+        parser_expect(parser, TOKEN_PIPE);
+        node->for_loop.variable_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        parser_expect(parser, TOKEN_PIPE);
+    } else {
+        // Slice form: for slice |v| { body } or for slice |v, i| { body }
+        node->for_loop.iterable = first;
+        parser_expect(parser, TOKEN_PIPE);
+        node->for_loop.variable_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        if (parser_match(parser, TOKEN_COMMA)) {
+            node->for_loop.index_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+        }
+        parser_expect(parser, TOKEN_PIPE);
+    }
+
     node->for_loop.body = parser_parse_block(parser);
     return node;
 }

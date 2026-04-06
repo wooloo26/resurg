@@ -85,9 +85,17 @@ static void dump_if_node(const ASTNode *node, int32_t level) {
 }
 
 static void dump_for_node(const ASTNode *node, int32_t level) {
-    fprintf(stderr, "For(%s)\n", node->for_loop.variable_name);
-    ast_dump(node->for_loop.start, level + 1);
-    ast_dump(node->for_loop.end, level + 1);
+    fprintf(stderr, "For(%s", node->for_loop.variable_name);
+    if (node->for_loop.index_name != NULL) {
+        fprintf(stderr, ", %s", node->for_loop.index_name);
+    }
+    fprintf(stderr, ")\n");
+    if (node->for_loop.iterable != NULL) {
+        ast_dump(node->for_loop.iterable, level + 1);
+    } else {
+        ast_dump(node->for_loop.start, level + 1);
+        ast_dump(node->for_loop.end, level + 1);
+    }
     ast_dump(node->for_loop.body, level + 1);
 }
 
@@ -332,6 +340,22 @@ void ast_dump(const ASTNode *node, int32_t level) {
     case NODE_DEFER:
         fprintf(stderr, "Defer\n");
         ast_dump(node->defer_statement.body, level + 1);
+        break;
+    case NODE_SLICE_LITERAL:
+        fprintf(stderr, "SliceLiteral(%d)\n", BUFFER_LENGTH(node->slice_literal.elements));
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->slice_literal.elements); i++) {
+            ast_dump(node->slice_literal.elements[i], level + 1);
+        }
+        break;
+    case NODE_SLICE_EXPR:
+        fprintf(stderr, "SliceExpr%s\n", node->slice_expr.full_range ? "[..]" : "");
+        ast_dump(node->slice_expr.object, level + 1);
+        if (node->slice_expr.start != NULL) {
+            ast_dump(node->slice_expr.start, level + 1);
+        }
+        if (node->slice_expr.end != NULL) {
+            ast_dump(node->slice_expr.end, level + 1);
+        }
         break;
     }
 }

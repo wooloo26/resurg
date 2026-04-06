@@ -316,6 +316,13 @@ const Type *check_member(SemanticAnalyzer *analyzer, ASTNode *node) {
         object_type = object_type->pointer.pointee;
     }
 
+    // Slice .len access
+    if (object_type != NULL && object_type->kind == TYPE_SLICE) {
+        if (strcmp(node->member.member, "len") == 0) {
+            return &TYPE_I32_INSTANCE;
+        }
+    }
+
     // Tuple field access: .0, .1, .2, ...
     if (object_type != NULL && object_type->kind == TYPE_TUPLE) {
         char *end = NULL;
@@ -374,6 +381,9 @@ const Type *check_index(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
         return object_type->array.element;
     }
+    if (object_type != NULL && object_type->kind == TYPE_SLICE) {
+        return object_type->slice.element;
+    }
     return &TYPE_ERROR_INSTANCE;
 }
 
@@ -413,6 +423,40 @@ const Type *check_array_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
         size = BUFFER_LENGTH(node->array_literal.elements);
     }
     return type_create_array(analyzer->arena, element_type, size);
+}
+
+const Type *check_slice_literal(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *element_type = resolve_ast_type(analyzer, &node->slice_literal.element_type);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->slice_literal.elements); i++) {
+        const Type *elem = check_node(analyzer, node->slice_literal.elements[i]);
+        if (element_type == NULL && elem != NULL) {
+            element_type = elem;
+        }
+        if (element_type != NULL) {
+            promote_literal(node->slice_literal.elements[i], element_type);
+        }
+    }
+    if (element_type == NULL) {
+        element_type = &TYPE_I32_INSTANCE;
+    }
+    return type_create_slice(analyzer->arena, element_type);
+}
+
+const Type *check_slice_expr(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *object_type = check_node(analyzer, node->slice_expr.object);
+    if (node->slice_expr.start != NULL) {
+        check_node(analyzer, node->slice_expr.start);
+    }
+    if (node->slice_expr.end != NULL) {
+        check_node(analyzer, node->slice_expr.end);
+    }
+    if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
+        return type_create_slice(analyzer->arena, object_type->array.element);
+    }
+    if (object_type != NULL && object_type->kind == TYPE_SLICE) {
+        return type_create_slice(analyzer->arena, object_type->slice.element);
+    }
+    return &TYPE_ERROR_INSTANCE;
 }
 
 const Type *check_tuple_literal(SemanticAnalyzer *analyzer, ASTNode *node) {

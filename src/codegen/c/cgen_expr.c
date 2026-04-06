@@ -222,6 +222,44 @@ static const char *emit_array_literal_expression(CodeGenerator *generator, const
     return arena_sprintf(generator->arena, "(%s){ ._data = { %s } }", tname, elements);
 }
 
+static const char *emit_slice_literal_expression(CodeGenerator *generator, const TtNode *node) {
+    int32_t count = BUFFER_LENGTH(node->slice_literal.elements);
+    const Type *elem_type = node->type->slice.element;
+    const char *elem_c = codegen_c_type_for(generator, elem_type);
+    if (count == 0) {
+        return arena_sprintf(generator->arena, "rsg_slice_new(NULL, 0, sizeof(%s))", elem_c);
+    }
+    const char *elements = join_expressions(generator, node->slice_literal.elements, count);
+    return arena_sprintf(generator->arena, "rsg_slice_new((%s[]){ %s }, %d, sizeof(%s))", elem_c,
+                         elements, count, elem_c);
+}
+
+static const char *emit_slice_expr_expression(CodeGenerator *generator, const TtNode *node) {
+    const char *object = codegen_emit_expression(generator, node->slice_expr.object);
+    const Type *obj_type = node->slice_expr.object->type;
+    const Type *elem_type = node->type->slice.element;
+    const char *elem_c = codegen_c_type_for(generator, elem_type);
+
+    if (node->slice_expr.from_array) {
+        int32_t array_size = obj_type->array.size;
+        return arena_sprintf(generator->arena, "rsg_slice_from_array(%s._data, %d, sizeof(%s))",
+                             object, array_size, elem_c);
+    }
+
+    const char *start_str = "0";
+    if (node->slice_expr.start != NULL) {
+        start_str = codegen_emit_expression(generator, node->slice_expr.start);
+    }
+    const char *end_str;
+    if (node->slice_expr.end != NULL) {
+        end_str = codegen_emit_expression(generator, node->slice_expr.end);
+    } else {
+        end_str = arena_sprintf(generator->arena, "%s.length", object);
+    }
+    return arena_sprintf(generator->arena, "rsg_slice_sub(%s, %s, %s, sizeof(%s))", object,
+                         start_str, end_str, elem_c);
+}
+
 static const char *emit_tuple_literal_expression(CodeGenerator *generator, const TtNode *node) {
     const char *tname = codegen_c_type_for(generator, node->type);
     const char *result = arena_sprintf(generator->arena, "(%s){ ", tname);
@@ -238,6 +276,11 @@ static const char *emit_tuple_literal_expression(CodeGenerator *generator, const
 static const char *emit_index_expression(CodeGenerator *generator, const TtNode *node) {
     const char *object = codegen_emit_expression(generator, node->index_access.object);
     const char *index = codegen_emit_expression(generator, node->index_access.index);
+    const Type *obj_type = node->index_access.object->type;
+    if (obj_type != NULL && obj_type->kind == TYPE_SLICE) {
+        const char *elem_c_type = codegen_c_type_for(generator, node->type);
+        return arena_sprintf(generator->arena, "((%s*)%s.data)[%s]", elem_c_type, object, index);
+    }
     return arena_sprintf(generator->arena, "%s._data[%s]", object, index);
 }
 
@@ -481,6 +524,10 @@ const char *codegen_emit_expression(CodeGenerator *generator, const TtNode *node
         return emit_block_expression(generator, node);
     case TT_ARRAY_LITERAL:
         return emit_array_literal_expression(generator, node);
+    case TT_SLICE_LITERAL:
+        return emit_slice_literal_expression(generator, node);
+    case TT_SLICE_EXPR:
+        return emit_slice_expr_expression(generator, node);
     case TT_TUPLE_LITERAL:
         return emit_tuple_literal_expression(generator, node);
     case TT_TYPE_CONVERSION:

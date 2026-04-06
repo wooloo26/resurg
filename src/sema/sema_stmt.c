@@ -253,14 +253,35 @@ static void check_defer(SemanticAnalyzer *analyzer, ASTNode *node) {
 }
 
 static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
-    check_node(analyzer, node->for_loop.start);
-    check_node(analyzer, node->for_loop.end);
-    scope_push(analyzer, true);
-    is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-    scope_define(analyzer,
-                 &(SymbolDef){node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR});
-    check_node(analyzer, node->for_loop.body);
-    scope_pop(analyzer);
+    if (node->for_loop.iterable != NULL) {
+        // Slice iteration: for slice |v| or for slice |v, i|
+        const Type *iter_type = check_node(analyzer, node->for_loop.iterable);
+        scope_push(analyzer, true);
+        const Type *elem_type = &TYPE_ERROR_INSTANCE;
+        if (iter_type != NULL && iter_type->kind == TYPE_SLICE) {
+            elem_type = iter_type->slice.element;
+        }
+        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
+        scope_define(analyzer,
+                     &(SymbolDef){node->for_loop.variable_name, elem_type, false, SYM_VAR});
+        if (node->for_loop.index_name != NULL) {
+            is_reserved_identifier(analyzer, node->location, node->for_loop.index_name);
+            scope_define(analyzer, &(SymbolDef){node->for_loop.index_name, &TYPE_I32_INSTANCE,
+                                                false, SYM_VAR});
+        }
+        check_node(analyzer, node->for_loop.body);
+        scope_pop(analyzer);
+    } else {
+        // Range iteration: for start..end |i|
+        check_node(analyzer, node->for_loop.start);
+        check_node(analyzer, node->for_loop.end);
+        scope_push(analyzer, true);
+        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
+        scope_define(analyzer, &(SymbolDef){node->for_loop.variable_name, &TYPE_I32_INSTANCE, false,
+                                            SYM_VAR});
+        check_node(analyzer, node->for_loop.body);
+        scope_pop(analyzer);
+    }
 }
 
 static void check_break_continue(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -548,6 +569,14 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_ARRAY_LITERAL:
         result = check_array_literal(analyzer, node);
+        break;
+
+    case NODE_SLICE_LITERAL:
+        result = check_slice_literal(analyzer, node);
+        break;
+
+    case NODE_SLICE_EXPR:
+        result = check_slice_expr(analyzer, node);
         break;
 
     case NODE_TUPLE_LITERAL:

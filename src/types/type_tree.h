@@ -76,12 +76,14 @@ typedef enum {
     TT_STRING_LITERAL,
     TT_UNIT_LITERAL,
     TT_ARRAY_LITERAL,
+    TT_SLICE_LITERAL,
     TT_TUPLE_LITERAL,
 
     // References
     TT_VARIABLE_REFERENCE,
     TT_MODULE_ACCESS,
     TT_INDEX,
+    TT_SLICE_EXPR,
     TT_TUPLE_INDEX,
 
     // Operations
@@ -219,6 +221,11 @@ struct TtNode {
             TtNode **elements; /* buf */
         } array_literal;
 
+        // TT_SLICE_LITERAL
+        struct {
+            TtNode **elements; /* buf */
+        } slice_literal;
+
         // TT_TUPLE_LITERAL
         struct {
             TtNode **elements; /* buf */
@@ -240,6 +247,14 @@ struct TtNode {
             TtNode *object;
             TtNode *index;
         } index_access;
+
+        // TT_SLICE_EXPR
+        struct {
+            TtNode *object;
+            TtNode *start;   // may be NULL
+            TtNode *end;     // may be NULL
+            bool from_array; // true when source is an array (copy semantics)
+        } slice_expr;
 
         // TT_TUPLE_INDEX
         struct {
