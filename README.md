@@ -481,6 +481,11 @@ enum Either<L, R> {
 }
 
 type Callback<T> = fn(T) -> bool
+type ListBox = Box<List>
+
+ext []Display {
+    fn join(*s, sep: str) -> str { ... }
+}
 
 ext<T: Display> []T {
     fn join(*s, sep: str) -> str { ... }
@@ -565,7 +570,7 @@ immut  return    struct true   type   use    var    while
 **Built-in functions:**
 
 ```
-assert
+assert panic  recover
 ```
 
 **Reserved (future):**
@@ -617,9 +622,16 @@ result := if x > 10 { x } else { x + 1 }
 // statement form — no else needed
 if condition { do_something() }
 
-while condition { do_work() }
 loop { if done() { break } }
 loop { if skip() { continue } }   // continue supported in loop
+result := loop {
+    counter += 1
+    if counter == 10 { break counter * 2 } // 
+}
+loop {} // never
+
+while condition { do_work() }
+
 for values |v| println(v)
 for values |v, i| ...
 for 0..10 |i| ...
@@ -641,6 +653,7 @@ if Some(user) := find_user(id) {
 
 if Some(user) := find_user(id) {
     println("found: {user.name}")
+    return // early return
 } else {
     println("not found")
 }

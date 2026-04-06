@@ -82,28 +82,13 @@ Algebraic data types and exhaustive matching.
 - [x] Compile-time rejection of non-exhaustive matches
 - [x] `::` namespace operator for enum variant access (`Enum::Variant`)
 
-## v0.6.0 — Option & Result
-
-Null safety and error handling.
-
-- [ ] `?T` option type (`Some(v)` / `None`)
-- [ ] `T ! E` result type (`Ok(v)` / `Err(e)`)
-- [ ] Option/Result pattern matching (`Some(v)`, `Ok(v)`, `Err(e)`)
-- [ ] Optional chaining (`?.`)
-- [ ] Postfix `!` error propagation
-- [ ] Default `None` for `var x: ?T`
-
-## v0.6.1 — Control Flow, defer & Panic/Recovery
+## v0.5.1 — Control flow
 
 - [ ] `defer` (LIFO cleanup on scope exit)
 - [ ] `while` loop
-- [ ] `if` pattern binding (`if Some(x) := expr { … }`)
-- [ ] `while` pattern binding (`while Some(x) := expr { … }`)
-- [ ] `panic(message)` builtin (immediate abort, `noreturn`)
-- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
-- [ ] `assert` rewritten on top of `panic`
-
-## v0.7.0 — Slices & Collections
+- [ ] `return` early return
+  
+## v0.6.0 — Slices & Collections
 
 Dynamic-length data.
 
@@ -115,22 +100,14 @@ Dynamic-length data.
 - [ ] Slice pointer `*[]T` (reassign slice header in-place)
 - [ ] `for` over slices with value and index (`|v, i|`)
 
-## v0.8.0 — Pacts & Generics
-
-Abstraction and polymorphism.
-
-- [ ] Generic functions (`fn max<T: Ord>(…)`)
-- [ ] Pact-bounded type parameters
-- [ ] Generic pacts (`pact B<T> { Into<T>; Clone }`)
-
-## v0.8.0 — Pacts & Conformance
+## v0.7.0 — Pacts & Conformance
 
 - [ ] Pact (interface) definition with required fields and methods
 - [ ] Default method implementations in pacts
 - [ ] Explicit conformance (`struct Foo: Pact1 + Pact2`)
 - [ ] Constraint aliases (`pact A { Ord; Display } or pact A = Ord + Display`)
 
-## v0.8.1 — Generics Core
+## v0.8.0 — Generics Core
 
 - [ ] Generic function syntax (`fn max<T: Ord>(a: T, b: T) -> T`)
 - [ ] Pact-bounded type parameters (`T: Ord + Display`)
@@ -139,7 +116,7 @@ Abstraction and polymorphism.
 - [ ] Compile-time monomorphization
 - [ ] Constraint alias expansion in type inference
 
-## v0.8.2 — Generic ADTs & Extensions
+## v0.8.1 — Generic ADTs & Extensions
 
 Parametric polymorphism for types and surface APIs.
 
@@ -150,10 +127,24 @@ Parametric polymorphism for types and surface APIs.
 - [ ] Generic type aliases: `type Callback<T> = fn(T) -> bool`
 - [ ] Type argument inference at call/instantiation site: `Pair { ... }` or `max(a, b)`
 
+## v0.8.2 — Option & Result
+
+Null safety and error handling.
+
+- [ ] `?T` option type (`Some(v)` / `None`)
+- [ ] `T ! E` result type (`Ok(v)` / `Err(e)`)
+- [ ] Option/Result pattern matching (`Some(v)`, `Ok(v)`, `Err(e)`)
+- [ ] Optional chaining (`?.`)
+- [ ] Postfix `!` error propagation
+- [ ] Default `None` for `var x: ?T`
+- [ ] `if` pattern binding (`if Some(x) := expr { … }`)
+- [ ] `while` pattern binding (`while Some(x) := expr { … }`)
+
 ## v0.9.0 — Closures, Extensions & Modules
 
 Higher-order programming and code organization.
 
+- [ ] Escape Analysis (if not proven non-escaping, it escapes)
 - [ ] Closures / lambdas (`|x| x * 2`)
 - [ ] Closure variable capture
 - [ ] Function types (`fn(i32) -> bool`)
@@ -167,6 +158,17 @@ Higher-order programming and code organization.
 - [ ] Private-by-default module resolution
 - [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
 - [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
+
+## v0.9.2 — Builtin functions
+
+- [ ] `never` type
+- [ ] `panic(message)` builtin (immediate abort, `noreturn`)
+- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
+- [ ] `assert` rewritten on top of `panic`
+
+## v0.9.3 — Expressions
+
+- [ ] `loop` expression
   
 ## v1.0.0 — Stable Release
 
