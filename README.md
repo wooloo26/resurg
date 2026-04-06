@@ -22,7 +22,7 @@ Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Type
 
 ### Primitives
 
-`bool`, `char`, `i8`–`i128`, `isize`, `u8`–`u128`, `usize`, `f32`, `f64`, `str` (UTF-8), `unit` (zero-size type).
+`bool`, `char`, `i8`–`i128`, `isize`, `u8`–`u128`, `usize`, `f32`, `f64`, `str` (UTF-8), `unit/()` (zero-size type).
 
 **Char semantics:** `char` is a Unicode scalar value. Supports equality (`==`, `!=`) and ordering (`<`, `>`, `<=`, `>=`). Escape sequences: `\n`, `\t`, `\\`, `\'`, `\0`, `\u{XXXX}`.
 
@@ -44,7 +44,7 @@ Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Type
 | Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling |
 | Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures   |
 
-**Tuples** support `==` and `!=` for equality comparison. Nested tuple fields are accessed by chaining indices: `t.0.1`.
+**Tuples** support `==` and `!=` for equality comparison. Nested tuple fields are accessed by chaining indices: `t.0.1`. `unit/()` equals `unit/()`
 
 ### Type Aliases
 
@@ -60,10 +60,11 @@ count := 0               // inferred i32
 var name: str = "Alice"  // explicit type
 x := i32(10)             // typed literal — equivalent to var x: i32 = 10
 y := f32(3.14)           // typed literal — equivalent to var y: f32 = 3.14
-var num: ?i32             // defaults to None
+var empty: unit = ()     // equals var empty: () = unit or empty := ()
+var num: ?i32            // defaults to None
 
 {name, age} := user           // destructure struct
-{name: n, age: a} := user    // destructure struct with aliases
+{name: n, age: a} := user     // destructure struct with aliases
 (first, second) := get_pair() // destructure tuple
 {name} := user                // partial struct destructure
 (_, second) := pair           // ignore element with _
@@ -74,7 +75,19 @@ var num: ?i32             // defaults to None
 
 No return annotation implies `unit`.
 
-### Scope & Shadowing
+### Declare first
+
+```rsg
+var a_binding // no type
+
+if cond {
+    a_binding = 
+} else {
+
+}
+```
+
+### Scope & Shadowing & Expression
 
 > If you don't like it, you can use lint to restrict it.
 
@@ -85,6 +98,17 @@ fn main() {
         shadowed_binding := "abc" // This binding *shadows* the outer one
     }
     shadowed_binding := true // This binding *shadows* the previous binding
+
+    x := 5
+    y := {
+        x_squared := x * x
+        x_cube := x_squared * x
+        x_cube + x_squared + x // This expression will be assigned to `y`
+    }
+    z := {
+        2 * x
+    }
+    empty := {}
 }
 ```
 

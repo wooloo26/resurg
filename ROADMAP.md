@@ -82,9 +82,11 @@ Algebraic data types and exhaustive matching.
 - [x] Compile-time rejection of non-exhaustive matches
 - [x] `::` namespace operator for enum variant access (`Enum::Variant`)
 
-## v0.5.1 — Control flow
+## v0.5.1 — Control flow & Other proposals
 
-- [ ] scope & shadowing
+- [ ] scope & shadowing & expression
+- [ ] declare first
+- [ ] `unit` is empty tuple
 - [ ] `while` loop
 - [ ] `defer` (LIFO cleanup on scope exit)
 - [ ] `return` early return
