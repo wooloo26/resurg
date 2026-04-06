@@ -190,6 +190,24 @@ static void dump_block(const TtNode *node, int32_t indent) {
     }
 }
 
+static void dump_match_node(const TtNode *node, int32_t indent) {
+    fprintf(stderr, "\n");
+    tt_dump(node->match_expr.operand, indent + 1);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expr.arm_bodies); i++) {
+        dump_indent(indent + 1);
+        fprintf(stderr, "arm %d:\n", i);
+        if (node->match_expr.arm_conditions[i] != NULL) {
+            tt_dump(node->match_expr.arm_conditions[i], indent + 2);
+        }
+        if (node->match_expr.arm_guards[i] != NULL) {
+            dump_indent(indent + 2);
+            fprintf(stderr, "guard:\n");
+            tt_dump(node->match_expr.arm_guards[i], indent + 3);
+        }
+        tt_dump(node->match_expr.arm_bodies[i], indent + 2);
+    }
+}
+
 static void dump_if_node(const TtNode *node, int32_t indent) {
     fprintf(stderr, "\n");
     tt_dump(node->if_expression.condition, indent + 1);
@@ -374,21 +392,7 @@ void tt_dump(const TtNode *node, int32_t indent) {
         break;
 
     case TT_MATCH:
-        fprintf(stderr, "\n");
-        tt_dump(node->match_expr.operand, indent + 1);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expr.arm_bodies); i++) {
-            dump_indent(indent + 1);
-            fprintf(stderr, "arm %d:\n", i);
-            if (node->match_expr.arm_conditions[i] != NULL) {
-                tt_dump(node->match_expr.arm_conditions[i], indent + 2);
-            }
-            if (node->match_expr.arm_guards[i] != NULL) {
-                dump_indent(indent + 2);
-                fprintf(stderr, "guard:\n");
-                tt_dump(node->match_expr.arm_guards[i], indent + 3);
-            }
-            tt_dump(node->match_expr.arm_bodies[i], indent + 2);
-        }
+        dump_match_node(node, indent);
         break;
     }
 }

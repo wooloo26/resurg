@@ -305,6 +305,28 @@ static TtNode *lower_enum_struct_init(Lowering *low, const Type *enum_type,
  * method calls (including promoted methods from embedded structs).
  * Returns NULL when the callee is not a recognized method.
  */
+/** Walk embedded structs to find a promoted method symbol. */
+static TtSymbol *find_promoted_method(Lowering *low, const Type *struct_type,
+                                      const char *method_name, TtNode **receiver_ptr,
+                                      bool via_pointer) {
+    for (int32_t i = 0; i < struct_type->struct_type.embed_count; i++) {
+        const Type *embed_type = struct_type->struct_type.embedded[i];
+        const char *embed_key =
+            arena_sprintf(low->tt_arena, "%s.%s", embed_type->struct_type.name, method_name);
+        TtSymbol *method_sym = lowering_scope_find(low, embed_key);
+        if (method_sym != NULL) {
+            TtNode *embed_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type,
+                                          (*receiver_ptr)->location);
+            embed_access->struct_field_access.object = *receiver_ptr;
+            embed_access->struct_field_access.field = embed_type->struct_type.name;
+            embed_access->struct_field_access.via_pointer = via_pointer;
+            *receiver_ptr = embed_access;
+            return method_sym;
+        }
+    }
+    return NULL;
+}
+
 static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
     const ASTNode *member_ast = ast->call.callee;
     const Type *obj_type = member_ast->member.object->type;
@@ -353,21 +375,7 @@ static TtNode *lower_member_call(Lowering *low, const ASTNode *ast) {
         TtSymbol *method_sym = lowering_scope_find(low, key);
 
         if (method_sym == NULL) {
-            for (int32_t i = 0; i < obj_type->struct_type.embed_count; i++) {
-                const Type *embed_type = obj_type->struct_type.embedded[i];
-                const char *embed_key = arena_sprintf(low->tt_arena, "%s.%s",
-                                                      embed_type->struct_type.name, method_name);
-                method_sym = lowering_scope_find(low, embed_key);
-                if (method_sym != NULL) {
-                    TtNode *embed_access = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type,
-                                                  receiver->location);
-                    embed_access->struct_field_access.object = receiver;
-                    embed_access->struct_field_access.field = embed_type->struct_type.name;
-                    embed_access->struct_field_access.via_pointer = via_pointer;
-                    receiver = embed_access;
-                    break;
-                }
-            }
+            method_sym = find_promoted_method(low, obj_type, method_name, &receiver, via_pointer);
         }
 
         if (method_sym != NULL) {

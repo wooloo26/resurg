@@ -155,6 +155,44 @@ static void dump_tuple_literal_node(const ASTNode *node, int32_t level) {
     }
 }
 
+static void dump_struct_declaration_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "StructDecl(%s)\n", node->struct_declaration.name);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
+        ast_dump(node->struct_declaration.methods[i], level + 1);
+    }
+}
+
+static void dump_struct_literal_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "StructLiteral(%s)\n", node->struct_literal.name);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_literal.field_values); i++) {
+        ast_dump(node->struct_literal.field_values[i], level + 1);
+    }
+}
+
+static void dump_enum_declaration_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "EnumDecl(%s)\n", node->enum_declaration.name);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
+        ast_dump(node->enum_declaration.methods[i], level + 1);
+    }
+}
+
+static void dump_match_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "Match\n");
+    ast_dump(node->match_expression.operand, level + 1);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expression.arms); i++) {
+        print_indent(level + 1);
+        fprintf(stderr, "Arm\n");
+        ast_dump(node->match_expression.arms[i].body, level + 2);
+    }
+}
+
+static void dump_enum_init_node(const ASTNode *node, int32_t level) {
+    fprintf(stderr, "EnumInit(%s::%s)\n", node->enum_init.enum_name, node->enum_init.variant_name);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_init.arguments); i++) {
+        ast_dump(node->enum_init.arguments[i], level + 1);
+    }
+}
+
 void ast_dump(const ASTNode *node, int32_t level) {
     if (node == NULL) {
         print_indent(level);
@@ -250,16 +288,10 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "TypeAlias(%s)\n", node->type_alias.name);
         break;
     case NODE_STRUCT_DECLARATION:
-        fprintf(stderr, "StructDecl(%s)\n", node->struct_declaration.name);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
-            ast_dump(node->struct_declaration.methods[i], level + 1);
-        }
+        dump_struct_declaration_node(node, level);
         break;
     case NODE_STRUCT_LITERAL:
-        fprintf(stderr, "StructLiteral(%s)\n", node->struct_literal.name);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_literal.field_values); i++) {
-            ast_dump(node->struct_literal.field_values[i], level + 1);
-        }
+        dump_struct_literal_node(node, level);
         break;
     case NODE_STRUCT_DESTRUCTURE:
         fprintf(stderr, "StructDestructure\n");
@@ -278,26 +310,13 @@ void ast_dump(const ASTNode *node, int32_t level) {
         ast_dump(node->deref.operand, level + 1);
         break;
     case NODE_ENUM_DECLARATION:
-        fprintf(stderr, "EnumDecl(%s)\n", node->enum_declaration.name);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
-            ast_dump(node->enum_declaration.methods[i], level + 1);
-        }
+        dump_enum_declaration_node(node, level);
         break;
     case NODE_MATCH:
-        fprintf(stderr, "Match\n");
-        ast_dump(node->match_expression.operand, level + 1);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->match_expression.arms); i++) {
-            print_indent(level + 1);
-            fprintf(stderr, "Arm\n");
-            ast_dump(node->match_expression.arms[i].body, level + 2);
-        }
+        dump_match_node(node, level);
         break;
     case NODE_ENUM_INIT:
-        fprintf(stderr, "EnumInit(%s::%s)\n", node->enum_init.enum_name,
-                node->enum_init.variant_name);
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_init.arguments); i++) {
-            ast_dump(node->enum_init.arguments[i], level + 1);
-        }
+        dump_enum_init_node(node, level);
         break;
     case NODE_RETURN:
         fprintf(stderr, "Return\n");

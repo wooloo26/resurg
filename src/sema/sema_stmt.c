@@ -284,6 +284,21 @@ static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method
     scope_pop(analyzer);
 }
 
+/** Check enum method bodies (pass 2) — delegates to check_struct_method_body. */
+static const Type *check_enum_declaration_body(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *result = node->type;
+    EnumDefinition *edef = sema_lookup_enum(analyzer, node->enum_declaration.name);
+    if (edef == NULL) {
+        return result;
+    }
+    const Type *ptr_type = type_create_pointer(analyzer->arena, edef->type, false);
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
+        check_struct_method_body(analyzer, node->enum_declaration.methods[i],
+                                 node->enum_declaration.name, ptr_type);
+    }
+    return result;
+}
+
 static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
     StructDefinition *sdef = sema_lookup_struct(analyzer, node->struct_declaration.name);
     if (sdef == NULL) {
@@ -528,50 +543,9 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         result = check_deref(analyzer, node);
         break;
 
-    case NODE_ENUM_DECLARATION: {
-        // Type already registered in first pass; check method bodies
-        result = node->type; // preserve type set by register_enum_definition
-        EnumDefinition *edef = sema_lookup_enum(analyzer, node->enum_declaration.name);
-        if (edef != NULL) {
-            const Type *ptr_type = type_create_pointer(analyzer->arena, edef->type, false);
-            for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
-                ASTNode *method = node->enum_declaration.methods[i];
-                scope_push(analyzer, false);
-                if (method->function_declaration.receiver_name != NULL) {
-                    scope_define(analyzer, method->function_declaration.receiver_name, ptr_type,
-                                 false, SYM_PARAM);
-                }
-                for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters);
-                     j++) {
-                    ASTNode *param = method->function_declaration.parameters[j];
-                    const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
-                    if (pt == NULL) {
-                        pt = &TYPE_ERROR_INSTANCE;
-                    }
-                    param->type = pt;
-                    scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
-                }
-                if (method->function_declaration.body != NULL) {
-                    const Type *body_type = check_node(analyzer, method->function_declaration.body);
-                    const Type *return_type =
-                        resolve_ast_type(analyzer, &method->function_declaration.return_type);
-                    if (return_type == NULL) {
-                        return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
-                    }
-                    method->type = return_type;
-                    const char *method_key =
-                        arena_sprintf(analyzer->arena, "%s.%s", node->enum_declaration.name,
-                                      method->function_declaration.name);
-                    FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
-                    if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
-                        sig->return_type = return_type;
-                    }
-                }
-                scope_pop(analyzer);
-            }
-        }
+    case NODE_ENUM_DECLARATION:
+        result = check_enum_declaration_body(analyzer, node);
         break;
-    }
 
     case NODE_RETURN:
         if (node->return_statement.value != NULL) {

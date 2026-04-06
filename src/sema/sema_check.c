@@ -236,6 +236,58 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
 }
 
 /** Register an enum definition: build the TYPE_ENUM, register methods as functions. */
+/** Build a single EnumVariant from its AST representation. */
+static EnumVariant build_enum_variant(SemanticAnalyzer *analyzer, ASTEnumVariant *ast_variant,
+                                      int32_t *auto_discriminant) {
+    EnumVariant variant = {0};
+    variant.name = ast_variant->name;
+
+    switch (ast_variant->kind) {
+    case VARIANT_UNIT:
+        variant.kind = ENUM_VARIANT_UNIT;
+        break;
+    case VARIANT_TUPLE: {
+        variant.kind = ENUM_VARIANT_TUPLE;
+        variant.tuple_count = BUFFER_LENGTH(ast_variant->tuple_types);
+        variant.tuple_types = (const Type **)arena_alloc_zero(
+            analyzer->arena, variant.tuple_count * sizeof(const Type *));
+        for (int32_t j = 0; j < variant.tuple_count; j++) {
+            variant.tuple_types[j] = resolve_ast_type(analyzer, &ast_variant->tuple_types[j]);
+            if (variant.tuple_types[j] == NULL) {
+                variant.tuple_types[j] = &TYPE_ERROR_INSTANCE;
+            }
+        }
+        break;
+    }
+    case VARIANT_STRUCT: {
+        variant.kind = ENUM_VARIANT_STRUCT;
+        variant.field_count = BUFFER_LENGTH(ast_variant->fields);
+        variant.fields =
+            arena_alloc_zero(analyzer->arena, variant.field_count * sizeof(StructField));
+        for (int32_t j = 0; j < variant.field_count; j++) {
+            variant.fields[j].name = ast_variant->fields[j].name;
+            variant.fields[j].type = resolve_ast_type(analyzer, &ast_variant->fields[j].type);
+            if (variant.fields[j].type == NULL) {
+                variant.fields[j].type = &TYPE_ERROR_INSTANCE;
+            }
+        }
+        break;
+    }
+    }
+
+    if (ast_variant->discriminant != NULL) {
+        if (ast_variant->discriminant->kind == NODE_LITERAL &&
+            ast_variant->discriminant->literal.kind == LITERAL_I32) {
+            variant.discriminant = (int32_t)ast_variant->discriminant->literal.integer_value;
+            *auto_discriminant = (int32_t)variant.discriminant + 1;
+        }
+    } else {
+        variant.discriminant = *auto_discriminant;
+        (*auto_discriminant)++;
+    }
+    return variant;
+}
+
 static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declaration) {
     const char *enum_name = declaration->enum_declaration.name;
 
@@ -244,60 +296,11 @@ static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declar
         return;
     }
 
-    // Build EnumVariant array for the type system
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
-
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->enum_declaration.variants); i++) {
-        ASTEnumVariant *ast_variant = &declaration->enum_declaration.variants[i];
-        EnumVariant variant = {0};
-        variant.name = ast_variant->name;
-
-        switch (ast_variant->kind) {
-        case VARIANT_UNIT:
-            variant.kind = ENUM_VARIANT_UNIT;
-            break;
-        case VARIANT_TUPLE: {
-            variant.kind = ENUM_VARIANT_TUPLE;
-            variant.tuple_count = BUFFER_LENGTH(ast_variant->tuple_types);
-            variant.tuple_types = (const Type **)arena_alloc_zero(
-                analyzer->arena, variant.tuple_count * sizeof(const Type *));
-            for (int32_t j = 0; j < variant.tuple_count; j++) {
-                variant.tuple_types[j] = resolve_ast_type(analyzer, &ast_variant->tuple_types[j]);
-                if (variant.tuple_types[j] == NULL) {
-                    variant.tuple_types[j] = &TYPE_ERROR_INSTANCE;
-                }
-            }
-            break;
-        }
-        case VARIANT_STRUCT: {
-            variant.kind = ENUM_VARIANT_STRUCT;
-            variant.field_count = BUFFER_LENGTH(ast_variant->fields);
-            variant.fields =
-                arena_alloc_zero(analyzer->arena, variant.field_count * sizeof(StructField));
-            for (int32_t j = 0; j < variant.field_count; j++) {
-                variant.fields[j].name = ast_variant->fields[j].name;
-                variant.fields[j].type = resolve_ast_type(analyzer, &ast_variant->fields[j].type);
-                if (variant.fields[j].type == NULL) {
-                    variant.fields[j].type = &TYPE_ERROR_INSTANCE;
-                }
-            }
-            break;
-        }
-        }
-
-        if (ast_variant->discriminant != NULL) {
-            // Explicit discriminant
-            if (ast_variant->discriminant->kind == NODE_LITERAL &&
-                ast_variant->discriminant->literal.kind == LITERAL_I32) {
-                variant.discriminant = (int32_t)ast_variant->discriminant->literal.integer_value;
-                auto_discriminant = (int32_t)variant.discriminant + 1;
-            }
-        } else {
-            variant.discriminant = auto_discriminant;
-            auto_discriminant++;
-        }
-
+        EnumVariant variant = build_enum_variant(
+            analyzer, &declaration->enum_declaration.variants[i], &auto_discriminant);
         BUFFER_PUSH(variants, variant);
     }
 
@@ -310,7 +313,6 @@ static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declar
     def->methods = NULL;
     def->type = enum_type;
 
-    // Register methods
     for (int32_t i = 0; i < BUFFER_LENGTH(declaration->enum_declaration.methods); i++) {
         register_method_signature(analyzer, enum_name, declaration->enum_declaration.methods[i],
                                   &def->methods);

@@ -167,91 +167,115 @@ const Type *check_binary(SemanticAnalyzer *analyzer, ASTNode *node) {
     return left;
 }
 
+/** Check an enum tuple variant construction: Enum.Variant(args). */
+static const Type *check_enum_variant_call(SemanticAnalyzer *analyzer, ASTNode *node,
+                                           const Type *enum_type, const char *variant_name) {
+    const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
+    if (variant == NULL || variant->kind != ENUM_VARIANT_TUPLE) {
+        return NULL;
+    }
+    int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
+    if (arg_count != variant->tuple_count) {
+        SEMA_ERROR(analyzer, node->location, "expected %d arguments for variant '%s', got %d",
+                   variant->tuple_count, variant_name, arg_count);
+    } else {
+        for (int32_t i = 0; i < arg_count; i++) {
+            promote_literal(node->call.arguments[i], variant->tuple_types[i]);
+            const Type *arg_type = node->call.arguments[i]->type;
+            if (arg_type != NULL && !type_equal(arg_type, variant->tuple_types[i]) &&
+                arg_type->kind != TYPE_ERROR) {
+                SEMA_ERROR(analyzer, node->call.arguments[i]->location,
+                           "type mismatch: expected '%s', got '%s'",
+                           type_name(analyzer->arena, variant->tuple_types[i]),
+                           type_name(analyzer->arena, arg_type));
+            }
+        }
+    }
+    node->type = enum_type;
+    return enum_type;
+}
+
+/** Resolve a struct method call, including promoted methods from embedded structs. */
+static const Type *check_struct_method_call(SemanticAnalyzer *analyzer, ASTNode *node,
+                                            const Type *struct_type, const char *method_name) {
+    const char *method_key =
+        arena_sprintf(analyzer->arena, "%s.%s", struct_type->struct_type.name, method_name);
+    FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+
+    // If not found directly, check embedded structs for promoted methods
+    if (sig == NULL) {
+        StructDefinition *sdef = sema_lookup_struct(analyzer, struct_type->struct_type.name);
+        if (sdef != NULL) {
+            for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
+                const char *embed_key =
+                    arena_sprintf(analyzer->arena, "%s.%s", sdef->embedded[ei], method_name);
+                sig = sema_lookup_function(analyzer, embed_key);
+                if (sig != NULL) {
+                    break;
+                }
+            }
+        }
+    }
+    if (sig == NULL) {
+        return NULL;
+    }
+    for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
+        check_node(analyzer, node->call.arguments[i]);
+    }
+    reorder_named_arguments(analyzer, node, sig);
+    check_call_arguments(analyzer, node, sig);
+    node->type = sig->return_type;
+    return sig->return_type;
+}
+
+/** Try to resolve a member call (enum variant, enum method, or struct method). */
+static const Type *check_member_call(SemanticAnalyzer *analyzer, ASTNode *node,
+                                     const char **out_function_name) {
+    const Type *obj_type = check_node(analyzer, node->call.callee->member.object);
+    const char *method_name = node->call.callee->member.member;
+
+    // Auto-deref for pointer types
+    if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
+        obj_type = obj_type->pointer.pointee;
+    }
+
+    if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
+        const Type *result = check_enum_variant_call(analyzer, node, obj_type, method_name);
+        if (result != NULL) {
+            return result;
+        }
+        // Enum method call
+        const char *method_key =
+            arena_sprintf(analyzer->arena, "%s.%s", type_enum_name(obj_type), method_name);
+        FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+        if (sig != NULL) {
+            reorder_named_arguments(analyzer, node, sig);
+            check_call_arguments(analyzer, node, sig);
+            node->type = sig->return_type;
+            return sig->return_type;
+        }
+    }
+
+    if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
+        const Type *result = check_struct_method_call(analyzer, node, obj_type, method_name);
+        if (result != NULL) {
+            return result;
+        }
+    }
+
+    *out_function_name = method_name;
+    return NULL;
+}
+
 const Type *check_call(SemanticAnalyzer *analyzer, ASTNode *node) {
-    // Check callee
     const char *function_name = NULL;
     if (node->call.callee->kind == NODE_IDENTIFIER) {
         function_name = node->call.callee->identifier.name;
     } else if (node->call.callee->kind == NODE_MEMBER) {
-        // Could be a method call — check the object's type
-        const Type *obj_type = check_node(analyzer, node->call.callee->member.object);
-        const char *method_name = node->call.callee->member.member;
-
-        // Auto-deref for pointer types
-        if (obj_type != NULL && obj_type->kind == TYPE_POINTER) {
-            obj_type = obj_type->pointer.pointee;
+        const Type *result = check_member_call(analyzer, node, &function_name);
+        if (result != NULL) {
+            return result;
         }
-
-        // Enum tuple variant construction: Enum.Variant(args)
-        if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
-            const EnumVariant *variant = type_enum_find_variant(obj_type, method_name);
-            if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
-                int32_t arg_count = BUFFER_LENGTH(node->call.arguments);
-                if (arg_count != variant->tuple_count) {
-                    SEMA_ERROR(analyzer, node->location,
-                               "expected %d arguments for variant '%s', got %d",
-                               variant->tuple_count, method_name, arg_count);
-                } else {
-                    for (int32_t i = 0; i < arg_count; i++) {
-                        promote_literal(node->call.arguments[i], variant->tuple_types[i]);
-                        const Type *arg_type = node->call.arguments[i]->type;
-                        if (arg_type != NULL && !type_equal(arg_type, variant->tuple_types[i]) &&
-                            arg_type->kind != TYPE_ERROR) {
-                            SEMA_ERROR(analyzer, node->call.arguments[i]->location,
-                                       "type mismatch: expected '%s', got '%s'",
-                                       type_name(analyzer->arena, variant->tuple_types[i]),
-                                       type_name(analyzer->arena, arg_type));
-                        }
-                    }
-                }
-                node->type = obj_type;
-                return obj_type;
-            }
-
-            // Enum method call: enum_value.method(args)
-            const char *method_key =
-                arena_sprintf(analyzer->arena, "%s.%s", type_enum_name(obj_type), method_name);
-            FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
-            if (sig != NULL) {
-                reorder_named_arguments(analyzer, node, sig);
-                check_call_arguments(analyzer, node, sig);
-                node->type = sig->return_type;
-                return sig->return_type;
-            }
-        }
-
-        if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
-            // Look up method on this struct (or promoted from embedded)
-            const char *method_key =
-                arena_sprintf(analyzer->arena, "%s.%s", obj_type->struct_type.name, method_name);
-            FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
-
-            // If not found directly, check embedded structs for promoted methods
-            if (sig == NULL) {
-                StructDefinition *sdef = sema_lookup_struct(analyzer, obj_type->struct_type.name);
-                if (sdef != NULL) {
-                    for (int32_t ei = 0; ei < BUFFER_LENGTH(sdef->embedded); ei++) {
-                        const char *embed_key = arena_sprintf(analyzer->arena, "%s.%s",
-                                                              sdef->embedded[ei], method_name);
-                        sig = sema_lookup_function(analyzer, embed_key);
-                        if (sig != NULL) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (sig != NULL) {
-                for (int32_t i = 0; i < BUFFER_LENGTH(node->call.arguments); i++) {
-                    check_node(analyzer, node->call.arguments[i]);
-                }
-                reorder_named_arguments(analyzer, node, sig);
-                check_call_arguments(analyzer, node, sig);
-                node->type = sig->return_type;
-                return sig->return_type;
-            }
-        }
-        function_name = method_name;
     }
 
     // Check arguments

@@ -154,6 +154,32 @@ static bool is_struct_literal_ahead(const Parser *parser) {
     return false;
 }
 
+/** Parse Enum::Variant { field = expr, ... } from a member node. */
+static ASTNode *parse_enum_struct_literal(Parser *parser, ASTNode *member_node) {
+    ASTNode *node = ast_new(parser->arena, NODE_ENUM_INIT, member_node->location);
+    node->enum_init.enum_name = member_node->member.object->identifier.name;
+    node->enum_init.variant_name = member_node->member.member;
+    node->enum_init.arguments = NULL;
+    node->enum_init.field_names = NULL;
+    node->enum_init.field_values = NULL;
+
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+    if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+        do {
+            parser_skip_newlines(parser);
+            const char *field_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
+            parser_expect(parser, TOKEN_EQUAL);
+            ASTNode *value = parser_parse_expression(parser);
+            BUFFER_PUSH(node->enum_init.field_names, field_name);
+            BUFFER_PUSH(node->enum_init.field_values, value);
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
+}
+
 /**
  * Parse an array literal: [expr, ...] or [N]T[expr, ...].
  * The opening '[' has NOT been consumed yet.
@@ -347,29 +373,7 @@ static ASTNode *parse_postfix(Parser *parser) {
         // Enum struct variant literal: Enum::Variant { field = expr, ... }
         if (left->kind == NODE_MEMBER && left->member.object->kind == NODE_IDENTIFIER &&
             is_struct_literal_ahead(parser)) {
-            SourceLocation enum_loc = left->location;
-            ASTNode *node = ast_new(parser->arena, NODE_ENUM_INIT, enum_loc);
-            node->enum_init.enum_name = left->member.object->identifier.name;
-            node->enum_init.variant_name = left->member.member;
-            node->enum_init.arguments = NULL;
-            node->enum_init.field_names = NULL;
-            node->enum_init.field_values = NULL;
-
-            parser_expect(parser, TOKEN_LEFT_BRACE);
-            parser_skip_newlines(parser);
-            if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
-                do {
-                    parser_skip_newlines(parser);
-                    const char *field_name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
-                    parser_expect(parser, TOKEN_EQUAL);
-                    ASTNode *value = parser_parse_expression(parser);
-                    BUFFER_PUSH(node->enum_init.field_names, field_name);
-                    BUFFER_PUSH(node->enum_init.field_values, value);
-                } while (parser_match(parser, TOKEN_COMMA));
-            }
-            parser_skip_newlines(parser);
-            parser_expect(parser, TOKEN_RIGHT_BRACE);
-            left = node;
+            left = parse_enum_struct_literal(parser, left);
             continue;
         }
 

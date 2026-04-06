@@ -311,20 +311,101 @@ static const char *emit_deref_expression(CodeGenerator *generator, const TtNode 
 }
 
 /** Emit a match expression as a temp variable with an if-else chain. */
+/** Emit a single guarded match arm (used inside do { } while(0) block). */
+static void emit_match_arm_guarded(CodeGenerator *generator, const TtNode *condition,
+                                   const TtNode *guard, const TtNode *body, const TtNode *bindings,
+                                   const char *result) {
+    if (condition != NULL) {
+        const char *cond_str = codegen_emit_expression(generator, condition);
+        const char *wrapped = cond_str;
+        if (cond_str[0] != '(') {
+            wrapped = arena_sprintf(generator->arena, "(%s)", cond_str);
+        }
+        codegen_emit_line(generator, "if %s {", wrapped);
+    } else {
+        codegen_emit_line(generator, "{");
+    }
+    generator->indent++;
+
+    if (bindings != NULL && bindings->kind == TT_BLOCK) {
+        codegen_emit_block_statements(generator, bindings);
+    }
+
+    if (guard != NULL) {
+        const char *guard_str = codegen_emit_expression(generator, guard);
+        const char *gwrapped = guard_str;
+        if (guard_str[0] != '(') {
+            gwrapped = arena_sprintf(generator->arena, "(%s)", guard_str);
+        }
+        codegen_emit_line(generator, "if %s {", gwrapped);
+        generator->indent++;
+    }
+
+    if (result != NULL) {
+        const char *value = codegen_emit_expression(generator, body);
+        codegen_emit_line(generator, "%s = %s;", result, value);
+    } else {
+        codegen_emit_statement(generator, body);
+    }
+    codegen_emit_line(generator, "break;");
+
+    if (guard != NULL) {
+        generator->indent--;
+        codegen_emit_line(generator, "}");
+    }
+    generator->indent--;
+    codegen_emit_line(generator, "}");
+}
+
+/** Emit a single simple match arm (part of if-else chain, no guards). */
+static void emit_match_arm_simple(CodeGenerator *generator, int32_t arm_index,
+                                  const TtNode *condition, const TtNode *body,
+                                  const TtNode *bindings, const char *result) {
+    if (condition != NULL) {
+        const char *cond_str = codegen_emit_expression(generator, condition);
+        const char *wrapped = cond_str;
+        if (cond_str[0] != '(') {
+            wrapped = arena_sprintf(generator->arena, "(%s)", cond_str);
+        }
+        if (arm_index == 0) {
+            codegen_emit_line(generator, "if %s {", wrapped);
+        } else {
+            codegen_emit_indent(generator);
+            fprintf(generator->output, "} else if %s {\n", wrapped);
+        }
+    } else {
+        if (arm_index == 0) {
+            codegen_emit_line(generator, "{");
+        } else {
+            codegen_emit_line(generator, "} else {");
+        }
+    }
+    generator->indent++;
+
+    if (bindings != NULL && bindings->kind == TT_BLOCK) {
+        codegen_emit_block_statements(generator, bindings);
+    }
+
+    if (result != NULL) {
+        const char *value = codegen_emit_expression(generator, body);
+        codegen_emit_line(generator, "%s = %s;", result, value);
+    } else {
+        codegen_emit_statement(generator, body);
+    }
+    generator->indent--;
+}
+
 static const char *emit_match_expression(CodeGenerator *generator, const TtNode *node) {
     const Type *type = node->type;
 
-    // Emit the operand as a variable declaration (match temp)
     codegen_emit_statement(generator, node->match_expr.operand);
 
-    // Declare result temporary if the match produces a value
     const char *result = NULL;
     if (type != NULL && type->kind != TYPE_UNIT) {
         result = codegen_next_temporary(generator);
         codegen_emit_line(generator, "%s %s;", codegen_c_type_for(generator, type), result);
     }
 
-    // Use do { } while(0) so guards can fall through to next arm via break
     int32_t arm_count = BUFFER_LENGTH(node->match_expr.arm_conditions);
     bool has_any_guard = false;
     for (int32_t i = 0; i < arm_count; i++) {
@@ -340,92 +421,14 @@ static const char *emit_match_expression(CodeGenerator *generator, const TtNode 
     }
 
     for (int32_t i = 0; i < arm_count; i++) {
-        const TtNode *condition = node->match_expr.arm_conditions[i];
-        const TtNode *guard = node->match_expr.arm_guards[i];
-        const TtNode *body = node->match_expr.arm_bodies[i];
-        const TtNode *bindings = node->match_expr.arm_bindings[i];
-
         if (has_any_guard) {
-            // Each arm is a separate if block (no else-if chain)
-            // so guard failure falls through to the next arm
-            if (condition != NULL) {
-                const char *cond_str = codegen_emit_expression(generator, condition);
-                const char *wrapped = cond_str;
-                if (cond_str[0] != '(') {
-                    wrapped = arena_sprintf(generator->arena, "(%s)", cond_str);
-                }
-                codegen_emit_line(generator, "if %s {", wrapped);
-            } else {
-                // Wildcard/catch-all arm
-                codegen_emit_line(generator, "{");
-            }
-            generator->indent++;
-
-            // Emit bindings before guard (guard may reference bound variables)
-            if (bindings != NULL && bindings->kind == TT_BLOCK) {
-                codegen_emit_block_statements(generator, bindings);
-            }
-
-            if (guard != NULL) {
-                const char *guard_str = codegen_emit_expression(generator, guard);
-                const char *gwrapped = guard_str;
-                if (guard_str[0] != '(') {
-                    gwrapped = arena_sprintf(generator->arena, "(%s)", guard_str);
-                }
-                codegen_emit_line(generator, "if %s {", gwrapped);
-                generator->indent++;
-            }
-
-            // Emit body
-            if (result != NULL) {
-                const char *value = codegen_emit_expression(generator, body);
-                codegen_emit_line(generator, "%s = %s;", result, value);
-            } else {
-                codegen_emit_statement(generator, body);
-            }
-            codegen_emit_line(generator, "break;");
-
-            if (guard != NULL) {
-                generator->indent--;
-                codegen_emit_line(generator, "}");
-            }
-
-            generator->indent--;
-            codegen_emit_line(generator, "}");
+            emit_match_arm_guarded(generator, node->match_expr.arm_conditions[i],
+                                   node->match_expr.arm_guards[i], node->match_expr.arm_bodies[i],
+                                   node->match_expr.arm_bindings[i], result);
         } else {
-            // Simple if-else chain (no guards)
-            if (condition != NULL) {
-                const char *cond_str = codegen_emit_expression(generator, condition);
-                const char *wrapped = cond_str;
-                if (cond_str[0] != '(') {
-                    wrapped = arena_sprintf(generator->arena, "(%s)", cond_str);
-                }
-                if (i == 0) {
-                    codegen_emit_line(generator, "if %s {", wrapped);
-                } else {
-                    codegen_emit_indent(generator);
-                    fprintf(generator->output, "} else if %s {\n", wrapped);
-                }
-            } else {
-                if (i == 0) {
-                    codegen_emit_line(generator, "{");
-                } else {
-                    codegen_emit_line(generator, "} else {");
-                }
-            }
-            generator->indent++;
-
-            if (bindings != NULL && bindings->kind == TT_BLOCK) {
-                codegen_emit_block_statements(generator, bindings);
-            }
-
-            if (result != NULL) {
-                const char *value = codegen_emit_expression(generator, body);
-                codegen_emit_line(generator, "%s = %s;", result, value);
-            } else {
-                codegen_emit_statement(generator, body);
-            }
-            generator->indent--;
+            emit_match_arm_simple(generator, i, node->match_expr.arm_conditions[i],
+                                  node->match_expr.arm_bodies[i], node->match_expr.arm_bindings[i],
+                                  result);
         }
     }
 
