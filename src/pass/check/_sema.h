@@ -32,6 +32,22 @@ struct FnSig {
     bool is_pub;
 };
 
+/** Generic fn template — stored when a fn has type params. */
+typedef struct GenericFnDef {
+    const char *name;
+    ASTNode *decl;             // original fn_decl AST
+    ASTTypeParam *type_params; /* buf */
+    int32_t type_param_count;
+} GenericFnDef;
+
+/** Tracks a pending generic instantiation for deferred body checking. */
+typedef struct GenericInst {
+    GenericFnDef *generic;    // source template
+    const char *mangled_name; // monomorphized fn name
+    const Type **type_args;   /* buf - resolved concrete types */
+    ASTNode *file_node;       // file AST to append cloned fn to
+} GenericInst;
+
 /** A field def with its default value expr. */
 typedef struct StructFieldInfo {
     const char *name;
@@ -77,11 +93,15 @@ struct Sema {
     Scope *current_scope;
     int32_t err_count;
     const Type *loop_break_type; // break value type in current loop (NULL if no break-with-value)
+    ASTNode *file_node;          // root file node (for appending monomorphized fns)
     HashTable type_alias_table;  // name → const Type*
     HashTable fn_table;          // name → FnSig*
     HashTable struct_table;      // name → StructDef*
     HashTable enum_table;        // name → EnumDef*
     HashTable pact_table;        // name → PactDef*
+    HashTable generic_fn_table;  // name → GenericFnDef*
+    HashTable type_param_table;  // name → const Type* (active during generic body check)
+    GenericInst *pending_insts;  /* buf - deferred generic instantiations */
 };
 
 /** Report a semantic err and bump the sema's err counter. */

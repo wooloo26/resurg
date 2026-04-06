@@ -1,0 +1,63 @@
+// v0.8.0 — Constraint alias expansion in type inference for generic bounds
+module test_constraint_aliases
+
+// ── base pacts ──
+
+pact Display {
+    fn to_display() -> str
+}
+
+pact HasName {
+    name: str
+}
+
+// ── constraint alias (brace syntax) ──
+
+pact Printable {
+    Display
+    HasName
+}
+
+// ── constraint alias (equals syntax) ──
+
+pact ShowName = Display + HasName
+
+// ── function using constraint alias as bound ──
+
+fn show_printable<T: Printable>(x: T) -> str {
+    x.to_display()
+}
+
+fn show_combo<T: ShowName>(x: T) -> str {
+    x.name
+}
+
+// ── struct conforming to constraint alias ──
+
+struct Person: Printable {
+    name: str
+
+    fn to_display(p) -> str {
+        p.name
+    }
+}
+
+struct User: ShowName {
+    name: str
+
+    fn to_display(u) -> str {
+        u.name
+    }
+}
+
+fn test_constraint_alias_brace() {
+    p := Person { name = "Alice" }
+    s := show_printable<Person>(p)
+    assert(s == "Alice")
+}
+
+fn test_constraint_alias_equals() {
+    u := User { name = "Bob" }
+    s := show_combo<User>(u)
+    assert(s == "Bob")
+}

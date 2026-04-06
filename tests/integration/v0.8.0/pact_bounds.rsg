@@ -1,0 +1,58 @@
+// v0.8.0 — Pact-bounded type parameters: single and multiple bounds
+module test_pact_bounds
+
+// ── pacts for bounds ──
+
+pact Display {
+    fn to_display() -> str
+}
+
+pact HasAge {
+    age: i32
+}
+
+// ── single bound ──
+
+fn show<T: Display>(x: T) -> str {
+    x.to_display()
+}
+
+// ── multiple bounds with + syntax ──
+
+fn describe<T: Display + HasAge>(x: T) -> str {
+    s := x.to_display()
+    s
+}
+
+// ── struct conforming to Display ──
+
+struct Dog: Display {
+    name: str
+
+    fn to_display(d) -> str {
+        d.name
+    }
+}
+
+// ── struct conforming to Display + HasAge ──
+
+struct Cat: Display + HasAge {
+    name: str
+    age: i32 = 0
+
+    fn to_display(c) -> str {
+        c.name
+    }
+}
+
+fn test_single_bound() {
+    d := Dog { name = "Dog" }
+    s := show<Dog>(d)
+    assert(s == "Dog")
+}
+
+fn test_multiple_bounds() {
+    c := Cat { name = "Cat", age = 5 }
+    s := describe<Cat>(c)
+    assert(s == "Cat")
+}

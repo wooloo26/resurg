@@ -475,6 +475,10 @@ const Type *check_node(Sema *sema, ASTNode *node) {
         break;
 
     case NODE_FN_DECL:
+        // Skip generic fn templates — they are checked per-instantiation
+        if (BUF_LEN(node->fn_decl.type_params) > 0) {
+            break;
+        }
         check_fn_body(sema, node);
         result = node->type; // preserve type set by check_fn_body
         break;

@@ -2,6 +2,78 @@
 
 // ── Named-arg helpers ─────────────────────────────────────────────
 
+// ── Generic call helpers ──────────────────────────────────────────
+
+/** Check if @p type satisfies the pact bound @p bound_name (recursively). */
+static bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name) {
+    PactDef *pact = sema_lookup_pact(sema, bound_name);
+    if (pact == NULL) {
+        return false;
+    }
+    if (type == NULL || type->kind != TYPE_STRUCT) {
+        return false;
+    }
+    const char *struct_name = type->struct_type.name;
+    StructDef *sdef = sema_lookup_struct(sema, struct_name);
+    if (sdef == NULL) {
+        return false;
+    }
+    // Check required fields
+    for (int32_t i = 0; i < BUF_LEN(pact->fields); i++) {
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
+            if (strcmp(sdef->fields[j].name, pact->fields[i].name) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    // Check required methods (non-default)
+    for (int32_t i = 0; i < BUF_LEN(pact->methods); i++) {
+        bool has_default =
+            pact->methods[i].decl != NULL && pact->methods[i].decl->fn_decl.body != NULL;
+        if (has_default) {
+            continue;
+        }
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
+            if (strcmp(sdef->methods[j].name, pact->methods[i].name) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    // Recursively check super pact requirements
+    for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
+        if (!type_satisfies_bound(sema, type, pact->super_pacts[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/** Build a mangled name for a generic instantiation: "fn__type1_type2". */
+static const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args,
+                                      int32_t count) {
+    // Start with "base__"
+    char buf[512];
+    int32_t len = snprintf(buf, sizeof(buf), "%s__", base);
+    for (int32_t i = 0; i < count; i++) {
+        if (i > 0) {
+            len += snprintf(buf + len, sizeof(buf) - (size_t)len, "_");
+        }
+        const char *tname = type_name(sema->arena, type_args[i]);
+        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "%s", tname);
+    }
+    return arena_sprintf(sema->arena, "%s", buf);
+}
+
 /**
  * Reorder call args to match param poss using named labels.
  * Clears @p node->call.arg_names after reordering.
@@ -281,6 +353,98 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     // Built-in fns
     if (fn_name != NULL && strcmp(fn_name, "assert") == 0) {
         return &TYPE_UNIT_INST;
+    }
+
+    // Generic call handling: fn_name<Type, ...>(args)
+    if (fn_name != NULL && BUF_LEN(node->call.type_args) > 0) {
+        GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
+        if (gdef == NULL) {
+            SEMA_ERR(sema, node->loc, "undefined generic function '%s'", fn_name);
+            return &TYPE_ERR_INST;
+        }
+        int32_t expected = gdef->type_param_count;
+        int32_t got = BUF_LEN(node->call.type_args);
+        if (got != expected) {
+            SEMA_ERR(sema, node->loc,
+                     "wrong number of type arguments for '%s': expected %d, got %d", fn_name,
+                     expected, got);
+            return &TYPE_ERR_INST;
+        }
+
+        // Resolve type args
+        const Type **resolved_args = NULL;
+        for (int32_t i = 0; i < got; i++) {
+            const Type *t = resolve_ast_type(sema, &node->call.type_args[i]);
+            if (t == NULL) {
+                t = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(resolved_args, t);
+        }
+
+        // Check bounds
+        for (int32_t i = 0; i < expected; i++) {
+            for (int32_t b = 0; b < BUF_LEN(gdef->type_params[i].bounds); b++) {
+                const char *bound = gdef->type_params[i].bounds[b];
+                if (!type_satisfies_bound(sema, resolved_args[i], bound)) {
+                    SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
+                             type_name(sema->arena, resolved_args[i]), bound);
+                    return &TYPE_ERR_INST;
+                }
+            }
+        }
+
+        // Build mangled name
+        const char *mangled = build_mangled_name(sema, fn_name, resolved_args, got);
+
+        // Check if already instantiated
+        FnSig *existing = sema_lookup_fn(sema, mangled);
+        if (existing != NULL) {
+            node->call.callee->id.name = mangled;
+            return resolve_call(sema, node, existing);
+        }
+
+        // Push type param substitutions to resolve param/return types
+        for (int32_t i = 0; i < expected; i++) {
+            hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
+                              (void *)resolved_args[i]);
+        }
+
+        ASTNode *orig = gdef->decl;
+        FnSig *sig = rsg_malloc(sizeof(*sig));
+        sig->name = mangled;
+        sig->param_count = BUF_LEN(orig->fn_decl.params);
+        sig->param_types = NULL;
+        sig->param_names = NULL;
+        sig->is_pub = false;
+        for (int32_t i = 0; i < sig->param_count; i++) {
+            ASTNode *param = orig->fn_decl.params[i];
+            const Type *pt = resolve_ast_type(sema, &param->param.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(sig->param_types, pt);
+            BUF_PUSH(sig->param_names, param->param.name);
+        }
+        const Type *ret = resolve_ast_type(sema, &orig->fn_decl.return_type);
+        sig->return_type = (ret != NULL) ? ret : &TYPE_UNIT_INST;
+
+        // Clear type param substitutions
+        hash_table_destroy(&sema->type_param_table);
+        hash_table_init(&sema->type_param_table, NULL);
+
+        // Register concrete FnSig
+        hash_table_insert(&sema->fn_table, mangled, sig);
+
+        // Queue pending instantiation for deferred body checking
+        GenericInst inst = {.generic = gdef,
+                            .mangled_name = mangled,
+                            .type_args = resolved_args,
+                            .file_node = sema->file_node};
+        BUF_PUSH(sema->pending_insts, inst);
+
+        // Rewrite call to use mangled name
+        node->call.callee->id.name = mangled;
+        return resolve_call(sema, node, sig);
     }
 
     // Look up fn return type and check arg types

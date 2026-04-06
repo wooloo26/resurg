@@ -40,7 +40,15 @@ struct ASTType {
     ASTType **tuple_elems; /* buf */
     // AST_TYPE_PTR fields
     ASTType *ptr_elem; // pointee type
+    // Generic type args for Name<T, U> syntax
+    ASTType **type_args; /* buf - NULL for non-generic types */
 };
+
+/** A type param in a generic decl (e.g., T: Ord + Display). */
+typedef struct {
+    const char *name;    // type param name (e.g., "T")
+    const char **bounds; /* buf - pact bound names (e.g., ["Ord", "Display"]) */
+} ASTTypeParam;
 
 /** A field def in a struct decl. */
 typedef struct {
@@ -210,6 +218,8 @@ struct ASTNode {
             bool is_mut_recv;
             bool is_ptr_recv;
             const char *owner_struct;
+            // Generic type params (NULL for non-generic fns)
+            ASTTypeParam *type_params; /* buf */
         } fn_decl;
 
         // NODE_PARAM
@@ -282,6 +292,7 @@ struct ASTNode {
             ASTNode **args;         /* buf */
             const char **arg_names; /* buf - NULL entry = posal */
             bool *arg_is_mut;       /* buf - true = `mut` at call site */
+            ASTType *type_args;     /* buf - explicit generic type args */
         } call;
 
         // NODE_MEMBER
@@ -427,9 +438,10 @@ struct ASTNode {
         // NODE_PACT_DECL
         struct {
             const char *name;
-            ASTStructField *fields;   /* buf - required fields */
-            ASTNode **methods;        /* buf - required + default methods */
-            const char **super_pacts; /* buf - constraint alias pact names */
+            ASTStructField *fields;    /* buf - required fields */
+            ASTNode **methods;         /* buf - required + default methods */
+            const char **super_pacts;  /* buf - constraint alias pact names */
+            ASTTypeParam *type_params; /* buf - generic type params */
         } pact_decl;
 
         // NODE_RETURN

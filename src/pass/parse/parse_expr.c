@@ -413,6 +413,42 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
 
+        // Generic call: fn_name<Type, ...>(args)
+        if (left->kind == NODE_ID && parser_check(parser, TOKEN_LESS)) {
+            int32_t save_pos = parser->pos;
+            parser_advance(parser); // consume '<'
+
+            ASTType *type_args = NULL;
+            bool valid = true;
+
+            do {
+                if (!(token_is_type_keyword(parser_current_token(parser)->kind) ||
+                      parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET) ||
+                      parser_check(parser, TOKEN_LEFT_PAREN) || parser_check(parser, TOKEN_STAR))) {
+                    valid = false;
+                    break;
+                }
+                ASTType arg = parser_parse_type(parser);
+                BUF_PUSH(type_args, arg);
+                if (!parser_check(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_GREATER)) {
+                    valid = false;
+                    break;
+                }
+            } while (parser_match(parser, TOKEN_COMMA));
+
+            if (valid && parser_match(parser, TOKEN_GREATER) &&
+                parser_match(parser, TOKEN_LEFT_PAREN)) {
+                ASTNode *call = parse_call_args(parser, left, loc);
+                call->call.type_args = type_args;
+                left = call;
+                continue;
+            }
+
+            // Not a generic call — backtrack
+            BUF_FREE(type_args);
+            parser->pos = save_pos;
+        }
+
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
             left = parse_call_args(parser, left, loc);
             continue;

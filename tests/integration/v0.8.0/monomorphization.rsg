@@ -1,0 +1,65 @@
+// v0.8.0 — Compile-time monomorphization: each instantiation produces distinct code
+module test_monomorphization
+
+// ── generic identity function: monomorphized per call-site type ──
+
+fn id<T>(x: T) -> T {
+    x
+}
+
+fn test_monomorphize_primitive_types() {
+    a := id<i32>(10)
+    assert(a == 10)
+
+    b := id<str>("abc")
+    assert(b == "abc")
+
+    c := id<bool>(true)
+    assert(c == true)
+
+    d := id<f64>(2.5)
+    assert(d == 2.5)
+}
+
+// ── multiple type params: each combination monomorphized ──
+
+fn make_pair<A, B>(a: A, b: B) -> (A, B) {
+    (a, b)
+}
+
+fn test_pair_monomorphization() {
+    p := make_pair<i32, str>(1, "hello")
+    assert(p.0 == 1)
+    assert(p.1 == "hello")
+}
+
+// ── monomorphization with struct types ──
+
+struct Wrapper {
+    value: i32 = 0
+}
+
+fn wrap_id<T>(x: T) -> T {
+    x
+}
+
+fn test_struct_monomorphization() {
+    w := Wrapper { value = 55 }
+    result := wrap_id<Wrapper>(w)
+    assert(result.value == 55)
+}
+
+// ── same generic called with different types → separate specializations ──
+
+fn add_one<T>(x: T) -> T {
+    x
+}
+
+fn test_multiple_specializations() {
+    a := add_one<i32>(1)
+    b := add_one<f64>(1.0)
+    c := add_one<bool>(true)
+    assert(a == 1)
+    assert(b == 1.0)
+    assert(c == true)
+}

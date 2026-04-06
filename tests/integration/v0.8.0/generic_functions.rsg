@@ -1,0 +1,49 @@
+// v0.8.0 — Generic function syntax: basic type parameterization
+module test_generic_functions
+
+// ── generic function with no bounds ──
+
+fn identity<T>(x: T) -> T {
+    x
+}
+
+// ── two type parameters, no bounds ──
+
+fn first<T, U>(a: T, b: U) -> T {
+    a
+}
+
+fn second<T, U>(a: T, b: U) -> U {
+    b
+}
+
+// ── generic function with block body ──
+
+fn apply<T>(x: T) -> T {
+    result := x
+    result
+}
+
+fn test_identity() {
+    x := identity<i32>(42)
+    assert(x == 42)
+
+    s := identity<str>("hello")
+    assert(s == "hello")
+
+    b := identity<bool>(true)
+    assert(b == true)
+}
+
+fn test_multi_type_params() {
+    a := first<i32, str>(10, "world")
+    assert(a == 10)
+
+    b := second<i32, str>(10, "world")
+    assert(b == "world")
+}
+
+fn test_apply() {
+    r := apply<i32>(99)
+    assert(r == 99)
+}

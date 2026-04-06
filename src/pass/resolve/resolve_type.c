@@ -22,6 +22,10 @@ PactDef *sema_lookup_pact(const Sema *sema, const char *name) {
     return hash_table_lookup(&sema->pact_table, name);
 }
 
+GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name) {
+    return hash_table_lookup(&sema->generic_fn_table, name);
+}
+
 // ── AST type resolution ────────────────────────────────────────────────
 
 const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
@@ -67,6 +71,11 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {
         return type;
+    }
+    // Check active type param substitutions (for generic body checking)
+    const Type *tp = hash_table_lookup(&sema->type_param_table, ast_type->name);
+    if (tp != NULL) {
+        return tp;
     }
     // Check type aliases
     const Type *alias = sema_lookup_type_alias(sema, ast_type->name);

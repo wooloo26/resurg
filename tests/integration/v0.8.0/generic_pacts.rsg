@@ -1,0 +1,69 @@
+// v0.8.0 — Generic pacts: pact with type parameters
+module test_generic_pacts
+
+// ── generic pact: single type parameter ──
+
+pact Into<T> {
+    fn into() -> T
+}
+
+// ── struct conforming to generic pact instantiation ──
+
+struct IntToStr: Into<str> {
+    value: i32 = 0
+
+    fn into(self) -> str {
+        "{self.value}"
+    }
+}
+
+struct F64Wrapper: Into<f64> {
+    inner: f64 = 0.0
+
+    fn into(self) -> f64 {
+        self.inner
+    }
+}
+
+fn test_into_str() {
+    x := IntToStr { value = 42 }
+    s := x.into()
+    assert(s == "42")
+}
+
+fn test_into_f64() {
+    x := F64Wrapper { inner = 3.14 }
+    v := x.into()
+    assert(v == 3.14)
+}
+
+// ── generic pact with composed constraints ──
+
+pact AsStr {
+    fn as_str() -> str
+}
+
+pact Convertible<T> {
+    Into<T>
+    AsStr
+}
+
+struct StrBox: Convertible<str> {
+    text: str
+
+    fn into(self) -> str {
+        self.text
+    }
+
+    fn as_str(self) -> str {
+        self.text
+    }
+}
+
+fn test_convertible() {
+    b := StrBox { text = "hello" }
+    s := b.as_str()
+    assert(s == "hello")
+    t := b.into()
+    assert(t == "hello")
+}

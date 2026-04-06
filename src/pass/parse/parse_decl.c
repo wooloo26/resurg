@@ -1,5 +1,8 @@
 #include "_parse.h"
 
+// ── Forward declarations ──────────────────────────────────────────────
+static ASTTypeParam *parse_type_params(Parser *parser);
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /** Peek one token ahead without consuming. */
@@ -150,6 +153,7 @@ static ASTNode *parse_pact_decl(Parser *parser) {
     node->pact_decl.fields = NULL;
     node->pact_decl.methods = NULL;
     node->pact_decl.super_pacts = NULL;
+    node->pact_decl.type_params = parse_type_params(parser);
 
     parser_skip_newlines(parser);
 
@@ -182,6 +186,13 @@ static ASTNode *parse_pact_decl(Parser *parser) {
             } else {
                 // Super pact ref (constraint alias brace syntax)
                 BUF_PUSH(node->pact_decl.super_pacts, name);
+                // Consume optional generic type args: Into<T>
+                if (parser_match(parser, TOKEN_LESS)) {
+                    do {
+                        parser_parse_type(parser);
+                    } while (parser_match(parser, TOKEN_COMMA));
+                    parser_expect(parser, TOKEN_GREATER);
+                }
             }
         } else {
             rsg_err(parser_current_loc(parser),
@@ -284,12 +295,19 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.embedded = NULL;
     node->struct_decl.conformances = NULL;
 
-    // Parse optional conformance list: struct Foo: Pact1 + Pact2
+    // Parse optional conformance list: struct Foo: Pact1 + Pact2 + Into<str>
     if (parser_match(parser, TOKEN_COLON)) {
         do {
             parser_skip_newlines(parser);
             const char *pact_name = parser_expect(parser, TOKEN_ID)->lexeme;
             BUF_PUSH(node->struct_decl.conformances, pact_name);
+            // Consume optional generic type args: Into<str>
+            if (parser_match(parser, TOKEN_LESS)) {
+                do {
+                    parser_parse_type(parser);
+                } while (parser_match(parser, TOKEN_COMMA));
+                parser_expect(parser, TOKEN_GREATER);
+            }
         } while (parser_match(parser, TOKEN_PLUS));
     }
 
@@ -332,6 +350,31 @@ static ASTNode *parse_struct_decl(Parser *parser) {
 
 // ── Fn decl ───────────────────────────────────────────────
 
+/**
+ * Parse generic type param list: `<T, U: Bound1 + Bound2, ...>`.
+ * Returns a stretchy buf of ASTTypeParam, or NULL if no `<` present.
+ */
+static ASTTypeParam *parse_type_params(Parser *parser) {
+    if (!parser_match(parser, TOKEN_LESS)) {
+        return NULL;
+    }
+    ASTTypeParam *params = NULL;
+    do {
+        ASTTypeParam tp = {0};
+        tp.name = parser_expect(parser, TOKEN_ID)->lexeme;
+        tp.bounds = NULL;
+        if (parser_match(parser, TOKEN_COLON)) {
+            do {
+                const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
+                BUF_PUSH(tp.bounds, bound);
+            } while (parser_match(parser, TOKEN_PLUS));
+        }
+        BUF_PUSH(params, tp);
+    } while (parser_match(parser, TOKEN_COMMA));
+    parser_expect(parser, TOKEN_GREATER);
+    return params;
+}
+
 static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
@@ -344,6 +387,7 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     node->fn_decl.is_mut_recv = false;
     node->fn_decl.is_ptr_recv = false;
     node->fn_decl.owner_struct = NULL;
+    node->fn_decl.type_params = parse_type_params(parser);
 
     // Parameters
     parser_expect(parser, TOKEN_LEFT_PAREN);

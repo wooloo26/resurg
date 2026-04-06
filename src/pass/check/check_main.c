@@ -1,5 +1,160 @@
 #include "_check.h"
 
+// ── AST node deep clone (for generic monomorphization) ─────────────────
+
+/** Recursively deep-clone an AST node and its children. */
+static ASTNode *clone_node(Arena *arena, ASTNode *src) {
+    if (src == NULL) {
+        return NULL;
+    }
+    ASTNode *dst = ast_new(arena, src->kind, src->loc);
+    switch (src->kind) {
+    case NODE_LIT:
+        dst->lit = src->lit;
+        break;
+    case NODE_ID:
+        dst->id = src->id;
+        break;
+    case NODE_UNARY:
+        dst->unary.op = src->unary.op;
+        dst->unary.operand = clone_node(arena, src->unary.operand);
+        break;
+    case NODE_BINARY:
+        dst->binary.op = src->binary.op;
+        dst->binary.left = clone_node(arena, src->binary.left);
+        dst->binary.right = clone_node(arena, src->binary.right);
+        break;
+    case NODE_BLOCK:
+        dst->block.stmts = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->block.stmts); i++) {
+            BUF_PUSH(dst->block.stmts, clone_node(arena, src->block.stmts[i]));
+        }
+        dst->block.result = clone_node(arena, src->block.result);
+        break;
+    case NODE_EXPR_STMT:
+        dst->expr_stmt.expr = clone_node(arena, src->expr_stmt.expr);
+        break;
+    case NODE_VAR_DECL:
+        dst->var_decl = src->var_decl;
+        dst->var_decl.init = clone_node(arena, src->var_decl.init);
+        break;
+    case NODE_CALL:
+        dst->call.callee = clone_node(arena, src->call.callee);
+        dst->call.args = NULL;
+        dst->call.arg_names = NULL;
+        dst->call.arg_is_mut = NULL;
+        dst->call.type_args = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->call.args); i++) {
+            BUF_PUSH(dst->call.args, clone_node(arena, src->call.args[i]));
+        }
+        for (int32_t i = 0; i < BUF_LEN(src->call.arg_names); i++) {
+            BUF_PUSH(dst->call.arg_names, src->call.arg_names[i]);
+        }
+        for (int32_t i = 0; i < BUF_LEN(src->call.arg_is_mut); i++) {
+            BUF_PUSH(dst->call.arg_is_mut, src->call.arg_is_mut[i]);
+        }
+        break;
+    case NODE_MEMBER:
+        dst->member.object = clone_node(arena, src->member.object);
+        dst->member.member = src->member.member;
+        break;
+    case NODE_IDX:
+        dst->idx_access.object = clone_node(arena, src->idx_access.object);
+        dst->idx_access.idx = clone_node(arena, src->idx_access.idx);
+        break;
+    case NODE_IF:
+        dst->if_expr.cond = clone_node(arena, src->if_expr.cond);
+        dst->if_expr.then_body = clone_node(arena, src->if_expr.then_body);
+        dst->if_expr.else_body = clone_node(arena, src->if_expr.else_body);
+        break;
+    case NODE_RETURN:
+        dst->return_stmt.value = clone_node(arena, src->return_stmt.value);
+        break;
+    case NODE_ASSIGN:
+        dst->assign.target = clone_node(arena, src->assign.target);
+        dst->assign.value = clone_node(arena, src->assign.value);
+        break;
+    case NODE_COMPOUND_ASSIGN:
+        dst->compound_assign.op = src->compound_assign.op;
+        dst->compound_assign.target = clone_node(arena, src->compound_assign.target);
+        dst->compound_assign.value = clone_node(arena, src->compound_assign.value);
+        break;
+    case NODE_STR_INTERPOLATION:
+        dst->str_interpolation.parts = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->str_interpolation.parts); i++) {
+            BUF_PUSH(dst->str_interpolation.parts,
+                     clone_node(arena, src->str_interpolation.parts[i]));
+        }
+        break;
+    case NODE_TUPLE_LIT:
+        dst->tuple_lit.elems = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->tuple_lit.elems); i++) {
+            BUF_PUSH(dst->tuple_lit.elems, clone_node(arena, src->tuple_lit.elems[i]));
+        }
+        break;
+    case NODE_ARRAY_LIT:
+        dst->array_lit = src->array_lit;
+        dst->array_lit.elems = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->array_lit.elems); i++) {
+            BUF_PUSH(dst->array_lit.elems, clone_node(arena, src->array_lit.elems[i]));
+        }
+        break;
+    case NODE_STRUCT_LIT:
+        dst->struct_lit.name = src->struct_lit.name;
+        dst->struct_lit.field_names = NULL;
+        dst->struct_lit.field_values = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->struct_lit.field_names); i++) {
+            BUF_PUSH(dst->struct_lit.field_names, src->struct_lit.field_names[i]);
+        }
+        for (int32_t i = 0; i < BUF_LEN(src->struct_lit.field_values); i++) {
+            BUF_PUSH(dst->struct_lit.field_values,
+                     clone_node(arena, src->struct_lit.field_values[i]));
+        }
+        break;
+    case NODE_ADDRESS_OF:
+        dst->address_of.operand = clone_node(arena, src->address_of.operand);
+        break;
+    case NODE_DEREF:
+        dst->deref.operand = clone_node(arena, src->deref.operand);
+        break;
+    case NODE_TYPE_CONVERSION:
+        dst->type_conversion.target_type = src->type_conversion.target_type;
+        dst->type_conversion.operand = clone_node(arena, src->type_conversion.operand);
+        break;
+    case NODE_LOOP:
+        dst->loop.body = clone_node(arena, src->loop.body);
+        break;
+    case NODE_WHILE:
+        dst->while_loop.cond = clone_node(arena, src->while_loop.cond);
+        dst->while_loop.body = clone_node(arena, src->while_loop.body);
+        break;
+    case NODE_FOR:
+        dst->for_loop = src->for_loop;
+        dst->for_loop.start = clone_node(arena, src->for_loop.start);
+        dst->for_loop.end = clone_node(arena, src->for_loop.end);
+        dst->for_loop.iterable = clone_node(arena, src->for_loop.iterable);
+        dst->for_loop.body = clone_node(arena, src->for_loop.body);
+        break;
+    case NODE_BREAK:
+        dst->break_stmt.value = clone_node(arena, src->break_stmt.value);
+        break;
+    case NODE_CONTINUE:
+        break;
+    case NODE_DEFER:
+        dst->defer_stmt.body = clone_node(arena, src->defer_stmt.body);
+        break;
+    case NODE_PARAM:
+        dst->param = src->param;
+        break;
+    default:
+        // Shallow copy for any unhandled kinds
+        *dst = *src;
+        dst->type = NULL;
+        break;
+    }
+    return dst;
+}
+
 // ── Public API ─────────────────────────────────────────────────────────
 
 Sema *sema_create(Arena *arena) {
@@ -8,11 +163,15 @@ Sema *sema_create(Arena *arena) {
     sema->current_scope = NULL;
     sema->err_count = 0;
     sema->loop_break_type = NULL;
+    sema->file_node = NULL;
     hash_table_init(&sema->type_alias_table, NULL);
     hash_table_init(&sema->fn_table, NULL);
     hash_table_init(&sema->struct_table, NULL);
     hash_table_init(&sema->enum_table, NULL);
     hash_table_init(&sema->pact_table, NULL);
+    hash_table_init(&sema->generic_fn_table, NULL);
+    hash_table_init(&sema->type_param_table, NULL);
+    sema->pending_insts = NULL;
     return sema;
 }
 
@@ -23,12 +182,26 @@ void sema_destroy(Sema *sema) {
         hash_table_destroy(&sema->struct_table);
         hash_table_destroy(&sema->enum_table);
         hash_table_destroy(&sema->pact_table);
+        hash_table_destroy(&sema->generic_fn_table);
+        hash_table_destroy(&sema->type_param_table);
+        BUF_FREE(sema->pending_insts);
         free(sema);
     }
 }
 
 /** Register a single fn's sig into the sema tables and scope. */
 static void register_fn_sig(Sema *sema, ASTNode *decl) {
+    // If the fn has type params, store as a generic template instead
+    if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+        GenericFnDef *gdef = rsg_malloc(sizeof(*gdef));
+        gdef->name = decl->fn_decl.name;
+        gdef->decl = decl;
+        gdef->type_params = decl->fn_decl.type_params;
+        gdef->type_param_count = BUF_LEN(decl->fn_decl.type_params);
+        hash_table_insert(&sema->generic_fn_table, decl->fn_decl.name, gdef);
+        return;
+    }
+
     const Type *resolved_return = &TYPE_UNIT_INST;
     if (decl->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
         resolved_return = resolve_ast_type(sema, &decl->fn_decl.return_type);
@@ -507,6 +680,13 @@ bool sema_check(Sema *sema, ASTNode *file) {
     hash_table_init(&sema->enum_table, NULL);
     hash_table_destroy(&sema->pact_table);
     hash_table_init(&sema->pact_table, NULL);
+    hash_table_destroy(&sema->generic_fn_table);
+    hash_table_init(&sema->generic_fn_table, NULL);
+    hash_table_destroy(&sema->type_param_table);
+    hash_table_init(&sema->type_param_table, NULL);
+    BUF_FREE(sema->pending_insts);
+    sema->pending_insts = NULL;
+    sema->file_node = file;
 
     scope_push(sema, false); // global scope
 
@@ -565,6 +745,54 @@ bool sema_check(Sema *sema, ASTNode *file) {
 
     // Second pass: type-check everything
     check_node(sema, file);
+
+    // Process pending generic instantiations (deferred body checking)
+    for (int32_t gi = 0; gi < BUF_LEN(sema->pending_insts); gi++) {
+        GenericInst *inst = &sema->pending_insts[gi];
+        GenericFnDef *gdef = inst->generic;
+
+        // Push type param substitutions
+        for (int32_t ti = 0; ti < gdef->type_param_count; ti++) {
+            hash_table_insert(&sema->type_param_table, gdef->type_params[ti].name,
+                              (void *)inst->type_args[ti]);
+        }
+
+        // Create a cloned fn_decl with the mangled name and concrete types
+        ASTNode *orig = gdef->decl;
+        ASTNode *clone = ast_new(sema->arena, NODE_FN_DECL, orig->loc);
+        clone->fn_decl.is_pub = false;
+        clone->fn_decl.name = inst->mangled_name;
+        clone->fn_decl.params = NULL;
+        clone->fn_decl.type_params = NULL;
+        clone->fn_decl.recv_name = NULL;
+        clone->fn_decl.is_mut_recv = false;
+        clone->fn_decl.is_ptr_recv = false;
+        clone->fn_decl.owner_struct = NULL;
+
+        // Clone params with substituted types
+        for (int32_t pi = 0; pi < BUF_LEN(orig->fn_decl.params); pi++) {
+            ASTNode *op = orig->fn_decl.params[pi];
+            ASTNode *np = ast_new(sema->arena, NODE_PARAM, op->loc);
+            np->param.name = op->param.name;
+            np->param.type = op->param.type;
+            np->param.is_mut = op->param.is_mut;
+            BUF_PUSH(clone->fn_decl.params, np);
+        }
+
+        // Copy return type (resolve_ast_type will use type_param_table)
+        clone->fn_decl.return_type = orig->fn_decl.return_type;
+        clone->fn_decl.body = clone_node(sema->arena, orig->fn_decl.body);
+
+        // Type-check the cloned fn body using the substitution context
+        check_fn_body(sema, clone);
+
+        // Append to file decls so lowering/codegen can see it
+        BUF_PUSH(inst->file_node->file.decls, clone);
+
+        // Clear type param substitutions
+        hash_table_destroy(&sema->type_param_table);
+        hash_table_init(&sema->type_param_table, NULL);
+    }
 
     scope_pop(sema);
     return sema->err_count == 0;

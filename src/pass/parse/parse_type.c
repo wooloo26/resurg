@@ -70,6 +70,19 @@ ASTType parser_parse_type(Parser *parser) {
     } else {
         rsg_err(parser_current_loc(parser), "expected type name");
         type.kind = AST_TYPE_INFERRED;
+        return type;
+    }
+
+    // Generic type args: Name<T, U, ...>
+    type.type_args = NULL;
+    if (parser_check(parser, TOKEN_LESS)) {
+        parser_advance(parser); // consume '<'
+        do {
+            ASTType *arg = arena_alloc(parser->arena, sizeof(ASTType));
+            *arg = parser_parse_type(parser);
+            BUF_PUSH(type.type_args, arg);
+        } while (parser_match(parser, TOKEN_COMMA));
+        parser_expect(parser, TOKEN_GREATER);
     }
     return type;
 }

@@ -1,0 +1,12 @@
+// TEST: compile_error
+// EXPECT-ERROR: type mismatch
+// v0.8.0 — Error: type argument mismatch in generic function
+module test_err
+
+fn id<T>(x: T) -> T {
+    x
+}
+
+fn main() {
+    var result: str = id<i32>(42)
+}

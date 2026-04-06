@@ -241,6 +241,10 @@ static void preregister_fns(Lower *low, const ASTNode *file_ast) {
     for (int32_t i = 0; i < BUF_LEN(file_ast->file.decls); i++) {
         const ASTNode *decl = file_ast->file.decls[i];
         if (decl->kind == NODE_FN_DECL) {
+            // Skip generic fn templates
+            if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+                continue;
+            }
             const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
             HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
             HirSym *sym = lower_make_sym(low, &fn_spec);
@@ -353,6 +357,10 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
     }
 
     case NODE_FN_DECL:
+        // Skip generic fn templates — only monomorphized copies are lowered
+        if (BUF_LEN(ast->fn_decl.type_params) > 0) {
+            return NULL;
+        }
         return lower_fn_decl(low, ast);
 
     case NODE_STRUCT_DECL: {

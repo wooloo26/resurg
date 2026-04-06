@@ -18,6 +18,7 @@ typedef struct FnSig FnSig;
 typedef struct StructDef StructDef;
 typedef struct EnumDef EnumDef;
 typedef struct PactDef PactDef;
+typedef struct GenericFnDef GenericFnDef;
 
 // ── Struct defs ─────────────────────────────────────────────────
 
@@ -87,6 +88,8 @@ StructDef *sema_lookup_struct(const Sema *sema, const char *name);
 EnumDef *sema_lookup_enum(const Sema *sema, const char *name);
 /** Look up a pact def by name. */
 PactDef *sema_lookup_pact(const Sema *sema, const char *name);
+/** Look up a generic fn template by name. */
+GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name);
 /**
  * Map a syntactic ASTType to a resolved Type*.  Returns NULL for inferred
  * types; emits an err and returns TYPE_ERR for unknown names.
