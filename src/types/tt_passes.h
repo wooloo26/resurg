@@ -18,4 +18,14 @@
  */
 void tt_pass_const_fold(Arena *arena, TtNode *root);
 
+/**
+ * Promote escaping TT_ADDRESS_OF nodes to TT_HEAP_ALLOC.
+ *
+ * An address-of result escapes if it may outlive the scope of the addressed
+ * variable — e.g. returned from a function or used as the function body's
+ * result expression.  Conservative rule: if escape status cannot be proven
+ * non-escaping, the node is treated as escaping.
+ */
+void tt_pass_escape_analysis(Arena *arena, TtNode *root);
+
 #endif // RG_TT_PASSES_H

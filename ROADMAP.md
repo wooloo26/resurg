@@ -95,7 +95,7 @@ Algebraic data types and exhaustive matching.
 
 ## v0.5.2 — Escape Analysis
 
-- [ ] Escape Analysis (if not proven non-escaping, it escapes)
+- [x] Escape Analysis (if not proven non-escaping, it escapes)
   
 ## v0.6.0 — Slices & Collections
 

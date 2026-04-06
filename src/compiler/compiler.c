@@ -124,6 +124,7 @@ static TtNode *stage_lower(const CompilerOptions *options, Arena *tt_arena, ASTN
     TtNode *tt_root = lowering_lower(*out_lowering, file_node);
 
     tt_pass_const_fold(tt_arena, tt_root);
+    tt_pass_escape_analysis(tt_arena, tt_root);
 
     if (options->dump_tt) {
         tt_dump(tt_root, 0);
