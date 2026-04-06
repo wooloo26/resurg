@@ -71,12 +71,13 @@ while IFS= read -r line; do
 done < "$RG_FILE"
 
 # -----------------------------------------------------------------------
-# Unique temp files for parallel safety
+# Output paths mirror test file layout inside the build directory.
+# e.g. tests/integration/v0.1.0/foo.rsg → build/tests/integration/v0.1.0/foo.c
 # -----------------------------------------------------------------------
-TEST_C="$BUILD/_test_$$.c"
-TEST_BIN="$BUILD/_test_$$"
-cleanup() { rm -f "$TEST_C" "$TEST_BIN"; }
-trap cleanup EXIT
+REL_PATH="${RG_FILE%.rsg}"
+TEST_C="$BUILD/$REL_PATH.c"
+TEST_BIN="$BUILD/$REL_PATH"
+mkdir -p "$(dirname "$TEST_C")"
 
 # -----------------------------------------------------------------------
 # Execute based on mode

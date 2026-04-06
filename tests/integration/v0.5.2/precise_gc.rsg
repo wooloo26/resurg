@@ -1,0 +1,182 @@
+// v0.5.2 — Precise GC: stack-map roots survive collection
+module test_precise_gc
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+struct Node {
+    value: i32 = 0
+    label: str
+}
+
+struct Pair {
+    left: *Point
+    right: *Point
+}
+
+// ── escaped pointer remains live after GC pressure ──
+
+fn make_point(x: f64, y: f64) -> *Point {
+    p := Point { x = x, y = y }
+    &p
+}
+
+fn test_escaped_root_survives() {
+    p := make_point(1.0, 2.0)
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(p.x == 1.0)
+    assert(p.y == 2.0)
+}
+
+// ── multiple roots from different call frames ──
+
+fn make_node(v: i32, s: str) -> *Node {
+    n := Node { value = v, label = s }
+    &n
+}
+
+fn test_multi_frame_roots() {
+    a := make_point(10.0, 20.0)
+    b := make_node(42, "hello")
+    c := make_point(30.0, 40.0)
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(a.x == 10.0)
+    assert(a.y == 20.0)
+    assert(b.value == 42)
+    assert(b.label == "hello")
+    assert(c.x == 30.0)
+    assert(c.y == 40.0)
+}
+
+// ── interior pointers: struct fields pointing to GC objects ──
+
+fn test_interior_pointers_traced() {
+    left := make_point(1.0, 2.0)
+    right := make_point(3.0, 4.0)
+    pair := &Pair { left = left, right = right }
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(pair.left.x == 1.0)
+    assert(pair.left.y == 2.0)
+    assert(pair.right.x == 3.0)
+    assert(pair.right.y == 4.0)
+}
+
+// ── transitive reachability: nested struct pointers ──
+
+fn test_transitive_reachability() {
+    left := make_point(1.0, 2.0)
+    right := make_point(3.0, 4.0)
+    p1 := &Pair { left = left, right = right }
+    inner := make_point(5.0, 6.0)
+    p2 := &Pair { left = inner, right = left }
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(p1.left.x == 1.0)
+    assert(p1.right.y == 4.0)
+    assert(p2.left.x == 5.0)
+    assert(p2.right.x == 1.0)
+}
+
+// ── dead objects are collected: only live roots survive ──
+
+fn allocate_garbage(n: i32) {
+    for 0..n |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+}
+
+fn test_dead_objects_collected() {
+    allocate_garbage(500)
+    // after returning, all 500 temporaries are dead
+    // allocating more should not cause unbounded growth
+    live := make_point(99.0, 88.0)
+    allocate_garbage(500)
+    assert(live.x == 99.0)
+    assert(live.y == 88.0)
+}
+
+// ── pointer aliasing: both aliases keep object alive ──
+
+fn test_aliased_roots() {
+    p := make_point(7.0, 8.0)
+    q := p
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    q.x = 77.0
+    assert(p.x == 77.0)
+    assert(q.x == 77.0)
+}
+
+// ── pointer from conditional branch survives ──
+
+fn conditional_alloc(flag: bool) -> *Point {
+    if flag {
+        make_point(1.0, 2.0)
+    } else {
+        make_point(3.0, 4.0)
+    }
+}
+
+fn test_conditional_root() {
+    a := conditional_alloc(true)
+    b := conditional_alloc(false)
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(a.x == 1.0)
+    assert(a.y == 2.0)
+    assert(b.x == 3.0)
+    assert(b.y == 4.0)
+}
+
+// ── mutation through pointer after GC pressure ──
+
+fn test_mutation_after_collection() {
+    p := make_point(0.0, 0.0)
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    p.x = 123.0
+    p.y = 456.0
+    assert(p.x == 123.0)
+    assert(p.y == 456.0)
+}
+
+// ── string fields in heap objects survive GC ──
+
+fn test_string_fields_survive() {
+    n := make_node(1, "precise")
+    for 0..1000 |i| {
+        tmp := make_node(0, "garbage")
+    }
+    assert(n.value == 1)
+    assert(n.label == "precise")
+}
+
+// ── multiple independent allocations in sequence ──
+
+fn test_sequential_allocations() {
+    p1 := make_point(1.0, 0.0)
+    p2 := make_point(2.0, 0.0)
+    p3 := make_point(3.0, 0.0)
+    p4 := make_point(4.0, 0.0)
+    p5 := make_point(5.0, 0.0)
+    for 0..1000 |i| {
+        tmp := make_point(0.0, 0.0)
+    }
+    assert(p1.x == 1.0)
+    assert(p2.x == 2.0)
+    assert(p3.x == 3.0)
+    assert(p4.x == 4.0)
+    assert(p5.x == 5.0)
+}
