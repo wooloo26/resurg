@@ -84,10 +84,12 @@ Algebraic data types and exhaustive matching.
 
 ## v0.5.1 — Control flow & Other proposals
 
+- [ ] `never` type
 - [ ] scope & shadowing & expression
 - [ ] declare first
 - [ ] `unit` is empty tuple
 - [ ] `while` loop
+- [ ] `loop` expression
 - [ ] `defer` (LIFO cleanup on scope exit)
 - [ ] `return` early return
   
@@ -161,17 +163,6 @@ Higher-order programming and code organization.
 - [ ] Private-by-default module resolution
 - [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
 - [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
-
-## v0.9.2 — Builtin functions
-
-- [ ] `never` type
-- [ ] `panic(message)` builtin (immediate abort, `noreturn`)
-- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
-- [ ] `assert` rewritten on top of `panic`
-
-## v0.9.3 — Expressions
-
-- [ ] `loop` expression
   
 ## v1.0.0 — Stable Release
 
@@ -189,6 +180,10 @@ Language completeness, tooling, and ecosystem.
 ## v1.0.2 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)
+- [ ] `panic(message)` builtin (immediate abort, `noreturn`)
+- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`)
+- [ ] `assert` rewritten on top of `panic`
+- [ ] Prelude (`panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
 
 ## v1.0.3 — Package manager
 

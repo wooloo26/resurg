@@ -40,7 +40,7 @@
 Avoid overly long lines, functions, and files.
 
 - **Calls:** break deeply nested or multi-argument calls into named intermediates.
-- **Functions / Files:** split only when it genuinely reduces complexity, eliminates duplication, or enforces single responsibility.
+- **Functions / Files:** split only when it genuinely reduces complexity, eliminates duplication, or enforces single responsibility. Refactor functions with more than 4 parameters to use a struct for parameter grouping.
 
 ## Functions
 

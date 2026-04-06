@@ -552,6 +552,21 @@ rd(..)
 pub fn add(a: i32, b: i32) = a + b
 ```
 
+Nested module.
+
+```rsg
+module my_module {
+    fn private_function() { ... }
+    pub fn public_function() { ... }
+
+    pub module nested_module { ... }
+}
+
+fn main() {
+    my_module::nested_module::public_function()
+}
+```
+
 **Visibility:** `pub` applies to `fn`, `struct`, `enum`, `type`, `var`, and `pact` declarations.
 
 ---
@@ -604,12 +619,6 @@ data |> |x| x + 1 |> println
 break  continue  defer  else   enum   false  fn
 for    if        loop   match  module mut    pact   pub
 immut  return    struct true   type   use    var    while
-```
-
-**Built-in functions:**
-
-```
-assert panic  recover
 ```
 
 **Reserved (future):**
