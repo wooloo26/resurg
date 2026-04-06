@@ -66,6 +66,8 @@ static const char *tt_node_kind_string(TtNodeKind kind) {
         return "Break";
     case TT_CONTINUE:
         return "Continue";
+    case TT_DEFER:
+        return "Defer";
     case TT_BOOL_LITERAL:
         return "BoolLit";
     case TT_INT_LITERAL:
@@ -279,6 +281,11 @@ void tt_dump(const TtNode *node, int32_t indent) {
         fprintf(stderr, "\n");
         break;
 
+    case TT_DEFER:
+        fprintf(stderr, "\n");
+        tt_dump(node->defer_statement.body, indent + 1);
+        break;
+
     case TT_BOOL_LITERAL:
     case TT_INT_LITERAL:
     case TT_FLOAT_LITERAL:
@@ -489,6 +496,9 @@ void tt_visit_children(TtNode *node, TtChildVisitor visitor, void *context) {
         break;
     case TT_LOOP:
         visitor(context, &node->loop.body);
+        break;
+    case TT_DEFER:
+        visitor(context, &node->defer_statement.body);
         break;
     case TT_STRUCT_DECLARATION:
         break;

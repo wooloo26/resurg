@@ -21,6 +21,8 @@ struct CodeGenerator {
     int32_t temporary_counter;      // monotonic counter for _rsg_tmp_N
     int32_t string_builder_counter; // monotonic counter for _rsg_sb_N
     const Type **compound_types;    /* buf */
+    const TtNode **defer_bodies;    /* buf – active defers in current function */
+    bool in_deferred_function;      // true when current function has defers
 };
 
 // ── Output helpers (codegen_helpers.c) ─────────────────────────────────

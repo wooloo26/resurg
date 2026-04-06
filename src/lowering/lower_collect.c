@@ -76,6 +76,9 @@ Lowering *lowering_create(Arena *tt_arena) {
 }
 
 void lowering_destroy(Lowering *lowering) {
+    if (lowering == NULL) {
+        return;
+    }
     BUFFER_FREE(lowering->compound_types);
     free(lowering);
 }

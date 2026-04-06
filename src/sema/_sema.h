@@ -98,10 +98,11 @@ struct SemanticAnalyzer {
     Arena *arena;
     Scope *current_scope;
     int32_t error_count;
-    HashTable type_alias_table; // name → const Type*
-    HashTable function_table;   // name → FunctionSignature*
-    HashTable struct_table;     // name → StructDefinition*
-    HashTable enum_table;       // name → EnumDefinition*
+    const Type *loop_break_type; // break value type in current loop (NULL if no break-with-value)
+    HashTable type_alias_table;  // name → const Type*
+    HashTable function_table;    // name → FunctionSignature*
+    HashTable struct_table;      // name → StructDefinition*
+    HashTable enum_table;        // name → EnumDefinition*
 };
 
 /** Report a semantic error and bump the analyzer's error counter. */
@@ -113,13 +114,20 @@ struct SemanticAnalyzer {
 
 // ── Scope manipulation (scope.c) ───────────────────────────────────────
 
+/** Grouped parameters for defining a symbol in a scope. */
+typedef struct {
+    const char *name;
+    const Type *type;
+    bool is_public;
+    SymbolKind kind;
+} SymbolDef;
+
 /** Push a new child scope.  If @p is_loop is true, break/continue are legal inside it. */
 Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop);
 /** Pop the innermost scope. */
 void scope_pop(SemanticAnalyzer *analyzer);
-/** Define @p name in the current scope. */
-void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
-                  SymbolKind kind);
+/** Define a symbol in the current scope. */
+void scope_define(SemanticAnalyzer *analyzer, const SymbolDef *def);
 /** Look up @p name in the innermost scope only (for redefinition checks). */
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name);
 /** Walk the scope chain outward to find @p name. */

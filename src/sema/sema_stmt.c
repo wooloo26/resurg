@@ -32,6 +32,14 @@ const Type *check_if(SemanticAnalyzer *analyzer, ASTNode *node) {
         else_type = check_node(analyzer, node->if_expression.else_body);
     }
 
+    // Never-type coercion: if one branch is never, use the other
+    if (then_type != NULL && then_type->kind == TYPE_NEVER && else_type != NULL) {
+        return else_type;
+    }
+    if (else_type != NULL && else_type->kind == TYPE_NEVER && then_type != NULL) {
+        return then_type;
+    }
+
     // If both branches present and non-unit, return their common type
     if (else_type != NULL && then_type != NULL && then_type->kind != TYPE_UNIT) {
         return then_type;
@@ -47,12 +55,16 @@ const Type *check_if(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 const Type *check_block(SemanticAnalyzer *analyzer, ASTNode *node) {
     scope_push(analyzer, false);
+    const Type *last_stmt_type = NULL;
     for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
-        check_node(analyzer, node->block.statements[i]);
+        last_stmt_type = check_node(analyzer, node->block.statements[i]);
     }
     const Type *result_type = &TYPE_UNIT_INSTANCE;
     if (node->block.result != NULL) {
         result_type = check_node(analyzer, node->block.result);
+    } else if (last_stmt_type != NULL && last_stmt_type->kind == TYPE_NEVER) {
+        // Block whose last statement diverges (return/break/continue) is never.
+        result_type = &TYPE_NEVER_INSTANCE;
     }
     scope_pop(analyzer);
     return result_type;
@@ -115,16 +127,13 @@ const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node
     }
 
     if (scope_lookup_current(analyzer, node->variable_declaration.name) != NULL) {
-        SEMA_ERROR(analyzer, node->location, "redefinition of '%s' in the same scope",
-                   node->variable_declaration.name);
-    } else if (scope_lookup(analyzer, node->variable_declaration.name) != NULL) {
-        SEMA_ERROR(analyzer, node->location, "variable '%s' shadows an existing binding",
-                   node->variable_declaration.name);
+        // Same-scope rebinding is allowed (shadowing)
     }
 
     is_reserved_identifier(analyzer, node->location, node->variable_declaration.name);
 
-    scope_define(analyzer, node->variable_declaration.name, variable_type, false, SYM_VAR);
+    scope_define(analyzer,
+                 &(SymbolDef){node->variable_declaration.name, variable_type, false, SYM_VAR});
 
     // Mark immutable bindings
     if (node->variable_declaration.is_immut) {
@@ -152,7 +161,8 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
         }
         parameter->type = parameter_type;
         is_reserved_identifier(analyzer, parameter->location, parameter->parameter.name);
-        scope_define(analyzer, parameter->parameter.name, parameter_type, false, SYM_PARAM);
+        scope_define(analyzer,
+                     &(SymbolDef){parameter->parameter.name, parameter_type, false, SYM_PARAM});
     }
 
     // Check body
@@ -216,10 +226,30 @@ const Type *check_compound_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
                                    node->compound_assign.value);
 }
 
-static void check_loop(SemanticAnalyzer *analyzer, ASTNode *node) {
+static const Type *check_loop(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *saved_break_type = analyzer->loop_break_type;
+    analyzer->loop_break_type = NULL;
     scope_push(analyzer, true);
     check_node(analyzer, node->loop.body);
     scope_pop(analyzer);
+    const Type *result = analyzer->loop_break_type;
+    analyzer->loop_break_type = saved_break_type;
+    return (result != NULL) ? result : &TYPE_NEVER_INSTANCE;
+}
+
+static void check_while(SemanticAnalyzer *analyzer, ASTNode *node) {
+    const Type *cond_type = check_node(analyzer, node->while_loop.condition);
+    if (cond_type != NULL && cond_type->kind != TYPE_BOOL && cond_type->kind != TYPE_ERROR) {
+        SEMA_ERROR(analyzer, node->while_loop.condition->location,
+                   "condition must be 'bool', got '%s'", type_name(analyzer->arena, cond_type));
+    }
+    scope_push(analyzer, true);
+    check_node(analyzer, node->while_loop.body);
+    scope_pop(analyzer);
+}
+
+static void check_defer(SemanticAnalyzer *analyzer, ASTNode *node) {
+    check_node(analyzer, node->defer_statement.body);
 }
 
 static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
@@ -227,15 +257,22 @@ static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
     check_node(analyzer, node->for_loop.end);
     scope_push(analyzer, true);
     is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-    scope_define(analyzer, node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR);
+    scope_define(analyzer,
+                 &(SymbolDef){node->for_loop.variable_name, &TYPE_I32_INSTANCE, false, SYM_VAR});
     check_node(analyzer, node->for_loop.body);
     scope_pop(analyzer);
 }
 
-static void check_break_continue(SemanticAnalyzer *analyzer, const ASTNode *node) {
+static void check_break_continue(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (!in_loop(analyzer)) {
         SEMA_ERROR(analyzer, node->location, "'%s' outside of loop",
                    node->kind == NODE_BREAK ? "break" : "continue");
+    }
+    if (node->kind == NODE_BREAK && node->break_statement.value != NULL) {
+        const Type *val_type = check_node(analyzer, node->break_statement.value);
+        if (analyzer->loop_break_type == NULL) {
+            analyzer->loop_break_type = val_type;
+        }
     }
 }
 
@@ -248,8 +285,8 @@ static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method
 
     // Register receiver as a parameter with struct type
     if (method->function_declaration.receiver_name != NULL) {
-        scope_define(analyzer, method->function_declaration.receiver_name, struct_type, false,
-                     SYM_PARAM);
+        scope_define(analyzer, &(SymbolDef){method->function_declaration.receiver_name, struct_type,
+                                            false, SYM_PARAM});
     }
 
     // Register method parameters
@@ -260,7 +297,7 @@ static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method
             pt = &TYPE_ERROR_INSTANCE;
         }
         param->type = pt;
-        scope_define(analyzer, param->parameter.name, pt, false, SYM_PARAM);
+        scope_define(analyzer, &(SymbolDef){param->parameter.name, pt, false, SYM_PARAM});
     }
 
     // Check body and infer return type
@@ -349,7 +386,7 @@ static const Type *check_struct_destructure(SemanticAnalyzer *analyzer, ASTNode 
                            value_type->struct_type.name);
                 field_type = &TYPE_ERROR_INSTANCE;
             }
-            scope_define(analyzer, var_name, field_type, false, SYM_VAR);
+            scope_define(analyzer, &(SymbolDef){var_name, field_type, false, SYM_VAR});
         }
     } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
         SEMA_ERROR(analyzer, node->location, "struct destructuring requires a struct type");
@@ -395,7 +432,8 @@ static const Type *check_tuple_destructure(SemanticAnalyzer *analyzer, ASTNode *
             if (vname[0] == '_') {
                 continue;
             }
-            scope_define(analyzer, vname, value_type->tuple.elements[elem_idx], false, SYM_VAR);
+            scope_define(analyzer,
+                         &(SymbolDef){vname, value_type->tuple.elements[elem_idx], false, SYM_VAR});
         }
     } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
         SEMA_ERROR(analyzer, node->location, "tuple destructuring requires a tuple type");
@@ -449,6 +487,7 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
     case NODE_BREAK:
     case NODE_CONTINUE:
         check_break_continue(analyzer, node);
+        result = &TYPE_NEVER_INSTANCE;
         break;
 
     case NODE_LITERAL:
@@ -492,7 +531,7 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         break;
 
     case NODE_LOOP:
-        check_loop(analyzer, node);
+        result = check_loop(analyzer, node);
         break;
 
     case NODE_FOR:
@@ -549,8 +588,17 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
 
     case NODE_RETURN:
         if (node->return_statement.value != NULL) {
-            result = check_node(analyzer, node->return_statement.value);
+            check_node(analyzer, node->return_statement.value);
         }
+        result = &TYPE_NEVER_INSTANCE;
+        break;
+
+    case NODE_WHILE:
+        check_while(analyzer, node);
+        break;
+
+    case NODE_DEFER:
+        check_defer(analyzer, node);
         break;
 
     case NODE_MATCH:

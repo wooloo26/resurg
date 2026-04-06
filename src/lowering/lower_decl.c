@@ -10,8 +10,9 @@ static void lower_parameter_list(Lowering *low, ASTNode *const *param_asts, int3
         const char *param_name = param_ast->parameter.name;
         const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERROR_INSTANCE;
 
-        TtSymbol *param_sym = lowering_make_symbol(low, TT_SYMBOL_PARAMETER, param_name, param_type,
-                                                   false, param_ast->location);
+        TtSymbolSpec param_spec = {TT_SYMBOL_PARAMETER, param_name, param_type, false,
+                                   param_ast->location};
+        TtSymbol *param_sym = lowering_make_symbol(low, &param_spec);
         lowering_scope_add(low, param_name, param_sym);
 
         TtNode *param_node = tt_new(low->tt_arena, TT_PARAMETER, param_type, param_ast->location);
@@ -46,8 +47,8 @@ TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast) {
     bool is_public = ast->function_declaration.is_public;
     const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INSTANCE;
 
-    TtSymbol *func_sym =
-        lowering_make_symbol(low, TT_SYMBOL_FUNCTION, name, return_type, false, ast->location);
+    TtSymbolSpec func_spec = {TT_SYMBOL_FUNCTION, name, return_type, false, ast->location};
+    TtSymbol *func_sym = lowering_make_symbol(low, &func_spec);
     func_sym->mangled_name = arena_sprintf(low->tt_arena, "rsgu_%s", name);
     lowering_scope_add(low, name, func_sym);
 
@@ -81,8 +82,8 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     // Look up pre-registered symbol
     TtSymbol *func_sym = lowering_scope_find(low, key);
     if (func_sym == NULL) {
-        func_sym =
-            lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, return_type, false, ast->location);
+        TtSymbolSpec method_spec = {TT_SYMBOL_FUNCTION, key, return_type, false, ast->location};
+        func_sym = lowering_make_symbol(low, &method_spec);
         func_sym->mangled_name =
             arena_sprintf(low->tt_arena, "rsgu_%s_%s", struct_name, method_name);
         lowering_scope_add(low, key, func_sym);
@@ -95,8 +96,9 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
     const char *receiver_name = ast->function_declaration.receiver_name;
     bool is_mut_receiver = ast->function_declaration.is_mut_receiver;
 
-    TtSymbol *recv_sym = lowering_make_symbol(low, TT_SYMBOL_PARAMETER, receiver_name, struct_type,
-                                              false, ast->location);
+    TtSymbolSpec recv_spec = {TT_SYMBOL_PARAMETER, receiver_name, struct_type, false,
+                              ast->location};
+    TtSymbol *recv_sym = lowering_make_symbol(low, &recv_spec);
     lowering_scope_add(low, receiver_name, recv_sym);
 
     TtNode *recv_param = tt_new(low->tt_arena, TT_PARAMETER, struct_type, ast->location);

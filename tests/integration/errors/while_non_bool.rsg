@@ -1,0 +1,8 @@
+// TEST: compile_error
+// EXPECT-ERROR: condition must be 'bool'
+module test_err
+
+fn main() {
+    while 42 {
+    }
+}

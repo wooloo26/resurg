@@ -22,7 +22,7 @@ static ASTNode *parse_variable_declaration(Parser *parser) {
         return node;
     }
 
-    // `var x: T = expr` or `x := expr`
+    // `var x: T = expr` or `x := expr` or `var x` (declare first)
     if (parser_match(parser, TOKEN_VARIABLE)) {
         node->variable_declaration.is_variable = true;
         node->variable_declaration.name = parser_expect(parser, TOKEN_IDENTIFIER)->lexeme;
@@ -31,8 +31,11 @@ static ASTNode *parse_variable_declaration(Parser *parser) {
         if (parser_match(parser, TOKEN_COLON)) {
             node->variable_declaration.type = parser_parse_type(parser);
         }
-        parser_expect(parser, TOKEN_EQUAL);
-        node->variable_declaration.initializer = parser_parse_expression(parser);
+        if (parser_match(parser, TOKEN_EQUAL)) {
+            node->variable_declaration.initializer = parser_parse_expression(parser);
+        } else {
+            node->variable_declaration.initializer = NULL;
+        }
     } else {
         // `name := expr` - already consumed IDENT, needs look-ahead
         node->variable_declaration.is_variable = false;
@@ -52,6 +55,23 @@ static ASTNode *parse_loop(Parser *parser) {
     parser_expect(parser, TOKEN_LOOP);
     ASTNode *node = ast_new(parser->arena, NODE_LOOP, location);
     node->loop.body = parser_parse_block(parser);
+    return node;
+}
+
+static ASTNode *parse_while(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_WHILE);
+    ASTNode *node = ast_new(parser->arena, NODE_WHILE, location);
+    node->while_loop.condition = parser_parse_expression(parser);
+    node->while_loop.body = parser_parse_block(parser);
+    return node;
+}
+
+static ASTNode *parse_defer(Parser *parser) {
+    SourceLocation location = parser_current_location(parser);
+    parser_expect(parser, TOKEN_DEFER);
+    ASTNode *node = ast_new(parser->arena, NODE_DEFER, location);
+    node->defer_statement.body = parser_parse_block(parser);
     return node;
 }
 
@@ -260,14 +280,26 @@ ASTNode *parser_parse_statement(Parser *parser) {
     if (parser_check(parser, TOKEN_LOOP)) {
         return parse_loop(parser);
     }
+    if (parser_check(parser, TOKEN_WHILE)) {
+        return parse_while(parser);
+    }
     if (parser_check(parser, TOKEN_FOR)) {
         return parse_for(parser);
+    }
+    if (parser_check(parser, TOKEN_DEFER)) {
+        return parse_defer(parser);
     }
 
     if (parser_check(parser, TOKEN_BREAK)) {
         SourceLocation location = parser_current_location(parser);
         parser_advance(parser); // consume 'break'
-        return ast_new(parser->arena, NODE_BREAK, location);
+        ASTNode *node = ast_new(parser->arena, NODE_BREAK, location);
+        node->break_statement.value = NULL;
+        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_RIGHT_BRACE) &&
+            !parser_at_end(parser)) {
+            node->break_statement.value = parser_parse_expression(parser);
+        }
+        return node;
     }
     if (parser_check(parser, TOKEN_CONTINUE)) {
         SourceLocation location = parser_current_location(parser);

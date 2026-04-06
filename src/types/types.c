@@ -19,6 +19,7 @@ const Type TYPE_F64_INSTANCE = {.kind = TYPE_F64};
 const Type TYPE_CHAR_INSTANCE = {.kind = TYPE_CHAR};
 const Type TYPE_STRING_INSTANCE = {.kind = TYPE_STRING};
 const Type TYPE_UNIT_INSTANCE = {.kind = TYPE_UNIT};
+const Type TYPE_NEVER_INSTANCE = {.kind = TYPE_NEVER};
 const Type TYPE_ERROR_INSTANCE = {.kind = TYPE_ERROR};
 
 // Type classification flags.
@@ -60,6 +61,7 @@ static const TypeInfoEntry TYPE_INFO[] = {
     [TYPE_CHAR] = {"char", "uint32_t", &TYPE_CHAR_INSTANCE, 0},
     [TYPE_STRING] = {"str", "RsgString", &TYPE_STRING_INSTANCE, 0},
     [TYPE_UNIT] = {"unit", "void", &TYPE_UNIT_INSTANCE, 0},
+    [TYPE_NEVER] = {"never", "void", &TYPE_NEVER_INSTANCE, 0},
     [TYPE_ERROR] = {"<error>", "/* error */", &TYPE_ERROR_INSTANCE, 0},
 };
 

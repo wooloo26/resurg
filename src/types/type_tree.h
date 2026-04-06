@@ -66,6 +66,7 @@ typedef enum {
     TT_ASSIGN,
     TT_BREAK,
     TT_CONTINUE,
+    TT_DEFER,
 
     // Literals
     TT_BOOL_LITERAL,
@@ -288,6 +289,11 @@ struct TtNode {
         struct {
             TtNode *body;
         } loop;
+
+        // TT_DEFER
+        struct {
+            TtNode *body;
+        } defer_statement;
 
         // TT_STRUCT_DECLARATION
         struct {

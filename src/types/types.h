@@ -27,6 +27,7 @@ typedef enum {
     TYPE_CHAR,
     TYPE_STRING,
     TYPE_UNIT,
+    TYPE_NEVER,   // bottom type (never completes)
     TYPE_ARRAY,   // [N]T
     TYPE_TUPLE,   // (A, B, ...)
     TYPE_STRUCT,  // struct { fields }
@@ -121,6 +122,7 @@ extern const Type TYPE_F64_INSTANCE;
 extern const Type TYPE_CHAR_INSTANCE;
 extern const Type TYPE_STRING_INSTANCE;
 extern const Type TYPE_UNIT_INSTANCE;
+extern const Type TYPE_NEVER_INSTANCE;
 extern const Type TYPE_ERROR_INSTANCE;
 
 /**

@@ -84,14 +84,18 @@ Algebraic data types and exhaustive matching.
 
 ## v0.5.1 — Control flow & Other proposals
 
-- [ ] `never` type
-- [ ] scope & shadowing & expression
-- [ ] declare first
-- [ ] `unit` is empty tuple
-- [ ] `while` loop
-- [ ] `loop` expression
-- [ ] `defer` (LIFO cleanup on scope exit)
-- [ ] `return` early return
+- [x] `never` type
+- [x] scope & shadowing & expression
+- [x] declare first
+- [x] `unit` is empty tuple
+- [x] `while` loop
+- [x] `loop` expression
+- [x] `defer` (LIFO cleanup on scope exit)
+- [x] `return` early return
+
+## v0.5.2 — Escape Analysis
+
+- [ ] Escape Analysis (if not proven non-escaping, it escapes)
   
 ## v0.6.0 — Slices & Collections
 
@@ -149,7 +153,6 @@ Null safety and error handling.
 
 Higher-order programming and code organization.
 
-- [ ] Escape Analysis (if not proven non-escaping, it escapes)
 - [ ] Closures / lambdas (`|x| x * 2`)
 - [ ] Closure variable capture
 - [ ] Function types (`fn(i32) -> bool`)

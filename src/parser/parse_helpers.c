@@ -59,6 +59,7 @@ Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const ch
     parser->tokens = tokens;
     parser->position = 0;
     parser->count = count;
+    parser->error_count = 0;
     parser->arena = arena;
     parser->file = file;
     return parser;
@@ -66,6 +67,10 @@ Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const ch
 
 void parser_destroy(Parser *parser) {
     free(parser);
+}
+
+int32_t parser_error_count(const Parser *parser) {
+    return parser->error_count;
 }
 
 ASTNode *parser_parse(Parser *parser) {

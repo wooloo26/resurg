@@ -2,6 +2,33 @@
 
 // ── Function body / declaration ────────────────────────────────────────
 
+/** Return true if the top-level block contains any TT_DEFER nodes. */
+static bool block_has_defers(const TtNode *body) {
+    if (body == NULL || body->kind != TT_BLOCK) {
+        return false;
+    }
+    for (int32_t i = 0; i < BUFFER_LENGTH(body->block.statements); i++) {
+        if (body->block.statements[i]->kind == TT_DEFER) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Emit defer bodies in LIFO order and the cleanup return. */
+static void emit_deferred_cleanup(CodeGenerator *generator, const Type *return_type) {
+    codegen_emit_line(generator, "_rsg_cleanup:;");
+    for (int32_t i = BUFFER_LENGTH(generator->defer_bodies) - 1; i >= 0; i--) {
+        const TtNode *defer_node = generator->defer_bodies[i];
+        if (defer_node->defer_statement.body != NULL) {
+            codegen_emit_statement(generator, defer_node->defer_statement.body);
+        }
+    }
+    if (return_type != NULL && return_type->kind != TYPE_UNIT) {
+        codegen_emit_line(generator, "return _rsg_result;");
+    }
+}
+
 /**
  * Emit the body of a function: block statements, trailing result
  * expression, and an implicit `return 0;` for main.
@@ -11,6 +38,17 @@ static void emit_function_body(CodeGenerator *generator, const TtNode *function_
     const Type *return_type = function_node->function_declaration.return_type;
     bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
     bool is_main = strcmp(function_node->function_declaration.name, "main") == 0;
+    bool has_defers = block_has_defers(body);
+
+    // Save and set defer state
+    const TtNode **saved_defers = generator->defer_bodies;
+    bool saved_in_deferred = generator->in_deferred_function;
+    generator->defer_bodies = NULL;
+    generator->in_deferred_function = has_defers;
+
+    if (has_defers && !is_unit && !is_main) {
+        codegen_emit_line(generator, "%s _rsg_result;", codegen_c_type_for(generator, return_type));
+    }
 
     if (body != NULL && body->kind == TT_BLOCK) {
         // Block body with optional trailing result
@@ -24,7 +62,12 @@ static void emit_function_body(CodeGenerator *generator, const TtNode *function_
                 codegen_emit_statement(generator, result_node);
             } else if (!is_unit && !is_main) {
                 const char *result = codegen_emit_expression(generator, result_node);
-                codegen_emit_line(generator, "return %s;", result);
+                if (has_defers) {
+                    codegen_emit_line(generator, "_rsg_result = %s;", result);
+                    codegen_emit_line(generator, "goto _rsg_cleanup;");
+                } else {
+                    codegen_emit_line(generator, "return %s;", result);
+                }
             } else {
                 // Unit/main: evaluate for side effects
                 if (result_node->kind == TT_CALL) {
@@ -42,11 +85,24 @@ static void emit_function_body(CodeGenerator *generator, const TtNode *function_
         // Expression body (fn foo() = expr)
         const char *result = codegen_emit_expression(generator, body);
         if (!is_unit && !is_main) {
-            codegen_emit_line(generator, "return %s;", result);
+            if (has_defers) {
+                codegen_emit_line(generator, "_rsg_result = %s;", result);
+                codegen_emit_line(generator, "goto _rsg_cleanup;");
+            } else {
+                codegen_emit_line(generator, "return %s;", result);
+            }
         } else {
             codegen_emit_line(generator, "(void)%s;", result);
         }
     }
+
+    if (has_defers) {
+        emit_deferred_cleanup(generator, is_unit ? NULL : return_type);
+    }
+
+    // Restore defer state
+    generator->defer_bodies = saved_defers;
+    generator->in_deferred_function = saved_in_deferred;
 }
 
 /** Emit the function signature: return-type name(params). */
@@ -245,6 +301,8 @@ CodeGenerator *code_generator_create(FILE *output, Arena *arena) {
     generator->temporary_counter = 0;
     generator->string_builder_counter = 0;
     generator->compound_types = NULL;
+    generator->defer_bodies = NULL;
+    generator->in_deferred_function = false;
     return generator;
 }
 

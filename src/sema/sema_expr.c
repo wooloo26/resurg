@@ -548,6 +548,18 @@ static int32_t find_variant_index(const Type *enum_type, const char *name) {
     return -1;
 }
 
+/** Mark a variant as covered if the pattern matches an enum variant by name. */
+static void mark_variant_covered(const Type *operand_type, const char *name,
+                                 bool *variant_covered) {
+    if (variant_covered == NULL) {
+        return;
+    }
+    int32_t idx = find_variant_index(operand_type, name);
+    if (idx >= 0) {
+        variant_covered[idx] = true;
+    }
+}
+
 /** Check a pattern and bind variables in the current scope. */
 static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const Type *operand_type,
                           bool *variant_covered, bool *has_wildcard) {
@@ -570,7 +582,7 @@ static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const
         }
         // It's a binding - define the variable in current scope
         if (operand_type != NULL) {
-            scope_define(analyzer, pattern->name, operand_type, false, SYM_VAR);
+            scope_define(analyzer, &(SymbolDef){pattern->name, operand_type, false, SYM_VAR});
         }
         break;
 
@@ -591,11 +603,8 @@ static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const
         break;
 
     case PATTERN_VARIANT_UNIT:
-        if (operand_type != NULL && operand_type->kind == TYPE_ENUM && variant_covered != NULL) {
-            int32_t idx = find_variant_index(operand_type, pattern->name);
-            if (idx >= 0) {
-                variant_covered[idx] = true;
-            }
+        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
+            mark_variant_covered(operand_type, pattern->name, variant_covered);
         }
         break;
 
@@ -606,17 +615,13 @@ static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const
                 SEMA_ERROR(analyzer, pattern->location, "unknown variant '%s'", pattern->name);
                 break;
             }
-            if (variant_covered != NULL) {
-                int32_t idx = find_variant_index(operand_type, pattern->name);
-                if (idx >= 0) {
-                    variant_covered[idx] = true;
-                }
-            }
+            mark_variant_covered(operand_type, pattern->name, variant_covered);
             // Bind sub-patterns to tuple element types
             for (int32_t i = 0; i < BUFFER_LENGTH(pattern->sub_patterns); i++) {
                 ASTPattern *sub = pattern->sub_patterns[i];
                 if (sub->kind == PATTERN_BINDING && i < variant->tuple_count) {
-                    scope_define(analyzer, sub->name, variant->tuple_types[i], false, SYM_VAR);
+                    scope_define(analyzer,
+                                 &(SymbolDef){sub->name, variant->tuple_types[i], false, SYM_VAR});
                 } else if (sub->kind == PATTERN_WILDCARD) {
                     // nothing to bind
                 }
@@ -631,18 +636,14 @@ static void check_pattern(SemanticAnalyzer *analyzer, ASTPattern *pattern, const
                 SEMA_ERROR(analyzer, pattern->location, "unknown variant '%s'", pattern->name);
                 break;
             }
-            if (variant_covered != NULL) {
-                int32_t idx = find_variant_index(operand_type, pattern->name);
-                if (idx >= 0) {
-                    variant_covered[idx] = true;
-                }
-            }
+            mark_variant_covered(operand_type, pattern->name, variant_covered);
             // Bind field names to their types
             for (int32_t i = 0; i < BUFFER_LENGTH(pattern->field_names); i++) {
                 const char *fname = pattern->field_names[i];
                 for (int32_t j = 0; j < variant->field_count; j++) {
                     if (strcmp(variant->fields[j].name, fname) == 0) {
-                        scope_define(analyzer, fname, variant->fields[j].type, false, SYM_VAR);
+                        scope_define(analyzer,
+                                     &(SymbolDef){fname, variant->fields[j].type, false, SYM_VAR});
                         break;
                     }
                 }
@@ -686,7 +687,8 @@ const Type *check_match(SemanticAnalyzer *analyzer, ASTNode *node) {
     }
 
     // Exhaustiveness check for enums
-    if (operand_type != NULL && operand_type->kind == TYPE_ENUM && !has_wildcard) {
+    if (operand_type != NULL && operand_type->kind == TYPE_ENUM && variant_covered != NULL &&
+        !has_wildcard) {
         int32_t variant_count = type_enum_variant_count(operand_type);
         for (int32_t i = 0; i < variant_count; i++) {
             if (!variant_covered[i]) {

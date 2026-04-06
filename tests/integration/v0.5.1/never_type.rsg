@@ -1,0 +1,23 @@
+// v0.5.1 — Never type: bottom type for non-terminating expressions
+module test_never_type
+
+// ── never coerces to i32 in if-else ──
+
+fn test_never_coercion_i32() {
+    x := if true { 42 } else { loop {} }
+    assert(x == 42)
+}
+
+// ── never coerces to str ──
+
+fn test_never_coercion_str() {
+    s := if true { "hello" } else { loop {} }
+    assert(s == "hello")
+}
+
+// ── never coerces to bool ──
+
+fn test_never_coercion_bool() {
+    b := if true { false } else { loop {} }
+    assert(b == false)
+}

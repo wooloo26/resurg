@@ -39,6 +39,8 @@ typedef enum {
     TOKEN_ENUM,     // enum
     TOKEN_MATCH,    // match
     TOKEN_RETURN,   // return
+    TOKEN_WHILE,    // while
+    TOKEN_DEFER,    // defer
 
     // Type keywords
     TOKEN_BOOL,   // bool
@@ -59,6 +61,7 @@ typedef enum {
     TOKEN_CHAR,   // char
     TOKEN_STRING, // str
     TOKEN_UNIT,   // unit
+    TOKEN_NEVER,  // never
 
     // Operators - arithmetic
     TOKEN_PLUS,    // +

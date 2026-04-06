@@ -39,12 +39,11 @@ TtSymbol *lowering_scope_find(const Lowering *low, const char *name) {
 
 // ── Shared helpers ────────────────────────────────────────────────────
 
-TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *name, const Type *type,
-                               bool is_mut, SourceLocation location) {
+TtSymbol *lowering_make_symbol(Lowering *low, const TtSymbolSpec *spec) {
     Symbol *sema_sym = arena_alloc_zero(low->tt_arena, sizeof(Symbol));
-    sema_sym->name = name;
-    sema_sym->type = type;
-    switch (kind) {
+    sema_sym->name = spec->name;
+    sema_sym->type = spec->type;
+    switch (spec->kind) {
     case TT_SYMBOL_VARIABLE:
         sema_sym->kind = SYM_VAR;
         break;
@@ -61,13 +60,12 @@ TtSymbol *lowering_make_symbol(Lowering *low, TtSymbolKind kind, const char *nam
         sema_sym->kind = SYM_MODULE;
         break;
     }
-    return tt_symbol_new(low->tt_arena, kind, sema_sym, is_mut, location);
+    return tt_symbol_new(low->tt_arena, spec->kind, sema_sym, spec->is_mut, spec->location);
 }
 
-TtSymbol *lowering_add_variable(Lowering *low, const char *name, const Type *type, bool is_mut,
-                                SourceLocation location) {
-    TtSymbol *sym = lowering_make_symbol(low, TT_SYMBOL_VARIABLE, name, type, is_mut, location);
-    lowering_scope_add(low, name, sym);
+TtSymbol *lowering_add_variable(Lowering *low, const TtSymbolSpec *spec) {
+    TtSymbol *sym = lowering_make_symbol(low, spec);
+    lowering_scope_add(low, spec->name, sym);
     return sym;
 }
 
@@ -81,11 +79,10 @@ TtNode *lowering_make_var_ref(Lowering *low, TtSymbol *symbol, SourceLocation lo
     return node;
 }
 
-TtNode *lowering_make_int_lit(Lowering *low, uint64_t value, const Type *type, TypeKind int_kind,
-                              SourceLocation location) {
-    TtNode *node = tt_new(low->tt_arena, TT_INT_LITERAL, type, location);
-    node->int_literal.value = value;
-    node->int_literal.int_kind = int_kind;
+TtNode *lowering_make_int_lit(Lowering *low, const IntLitSpec *spec) {
+    TtNode *node = tt_new(low->tt_arena, TT_INT_LITERAL, spec->type, spec->location);
+    node->int_literal.value = spec->value;
+    node->int_literal.int_kind = spec->int_kind;
     return node;
 }
 
@@ -100,22 +97,21 @@ TtNode *lowering_make_var_decl(Lowering *low, TtSymbol *symbol, TtNode *initiali
     return node;
 }
 
-TtNode *lowering_resolve_promoted_field(Lowering *low, TtNode *object, const Type *struct_type,
-                                        const char *field_name, bool via_pointer,
-                                        SourceLocation location) {
-    for (int32_t i = 0; i < struct_type->struct_type.embed_count; i++) {
-        const Type *embed_type = struct_type->struct_type.embedded[i];
-        const StructField *sf = type_struct_find_field(embed_type, field_name);
+TtNode *lowering_resolve_promoted_field(Lowering *low, const FieldLookup *lookup) {
+    for (int32_t i = 0; i < lookup->struct_type->struct_type.embed_count; i++) {
+        const Type *embed_type = lookup->struct_type->struct_type.embedded[i];
+        const StructField *sf = type_struct_find_field(embed_type, lookup->field_name);
         if (sf != NULL) {
             TtNode *embed_access =
-                tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, location);
-            embed_access->struct_field_access.object = object;
+                tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, embed_type, lookup->location);
+            embed_access->struct_field_access.object = lookup->object;
             embed_access->struct_field_access.field = embed_type->struct_type.name;
-            embed_access->struct_field_access.via_pointer = via_pointer;
+            embed_access->struct_field_access.via_pointer = lookup->via_pointer;
 
-            TtNode *field_node = tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, sf->type, location);
+            TtNode *field_node =
+                tt_new(low->tt_arena, TT_STRUCT_FIELD_ACCESS, sf->type, lookup->location);
             field_node->struct_field_access.object = embed_access;
-            field_node->struct_field_access.field = field_name;
+            field_node->struct_field_access.field = lookup->field_name;
             field_node->struct_field_access.via_pointer = false;
             return field_node;
         }
@@ -138,16 +134,17 @@ TokenKind lowering_compound_to_base_op(TokenKind op) {
     }
 }
 
-TtNode *lowering_make_builtin_call(Lowering *low, const char *name, const Type *return_type,
-                                   TtNode **args, SourceLocation location) {
-    TtSymbol *sym = lowering_scope_find(low, name);
+TtNode *lowering_make_builtin_call(Lowering *low, const BuiltinCallSpec *spec) {
+    TtSymbol *sym = lowering_scope_find(low, spec->name);
     if (sym == NULL) {
-        sym = lowering_make_symbol(low, TT_SYMBOL_FUNCTION, name, return_type, false, location);
-        lowering_scope_add(low, name, sym);
+        TtSymbolSpec sym_spec = {TT_SYMBOL_FUNCTION, spec->name, spec->return_type, false,
+                                 spec->location};
+        sym = lowering_make_symbol(low, &sym_spec);
+        lowering_scope_add(low, spec->name, sym);
     }
-    TtNode *callee = lowering_make_var_ref(low, sym, location);
-    TtNode *node = tt_new(low->tt_arena, TT_CALL, return_type, location);
+    TtNode *callee = lowering_make_var_ref(low, sym, spec->location);
+    TtNode *node = tt_new(low->tt_arena, TT_CALL, spec->return_type, spec->location);
     node->call.callee = callee;
-    node->call.arguments = args;
+    node->call.arguments = spec->args;
     return node;
 }

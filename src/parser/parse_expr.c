@@ -270,6 +270,11 @@ static ASTNode *parse_primary(Parser *parser) {
         node->literal.boolean_value = false;
         return node;
     }
+    if (parser_match(parser, TOKEN_UNIT)) {
+        ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+        node->literal.kind = LITERAL_UNIT;
+        return node;
+    }
 
     // Typed literal syntax: type_keyword(expr) e.g. i64(100), f32(3.14)
     if (token_is_type_keyword(parser_current_token(parser)->kind) &&
@@ -298,6 +303,13 @@ static ASTNode *parse_primary(Parser *parser) {
 
     // Parenthesized expression or tuple literal
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+        if (parser_match(parser, TOKEN_RIGHT_PAREN)) {
+            parser->error_count++;
+            rsg_error(location, "empty tuple '()' is not allowed; use 'unit'");
+            ASTNode *node = ast_new(parser->arena, NODE_LITERAL, location);
+            node->literal.kind = LITERAL_UNIT;
+            return node;
+        }
         ASTNode *first = parser_parse_expression(parser);
         if (parser_match(parser, TOKEN_COMMA)) {
             // Tuple literal: (expr, expr, ...)
@@ -314,6 +326,9 @@ static ASTNode *parse_primary(Parser *parser) {
 
     if (parser_check(parser, TOKEN_IF)) {
         return parser_parse_expression(parser);
+    }
+    if (parser_check(parser, TOKEN_LOOP)) {
+        return parser_parse_statement(parser);
     }
     if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         return parser_parse_block(parser);

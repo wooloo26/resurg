@@ -1,0 +1,86 @@
+// v0.5.1 — While loop
+module test_while_loop
+
+// ── basic while loop ──
+
+fn test_while_basic() {
+    count := 0
+    while count < 5 {
+        count = count + 1
+    }
+    assert(count == 5)
+}
+
+// ── while false never executes ──
+
+fn test_while_false() {
+    count := 0
+    while false {
+        count = count + 1
+    }
+    assert(count == 0)
+}
+
+// ── while with break ──
+
+fn test_while_break() {
+    count := 0
+    while true {
+        count = count + 1
+        if count == 3 { break }
+    }
+    assert(count == 3)
+}
+
+// ── while with continue ──
+
+fn test_while_continue() {
+    sum := 0
+    i := 0
+    while i < 10 {
+        i = i + 1
+        if i % 2 != 0 { continue }
+        sum = sum + i
+    }
+    assert(sum == 30)
+}
+
+// ── nested while ──
+
+fn test_while_nested() {
+    total := 0
+    i := 0
+    while i < 3 {
+        j := 0
+        while j < 3 {
+            total = total + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    assert(total == 9)
+}
+
+// ── while with complex condition ──
+
+fn test_while_complex_condition() {
+    x := 100
+    steps := 0
+    while x > 1 {
+        x = x / 2
+        steps = steps + 1
+    }
+    assert(steps == 6)
+}
+
+// ── while with compound body ──
+
+fn test_while_accumulate() {
+    sum := 0
+    n := 1
+    while n <= 10 {
+        sum = sum + n
+        n = n + 1
+    }
+    assert(sum == 55)
+}

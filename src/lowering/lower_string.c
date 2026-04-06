@@ -35,8 +35,8 @@ static TtNode *lower_string_part(Lowering *low, const ASTNode *part) {
     if (builtin != NULL) {
         TtNode **args = NULL;
         BUFFER_PUSH(args, lowered);
-        return lowering_make_builtin_call(low, builtin, &TYPE_STRING_INSTANCE, args,
-                                          part->location);
+        return lowering_make_builtin_call(
+            low, &(BuiltinCallSpec){builtin, &TYPE_STRING_INSTANCE, args, part->location});
     }
     return lowered;
 }
@@ -65,8 +65,8 @@ static TtNode *chain_string_concat(Lowering *low, TtNode **parts, int32_t count,
         TtNode **args = NULL;
         BUFFER_PUSH(args, result);
         BUFFER_PUSH(args, parts[i]);
-        result =
-            lowering_make_builtin_call(low, "rsg_string_concat", &TYPE_STRING_INSTANCE, args, loc);
+        result = lowering_make_builtin_call(
+            low, &(BuiltinCallSpec){"rsg_string_concat", &TYPE_STRING_INSTANCE, args, loc});
     }
     return result;
 }

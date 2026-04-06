@@ -17,17 +17,16 @@ void scope_pop(SemanticAnalyzer *analyzer) {
     analyzer->current_scope = analyzer->current_scope->parent;
 }
 
-void scope_define(SemanticAnalyzer *analyzer, const char *name, const Type *type, bool is_public,
-                  SymbolKind kind) {
+void scope_define(SemanticAnalyzer *analyzer, const SymbolDef *def) {
     Symbol *symbol = arena_alloc(analyzer->arena, sizeof(Symbol));
-    symbol->name = name;
-    symbol->type = type;
-    symbol->kind = kind;
-    symbol->is_public = is_public;
+    symbol->name = def->name;
+    symbol->type = def->type;
+    symbol->kind = def->kind;
+    symbol->is_public = def->is_public;
     symbol->is_immut = false;
     symbol->declaration = NULL;
     symbol->owner = NULL;
-    hash_table_insert(&analyzer->current_scope->table, name, symbol);
+    hash_table_insert(&analyzer->current_scope->table, def->name, symbol);
 }
 
 Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name) {

@@ -91,9 +91,25 @@ static void emit_variable_declaration_statement(CodeGenerator *generator, const 
     if (type == NULL) {
         type = &TYPE_I32_INSTANCE;
     }
+
+    // unit/never-typed variables have no C representation; emit initializer
+    // (if any) as a bare expression for its side effects.
+    if (type->kind == TYPE_UNIT || type->kind == TYPE_NEVER) {
+        if (node->variable_declaration.initializer != NULL) {
+            codegen_emit_statement(generator, node->variable_declaration.initializer);
+        }
+        return;
+    }
+
     const char *c_name = node->variable_declaration.symbol->mangled_name;
-    const char *value = codegen_emit_expression(generator, node->variable_declaration.initializer);
-    codegen_emit_line(generator, "%s %s = %s;", codegen_c_type_for(generator, type), c_name, value);
+    if (node->variable_declaration.initializer != NULL) {
+        const char *value =
+            codegen_emit_expression(generator, node->variable_declaration.initializer);
+        codegen_emit_line(generator, "%s %s = %s;", codegen_c_type_for(generator, type), c_name,
+                          value);
+    } else {
+        codegen_emit_line(generator, "%s %s;", codegen_c_type_for(generator, type), c_name);
+    }
 }
 
 /** Resolve an assignment target to a C lvalue expression. */
@@ -164,10 +180,22 @@ void codegen_emit_statement(CodeGenerator *generator, const TtNode *node) {
         codegen_emit_line(generator, "continue;");
         break;
     case TT_RETURN:
-        emit_return_statement(generator, node);
+        if (generator->in_deferred_function) {
+            if (node->return_statement.value != NULL) {
+                const char *value =
+                    codegen_emit_expression(generator, node->return_statement.value);
+                codegen_emit_line(generator, "_rsg_result = %s;", value);
+            }
+            codegen_emit_line(generator, "goto _rsg_cleanup;");
+        } else {
+            emit_return_statement(generator, node);
+        }
         break;
     case TT_LOOP:
         emit_loop_statement(generator, node);
+        break;
+    case TT_DEFER:
+        BUFFER_PUSH(generator->defer_bodies, node);
         break;
     case TT_IF:
         codegen_emit_if(generator, node, NULL, false);

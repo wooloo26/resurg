@@ -16,6 +16,7 @@ struct Parser {
     const Token *tokens; /* buf */
     int32_t position;
     int32_t count;
+    int32_t error_count;
     Arena *arena;     // AST allocation arena
     const char *file; // source filename for diagnostics
 };

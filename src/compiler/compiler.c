@@ -92,13 +92,18 @@ static int stage_lex(const CompilerOptions *options, const char *source, Arena *
 
 /** Run the parser and optionally dump the AST.  Returns NULL on early exit. */
 static ASTNode *stage_parse(const CompilerOptions *options, Token *tokens, int32_t count,
-                            Arena *arena) {
+                            Arena *arena, int *out_status) {
     Parser *parser = parser_create(tokens, count, arena, options->input_file);
     ASTNode *file_node = parser_parse(parser);
+    int32_t errors = parser_error_count(parser);
     parser_destroy(parser);
 
     if (options->dump_ast) {
         ast_dump(file_node, 0);
+        return NULL;
+    }
+    if (errors > 0) {
+        *out_status = 1;
         return NULL;
     }
     return file_node;
@@ -174,7 +179,8 @@ int compiler_run(Compiler *compiler, const CompilerOptions *options) {
     }
 
     // Stage 2: Parsing.
-    ASTNode *file_node = stage_parse(options, tokens, BUFFER_LENGTH(tokens), compiler->arena);
+    ASTNode *file_node =
+        stage_parse(options, tokens, BUFFER_LENGTH(tokens), compiler->arena, &status);
     if (file_node == NULL) {
         goto cleanup;
     }

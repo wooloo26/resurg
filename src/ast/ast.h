@@ -108,6 +108,7 @@ typedef enum {
     NODE_STRUCT_DECLARATION,   // struct definition
     NODE_ENUM_DECLARATION,     // enum definition
     NODE_RETURN,               // return expr
+    NODE_DEFER,                // defer { ... }
 
     // Statements
     NODE_EXPRESSION_STATEMENT, // expression used as statement
@@ -126,6 +127,7 @@ typedef enum {
     NODE_INDEX,                // arr[i] (array indexing)
     NODE_IF,                   // if/else expression
     NODE_LOOP,                 // loop { ... }
+    NODE_WHILE,                // while cond { ... }
     NODE_FOR,                  // for i := 0..N { ... }
     NODE_BLOCK,                // { stmts; optional trailing expr }
     NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
@@ -402,6 +404,22 @@ struct ASTNode {
         struct {
             ASTNode *value; // may be NULL
         } return_statement;
+
+        // NODE_WHILE
+        struct {
+            ASTNode *condition;
+            ASTNode *body;
+        } while_loop;
+
+        // NODE_DEFER
+        struct {
+            ASTNode *body; // block body
+        } defer_statement;
+
+        // NODE_BREAK
+        struct {
+            ASTNode *value; // may be NULL (break with value for loop expressions)
+        } break_statement;
     };
 };
 

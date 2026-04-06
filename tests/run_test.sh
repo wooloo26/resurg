@@ -9,6 +9,8 @@
 #   // EXPECT-ERROR: <text>  — stderr must contain <text>
 set -u
 
+TIMEOUT=${RSG_TEST_TIMEOUT:-10}
+
 RG_FILE="$1"
 RESURG="$2"
 CC="$3"
@@ -69,25 +71,36 @@ while IFS= read -r line; do
 done < "$RG_FILE"
 
 # -----------------------------------------------------------------------
+# Unique temp files for parallel safety
+# -----------------------------------------------------------------------
+TEST_C="$BUILD/_test_$$.c"
+TEST_BIN="$BUILD/_test_$$"
+cleanup() { rm -f "$TEST_C" "$TEST_BIN"; }
+trap cleanup EXIT
+
+# -----------------------------------------------------------------------
 # Execute based on mode
 # -----------------------------------------------------------------------
 case "$TEST_MODE" in
     normal)
-        STDERR=$("$RESURG" "$RG_FILE" -o "$BUILD/_test.c" 2>&1) || {
+        STDERR=$("$RESURG" "$RG_FILE" -o "$TEST_C" 2>&1) || {
             rc=$?
-            fail "resurg codegen failed ($(describe_exit $rc))" "$RESURG $RG_FILE -o $BUILD/_test.c" "$STDERR"
+            fail "resurg codegen failed ($(describe_exit $rc))" "$RESURG $RG_FILE -o $TEST_C" "$STDERR"
         }
-        STDERR=$($CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS 2>&1) || {
-            fail "C compilation failed" "$CC ... $BUILD/_test.c" "$STDERR"
+        STDERR=$($CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$TEST_BIN" "$TEST_C" $RT_OBJS 2>&1) || {
+            fail "C compilation failed" "$CC ... $TEST_C" "$STDERR"
         }
-        STDERR=$("$BUILD/_test" 2>&1) || {
+        STDERR=$(timeout "$TIMEOUT" "$TEST_BIN" 2>&1) || {
             rc=$?
-            fail "test binary crashed ($(describe_exit $rc))" "$BUILD/_test" "$STDERR"
+            if (( rc == 124 )); then
+                fail "test binary timed out (possible infinite loop, ${TIMEOUT}s limit)" "$TEST_BIN"
+            fi
+            fail "test binary crashed ($(describe_exit $rc))" "$TEST_BIN" "$STDERR"
         }
         ;;
 
     compile_error)
-        if STDERR=$("$RESURG" "$RG_FILE" -o "$BUILD/_test.c" 2>&1); then
+        if STDERR=$("$RESURG" "$RG_FILE" -o "$TEST_C" 2>&1); then
             fail "expected compile error but resurg succeeded"
         fi
         if [[ -n "$EXPECT_ERROR" ]] && ! printf '%s' "$STDERR" | grep -qF "$EXPECT_ERROR"; then
@@ -96,15 +109,17 @@ case "$TEST_MODE" in
         ;;
 
     runtime_error)
-        STDERR=$("$RESURG" "$RG_FILE" -o "$BUILD/_test.c" 2>&1) || {
+        STDERR=$("$RESURG" "$RG_FILE" -o "$TEST_C" 2>&1) || {
             rc=$?
-            fail "resurg codegen failed ($(describe_exit $rc))" "$RESURG $RG_FILE -o $BUILD/_test.c" "$STDERR"
+            fail "resurg codegen failed ($(describe_exit $rc))" "$RESURG $RG_FILE -o $TEST_C" "$STDERR"
         }
-        STDERR=$($CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$BUILD/_test" "$BUILD/_test.c" $RT_OBJS 2>&1) || {
-            fail "C compilation failed" "$CC ... $BUILD/_test.c" "$STDERR"
+        STDERR=$($CC -std=c17 -Wno-tautological-compare -I"$RUNTIME" -o "$TEST_BIN" "$TEST_C" $RT_OBJS 2>&1) || {
+            fail "C compilation failed" "$CC ... $TEST_C" "$STDERR"
         }
-        if "$BUILD/_test" 2>/dev/null; then
+        if timeout "$TIMEOUT" "$TEST_BIN" 2>/dev/null; then
             fail "expected runtime error but program succeeded"
+        elif (( $? == 124 )); then
+            fail "test binary timed out (possible infinite loop, ${TIMEOUT}s limit)" "$TEST_BIN"
         fi
         ;;
 

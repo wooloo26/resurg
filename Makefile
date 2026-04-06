@@ -68,11 +68,8 @@ test: all
 ifeq ($(OS),Windows_NT)
 	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_all_tests.ps1 $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME) $(TESTS)
 else
-	@for f in $(TESTS); do \
-		bash tests/run_test.sh "$$f" $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME) || exit 1; \
-		echo "  PASS  $$f"; \
-	done; \
-	echo '$(words $(TESTS)) tests passed.'
+	@$(MAKE) --no-print-directory -j$(JOBS) $(TEST_TARGETS)
+	@echo '$(words $(TESTS)) tests passed.'
 endif
 
 # Run a single test: make tests/integration/v0.1.0/primitives.test

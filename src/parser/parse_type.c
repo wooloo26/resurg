@@ -36,13 +36,18 @@ ASTType parser_parse_type(Parser *parser) {
         type.kind = AST_TYPE_TUPLE;
         type.tuple_elements = NULL;
         parser_advance(parser); // consume '('
-        if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-            do {
-                ASTType *element = arena_alloc(parser->arena, sizeof(ASTType));
-                *element = parser_parse_type(parser);
-                BUFFER_PUSH(type.tuple_elements, element);
-            } while (parser_match(parser, TOKEN_COMMA));
+        if (parser_match(parser, TOKEN_RIGHT_PAREN)) {
+            parser->error_count++;
+            rsg_error(type.location, "empty tuple '()' is not a valid type; use 'unit'");
+            type.kind = AST_TYPE_NAME;
+            type.name = "unit";
+            return type;
         }
+        do {
+            ASTType *element = arena_alloc(parser->arena, sizeof(ASTType));
+            *element = parser_parse_type(parser);
+            BUFFER_PUSH(type.tuple_elements, element);
+        } while (parser_match(parser, TOKEN_COMMA));
         parser_expect(parser, TOKEN_RIGHT_PAREN);
         return type;
     }

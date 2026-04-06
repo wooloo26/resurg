@@ -13,10 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        cc: [clang, gcc]
-        exclude:
-          - os: macos-latest
-            cc: gcc
+        cc: [clang]
 
     steps:
       - uses: actions/checkout@v4

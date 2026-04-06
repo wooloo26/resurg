@@ -324,5 +324,14 @@ void ast_dump(const ASTNode *node, int32_t level) {
             ast_dump(node->return_statement.value, level + 1);
         }
         break;
+    case NODE_WHILE:
+        fprintf(stderr, "While\n");
+        ast_dump(node->while_loop.condition, level + 1);
+        ast_dump(node->while_loop.body, level + 1);
+        break;
+    case NODE_DEFER:
+        fprintf(stderr, "Defer\n");
+        ast_dump(node->defer_statement.body, level + 1);
+        break;
     }
 }

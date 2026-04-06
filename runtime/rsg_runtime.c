@@ -271,7 +271,7 @@ static void gc_insert_object(RsgGcObject *object) {
     if (g_gc_object_count >= g_gc_object_capacity) {
         g_gc_object_capacity = g_gc_object_capacity == 0 ? 256 : g_gc_object_capacity * 2;
         g_gc_objects = (RsgGcObject **)checked_realloc(
-            (void *)g_gc_objects, g_gc_object_capacity * sizeof(*g_gc_objects));
+            (void *)g_gc_objects, g_gc_object_capacity * sizeof(RsgGcObject *));
     }
     uintptr_t key = gc_object_start(object);
     // Binary search for insertion point.
@@ -286,7 +286,7 @@ static void gc_insert_object(RsgGcObject *object) {
         }
     }
     memmove((void *)&g_gc_objects[low + 1], (const void *)&g_gc_objects[low],
-            (g_gc_object_count - low) * sizeof(*g_gc_objects));
+            (g_gc_object_count - low) * sizeof(RsgGcObject *));
     g_gc_objects[low] = object;
     g_gc_object_count++;
 }
@@ -307,7 +307,7 @@ static void gc_worklist_push(RsgGcObject *object) {
     if (g_gc_worklist_length >= g_gc_worklist_capacity) {
         g_gc_worklist_capacity = g_gc_worklist_capacity == 0 ? 64 : g_gc_worklist_capacity * 2;
         g_gc_worklist = (RsgGcObject **)checked_realloc(
-            (void *)g_gc_worklist, g_gc_worklist_capacity * sizeof(*g_gc_worklist));
+            (void *)g_gc_worklist, g_gc_worklist_capacity * sizeof(RsgGcObject *));
     }
     g_gc_worklist[g_gc_worklist_length++] = object;
 }

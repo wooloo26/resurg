@@ -21,7 +21,8 @@ static TtNode *lower_variable_declaration(Lowering *low, const ASTNode *ast) {
     const Type *type = ast->type != NULL ? ast->type : &TYPE_ERROR_INSTANCE;
     bool is_mut = ast->variable_declaration.is_variable;
 
-    TtSymbol *symbol = lowering_add_variable(low, name, type, is_mut, ast->location);
+    TtSymbolSpec var_spec = {TT_SYMBOL_VARIABLE, name, type, is_mut, ast->location};
+    TtSymbol *symbol = lowering_add_variable(low, &var_spec);
 
     TtNode *init = NULL;
     if (ast->variable_declaration.initializer != NULL) {
@@ -66,7 +67,8 @@ static void lower_struct_destructure_into(Lowering *low, const ASTNode *ast, TtN
     const Type *struct_type = value->type;
 
     const char *tmp_name = lowering_make_temp_name(low);
-    TtSymbol *tmp_sym = lowering_add_variable(low, tmp_name, struct_type, false, ast->location);
+    TtSymbolSpec tmp_spec = {TT_SYMBOL_VARIABLE, tmp_name, struct_type, false, ast->location};
+    TtSymbol *tmp_sym = lowering_add_variable(low, &tmp_spec);
     BUFFER_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, value));
 
     for (int32_t i = 0; i < BUFFER_LENGTH(ast->struct_destructure.field_names); i++) {
@@ -91,8 +93,8 @@ static void lower_struct_destructure_into(Lowering *low, const ASTNode *ast, TtN
         } else {
             // Check promoted fields from embedded structs
             TtNode *tmp_ref = lowering_make_var_ref(low, tmp_sym, ast->location);
-            field_access = lowering_resolve_promoted_field(low, tmp_ref, struct_type, fname, false,
-                                                           ast->location);
+            FieldLookup lookup = {tmp_ref, struct_type, fname, false, ast->location};
+            field_access = lowering_resolve_promoted_field(low, &lookup);
             if (field_access != NULL) {
                 field_type = field_access->type;
             }
@@ -102,7 +104,8 @@ static void lower_struct_destructure_into(Lowering *low, const ASTNode *ast, TtN
             field_type = &TYPE_ERROR_INSTANCE;
         }
 
-        TtSymbol *var_sym = lowering_add_variable(low, var_name, field_type, false, ast->location);
+        TtSymbolSpec vspec = {TT_SYMBOL_VARIABLE, var_name, field_type, false, ast->location};
+        TtSymbol *var_sym = lowering_add_variable(low, &vspec);
         BUFFER_PUSH(*stmts, lowering_make_var_decl(low, var_sym, field_access));
     }
 }
@@ -113,7 +116,8 @@ static void lower_tuple_destructure_into(Lowering *low, const ASTNode *ast, TtNo
     const Type *tuple_type = value->type;
 
     const char *tmp_name = lowering_make_temp_name(low);
-    TtSymbol *tmp_sym = lowering_add_variable(low, tmp_name, tuple_type, false, ast->location);
+    TtSymbolSpec tmp_spec2 = {TT_SYMBOL_VARIABLE, tmp_name, tuple_type, false, ast->location};
+    TtSymbol *tmp_sym = lowering_add_variable(low, &tmp_spec2);
     BUFFER_PUSH(*stmts, lowering_make_var_decl(low, tmp_sym, value));
 
     int32_t name_count = BUFFER_LENGTH(ast->tuple_destructure.names);
@@ -146,7 +150,8 @@ static void lower_tuple_destructure_into(Lowering *low, const ASTNode *ast, TtNo
         idx_access->tuple_index.object = lowering_make_var_ref(low, tmp_sym, ast->location);
         idx_access->tuple_index.element_index = elem_idx;
 
-        TtSymbol *var_sym = lowering_add_variable(low, vname, elem_type, false, ast->location);
+        TtSymbolSpec vspec2 = {TT_SYMBOL_VARIABLE, vname, elem_type, false, ast->location};
+        TtSymbol *var_sym = lowering_add_variable(low, &vspec2);
         BUFFER_PUSH(*stmts, lowering_make_var_decl(low, var_sym, idx_access));
     }
 }
@@ -196,11 +201,140 @@ TtNode *lower_block(Lowering *low, const ASTNode *ast) {
     return node;
 }
 
-static TtNode *lower_loop(Lowering *low, const ASTNode *ast) {
-    TtNode *body = lower_block(low, ast->loop.body);
-    TtNode *node = tt_new(low->tt_arena, TT_LOOP, &TYPE_UNIT_INSTANCE, ast->location);
-    node->loop.body = body;
+/**
+ * Rewrite TT_BREAK nodes with values: `break val` → `{ result = val; break; }`.
+ * Skips nested TT_LOOP nodes (their breaks are independent).
+ */
+static void rewrite_break_values(Lowering *low, TtNode **node_ptr, TtSymbol *result_sym) {
+    TtNode *node = *node_ptr;
+    if (node == NULL) {
+        return;
+    }
+
+    if (node->kind == TT_BREAK && node->break_statement.value != NULL) {
+        TtNode *assign = tt_new(low->tt_arena, TT_ASSIGN, &TYPE_UNIT_INSTANCE, node->location);
+        assign->assign.target = lowering_make_var_ref(low, result_sym, node->location);
+        assign->assign.value = node->break_statement.value;
+
+        node->break_statement.value = NULL;
+
+        TtNode **stmts = NULL;
+        BUFFER_PUSH(stmts, assign);
+        BUFFER_PUSH(stmts, node);
+
+        TtNode *block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, node->location);
+        block->block.statements = stmts;
+        block->block.result = NULL;
+        *node_ptr = block;
+        return;
+    }
+
+    if (node->kind == TT_LOOP) {
+        return;
+    }
+
+    switch (node->kind) {
+    case TT_BLOCK:
+        for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
+            rewrite_break_values(low, &node->block.statements[i], result_sym);
+        }
+        if (node->block.result != NULL) {
+            rewrite_break_values(low, &node->block.result, result_sym);
+        }
+        break;
+    case TT_IF:
+        rewrite_break_values(low, &node->if_expression.then_body, result_sym);
+        rewrite_break_values(low, &node->if_expression.else_body, result_sym);
+        break;
+    default:
+        break;
+    }
+}
+
+/** Desugar `while cond { body }` → `loop { if !cond { break }; body }`. */
+static TtNode *lower_while(Lowering *low, const ASTNode *ast) {
+    SourceLocation loc = ast->location;
+
+    TtNode *cond = lower_expression(low, ast->while_loop.condition);
+
+    // Build: if !cond { break }
+    TtNode *neg_cond = tt_new(low->tt_arena, TT_UNARY, &TYPE_BOOL_INSTANCE, loc);
+    neg_cond->unary.op = TOKEN_BANG;
+    neg_cond->unary.operand = cond;
+
+    TtNode *break_node = tt_new(low->tt_arena, TT_BREAK, &TYPE_UNIT_INSTANCE, loc);
+    TtNode **break_stmts = NULL;
+    BUFFER_PUSH(break_stmts, break_node);
+    TtNode *break_block = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+    break_block->block.statements = break_stmts;
+    break_block->block.result = NULL;
+
+    TtNode *guard = tt_new(low->tt_arena, TT_IF, &TYPE_UNIT_INSTANCE, loc);
+    guard->if_expression.condition = neg_cond;
+    guard->if_expression.then_body = break_block;
+    guard->if_expression.else_body = NULL;
+
+    // Build loop body: { guard; user_body }
+    TtNode *user_body = lower_block(low, ast->while_loop.body);
+    TtNode **loop_stmts = NULL;
+    BUFFER_PUSH(loop_stmts, guard);
+    for (int32_t i = 0; i < BUFFER_LENGTH(user_body->block.statements); i++) {
+        BUFFER_PUSH(loop_stmts, user_body->block.statements[i]);
+    }
+    if (user_body->block.result != NULL) {
+        BUFFER_PUSH(loop_stmts, user_body->block.result);
+    }
+
+    TtNode *loop_body = tt_new(low->tt_arena, TT_BLOCK, &TYPE_UNIT_INSTANCE, loc);
+    loop_body->block.statements = loop_stmts;
+    loop_body->block.result = NULL;
+
+    TtNode *loop_node = tt_new(low->tt_arena, TT_LOOP, &TYPE_UNIT_INSTANCE, loc);
+    loop_node->loop.body = loop_body;
+    return loop_node;
+}
+
+static TtNode *lower_defer(Lowering *low, const ASTNode *ast) {
+    TtNode *body = lower_node(low, ast->defer_statement.body);
+    TtNode *node = tt_new(low->tt_arena, TT_DEFER, &TYPE_UNIT_INSTANCE, ast->location);
+    node->defer_statement.body = body;
     return node;
+}
+
+static TtNode *lower_loop(Lowering *low, const ASTNode *ast) {
+    const Type *loop_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INSTANCE;
+    bool is_expression = loop_type->kind != TYPE_UNIT && loop_type->kind != TYPE_NEVER;
+
+    TtNode *body = lower_block(low, ast->loop.body);
+
+    if (!is_expression) {
+        TtNode *node = tt_new(low->tt_arena, TT_LOOP, loop_type, ast->location);
+        node->loop.body = body;
+        return node;
+    }
+
+    // Loop expression: desugar break-with-value.
+    // { var _result; loop { ... break val → { _result = val; break } ... }; _result }
+    const char *result_name = lowering_make_temp_name(low);
+    TtSymbolSpec result_spec = {TT_SYMBOL_VARIABLE, result_name, loop_type, true, ast->location};
+    TtSymbol *result_sym = lowering_add_variable(low, &result_spec);
+    TtNode *result_decl = lowering_make_var_decl(low, result_sym, NULL);
+
+    rewrite_break_values(low, &body, result_sym);
+
+    TtNode *loop_node = tt_new(low->tt_arena, TT_LOOP, loop_type, ast->location);
+    loop_node->loop.body = body;
+
+    TtNode *result_ref = lowering_make_var_ref(low, result_sym, ast->location);
+
+    TtNode **outer_stmts = NULL;
+    BUFFER_PUSH(outer_stmts, result_decl);
+    BUFFER_PUSH(outer_stmts, loop_node);
+
+    TtNode *outer = tt_new(low->tt_arena, TT_BLOCK, loop_type, ast->location);
+    outer->block.statements = outer_stmts;
+    outer->block.result = result_ref;
+    return outer;
 }
 
 /** Build `if iter >= end_bound { break }` guard for desugared for-loop. */
@@ -232,7 +366,8 @@ static TtNode *build_for_increment(Lowering *low, TtSymbol *iter_sym) {
     TtNode *increment = tt_new(low->tt_arena, TT_BINARY, iter_type, loc);
     increment->binary.op = TOKEN_PLUS;
     increment->binary.left = lowering_make_var_ref(low, iter_sym, loc);
-    increment->binary.right = lowering_make_int_lit(low, 1, iter_type, TYPE_I32, loc);
+    increment->binary.right =
+        lowering_make_int_lit(low, &(IntLitSpec){1, iter_type, TYPE_I32, loc});
 
     TtNode *assign = tt_new(low->tt_arena, TT_ASSIGN, &TYPE_UNIT_INSTANCE, loc);
     assign->assign.target = lowering_make_var_ref(low, iter_sym, loc);
@@ -329,13 +464,15 @@ static TtNode *lower_for(Lowering *low, const ASTNode *ast) {
     // var _end = end
     TtNode *end_expr = lower_expression(low, ast->for_loop.end);
     const char *end_name = lowering_make_temp_name(low);
-    TtSymbol *end_sym = lowering_add_variable(low, end_name, iter_type, false, loc);
+    TtSymbolSpec end_spec = {TT_SYMBOL_VARIABLE, end_name, iter_type, false, loc};
+    TtSymbol *end_sym = lowering_add_variable(low, &end_spec);
     TtNode *end_decl = lowering_make_var_decl(low, end_sym, end_expr);
 
     // var i = start
     const char *var_name = ast->for_loop.variable_name;
     TtNode *start = lower_expression(low, ast->for_loop.start);
-    TtSymbol *var_sym = lowering_add_variable(low, var_name, iter_type, true, loc);
+    TtSymbolSpec iter_spec = {TT_SYMBOL_VARIABLE, var_name, iter_type, true, loc};
+    TtSymbol *var_sym = lowering_add_variable(low, &iter_spec);
     TtNode *iter_decl = lowering_make_var_decl(low, var_sym, start);
 
     // Build loop body: guard + user body + increment
@@ -388,8 +525,8 @@ static void preregister_type_methods(Lowering *low, const char *type_name,
         const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INSTANCE;
         const char *key = arena_sprintf(low->tt_arena, "%s.%s", type_name, method_name);
         const char *mangled = arena_sprintf(low->tt_arena, "rsgu_%s_%s", type_name, method_name);
-        TtSymbol *sym =
-            lowering_make_symbol(low, TT_SYMBOL_FUNCTION, key, ret, false, method->location);
+        TtSymbolSpec sym_spec = {TT_SYMBOL_FUNCTION, key, ret, false, method->location};
+        TtSymbol *sym = lowering_make_symbol(low, &sym_spec);
         sym->mangled_name = mangled;
         lowering_scope_add(low, key, sym);
     }
@@ -401,9 +538,9 @@ static void preregister_functions(Lowering *low, const ASTNode *file_ast) {
         const ASTNode *decl = file_ast->file.declarations[i];
         if (decl->kind == NODE_FUNCTION_DECLARATION) {
             const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INSTANCE;
-            TtSymbol *sym =
-                lowering_make_symbol(low, TT_SYMBOL_FUNCTION, decl->function_declaration.name, ret,
-                                     false, decl->location);
+            TtSymbolSpec fn_spec = {TT_SYMBOL_FUNCTION, decl->function_declaration.name, ret, false,
+                                    decl->location};
+            TtSymbol *sym = lowering_make_symbol(low, &fn_spec);
             sym->mangled_name =
                 arena_sprintf(low->tt_arena, "rsgu_%s", decl->function_declaration.name);
             lowering_scope_add(low, decl->function_declaration.name, sym);
@@ -535,12 +672,14 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
     }
 
     case NODE_RETURN: {
-        // Lower return as a block with the return value as result
-        // (codegen will handle this via function body result)
+        TtNode *value = NULL;
         if (ast->return_statement.value != NULL) {
-            return lower_expression(low, ast->return_statement.value);
+            value = lower_expression(low, ast->return_statement.value);
         }
-        return tt_new(low->tt_arena, TT_UNIT_LITERAL, &TYPE_UNIT_INSTANCE, ast->location);
+        TtNode *node = tt_new(low->tt_arena, TT_RETURN,
+                              value != NULL ? value->type : &TYPE_UNIT_INSTANCE, ast->location);
+        node->return_statement.value = value;
+        return node;
     }
 
     case NODE_VARIABLE_DECLARATION:
@@ -551,6 +690,9 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
 
     case NODE_BREAK: {
         TtNode *node = tt_new(low->tt_arena, TT_BREAK, &TYPE_UNIT_INSTANCE, ast->location);
+        if (ast->break_statement.value != NULL) {
+            node->break_statement.value = lower_expression(low, ast->break_statement.value);
+        }
         return node;
     }
 
@@ -565,6 +707,12 @@ TtNode *lower_node(Lowering *low, const ASTNode *ast) {
 
     case NODE_LOOP:
         return lower_loop(low, ast);
+
+    case NODE_WHILE:
+        return lower_while(low, ast);
+
+    case NODE_DEFER:
+        return lower_defer(low, ast);
 
     case NODE_FOR:
         return lower_for(low, ast);

@@ -22,7 +22,7 @@ Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Type
 
 ### Primitives
 
-`bool`, `char`, `i8`–`i128`, `isize`, `u8`–`u128`, `usize`, `f32`, `f64`, `str` (UTF-8), `unit/()` (zero-size type).
+`bool`, `char`, `i8`–`i128`, `isize`, `u8`–`u128`, `usize`, `f32`, `f64`, `str` (UTF-8), `unit`, `never`.
 
 **Char semantics:** `char` is a Unicode scalar value. Supports equality (`==`, `!=`) and ordering (`<`, `>`, `<=`, `>=`). Escape sequences: `\n`, `\t`, `\\`, `\'`, `\0`, `\u{XXXX}`.
 
@@ -44,7 +44,7 @@ Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Type
 | Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling |
 | Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures   |
 
-**Tuples** support `==` and `!=` for equality comparison. Nested tuple fields are accessed by chaining indices: `t.0.1`. `unit/()` equals `unit/()`
+**Tuples** support `==` and `!=` for equality comparison. Nested tuple fields are accessed by chaining indices: `t.0.1`.
 
 ### Type Aliases
 
@@ -60,7 +60,6 @@ count := 0               // inferred i32
 var name: str = "Alice"  // explicit type
 x := i32(10)             // typed literal — equivalent to var x: i32 = 10
 y := f32(3.14)           // typed literal — equivalent to var y: f32 = 3.14
-var empty: unit = ()     // equals var empty: () = unit or empty := ()
 var num: ?i32            // defaults to None
 
 {name, age} := user           // destructure struct
@@ -77,14 +76,20 @@ No return annotation implies `unit`.
 
 ### Declare first
 
+Variables declared in advance can only be assigned values of the same type. If you need to handle multiple types, please use an Enum.
+
 ```rsg
-var a_binding // no type
+var a_binding: str
 
 if cond {
-    a_binding = 
+    a_binding = "yes"
 } else {
-
+    a_binding = "no"
 }
+
+var another_binding: i32
+
+another_binding // Error! Use of uninitialized binding
 ```
 
 ### Scope & Shadowing & Expression
@@ -162,6 +167,23 @@ Built-in function. Panics immediately if the condition is false.
 ```rsg
 assert(x > 0)
 assert(x > 0, "x must be positive")
+```
+
+### `unit` & `never`
+
+`unit` is most commonly seen implicitly: functions without a -> ... implicitly have return type `unit`. `unit` equals `unit`.
+
+```rsg
+fn long() -> unit {}
+fn short() {}
+```
+
+`never` represents the type of computations which never resolve to any value at all.
+
+```rsg
+x := {  // equals x: never =
+    return 123
+}
 ```
 
 ### Panic & Recover

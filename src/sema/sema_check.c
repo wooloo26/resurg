@@ -7,6 +7,7 @@ SemanticAnalyzer *semantic_analyzer_create(Arena *arena) {
     analyzer->arena = arena;
     analyzer->current_scope = NULL;
     analyzer->error_count = 0;
+    analyzer->loop_break_type = NULL;
     hash_table_init(&analyzer->type_alias_table, NULL);
     hash_table_init(&analyzer->function_table, NULL);
     hash_table_init(&analyzer->struct_table, NULL);
@@ -53,8 +54,8 @@ static void register_function_signature(SemanticAnalyzer *analyzer, ASTNode *dec
     }
     hash_table_insert(&analyzer->function_table, declaration->function_declaration.name, signature);
 
-    scope_define(analyzer, declaration->function_declaration.name, resolved_return,
-                 declaration->function_declaration.is_public, SYM_FUNCTION);
+    scope_define(analyzer, &(SymbolDef){declaration->function_declaration.name, resolved_return,
+                                        declaration->function_declaration.is_public, SYM_FUNCTION});
 }
 
 /**
@@ -232,7 +233,7 @@ static void register_struct_definition(SemanticAnalyzer *analyzer, ASTNode *decl
     hash_table_insert(&analyzer->type_alias_table, struct_name, (void *)def->type);
 
     // Register struct name as a type symbol
-    scope_define(analyzer, struct_name, def->type, false, SYM_TYPE);
+    scope_define(analyzer, &(SymbolDef){struct_name, def->type, false, SYM_TYPE});
 }
 
 /** Register an enum definition: build the TYPE_ENUM, register methods as functions. */
@@ -320,7 +321,7 @@ static void register_enum_definition(SemanticAnalyzer *analyzer, ASTNode *declar
 
     hash_table_insert(&analyzer->enum_table, enum_name, def);
     hash_table_insert(&analyzer->type_alias_table, enum_name, (void *)enum_type);
-    scope_define(analyzer, enum_name, enum_type, false, SYM_TYPE);
+    scope_define(analyzer, &(SymbolDef){enum_name, enum_type, false, SYM_TYPE});
 }
 
 bool semantic_analyzer_check(SemanticAnalyzer *analyzer, ASTNode *file) {

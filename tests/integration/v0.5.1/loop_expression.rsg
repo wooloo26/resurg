@@ -1,0 +1,49 @@
+// v0.5.1 — Loop expression: loop with break value
+module test_loop_expression
+
+// ── basic loop expression with break value ──
+
+fn test_loop_break_value() {
+    counter := 0
+    result := loop {
+        counter = counter + 1
+        if counter == 10 { break counter * 2 }
+    }
+    assert(result == 20)
+}
+
+// ── loop expression returning string ──
+
+fn test_loop_break_string() {
+    i := 0
+    result := loop {
+        i = i + 1
+        if i == 3 { break "found" }
+    }
+    assert(result == "found")
+}
+
+// ── loop expression returning bool ──
+
+fn test_loop_break_bool() {
+    x := 0
+    result := loop {
+        x = x + 1
+        if x >= 5 { break true }
+    }
+    assert(result == true)
+}
+
+// ── loop expression with computation ──
+
+fn test_loop_expression_fibonacci() {
+    a := 0
+    b := 1
+    result := loop {
+        next := a + b
+        a = b
+        b = next
+        if b > 100 { break b }
+    }
+    assert(result == 144)
+}
