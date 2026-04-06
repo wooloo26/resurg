@@ -17,8 +17,7 @@ engineering in general.
 | `TT`/`tt`   | Typed Tree                  | Lowered, fully-typed IR              |
 | `IR`/`ir`   | Intermediate Representation | General compiler term                |
 | `sema`      | Semantic Analysis           | Type checking and scope resolution   |
-| `cgen`      | Code Generation             | C backend emission                   |
-| `codegen`   | Code Generation             | Longer form used in identifiers      |
+| `cgen`      | Code Generator/Generation   | backend emission                   |
 
 ## Token & Syntax Abbreviations
 
@@ -83,6 +82,8 @@ engineering in general.
 | `fmt`   | Format         | Format string                       |
 | `sb`    | String Builder | `RsgStringBuilder` instances        |
 | `recv`  | Receiver       | Method receiver parameter           |
+| `len`   | Length         | Text/buffer length                  |
+| `deref` | Dereference    | Pointer dereference nodes           |
 
 ## Build & Tooling Abbreviations
 

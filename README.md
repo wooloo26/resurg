@@ -72,7 +72,21 @@ var num: ?i32             // defaults to None
 (first, .., last) := quad     // ignore middle elements with ..
 ```
 
-No return annotation implies `unit`. Variable redefinition in the same scope is forbidden — no shadowing.
+No return annotation implies `unit`.
+
+### Scope & Shadowing
+
+> If you don't like it, you can use lint to restrict it.
+
+```rsg
+fn main() {
+    shadowed_binding := 1
+    {
+        shadowed_binding := "abc" // This binding *shadows* the outer one
+    }
+    shadowed_binding := true // This binding *shadows* the previous binding
+}
+```
 
 ---
 
@@ -107,14 +121,15 @@ fn calc() -> f32 ! str {
 }
 ```
 
-### Defer
+### Defer & Return
 
-LIFO cleanup on scope exit.
+Both `defer` and `return` are strictly **function-scoped**. They are unaffected by inner block boundaries (e.g., loops, conditionals, or nested `{}` blocks).
+
+Deferred calls execute in LIFO order exclusively when the enclosing function exits.
 
 ```rsg
 f := open(path)!
-defer f.close()
-```
+defer f.close() // Executes only on function return, ignoring block structure
 
 ### Assert
 
@@ -635,7 +650,7 @@ while condition { do_work() }
 for values |v| println(v)
 for values |v, i| ...
 for 0..10 |i| ...
-for start..end |i| ...             // variable bounds
+for start..end |i| ...            // variable bounds
 for 0..n * 2 |i| ...              // computed bounds
 ```
 
@@ -653,7 +668,6 @@ if Some(user) := find_user(id) {
 
 if Some(user) := find_user(id) {
     println("found: {user.name}")
-    return // early return
 } else {
     println("not found")
 }

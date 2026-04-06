@@ -88,7 +88,6 @@ Opaque types in headers (`typedef struct Foo Foo;`). Definitions in `.c` only.
 
 ## Comments
 
-、
 VSCode-style Doxygen block comments.
 
 - `/** Brief description. */` for single-line doc comments.

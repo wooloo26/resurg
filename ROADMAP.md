@@ -84,8 +84,9 @@ Algebraic data types and exhaustive matching.
 
 ## v0.5.1 — Control flow
 
-- [ ] `defer` (LIFO cleanup on scope exit)
+- [ ] scope & shadowing
 - [ ] `while` loop
+- [ ] `defer` (LIFO cleanup on scope exit)
 - [ ] `return` early return
   
 ## v0.6.0 — Slices & Collections
