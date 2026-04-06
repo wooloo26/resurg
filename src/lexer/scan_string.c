@@ -1,8 +1,8 @@
 #include "_lexer.h"
 
-// ── Character literal ──────────────────────────────────────────────────
+// ── Character lit ──────────────────────────────────────────────────
 
-Token scan_char_literal(Lexer *lexer, SourceLocation location) {
+Token scan_char_lit(Lexer *lexer, SourceLoc loc) {
     // Opening '\'' already consumed
     uint32_t value;
     if (peek(lexer) == '\\') {
@@ -25,7 +25,7 @@ Token scan_char_literal(Lexer *lexer, SourceLocation location) {
             value = '\0';
             break;
         default:
-            rsg_error(location, "unknown escape sequence '\\%c'", escaped);
+            rsg_err(loc, "unknown escape sequence '\\%c'", escaped);
             value = (unsigned char)escaped;
             break;
         }
@@ -33,35 +33,35 @@ Token scan_char_literal(Lexer *lexer, SourceLocation location) {
         value = (unsigned char)advance(lexer);
     }
     if (peek(lexer) != '\'') {
-        rsg_error(location, "unterminated character literal");
-        return make_token(lexer, TOKEN_ERROR, "'", 1, location);
+        rsg_err(loc, "unterminated character lit");
+        return make_token(lexer, TOKEN_ERR, "'", 1, loc);
     }
     advance(lexer); // consume closing '\''
-    Token token = make_token(lexer, TOKEN_CHAR_LITERAL, "'", 1, location);
-    token.literal_value.char_value = value;
+    Token token = make_token(lexer, TOKEN_CHAR_LIT, "'", 1, loc);
+    token.lit_value.char_value = value;
     return token;
 }
 
-// ── String helpers ─────────────────────────────────────────────────────
+// ── Str helpers ─────────────────────────────────────────────────────
 
-static char *copy_string_range(const Lexer *lexer, int32_t from, int32_t to) {
-    // Copy raw content between positions (escape sequences preserved as-is)
+static char *copy_str_range(const Lexer *lexer, int32_t from, int32_t to) {
+    // Copy raw content between poss (escape sequences preserved as-is)
     return arena_strndup(lexer->arena, lexer->source + from, to - from);
 }
 
-static Token make_string_token(const Lexer *lexer, const char *value, SourceLocation location) {
+static Token make_str_token(const Lexer *lexer, const char *value, SourceLoc loc) {
     (void)lexer;
     return (Token){
-        .kind = TOKEN_STRING_LITERAL,
+        .kind = TOKEN_STR_LIT,
         .lexeme = value,
-        .length = (int32_t)strlen(value),
-        .location = location,
-        .literal_value.string_value = (char *)value,
+        .len = (int32_t)strlen(value),
+        .loc = loc,
+        .lit_value.str_value = (char *)value,
     };
 }
 
-/** Advance past a string body (handling escape sequences) until @p stop char or EOF. */
-static void skip_string_body(Lexer *lexer, char stop) {
+/** Advance past a str body (handling escape sequences) until @p stop char or EOF. */
+static void skip_str_body(Lexer *lexer, char stop) {
     while (peek(lexer) != stop && peek(lexer) != '\0') {
         if (peek(lexer) == '\\') {
             advance(lexer); // consume '\\'
@@ -74,35 +74,34 @@ static void skip_string_body(Lexer *lexer, char stop) {
     }
 }
 
-// ── Simple strings ─────────────────────────────────────────────────────
+// ── Simple strs ─────────────────────────────────────────────────────
 
-/** Scan a simple (non-interpolated) string literal body. */
-static Token scan_simple_string(Lexer *lexer, int32_t content_start, SourceLocation location) {
-    skip_string_body(lexer, '"');
+/** Scan a simple (non-interpolated) str lit body. */
+static Token scan_simple_str(Lexer *lexer, int32_t content_start, SourceLoc loc) {
+    skip_str_body(lexer, '"');
 
     if (peek(lexer) == '\0') {
-        rsg_error(location, "unterminated string literal");
-        return make_token(lexer, TOKEN_ERROR, lexer->source + content_start - 1,
-                          lexer->position - content_start + 1, location);
+        rsg_err(loc, "unterminated str lit");
+        return make_token(lexer, TOKEN_ERR, lexer->source + content_start - 1,
+                          lexer->pos - content_start + 1, loc);
     }
 
-    char *value = copy_string_range(lexer, content_start, lexer->position);
+    char *value = copy_str_range(lexer, content_start, lexer->pos);
     advance(lexer); // consume '"'
-    return make_string_token(lexer, value, location);
+    return make_str_token(lexer, value, loc);
 }
 
-// ── Interpolated strings ───────────────────────────────────────────────
+// ── Interpolated strs ───────────────────────────────────────────────
 
 /**
- * Lex the expression tokens inside a single `{...}` interpolation block.
+ * Lex the expr tokens inside a single `{...}` interpolation block.
  * Appends tokens to @c lexer->pending and advances past the closing `}`.
  */
 static void scan_interpolation_block(Lexer *lexer) {
     advance(lexer); // consume '{'
 
-    Token interp_start =
-        make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_location(lexer));
-    BUFFER_PUSH(lexer->pending, interp_start);
+    Token interp_start = make_token(lexer, TOKEN_INTERPOLATION_START, "{", 1, current_loc(lexer));
+    BUF_PUSH(lexer->pending, interp_start);
 
     int32_t brace_depth = 1;
     while (brace_depth > 0 && peek(lexer) != '\0') {
@@ -122,28 +121,28 @@ static void scan_interpolation_block(Lexer *lexer) {
         }
 
         Token token = scan_token(lexer);
-        if (token.kind == TOKEN_EOF || token.kind == TOKEN_ERROR) {
+        if (token.kind == TOKEN_EOF || token.kind == TOKEN_ERR) {
             break;
         }
         if (token.kind == TOKEN_NEWLINE) {
             continue;
         }
-        BUFFER_PUSH(lexer->pending, token);
+        BUF_PUSH(lexer->pending, token);
     }
 
-    Token interp_end = make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_location(lexer));
-    BUFFER_PUSH(lexer->pending, interp_end);
+    Token interp_end = make_token(lexer, TOKEN_INTERPOLATION_END, "}", 1, current_loc(lexer));
+    BUF_PUSH(lexer->pending, interp_end);
 }
 
-/** Scan an interpolated string, populating lexer->pending with token sequence. */
-static Token scan_interpolated_string(Lexer *lexer, SourceLocation location) {
+/** Scan an interpolated str, populating lexer->pending with token sequence. */
+static Token scan_interpolated_str(Lexer *lexer, SourceLoc loc) {
     lexer->pending = NULL;
-    lexer->pending_position = 0;
+    lexer->pending_pos = 0;
 
     while (peek(lexer) != '"' && peek(lexer) != '\0') {
         // Scan text segment until '{' or '"'
-        int32_t segment_start = lexer->position;
-        SourceLocation segment_location = current_location(lexer);
+        int32_t segment_start = lexer->pos;
+        SourceLoc segment_loc = current_loc(lexer);
 
         while (peek(lexer) != '{' && peek(lexer) != '"' && peek(lexer) != '\0') {
             if (peek(lexer) == '\\') {
@@ -157,46 +156,46 @@ static Token scan_interpolated_string(Lexer *lexer, SourceLocation location) {
         }
 
         // Emit text segment
-        char *text = copy_string_range(lexer, segment_start, lexer->position);
-        BUFFER_PUSH(lexer->pending, make_string_token(lexer, text, segment_location));
+        char *text = copy_str_range(lexer, segment_start, lexer->pos);
+        BUF_PUSH(lexer->pending, make_str_token(lexer, text, segment_loc));
 
         if (peek(lexer) == '{') {
             scan_interpolation_block(lexer);
         }
     }
 
-    // If the string ends with an interpolation, emit a trailing empty STRING_LITERAL
-    if (BUFFER_LENGTH(lexer->pending) > 0 &&
-        lexer->pending[BUFFER_LENGTH(lexer->pending) - 1].kind == TOKEN_INTERPOLATION_END) {
-        BUFFER_PUSH(lexer->pending, make_string_token(lexer, "", current_location(lexer)));
+    // If the str ends with an interpolation, emit a trailing empty STR_LIT
+    if (BUF_LEN(lexer->pending) > 0 &&
+        lexer->pending[BUF_LEN(lexer->pending) - 1].kind == TOKEN_INTERPOLATION_END) {
+        BUF_PUSH(lexer->pending, make_str_token(lexer, "", current_loc(lexer)));
     }
 
     if (peek(lexer) == '\0') {
-        rsg_error(location, "unterminated string literal");
+        rsg_err(loc, "unterminated str lit");
     } else {
         advance(lexer); // consume '"'
     }
 
     // Return first pending token
-    if (BUFFER_LENGTH(lexer->pending) > 0) {
+    if (BUF_LEN(lexer->pending) > 0) {
         Token first = lexer->pending[0];
-        lexer->pending_position = 1;
+        lexer->pending_pos = 1;
         return first;
     }
 
-    // Empty string edge case
-    return make_string_token(lexer, "", location);
+    // Empty str edge case
+    return make_str_token(lexer, "", loc);
 }
 
-// ── String dispatch ────────────────────────────────────────────────────
+// ── Str dispatch ────────────────────────────────────────────────────
 
-Token scan_string(Lexer *lexer, SourceLocation location) {
+Token scan_str(Lexer *lexer, SourceLoc loc) {
     // Opening '"' already consumed
-    int32_t content_start = lexer->position;
+    int32_t content_start = lexer->pos;
 
     // Quick lookahead for interpolation (avoid save/restore)
     bool has_interpolation = false;
-    for (int32_t i = lexer->position; i < lexer->length && lexer->source[i] != '"'; i++) {
+    for (int32_t i = lexer->pos; i < lexer->len && lexer->source[i] != '"'; i++) {
         if (lexer->source[i] == '\\') {
             i++;
             continue;
@@ -208,7 +207,7 @@ Token scan_string(Lexer *lexer, SourceLocation location) {
     }
 
     if (!has_interpolation) {
-        return scan_simple_string(lexer, content_start, location);
+        return scan_simple_str(lexer, content_start, loc);
     }
-    return scan_interpolated_string(lexer, location);
+    return scan_interpolated_str(lexer, loc);
 }

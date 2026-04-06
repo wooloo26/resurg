@@ -13,14 +13,14 @@
 
 /**
  * @file common.h
- * @brief Shared infrastructure: arena allocator, stretchy buffers, diagnostics.
+ * @brief Shared infrastructure: arena allocator, stretchy bufs, diagnostics.
  */
 
 /** Block size for the arena bump allocator (1 MiB). */
 #define ARENA_BLOCK_SIZE ((size_t)1024 * 1024)
 
 /**
- * Opaque bump-pointer arena.  All AST nodes, tokens, and interned strings
+ * Opaque bump-ptr arena.  All AST nodes, tokens, and interned strs
  * are allocated here and freed in one shot at end of compilation.
  */
 typedef struct Arena Arena;
@@ -33,12 +33,12 @@ void arena_destroy(Arena *arena);
 void *arena_alloc(Arena *arena, size_t size);
 /** Allocate @p size zero-initialised bytes from @p arena. */
 void *arena_alloc_zero(Arena *arena, size_t size);
-/** Duplicate a NUL-terminated string into @p arena. */
+/** Duplicate a NUL-terminated str into @p arena. */
 char *arena_strdup(Arena *arena, const char *source);
-/** Duplicate the first @p length bytes of @p source into @p arena. */
-char *arena_strndup(Arena *arena, const char *source, size_t length);
-/** printf-style formatting into arena-allocated memory. */
-char *arena_sprintf(Arena *arena, const char *format, ...);
+/** Duplicate the first @p len bytes of @p source into @p arena. */
+char *arena_strndup(Arena *arena, const char *source, size_t len);
+/** printf-style fmtting into arena-allocated memory. */
+char *arena_sprintf(Arena *arena, const char *fmt, ...);
 
 // ── Hash table ─────────────────────────────────────────────────────────
 
@@ -49,7 +49,7 @@ typedef struct {
 } HashEntry;
 
 /**
- * String-keyed hash table with open addressing and linear probing.
+ * Str-keyed hash table with open addressing and linear probing.
  *
  * Entries can live on the heap (arena == NULL) or in an Arena.  Heap-backed
  * tables must be cleaned up with hash_table_destroy(); arena-backed ones
@@ -73,73 +73,73 @@ void *hash_table_lookup(const HashTable *table, const char *key);
 /** Remove @p key from the table.  Returns true if the key was found. */
 bool hash_table_remove(HashTable *table, const char *key);
 
-// ── Stretchy buffer ────────────────────────────────────────────────────
+// ── Stretchy buf ────────────────────────────────────────────────────
 
 /**
- * Stretchy buffer - type-safe dynamic array via macros.
+ * Stretchy buf - type-safe dynamic array via macros.
  *
- * Declare as a typed NULL pointer, grow with BUFFER_PUSH, and free with
- * BUFFER_FREE.  The header lives just before the data pointer.
+ * Declare as a typed NULL ptr, grow with BUF_PUSH, and free with
+ * BUF_FREE.  The header lives just before the data ptr.
  *
  * @code
  *     Token *tokens = NULL;
- *     BUFFER_PUSH(tokens, tok);
- *     for (int i = 0; i < BUFFER_LENGTH(tokens); i++) { ... }
- *     BUFFER_FREE(tokens);
+ *     BUF_PUSH(tokens, tok);
+ *     for (int i = 0; i < BUF_LEN(tokens); i++) { ... }
+ *     BUF_FREE(tokens);
  * @endcode
  */
 typedef struct {
-    size_t length;
+    size_t len;
     size_t capacity;
-} BufferHeader;
+} BufHeader;
 
-#define BUFFER__HEADER(buffer) ((BufferHeader *)((char *)(buffer) - sizeof(BufferHeader)))
+#define BUF__HEADER(buf) ((BufHeader *)((char *)(buf) - sizeof(BufHeader)))
 // Cast to int32_t: enables signed loop idioms (e.g. reverse iteration).
-// Overflow is guarded at growth time in buffer__grow().
-#define BUFFER_LENGTH(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->length : 0)
-#define BUFFER_CAPACITY(buffer) ((buffer) != NULL ? (int32_t)BUFFER__HEADER(buffer)->capacity : 0)
-#define BUFFER_END(buffer) ((buffer) + BUFFER_LENGTH(buffer))
-#define BUFFER_FREE(buffer) ((buffer) != NULL ? (free(BUFFER__HEADER(buffer)), (buffer) = NULL) : 0)
+// Overflow is guarded at growth time in buf__grow().
+#define BUF_LEN(buf) ((buf) != NULL ? (int32_t)BUF__HEADER(buf)->len : 0)
+#define BUF_CAPACITY(buf) ((buf) != NULL ? (int32_t)BUF__HEADER(buf)->capacity : 0)
+#define BUF_END(buf) ((buf) + BUF_LEN(buf))
+#define BUF_FREE(buf) ((buf) != NULL ? (free(BUF__HEADER(buf)), (buf) = NULL) : 0)
 
 // __typeof__ is a reserved-namespace extension supported by GCC/Clang;
-// it avoids an unsafe (void *) cast for multi-level pointers.
-#define BUFFER_FIT(buffer, needed)                                                                 \
-    ((needed) <= BUFFER_CAPACITY(buffer)                                                           \
+// it avoids an unsafe (void *) cast for multi-level ptrs.
+#define BUF_FIT(buf, needed)                                                                       \
+    ((needed) <= BUF_CAPACITY(buf)                                                                 \
          ? 0                                                                                       \
-         : ((buffer) = (__typeof__(buffer))buffer__grow(                                           \
-                (const void *)(buffer), (needed),                                                  \
-                sizeof(*(buffer))))) /* NOLINT(bugprone-sizeof-expression) */
+         : ((buf) = (__typeof__(buf))buf__grow(                                                    \
+                (const void *)(buf), (needed),                                                     \
+                sizeof(*(buf))))) /* NOLINT(bugprone-sizeof-expression) */
 
-#define BUFFER_PUSH(buffer, value)                                                                 \
+#define BUF_PUSH(buf, value)                                                                       \
     do {                                                                                           \
-        BUFFER_FIT((buffer), BUFFER_LENGTH(buffer) + 1);                                           \
-        (buffer)[BUFFER__HEADER(buffer)->length++] = (value);                                      \
+        BUF_FIT((buf), BUF_LEN(buf) + 1);                                                          \
+        (buf)[BUF__HEADER(buf)->len++] = (value);                                                  \
     } while (0)
 
-/** Internal growth routine for stretchy buffers - do not call directly. */
-void *buffer__grow(const void *buffer, size_t new_length, size_t element_size);
+/** Internal growth routine for stretchy bufs - do not call directly. */
+void *buf__grow(const void *buf, size_t new_len, size_t elem_size);
 
 /** A file:line:column triple attached to tokens and AST nodes. */
 typedef struct {
     const char *file;
     int32_t line;
     int32_t column;
-} SourceLocation;
+} SourceLoc;
 
 /** Checked malloc - aborts on OOM. */
 void *rsg_malloc(size_t size);
 /** Checked calloc - aborts on OOM. */
 void *rsg_calloc(size_t count, size_t size);
 /** Checked realloc - aborts on OOM. */
-void *rsg_realloc(void *pointer, size_t size);
+void *rsg_realloc(void *ptr, size_t size);
 
 /**
- * Emit "file:line:col: error: ..." to stderr.
+ * Emit "file:line:col: err: ..." to stderr.
  */
-void rsg_error(SourceLocation location, const char *format, ...);
+void rsg_err(SourceLoc loc, const char *fmt, ...);
 /** Emit "file:line:col: warning: ..." to stderr. */
-void rsg_warn(SourceLocation location, const char *format, ...);
+void rsg_warn(SourceLoc loc, const char *fmt, ...);
 /** Emit "fatal: ..." to stderr and terminate the process. */
-noreturn void rsg_fatal(const char *format, ...);
+noreturn void rsg_fatal(const char *fmt, ...);
 
 #endif // RG_COMMON_H

@@ -15,17 +15,17 @@ typedef struct {
 } TokenDescriptor;
 
 static const TokenDescriptor TOKEN_TABLE[] = {
-    [TOKEN_INTEGER_LITERAL] = {"INTEGER_LITERAL", 0},
-    [TOKEN_FLOAT_LITERAL] = {"FLOAT_LITERAL", 0},
-    [TOKEN_STRING_LITERAL] = {"STRING_LITERAL", 0},
-    [TOKEN_CHAR_LITERAL] = {"CHAR_LITERAL", 0},
+    [TOKEN_INTEGER_LIT] = {"INTEGER_LIT", 0},
+    [TOKEN_FLOAT_LIT] = {"FLOAT_LIT", 0},
+    [TOKEN_STR_LIT] = {"STR_LIT", 0},
+    [TOKEN_CHAR_LIT] = {"CHAR_LIT", 0},
     [TOKEN_TRUE] = {"true", 0},
     [TOKEN_FALSE] = {"false", 0},
-    [TOKEN_IDENTIFIER] = {"IDENTIFIER", 0},
+    [TOKEN_ID] = {"ID", 0},
     [TOKEN_MODULE] = {"module", 0},
-    [TOKEN_PUBLIC] = {"pub", 0},
-    [TOKEN_FUNCTION] = {"fn", 0},
-    [TOKEN_VARIABLE] = {"var", 0},
+    [TOKEN_PUB] = {"pub", 0},
+    [TOKEN_FN] = {"fn", 0},
+    [TOKEN_VAR] = {"var", 0},
     [TOKEN_IF] = {"if", 0},
     [TOKEN_ELSE] = {"else", 0},
     [TOKEN_LOOP] = {"loop", 0},
@@ -58,7 +58,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_F32] = {"f32", TKF_TYPE_KEYWORD},
     [TOKEN_F64] = {"f64", TKF_TYPE_KEYWORD},
     [TOKEN_CHAR] = {"char", TKF_TYPE_KEYWORD},
-    [TOKEN_STRING] = {"str", TKF_TYPE_KEYWORD},
+    [TOKEN_STR] = {"str", TKF_TYPE_KEYWORD},
     [TOKEN_UNIT] = {"unit", TKF_TYPE_KEYWORD},
     [TOKEN_NEVER] = {"never", TKF_TYPE_KEYWORD},
     [TOKEN_PLUS] = {"+", 0},
@@ -102,12 +102,12 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_INTERPOLATION_END] = {"INTERPOLATION_END", 0},
     [TOKEN_NEWLINE] = {"NEWLINE", 0},
     [TOKEN_EOF] = {"EOF", 0},
-    [TOKEN_ERROR] = {"ERROR", 0},
+    [TOKEN_ERR] = {"ERR", 0},
 };
 
 static const int32_t TOKEN_TABLE_COUNT = (int32_t)(sizeof(TOKEN_TABLE) / sizeof(TOKEN_TABLE[0]));
 
-const char *token_kind_string(TokenKind kind) {
+const char *token_kind_str(TokenKind kind) {
     if (kind >= 0 && kind < TOKEN_TABLE_COUNT && TOKEN_TABLE[kind].name != NULL) {
         return TOKEN_TABLE[kind].name;
     }

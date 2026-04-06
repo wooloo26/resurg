@@ -24,39 +24,39 @@ typedef enum {
     AST_TYPE_ARRAY,    // [N]T
     AST_TYPE_SLICE,    // []T
     AST_TYPE_TUPLE,    // (A, B, ...)
-    AST_TYPE_POINTER,  // *T
+    AST_TYPE_PTR,      // *T
 } ASTTypeKind;
 
 struct ASTType {
     ASTTypeKind kind;
     const char *name; // may be NULL (for NAME kind)
-    SourceLocation location;
+    SourceLoc loc;
     // AST_TYPE_ARRAY fields
-    ASTType *array_element; // heap-allocated element type
-    int32_t array_size;     // element count N
+    ASTType *array_elem; // heap-allocated elem type
+    int32_t array_size;  // elem count N
     // AST_TYPE_SLICE fields
-    ASTType *slice_element; // heap-allocated element type
+    ASTType *slice_elem; // heap-allocated elem type
     // AST_TYPE_TUPLE fields
-    ASTType **tuple_elements; /* buf */
-    // AST_TYPE_POINTER fields
-    ASTType *pointer_element; // pointee type
+    ASTType **tuple_elems; /* buf */
+    // AST_TYPE_PTR fields
+    ASTType *ptr_elem; // pointee type
 };
 
-/** A field definition in a struct declaration. */
+/** A field def in a struct decl. */
 typedef struct {
     const char *name;
     ASTType type;
     ASTNode *default_value; // may be NULL
 } ASTStructField;
 
-/** Variant kind in an enum declaration. */
+/** Variant kind in an enum decl. */
 typedef enum {
     VARIANT_UNIT,   // Quit
     VARIANT_TUPLE,  // Write(str)
     VARIANT_STRUCT, // Move { x: i32, y: i32 }
 } ASTVariantKind;
 
-/** A variant in an enum declaration. */
+/** A variant in an enum decl. */
 typedef struct {
     const char *name;
     ASTVariantKind kind;
@@ -69,7 +69,7 @@ typedef struct {
 typedef enum {
     PATTERN_WILDCARD,       // _
     PATTERN_BINDING,        // name
-    PATTERN_LITERAL,        // 42, "hello", true
+    PATTERN_LIT,            // 42, "hello", true
     PATTERN_RANGE,          // 1..10 or 1..=10
     PATTERN_VARIANT_UNIT,   // Quit
     PATTERN_VARIANT_TUPLE,  // Write(text)
@@ -80,9 +80,9 @@ typedef enum {
 typedef struct ASTPattern ASTPattern;
 struct ASTPattern {
     ASTPatternKind kind;
-    SourceLocation location;
+    SourceLoc loc;
     const char *name;          // binding name or variant name
-    ASTNode *literal;          // for PATTERN_LITERAL
+    ASTNode *lit;              // for PATTERN_LIT
     ASTNode *range_start;      // for PATTERN_RANGE
     ASTNode *range_end;        // for PATTERN_RANGE
     bool range_inclusive;      // true for ..=
@@ -90,7 +90,7 @@ struct ASTPattern {
     const char **field_names;  /* buf - for struct variant */
 };
 
-/** A single arm in a match expression. */
+/** A single arm in a match expr. */
 typedef struct {
     ASTPattern *pattern;
     ASTNode *guard; // may be NULL
@@ -100,85 +100,85 @@ typedef struct {
 /** Discriminator for the ASTNode tagged union. */
 typedef enum {
     // Top-level
-    NODE_MODULE,     // module declaration
-    NODE_FILE,       // root list of declarations
-    NODE_TYPE_ALIAS, // type alias declaration
+    NODE_MODULE,     // module decl
+    NODE_FILE,       // root list of decls
+    NODE_TYPE_ALIAS, // type alias decl
 
     // Declarations
-    NODE_FUNCTION_DECLARATION, // function declaration
-    NODE_VARIABLE_DECLARATION, // variable declaration (:= or var)
-    NODE_PARAMETER,            // function parameter
-    NODE_STRUCT_DECLARATION,   // struct definition
-    NODE_ENUM_DECLARATION,     // enum definition
-    NODE_PACT_DECLARATION,     // pact definition
-    NODE_RETURN,               // return expr
-    NODE_DEFER,                // defer { ... }
+    NODE_FN_DECL,     // fn decl
+    NODE_VAR_DECL,    // var decl (:= or var)
+    NODE_PARAM,       // fn param
+    NODE_STRUCT_DECL, // struct def
+    NODE_ENUM_DECL,   // enum def
+    NODE_PACT_DECL,   // pact def
+    NODE_RETURN,      // return expr
+    NODE_DEFER,       // defer { ... }
 
     // Statements
-    NODE_EXPRESSION_STATEMENT, // expression used as statement
-    NODE_BREAK,                // break
-    NODE_CONTINUE,             // continue
+    NODE_EXPR_STMT, // expr used as stmt
+    NODE_BREAK,     // break
+    NODE_CONTINUE,  // continue
 
     // Expressions
-    NODE_LITERAL,              // int, float, str, bool, char, unit literals
-    NODE_IDENTIFIER,           // variable / function reference
-    NODE_UNARY,                // !x, -x
-    NODE_BINARY,               // x + y, x == y, x && y
-    NODE_ASSIGN,               // x = expr
-    NODE_COMPOUND_ASSIGN,      // x += expr, x -= expr, ...
-    NODE_CALL,                 // foo(a, b)
-    NODE_MEMBER,               // module.func (dot access)
-    NODE_INDEX,                // arr[i] (array indexing)
-    NODE_IF,                   // if/else expression
-    NODE_LOOP,                 // loop { ... }
-    NODE_WHILE,                // while cond { ... }
-    NODE_FOR,                  // for i := 0..N { ... }
-    NODE_BLOCK,                // { stmts; optional trailing expr }
-    NODE_STRING_INTERPOLATION, // "hello {name}, {1+2}"
-    NODE_ARRAY_LITERAL,        // [1, 2, 3] or [3]i32[1, 2, 3]
-    NODE_SLICE_LITERAL,        // []i32[1, 2, 3]
-    NODE_SLICE_EXPR,           // arr[..], s[1..4], s[2..], s[..3]
-    NODE_TUPLE_LITERAL,        // (1, true, "hi")
-    NODE_TYPE_CONVERSION,      // i64(100), f32(3.14)
-    NODE_STRUCT_LITERAL,       // Point { x = 1.0, y = 2.0 }
-    NODE_STRUCT_DESTRUCTURE,   // {x, y} := expr
-    NODE_TUPLE_DESTRUCTURE,    // (a, b) := expr
-    NODE_ADDRESS_OF,           // &expr (heap alloc or address-of)
-    NODE_DEREF,                // *expr (pointer dereference)
-    NODE_MATCH,                // match expr { arms }
-    NODE_ENUM_INIT,            // Enum.Variant or Enum.Variant(args) or Enum.Variant { fields }
+    NODE_LIT,                // int, float, str, bool, char, unit lits
+    NODE_ID,                 // var / fn ref
+    NODE_UNARY,              // !x, -x
+    NODE_BINARY,             // x + y, x == y, x && y
+    NODE_ASSIGN,             // x = expr
+    NODE_COMPOUND_ASSIGN,    // x += expr, x -= expr, ...
+    NODE_CALL,               // foo(a, b)
+    NODE_MEMBER,             // module.func (dot access)
+    NODE_IDX,                // arr[i] (array idxing)
+    NODE_IF,                 // if/else expr
+    NODE_LOOP,               // loop { ... }
+    NODE_WHILE,              // while cond { ... }
+    NODE_FOR,                // for i := 0..N { ... }
+    NODE_BLOCK,              // { stmts; optional trailing expr }
+    NODE_STR_INTERPOLATION,  // "hello {name}, {1+2}"
+    NODE_ARRAY_LIT,          // [1, 2, 3] or [3]i32[1, 2, 3]
+    NODE_SLICE_LIT,          // []i32[1, 2, 3]
+    NODE_SLICE_EXPR,         // arr[..], s[1..4], s[2..], s[..3]
+    NODE_TUPLE_LIT,          // (1, true, "hi")
+    NODE_TYPE_CONVERSION,    // i64(100), f32(3.14)
+    NODE_STRUCT_LIT,         // Point { x = 1.0, y = 2.0 }
+    NODE_STRUCT_DESTRUCTURE, // {x, y} := expr
+    NODE_TUPLE_DESTRUCTURE,  // (a, b) := expr
+    NODE_ADDRESS_OF,         // &expr (heap alloc or address-of)
+    NODE_DEREF,              // *expr (ptr deref)
+    NODE_MATCH,              // match expr { arms }
+    NODE_ENUM_INIT,          // Enum.Variant or Enum.Variant(args) or Enum.Variant { fields }
 } NodeKind;
 
-/** Sub-kind for NODE_LITERAL - indicates which payload field is active. */
+/** Sub-kind for NODE_LIT - indicates which payload field is active. */
 typedef enum {
-    LITERAL_BOOL,
-    LITERAL_I8,
-    LITERAL_I16,
-    LITERAL_I32,
-    LITERAL_I64,
-    LITERAL_I128,
-    LITERAL_U8,
-    LITERAL_U16,
-    LITERAL_U32,
-    LITERAL_U64,
-    LITERAL_U128,
-    LITERAL_ISIZE,
-    LITERAL_USIZE,
-    LITERAL_F32,
-    LITERAL_F64,
-    LITERAL_CHAR,
-    LITERAL_STRING,
-    LITERAL_UNIT,
-} LiteralKind;
+    LIT_BOOL,
+    LIT_I8,
+    LIT_I16,
+    LIT_I32,
+    LIT_I64,
+    LIT_I128,
+    LIT_U8,
+    LIT_U16,
+    LIT_U32,
+    LIT_U64,
+    LIT_U128,
+    LIT_ISIZE,
+    LIT_USIZE,
+    LIT_F32,
+    LIT_F64,
+    LIT_CHAR,
+    LIT_STR,
+    LIT_UNIT,
+} LitKind;
 
 /**
  * AST node - a tagged union covering every syntactic construct.
- * Each variant stores its children in the anonymous union; stretchy-buffer
- * pointers are marked with a trailing @c buf comment.
+ * Each variant stores its children in the anonymous union; stretchy-buf
+ * ptrs are marked with a trailing @c buf comment.
  */
 struct ASTNode {
     NodeKind kind;
-    SourceLocation location;
+    SourceLoc loc;
     const Type *type; // may be NULL
 
     union {
@@ -189,7 +189,7 @@ struct ASTNode {
 
         // NODE_FILE
         struct {
-            ASTNode **declarations; /* buf */
+            ASTNode **decls; /* buf */
         } file;
 
         // NODE_TYPE_ALIAS
@@ -198,57 +198,57 @@ struct ASTNode {
             ASTType alias_type;
         } type_alias;
 
-        // NODE_FUNCTION_DECLARATION
+        // NODE_FN_DECL
         struct {
-            bool is_public;
+            bool is_pub;
             const char *name;
-            ASTNode **parameters; /* buf */
+            ASTNode **params; /* buf */
             ASTType return_type;
             ASTNode *body;
-            // Method-specific fields (NULL / false for regular functions)
-            const char *receiver_name;
-            bool is_mut_receiver;
-            bool is_pointer_receiver;
+            // Method-specific fields (NULL / false for regular fns)
+            const char *recv_name;
+            bool is_mut_recv;
+            bool is_ptr_recv;
             const char *owner_struct;
-        } function_declaration;
+        } fn_decl;
 
-        // NODE_PARAMETER
+        // NODE_PARAM
         struct {
             const char *name;
             ASTType type;
             bool is_mut; // true for `mut name: *T`
-        } parameter;
+        } param;
 
-        // NODE_VARIABLE_DECLARATION
+        // NODE_VAR_DECL
         struct {
             const char *name;
-            ASTType type;         // may be AST_TYPE_INFERRED
-            ASTNode *initializer; // initializer expression
-            bool is_variable;     // true for `var x: T = ...`, false for `:=`
-            bool is_immut;        // true for `immut x := ...`
-        } variable_declaration;
+            ASTType type;  // may be AST_TYPE_INFERRED
+            ASTNode *init; // init expr
+            bool is_var;   // true for `var x: T = ...`, false for `:=`
+            bool is_immut; // true for `immut x := ...`
+        } var_decl;
 
-        // NODE_EXPRESSION_STATEMENT
+        // NODE_EXPR_STMT
         struct {
-            ASTNode *expression;
-        } expression_statement;
+            ASTNode *expr;
+        } expr_stmt;
 
-        // NODE_LITERAL
+        // NODE_LIT
         struct {
-            LiteralKind kind;
+            LitKind kind;
             union {
                 bool boolean_value;
-                uint64_t integer_value; // for all integer literal kinds
-                double float64_value;   // for LITERAL_F32 and LITERAL_F64
-                const char *string_value;
-                uint32_t char_value; // Unicode scalar value (for LITERAL_CHAR)
+                uint64_t integer_value; // for all integer lit kinds
+                double float64_value;   // for LIT_F32 and LIT_F64
+                const char *str_value;
+                uint32_t char_value; // Unicode scalar value (for LIT_CHAR)
             };
-        } literal;
+        } lit;
 
-        // NODE_IDENTIFIER
+        // NODE_ID
         struct {
             const char *name;
-        } identifier;
+        } id;
 
         // NODE_UNARY
         struct {
@@ -279,8 +279,8 @@ struct ASTNode {
         // NODE_CALL
         struct {
             ASTNode *callee;
-            ASTNode **arguments;    /* buf */
-            const char **arg_names; /* buf - NULL entry = positional */
+            ASTNode **args;         /* buf */
+            const char **arg_names; /* buf - NULL entry = posal */
             bool *arg_is_mut;       /* buf - true = `mut` at call site */
         } call;
 
@@ -290,18 +290,18 @@ struct ASTNode {
             const char *member;
         } member;
 
-        // NODE_INDEX
+        // NODE_IDX
         struct {
             ASTNode *object;
-            ASTNode *index;
-        } index_access;
+            ASTNode *idx;
+        } idx_access;
 
         // NODE_IF
         struct {
-            ASTNode *condition;
+            ASTNode *cond;
             ASTNode *then_body;
             ASTNode *else_body; // may be NULL
-        } if_expression;
+        } if_expr;
 
         // NODE_LOOP
         struct {
@@ -310,37 +310,37 @@ struct ASTNode {
 
         // NODE_FOR
         struct {
-            const char *variable_name;
-            const char *index_name; // for |v, i| form (may be NULL)
-            ASTNode *start;         // range start expression (NULL for slice iteration)
-            ASTNode *end;           // range end expression (NULL for slice iteration)
-            ASTNode *iterable;      // slice expression (NULL for range iteration)
+            const char *var_name;
+            const char *idx_name; // for |v, i| form (may be NULL)
+            ASTNode *start;       // range start expr (NULL for slice iteration)
+            ASTNode *end;         // range end expr (NULL for slice iteration)
+            ASTNode *iterable;    // slice expr (NULL for range iteration)
             ASTNode *body;
         } for_loop;
 
         // NODE_BLOCK
         struct {
-            ASTNode **statements; /* buf */
-            ASTNode *result;      // may be NULL
+            ASTNode **stmts; /* buf */
+            ASTNode *result; // may be NULL
         } block;
 
-        // NODE_STRING_INTERPOLATION
+        // NODE_STR_INTERPOLATION
         struct {
             ASTNode **parts; /* buf */
-        } string_interpolation;
+        } str_interpolation;
 
-        // NODE_ARRAY_LITERAL
+        // NODE_ARRAY_LIT
         struct {
-            ASTNode **elements;   /* buf */
-            ASTType element_type; // may be inferred
-            int32_t size;         // N from [N]T prefix, or element count
-        } array_literal;
+            ASTNode **elems;   /* buf */
+            ASTType elem_type; // may be inferred
+            int32_t size;      // N from [N]T prefix, or elem count
+        } array_lit;
 
-        // NODE_SLICE_LITERAL
+        // NODE_SLICE_LIT
         struct {
-            ASTNode **elements;   /* buf */
-            ASTType element_type; // from []T prefix
-        } slice_literal;
+            ASTNode **elems;   /* buf */
+            ASTType elem_type; // from []T prefix
+        } slice_lit;
 
         // NODE_SLICE_EXPR
         struct {
@@ -350,10 +350,10 @@ struct ASTNode {
             bool full_range; // true for arr[..]
         } slice_expr;
 
-        // NODE_TUPLE_LITERAL
+        // NODE_TUPLE_LIT
         struct {
-            ASTNode **elements; /* buf */
-        } tuple_literal;
+            ASTNode **elems; /* buf */
+        } tuple_lit;
 
         // NODE_TYPE_CONVERSION
         struct {
@@ -361,21 +361,21 @@ struct ASTNode {
             ASTNode *operand;
         } type_conversion;
 
-        // NODE_STRUCT_DECLARATION
+        // NODE_STRUCT_DECL
         struct {
             const char *name;
             ASTStructField *fields;    /* buf */
-            ASTNode **methods;         /* buf - NODE_FUNCTION_DECLARATION */
+            ASTNode **methods;         /* buf - NODE_FN_DECL */
             const char **embedded;     /* buf - embedded struct names */
             const char **conformances; /* buf - pact names */
-        } struct_declaration;
+        } struct_decl;
 
-        // NODE_STRUCT_LITERAL
+        // NODE_STRUCT_LIT
         struct {
             const char *name;
             const char **field_names; /* buf */
             ASTNode **field_values;   /* buf */
-        } struct_literal;
+        } struct_lit;
 
         // NODE_STRUCT_DESTRUCTURE
         struct {
@@ -388,8 +388,8 @@ struct ASTNode {
         struct {
             const char **names; /* buf */
             ASTNode *value;
-            bool has_rest;         // true when `..` appears in pattern
-            int32_t rest_position; // index of `..` in pattern (-1 if none)
+            bool has_rest;    // true when `..` appears in pattern
+            int32_t rest_pos; // idx of `..` in pattern (-1 if none)
         } tuple_destructure;
 
         // NODE_ADDRESS_OF
@@ -402,61 +402,61 @@ struct ASTNode {
             ASTNode *operand;
         } deref;
 
-        // NODE_ENUM_DECLARATION
+        // NODE_ENUM_DECL
         struct {
             const char *name;
             ASTEnumVariant *variants; /* buf */
-            ASTNode **methods;        /* buf - NODE_FUNCTION_DECLARATION */
-        } enum_declaration;
+            ASTNode **methods;        /* buf - NODE_FN_DECL */
+        } enum_decl;
 
         // NODE_MATCH
         struct {
             ASTNode *operand;
             ASTMatchArm *arms; /* buf */
-        } match_expression;
+        } match_expr;
 
         // NODE_ENUM_INIT
         struct {
             const char *enum_name;
             const char *variant_name;
-            ASTNode **arguments;      /* buf - for tuple variants */
+            ASTNode **args;           /* buf - for tuple variants */
             const char **field_names; /* buf - for struct variants */
             ASTNode **field_values;   /* buf - for struct variants */
         } enum_init;
 
-        // NODE_PACT_DECLARATION
+        // NODE_PACT_DECL
         struct {
             const char *name;
             ASTStructField *fields;   /* buf - required fields */
             ASTNode **methods;        /* buf - required + default methods */
             const char **super_pacts; /* buf - constraint alias pact names */
-        } pact_declaration;
+        } pact_decl;
 
         // NODE_RETURN
         struct {
             ASTNode *value; // may be NULL
-        } return_statement;
+        } return_stmt;
 
         // NODE_WHILE
         struct {
-            ASTNode *condition;
+            ASTNode *cond;
             ASTNode *body;
         } while_loop;
 
         // NODE_DEFER
         struct {
             ASTNode *body; // block body
-        } defer_statement;
+        } defer_stmt;
 
         // NODE_BREAK
         struct {
-            ASTNode *value; // may be NULL (break with value for loop expressions)
-        } break_statement;
+            ASTNode *value; // may be NULL (break with value for loop exprs)
+        } break_stmt;
     };
 };
 
 /** Allocate a zero-initialised ASTNode of the given @p kind from @p arena. */
-ASTNode *ast_new(Arena *arena, NodeKind kind, SourceLocation location);
+ASTNode *ast_new(Arena *arena, NodeKind kind, SourceLoc loc);
 
 /**
  * Recursively pretty-print @p node to stderr (indented by @p indent

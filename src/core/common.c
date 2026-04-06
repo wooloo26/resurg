@@ -42,41 +42,41 @@ void *arena_alloc(Arena *arena, size_t size) {
         arena->current->next = block;
         arena->current = block;
     }
-    void *pointer = arena->current->data + arena->current->used;
+    void *ptr = arena->current->data + arena->current->used;
     arena->current->used += size;
-    return pointer;
+    return ptr;
 }
 
 void *arena_alloc_zero(Arena *arena, size_t size) {
-    void *pointer = arena_alloc(arena, size);
-    memset(pointer, 0, size);
-    return pointer;
+    void *ptr = arena_alloc(arena, size);
+    memset(ptr, 0, size);
+    return ptr;
 }
 
 char *arena_strdup(Arena *arena, const char *source) {
-    size_t length = strlen(source);
-    char *duplicate = arena_alloc(arena, length + 1);
-    memcpy(duplicate, source, length + 1);
+    size_t len = strlen(source);
+    char *duplicate = arena_alloc(arena, len + 1);
+    memcpy(duplicate, source, len + 1);
     return duplicate;
 }
 
-char *arena_strndup(Arena *arena, const char *source, size_t length) {
-    char *duplicate = arena_alloc(arena, length + 1);
-    memcpy(duplicate, source, length);
-    duplicate[length] = '\0';
+char *arena_strndup(Arena *arena, const char *source, size_t len) {
+    char *duplicate = arena_alloc(arena, len + 1);
+    memcpy(duplicate, source, len);
+    duplicate[len] = '\0';
     return duplicate;
 }
 
-char *arena_sprintf(Arena *arena, const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
-    int32_t length = vsnprintf(NULL, 0, format, arguments);
-    va_end(arguments);
-    char *buffer = arena_alloc(arena, length + 1);
-    va_start(arguments, format);
-    vsnprintf(buffer, length + 1, format, arguments);
-    va_end(arguments);
-    return buffer;
+char *arena_sprintf(Arena *arena, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int32_t len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    char *buf = arena_alloc(arena, len + 1);
+    va_start(args, fmt);
+    vsnprintf(buf, len + 1, fmt, args);
+    va_end(args);
+    return buf;
 }
 
 void arena_destroy(Arena *arena) {
@@ -94,11 +94,11 @@ void arena_destroy(Arena *arena) {
 
 #define HASH_TABLE_INITIAL_CAPACITY 16
 
-/** Tombstone marker for deleted slots (invalid pointer, never dereferenced). */
+/** Tombstone marker for deleted slots (invalid ptr, never derefd). */
 static const char *const HASH_TABLE_TOMBSTONE = (const char *)(uintptr_t)1;
 
-/** FNV-1a hash for NUL-terminated strings. */
-static uint32_t hash_string(const char *key) {
+/** FNV-1a hash for NUL-terminated strs. */
+static uint32_t hash_str(const char *key) {
     uint32_t hash = 2166136261u;
     for (const char *p = key; *p != '\0'; p++) {
         hash ^= (uint8_t)*p;
@@ -125,11 +125,11 @@ static void hash_table__resize(HashTable *table, int32_t new_capacity) {
 
     for (int32_t i = 0; i < table->capacity; i++) {
         if (table->entries[i].key != NULL && table->entries[i].key != HASH_TABLE_TOMBSTONE) {
-            uint32_t index = hash_string(table->entries[i].key) & mask;
-            while (new_entries[index].key != NULL) {
-                index = (index + 1) & mask;
+            uint32_t idx = hash_str(table->entries[i].key) & mask;
+            while (new_entries[idx].key != NULL) {
+                idx = (idx + 1) & mask;
             }
-            new_entries[index] = table->entries[i];
+            new_entries[idx] = table->entries[i];
         }
     }
 
@@ -158,18 +158,18 @@ void hash_table_destroy(HashTable *table) {
 
 /**
  * Probe the table for @p key, skipping tombstones.
- * Returns a pointer to the matching entry, or NULL if not found.
+ * Returns a ptr to the matching entry, or NULL if not found.
  */
 static HashEntry *hash_table__find_entry(const HashTable *table, const char *key) {
     uint32_t mask = (uint32_t)(table->capacity - 1);
-    uint32_t index = hash_string(key) & mask;
+    uint32_t idx = hash_str(key) & mask;
 
-    while (table->entries[index].key != NULL) {
-        if (table->entries[index].key != HASH_TABLE_TOMBSTONE &&
-            strcmp(table->entries[index].key, key) == 0) {
-            return &table->entries[index];
+    while (table->entries[idx].key != NULL) {
+        if (table->entries[idx].key != HASH_TABLE_TOMBSTONE &&
+            strcmp(table->entries[idx].key, key) == 0) {
+            return &table->entries[idx];
         }
-        index = (index + 1) & mask;
+        idx = (idx + 1) & mask;
     }
     return NULL;
 }
@@ -190,14 +190,14 @@ void hash_table_insert(HashTable *table, const char *key, void *value) {
 
     // Insert into first available slot (empty or tombstone)
     uint32_t mask = (uint32_t)(table->capacity - 1);
-    uint32_t index = hash_string(key) & mask;
+    uint32_t idx = hash_str(key) & mask;
 
-    while (table->entries[index].key != NULL && table->entries[index].key != HASH_TABLE_TOMBSTONE) {
-        index = (index + 1) & mask;
+    while (table->entries[idx].key != NULL && table->entries[idx].key != HASH_TABLE_TOMBSTONE) {
+        idx = (idx + 1) & mask;
     }
 
-    table->entries[index].key = key;
-    table->entries[index].value = value;
+    table->entries[idx].key = key;
+    table->entries[idx].value = value;
     table->count++;
 }
 
@@ -224,89 +224,89 @@ bool hash_table_remove(HashTable *table, const char *key) {
 }
 
 /**
- * Grow a stretchy buffer so it can hold at least @p new_length elements of
- * @p element_size bytes each.  Returns the new data pointer (header hidden
+ * Grow a stretchy buf so it can hold at least @p new_len elems of
+ * @p elem_size bytes each.  Returns the new data ptr (header hidden
  * before it).
  */
-void *buffer__grow(const void *buffer, size_t new_length, size_t element_size) {
+void *buf__grow(const void *buf, size_t new_len, size_t elem_size) {
     static_assert(sizeof(size_t) >= sizeof(int32_t),
-                  "BUFFER_LENGTH assumes size_t is at least as wide as int32_t");
+                  "BUF_LEN assumes size_t is at least as wide as int32_t");
 
-    size_t new_capacity = BUFFER_CAPACITY(buffer) ? BUFFER_CAPACITY(buffer) * 2 : 16;
-    if (new_capacity < new_length) {
-        new_capacity = new_length;
+    size_t new_capacity = BUF_CAPACITY(buf) ? BUF_CAPACITY(buf) * 2 : 16;
+    if (new_capacity < new_len) {
+        new_capacity = new_len;
     }
     if (new_capacity > INT32_MAX) {
-        rsg_fatal("buffer capacity exceeds INT32_MAX");
+        rsg_fatal("buf capacity exceeds INT32_MAX");
     }
 
-    size_t new_size = sizeof(BufferHeader) + new_capacity * element_size;
-    BufferHeader *header;
-    if (buffer != NULL) {
-        header = rsg_realloc(BUFFER__HEADER(buffer), new_size);
+    size_t new_size = sizeof(BufHeader) + new_capacity * elem_size;
+    BufHeader *header;
+    if (buf != NULL) {
+        header = rsg_realloc(BUF__HEADER(buf), new_size);
     } else {
         header = rsg_malloc(new_size);
-        header->length = 0;
+        header->len = 0;
     }
     header->capacity = new_capacity;
-    return (char *)header + sizeof(BufferHeader);
+    return (char *)header + sizeof(BufHeader);
 }
 
-// Checked allocation wrappers - abort on OOM.
+// Checked alloc wrappers - abort on OOM.
 
 void *rsg_malloc(size_t size) {
-    void *pointer = malloc(size);
-    if (pointer == NULL) {
+    void *ptr = malloc(size);
+    if (ptr == NULL) {
         rsg_fatal("out of memory");
     }
-    return pointer;
+    return ptr;
 }
 
 void *rsg_calloc(size_t count, size_t size) {
-    void *pointer = calloc(count, size);
-    if (pointer == NULL) {
+    void *ptr = calloc(count, size);
+    if (ptr == NULL) {
         rsg_fatal("out of memory");
     }
-    return pointer;
+    return ptr;
 }
 
-void *rsg_realloc(void *pointer, size_t size) {
-    void *result = realloc(pointer, size);
+void *rsg_realloc(void *ptr, size_t size) {
+    void *result = realloc(ptr, size);
     if (result == NULL) {
         rsg_fatal("out of memory");
     }
     return result;
 }
 
-/** Emit "label: msg\n" to @p stream with a location prefix. */
-static void emit_located_diagnostic(SourceLocation location, const char *label, const char *format,
-                                    va_list arguments) {
-    fprintf(stderr, "%s:%d:%d: %s: ", location.file, location.line, location.column, label);
-    vfprintf(stderr, format, arguments);
+/** Emit "label: msg\n" to @p stream with a loc prefix. */
+static void emit_located_diagnostic(SourceLoc loc, const char *label, const char *fmt,
+                                    va_list args) {
+    fprintf(stderr, "%s:%d:%d: %s: ", loc.file, loc.line, loc.column, label);
+    vfprintf(stderr, fmt, args);
     fputc('\n', stderr);
 }
 
-void rsg_error(SourceLocation location, const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
-    emit_located_diagnostic(location, "error", format, arguments);
-    va_end(arguments);
+void rsg_err(SourceLoc loc, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    emit_located_diagnostic(loc, "err", fmt, args);
+    va_end(args);
 }
 
-void rsg_warn(SourceLocation location, const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
-    emit_located_diagnostic(location, "warning", format, arguments);
-    va_end(arguments);
+void rsg_warn(SourceLoc loc, const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    emit_located_diagnostic(loc, "warning", fmt, args);
+    va_end(args);
 }
 
-noreturn void rsg_fatal(const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
+noreturn void rsg_fatal(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
     fputs("fatal: ", stderr);
-    vfprintf(stderr, format, arguments);
+    vfprintf(stderr, fmt, args);
     fputc('\n', stderr);
-    va_end(arguments);
+    va_end(args);
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
 }

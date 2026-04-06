@@ -13,13 +13,13 @@ static bool is_alnum(char c) {
     return is_alpha(c) || is_digit(c);
 }
 
-Token make_token(const Lexer *lexer, TokenKind kind, const char *start, int32_t length,
-                 SourceLocation location) {
+Token make_token(const Lexer *lexer, TokenKind kind, const char *start, int32_t len,
+                 SourceLoc loc) {
     return (Token){
         .kind = kind,
-        .lexeme = arena_strndup(lexer->arena, start, length),
-        .length = length,
-        .location = location,
+        .lexeme = arena_strndup(lexer->arena, start, len),
+        .len = len,
+        .loc = loc,
     };
 }
 
@@ -30,8 +30,8 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOKEN_MODULE},     {"pub", TOKEN_PUBLIC},    {"fn", TOKEN_FUNCTION},
-    {"var", TOKEN_VARIABLE},      {"if", TOKEN_IF},         {"else", TOKEN_ELSE},
+    {"module", TOKEN_MODULE},     {"pub", TOKEN_PUB},       {"fn", TOKEN_FN},
+    {"var", TOKEN_VAR},           {"if", TOKEN_IF},         {"else", TOKEN_ELSE},
     {"loop", TOKEN_LOOP},         {"for", TOKEN_FOR},       {"break", TOKEN_BREAK},
     {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},     {"false", TOKEN_FALSE},
     {"type", TOKEN_TYPE},         {"struct", TOKEN_STRUCT}, {"mut", TOKEN_MUT},
@@ -42,15 +42,15 @@ static const Keyword KEYWORDS[] = {
     {"i128", TOKEN_I128},         {"u8", TOKEN_U8},         {"u16", TOKEN_U16},
     {"u32", TOKEN_U32},           {"u64", TOKEN_U64},       {"u128", TOKEN_U128},
     {"isize", TOKEN_ISIZE},       {"usize", TOKEN_USIZE},   {"f32", TOKEN_F32},
-    {"f64", TOKEN_F64},           {"char", TOKEN_CHAR},     {"str", TOKEN_STRING},
+    {"f64", TOKEN_F64},           {"char", TOKEN_CHAR},     {"str", TOKEN_STR},
     {"unit", TOKEN_UNIT},         {"never", TOKEN_NEVER},
 };
 
 static const int32_t KEYWORD_COUNT = (int32_t)(sizeof(KEYWORDS) / sizeof(KEYWORDS[0]));
 
 /**
- * Look up @p text (length @p len) in the keyword table.  Returns
- * TOKEN_IDENTIFIER if no keyword matches.
+ * Look up @p text (len @p len) in the keyword table.  Returns
+ * TOKEN_ID if no keyword matches.
  */
 static TokenKind lookup_keyword(const char *text, int32_t len) {
     for (int32_t i = 0; i < KEYWORD_COUNT; i++) {
@@ -58,17 +58,17 @@ static TokenKind lookup_keyword(const char *text, int32_t len) {
             return KEYWORDS[i].kind;
         }
     }
-    return TOKEN_IDENTIFIER;
+    return TOKEN_ID;
 }
 
 // Scanning routines - one per lexeme category.
 
 /**
- * Scan a decimal integer or floating-point literal.  Underscores are
+ * Scan a decimal integer or floating-point lit.  Underscores are
  * silently stripped before parsing the numeric value.
  */
-static Token scan_number(Lexer *lexer, SourceLocation location) {
-    const char *start = lexer->source + lexer->position - 1;
+static Token scan_number(Lexer *lexer, SourceLoc loc) {
+    const char *start = lexer->source + lexer->pos - 1;
     bool is_float = false;
 
     while (is_digit(peek(lexer)) || peek(lexer) == '_') {
@@ -94,32 +94,32 @@ static Token scan_number(Lexer *lexer, SourceLocation location) {
         }
     }
 
-    int32_t length = (int32_t)(lexer->source + lexer->position - start);
-    TokenKind number_kind = is_float ? TOKEN_FLOAT_LITERAL : TOKEN_INTEGER_LITERAL;
-    Token token = make_token(lexer, number_kind, start, length, location);
+    int32_t len = (int32_t)(lexer->source + lexer->pos - start);
+    TokenKind number_kind = is_float ? TOKEN_FLOAT_LIT : TOKEN_INTEGER_LIT;
+    Token token = make_token(lexer, number_kind, start, len, loc);
 
     // Strip underscores and parse value
-    char buffer[64];
-    int32_t buffer_index = 0;
-    for (int32_t i = 0; i < length && buffer_index < 63; i++) {
+    char buf[64];
+    int32_t buf_idx = 0;
+    for (int32_t i = 0; i < len && buf_idx < 63; i++) {
         if (start[i] != '_') {
-            buffer[buffer_index++] = start[i];
+            buf[buf_idx++] = start[i];
         }
     }
-    buffer[buffer_index] = '\0';
+    buf[buf_idx] = '\0';
 
     if (is_float) {
-        token.literal_value.float_value = strtod(buffer, NULL);
+        token.lit_value.float_value = strtod(buf, NULL);
     } else {
-        token.literal_value.integer_value = strtoull(buffer, NULL, 10);
+        token.lit_value.integer_value = strtoull(buf, NULL, 10);
     }
 
     return token;
 }
 
-// scan_char_literal and scan_string are in scan_string.c
+// scan_char_lit and scan_str are in scan_str.c
 
-/** Reserved keywords that cannot be used as identifiers. */
+/** Reserved keywords that cannot be used as ids. */
 static const char *const RESERVED_KEYWORDS[] = {
     "async", "await", "comptime", "macro", "spawn", "use", "where",
 };
@@ -127,7 +127,7 @@ static const char *const RESERVED_KEYWORDS[] = {
 static const int32_t RESERVED_KEYWORD_COUNT =
     (int32_t)(sizeof(RESERVED_KEYWORDS) / sizeof(RESERVED_KEYWORDS[0]));
 
-/** Return true if @p text (length @p len) is a reserved keyword. */
+/** Return true if @p text (len @p len) is a reserved keyword. */
 static bool is_reserved_keyword(const char *text, int32_t len) {
     for (int32_t i = 0; i < RESERVED_KEYWORD_COUNT; i++) {
         if ((int32_t)strlen(RESERVED_KEYWORDS[i]) == len &&
@@ -138,132 +138,132 @@ static bool is_reserved_keyword(const char *text, int32_t len) {
     return false;
 }
 
-static Token scan_ident(Lexer *lexer, SourceLocation location) {
-    const char *start = lexer->source + lexer->position - 1;
+static Token scan_ident(Lexer *lexer, SourceLoc loc) {
+    const char *start = lexer->source + lexer->pos - 1;
     while (is_alnum(peek(lexer))) {
         advance(lexer);
     }
 
-    int32_t length = (int32_t)(lexer->source + lexer->position - start);
-    TokenKind kind = lookup_keyword(start, length);
+    int32_t len = (int32_t)(lexer->source + lexer->pos - start);
+    TokenKind kind = lookup_keyword(start, len);
 
-    if (kind == TOKEN_IDENTIFIER && is_reserved_keyword(start, length)) {
-        rsg_error(location, "'%.*s' is a reserved keyword", length, start);
-        return make_token(lexer, TOKEN_ERROR, start, length, location);
+    if (kind == TOKEN_ID && is_reserved_keyword(start, len)) {
+        rsg_err(loc, "'%.*s' is a reserved keyword", len, start);
+        return make_token(lexer, TOKEN_ERR, start, len, loc);
     }
 
-    return make_token(lexer, kind, start, length, location);
+    return make_token(lexer, kind, start, len, loc);
 }
 
 /** Dispatch a comparison or logical operator token. */
-static Token scan_comparison_or_logical(Lexer *lexer, char c, SourceLocation location) {
+static Token scan_comparison_or_logical(Lexer *lexer, char c, SourceLoc loc) {
     switch (c) {
     case '=':
         if (match(lexer, '>')) {
-            return make_token(lexer, TOKEN_FAT_ARROW, "=>", 2, location);
+            return make_token(lexer, TOKEN_FAT_ARROW, "=>", 2, loc);
         }
-        return match(lexer, '=') ? make_token(lexer, TOKEN_EQUAL_EQUAL, "==", 2, location)
-                                 : make_token(lexer, TOKEN_EQUAL, "=", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_EQUAL_EQUAL, "==", 2, loc)
+                                 : make_token(lexer, TOKEN_EQUAL, "=", 1, loc);
     case '!':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_BANG_EQUAL, "!=", 2, location)
-                                 : make_token(lexer, TOKEN_BANG, "!", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_BANG_EQUAL, "!=", 2, loc)
+                                 : make_token(lexer, TOKEN_BANG, "!", 1, loc);
     case '<':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_LESS_EQUAL, "<=", 2, location)
-                                 : make_token(lexer, TOKEN_LESS, "<", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_LESS_EQUAL, "<=", 2, loc)
+                                 : make_token(lexer, TOKEN_LESS, "<", 1, loc);
     case '>':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_GREATER_EQUAL, ">=", 2, location)
-                                 : make_token(lexer, TOKEN_GREATER, ">", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_GREATER_EQUAL, ">=", 2, loc)
+                                 : make_token(lexer, TOKEN_GREATER, ">", 1, loc);
     case '&':
         if (match(lexer, '&')) {
-            return make_token(lexer, TOKEN_AMPERSAND_AMPERSAND, "&&", 2, location);
+            return make_token(lexer, TOKEN_AMPERSAND_AMPERSAND, "&&", 2, loc);
         }
-        return make_token(lexer, TOKEN_AMPERSAND, "&", 1, location);
+        return make_token(lexer, TOKEN_AMPERSAND, "&", 1, loc);
     case '|':
         if (match(lexer, '|')) {
-            return make_token(lexer, TOKEN_PIPE_PIPE, "||", 2, location);
+            return make_token(lexer, TOKEN_PIPE_PIPE, "||", 2, loc);
         }
-        return make_token(lexer, TOKEN_PIPE, "|", 1, location);
+        return make_token(lexer, TOKEN_PIPE, "|", 1, loc);
     default:
         break;
     }
-    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
+    return make_token(lexer, TOKEN_ERR, &lexer->source[lexer->pos - 1], 1, loc);
 }
 
 /** Dispatch an arithmetic operator token (with optional compound assignment). */
-static Token scan_arithmetic(Lexer *lexer, char c, SourceLocation location) {
+static Token scan_arithmetic(Lexer *lexer, char c, SourceLoc loc) {
     switch (c) {
     case '+':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_PLUS_EQUAL, "+=", 2, location)
-                                 : make_token(lexer, TOKEN_PLUS, "+", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_PLUS_EQUAL, "+=", 2, loc)
+                                 : make_token(lexer, TOKEN_PLUS, "+", 1, loc);
     case '-':
         if (match(lexer, '>')) {
-            return make_token(lexer, TOKEN_ARROW, "->", 2, location);
+            return make_token(lexer, TOKEN_ARROW, "->", 2, loc);
         }
-        return match(lexer, '=') ? make_token(lexer, TOKEN_MINUS_EQUAL, "-=", 2, location)
-                                 : make_token(lexer, TOKEN_MINUS, "-", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_MINUS_EQUAL, "-=", 2, loc)
+                                 : make_token(lexer, TOKEN_MINUS, "-", 1, loc);
     case '*':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_STAR_EQUAL, "*=", 2, location)
-                                 : make_token(lexer, TOKEN_STAR, "*", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_STAR_EQUAL, "*=", 2, loc)
+                                 : make_token(lexer, TOKEN_STAR, "*", 1, loc);
     case '/':
-        return match(lexer, '=') ? make_token(lexer, TOKEN_SLASH_EQUAL, "/=", 2, location)
-                                 : make_token(lexer, TOKEN_SLASH, "/", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_SLASH_EQUAL, "/=", 2, loc)
+                                 : make_token(lexer, TOKEN_SLASH, "/", 1, loc);
     case '%':
-        return make_token(lexer, TOKEN_PERCENT, "%", 1, location);
+        return make_token(lexer, TOKEN_PERCENT, "%", 1, loc);
     default:
         break;
     }
-    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
+    return make_token(lexer, TOKEN_ERR, &lexer->source[lexer->pos - 1], 1, loc);
 }
 
 /** Dispatch a single- or double-character punctuation / operator token. */
-static Token scan_punctuation(Lexer *lexer, char c, SourceLocation location) {
+static Token scan_punctuation(Lexer *lexer, char c, SourceLoc loc) {
     switch (c) {
     case ':':
         if (match(lexer, ':')) {
-            return make_token(lexer, TOKEN_COLON_COLON, "::", 2, location);
+            return make_token(lexer, TOKEN_COLON_COLON, "::", 2, loc);
         }
-        return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, location)
-                                 : make_token(lexer, TOKEN_COLON, ":", 1, location);
+        return match(lexer, '=') ? make_token(lexer, TOKEN_COLON_EQUAL, ":=", 2, loc)
+                                 : make_token(lexer, TOKEN_COLON, ":", 1, loc);
     case '.':
         if (match(lexer, '.')) {
-            return match(lexer, '=') ? make_token(lexer, TOKEN_DOT_DOT_EQUAL, "..=", 3, location)
-                                     : make_token(lexer, TOKEN_DOT_DOT, "..", 2, location);
+            return match(lexer, '=') ? make_token(lexer, TOKEN_DOT_DOT_EQUAL, "..=", 3, loc)
+                                     : make_token(lexer, TOKEN_DOT_DOT, "..", 2, loc);
         }
-        return make_token(lexer, TOKEN_DOT, ".", 1, location);
+        return make_token(lexer, TOKEN_DOT, ".", 1, loc);
     case '(':
-        return make_token(lexer, TOKEN_LEFT_PAREN, "(", 1, location);
+        return make_token(lexer, TOKEN_LEFT_PAREN, "(", 1, loc);
     case ')':
-        return make_token(lexer, TOKEN_RIGHT_PAREN, ")", 1, location);
+        return make_token(lexer, TOKEN_RIGHT_PAREN, ")", 1, loc);
     case '{':
-        return make_token(lexer, TOKEN_LEFT_BRACE, "{", 1, location);
+        return make_token(lexer, TOKEN_LEFT_BRACE, "{", 1, loc);
     case '}':
-        return make_token(lexer, TOKEN_RIGHT_BRACE, "}", 1, location);
+        return make_token(lexer, TOKEN_RIGHT_BRACE, "}", 1, loc);
     case '[':
-        return make_token(lexer, TOKEN_LEFT_BRACKET, "[", 1, location);
+        return make_token(lexer, TOKEN_LEFT_BRACKET, "[", 1, loc);
     case ']':
-        return make_token(lexer, TOKEN_RIGHT_BRACKET, "]", 1, location);
+        return make_token(lexer, TOKEN_RIGHT_BRACKET, "]", 1, loc);
     case ',':
-        return make_token(lexer, TOKEN_COMMA, ",", 1, location);
+        return make_token(lexer, TOKEN_COMMA, ",", 1, loc);
     case ';':
-        return make_token(lexer, TOKEN_SEMICOLON, ";", 1, location);
+        return make_token(lexer, TOKEN_SEMICOLON, ";", 1, loc);
     case '=':
     case '!':
     case '<':
     case '>':
     case '&':
     case '|':
-        return scan_comparison_or_logical(lexer, c, location);
+        return scan_comparison_or_logical(lexer, c, loc);
     case '+':
     case '-':
     case '*':
     case '/':
     case '%':
-        return scan_arithmetic(lexer, c, location);
+        return scan_arithmetic(lexer, c, loc);
     default:
         break;
     }
-    rsg_error(location, "unexpected character '%c'", c);
-    return make_token(lexer, TOKEN_ERROR, &lexer->source[lexer->position - 1], 1, location);
+    rsg_err(loc, "unexpected character '%c'", c);
+    return make_token(lexer, TOKEN_ERR, &lexer->source[lexer->pos - 1], 1, loc);
 }
 
 /**
@@ -278,14 +278,14 @@ Token scan_token(Lexer *lexer) {
             advance(lexer);
         }
 
-        // Newlines are significant - emit TOKEN_NEWLINE as a statement
+        // Newlines are significant - emit TOKEN_NEWLINE as a stmt
         // terminator.
         if (peek(lexer) == '\n') {
-            SourceLocation location = current_location(lexer);
+            SourceLoc loc = current_loc(lexer);
             advance(lexer); // consume '\n'
             lexer->line++;
             lexer->column = 1;
-            return make_token(lexer, TOKEN_NEWLINE, "\n", 1, location);
+            return make_token(lexer, TOKEN_NEWLINE, "\n", 1, loc);
         }
 
         // Line comments: skip until end of line.
@@ -299,61 +299,61 @@ Token scan_token(Lexer *lexer) {
         break;
     }
 
-    SourceLocation location = current_location(lexer);
+    SourceLoc loc = current_loc(lexer);
     char c = advance(lexer);
 
     if (c == '\0') {
-        return make_token(lexer, TOKEN_EOF, "", 0, location);
+        return make_token(lexer, TOKEN_EOF, "", 0, loc);
     }
     if (is_digit(c)) {
-        return scan_number(lexer, location);
+        return scan_number(lexer, loc);
     }
     if (is_alpha(c)) {
-        return scan_ident(lexer, location);
+        return scan_ident(lexer, loc);
     }
     if (c == '"') {
-        return scan_string(lexer, location);
+        return scan_str(lexer, loc);
     }
     if (c == '\'') {
-        return scan_char_literal(lexer, location);
+        return scan_char_lit(lexer, loc);
     }
-    return scan_punctuation(lexer, c, location);
+    return scan_punctuation(lexer, c, loc);
 }
 
 Lexer *lexer_create(const char *source, const char *file, Arena *arena) {
     Lexer *lexer = rsg_malloc(sizeof(*lexer));
     lexer->source = source;
     lexer->file = file;
-    lexer->position = 0;
-    lexer->length = (int32_t)strlen(source);
+    lexer->pos = 0;
+    lexer->len = (int32_t)strlen(source);
     lexer->line = 1;
     lexer->column = 1;
     lexer->arena = arena;
     lexer->pending = NULL;
-    lexer->pending_position = 0;
+    lexer->pending_pos = 0;
     lexer->last_kind = TOKEN_EOF;
     return lexer;
 }
 
 void lexer_destroy(Lexer *lexer) {
     if (lexer != NULL) {
-        BUFFER_FREE(lexer->pending);
+        BUF_FREE(lexer->pending);
         free(lexer);
     }
 }
 
 Token lexer_next(Lexer *lexer) {
-    // Return pending tokens first (from string interpolation)
-    if (lexer->pending != NULL && lexer->pending_position < BUFFER_LENGTH(lexer->pending)) {
-        Token token = lexer->pending[lexer->pending_position++];
+    // Return pending tokens first (from str interpolation)
+    if (lexer->pending != NULL && lexer->pending_pos < BUF_LEN(lexer->pending)) {
+        Token token = lexer->pending[lexer->pending_pos++];
         lexer->last_kind = token.kind;
         return token;
     }
-    // Free pending buffer when exhausted
+    // Free pending buf when exhausted
     if (lexer->pending != NULL) {
-        BUFFER_FREE(lexer->pending);
+        BUF_FREE(lexer->pending);
         lexer->pending = NULL;
-        lexer->pending_position = 0;
+        lexer->pending_pos = 0;
     }
     Token token = scan_token(lexer);
     lexer->last_kind = token.kind;
@@ -364,7 +364,7 @@ Token *lexer_scan_all(Lexer *lexer) {
     Token *tokens = NULL;
     for (;;) {
         Token token = lexer_next(lexer);
-        BUFFER_PUSH(tokens, token);
+        BUF_PUSH(tokens, token);
         if (token.kind == TOKEN_EOF) {
             break;
         }

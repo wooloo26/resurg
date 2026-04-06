@@ -2,66 +2,66 @@
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
-const Type *sema_lookup_type_alias(const SemanticAnalyzer *analyzer, const char *name) {
+const Type *sema_lookup_type_alias(const Sema *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->type_alias_table, name);
 }
 
-FunctionSignature *sema_lookup_function(const SemanticAnalyzer *analyzer, const char *name) {
-    return hash_table_lookup(&analyzer->function_table, name);
+FnSignature *sema_lookup_fn(const Sema *analyzer, const char *name) {
+    return hash_table_lookup(&analyzer->fn_table, name);
 }
 
-StructDefinition *sema_lookup_struct(const SemanticAnalyzer *analyzer, const char *name) {
+StructDef *sema_lookup_struct(const Sema *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->struct_table, name);
 }
 
-EnumDefinition *sema_lookup_enum(const SemanticAnalyzer *analyzer, const char *name) {
+EnumDef *sema_lookup_enum(const Sema *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->enum_table, name);
 }
 
-PactDefinition *sema_lookup_pact(const SemanticAnalyzer *analyzer, const char *name) {
+PactDef *sema_lookup_pact(const Sema *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->pact_table, name);
 }
 
 // ── AST type resolution ────────────────────────────────────────────────
 
-const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type) {
+const Type *resolve_ast_type(Sema *analyzer, const ASTType *ast_type) {
     if (ast_type == NULL || ast_type->kind == AST_TYPE_INFERRED) {
         return NULL;
     }
     if (ast_type->kind == AST_TYPE_ARRAY) {
-        const Type *element = resolve_ast_type(analyzer, ast_type->array_element);
-        if (element == NULL) {
-            SEMA_ERROR(analyzer, ast_type->location, "array element type required");
-            return &TYPE_ERROR_INSTANCE;
+        const Type *elem = resolve_ast_type(analyzer, ast_type->array_elem);
+        if (elem == NULL) {
+            SEMA_ERR(analyzer, ast_type->loc, "array elem type required");
+            return &TYPE_ERR_INST;
         }
-        return type_create_array(analyzer->arena, element, ast_type->array_size);
+        return type_create_array(analyzer->arena, elem, ast_type->array_size);
     }
     if (ast_type->kind == AST_TYPE_SLICE) {
-        const Type *element = resolve_ast_type(analyzer, ast_type->slice_element);
-        if (element == NULL) {
-            SEMA_ERROR(analyzer, ast_type->location, "slice element type required");
-            return &TYPE_ERROR_INSTANCE;
+        const Type *elem = resolve_ast_type(analyzer, ast_type->slice_elem);
+        if (elem == NULL) {
+            SEMA_ERR(analyzer, ast_type->loc, "slice elem type required");
+            return &TYPE_ERR_INST;
         }
-        return type_create_slice(analyzer->arena, element);
+        return type_create_slice(analyzer->arena, elem);
     }
     if (ast_type->kind == AST_TYPE_TUPLE) {
-        const Type **elements = NULL;
-        for (int32_t i = 0; i < BUFFER_LENGTH(ast_type->tuple_elements); i++) {
-            const Type *element = resolve_ast_type(analyzer, ast_type->tuple_elements[i]);
-            if (element == NULL) {
-                element = &TYPE_ERROR_INSTANCE;
+        const Type **elems = NULL;
+        for (int32_t i = 0; i < BUF_LEN(ast_type->tuple_elems); i++) {
+            const Type *elem = resolve_ast_type(analyzer, ast_type->tuple_elems[i]);
+            if (elem == NULL) {
+                elem = &TYPE_ERR_INST;
             }
-            BUFFER_PUSH(elements, element);
+            BUF_PUSH(elems, elem);
         }
-        return type_create_tuple(analyzer->arena, elements, BUFFER_LENGTH(elements));
+        return type_create_tuple(analyzer->arena, elems, BUF_LEN(elems));
     }
-    if (ast_type->kind == AST_TYPE_POINTER) {
-        const Type *pointee = resolve_ast_type(analyzer, ast_type->pointer_element);
+    if (ast_type->kind == AST_TYPE_PTR) {
+        const Type *pointee = resolve_ast_type(analyzer, ast_type->ptr_elem);
         if (pointee == NULL) {
-            SEMA_ERROR(analyzer, ast_type->location, "pointer element type required");
-            return &TYPE_ERROR_INSTANCE;
+            SEMA_ERR(analyzer, ast_type->loc, "ptr elem type required");
+            return &TYPE_ERR_INST;
         }
-        return type_create_pointer(analyzer->arena, pointee, false);
+        return type_create_ptr(analyzer->arena, pointee, false);
     }
     // AST_TYPE_NAME
     const Type *type = type_from_name(ast_type->name);
@@ -73,79 +73,79 @@ const Type *resolve_ast_type(SemanticAnalyzer *analyzer, const ASTType *ast_type
     if (alias != NULL) {
         return alias;
     }
-    SEMA_ERROR(analyzer, ast_type->location, "unknown type '%s'", ast_type->name);
-    return &TYPE_ERROR_INSTANCE;
+    SEMA_ERR(analyzer, ast_type->loc, "unknown type '%s'", ast_type->name);
+    return &TYPE_ERR_INST;
 }
 
-// ── Literal ↔ type mapping ─────────────────────────────────────────────
+// ── Lit ↔ type mapping ─────────────────────────────────────────────
 
 /**
- * LiteralKind and TypeKind share the same ordering for the first 18
- * primitive entries.  Validate at compile time and use direct indexing.
+ * LitKind and TypeKind share the same ordering for the first 18
+ * primitive entries.  Validate at compile time and use direct idxing.
  */
-static_assert((int)LITERAL_BOOL == (int)TYPE_BOOL, "LiteralKind/TypeKind mismatch: BOOL");
-static_assert((int)LITERAL_I32 == (int)TYPE_I32, "LiteralKind/TypeKind mismatch: I32");
-static_assert((int)LITERAL_F64 == (int)TYPE_F64, "LiteralKind/TypeKind mismatch: F64");
-static_assert((int)LITERAL_STRING == (int)TYPE_STRING, "LiteralKind/TypeKind mismatch: STRING");
-static_assert((int)LITERAL_UNIT == (int)TYPE_UNIT, "LiteralKind/TypeKind mismatch: UNIT");
+static_assert((int)LIT_BOOL == (int)TYPE_BOOL, "LitKind/TypeKind mismatch: BOOL");
+static_assert((int)LIT_I32 == (int)TYPE_I32, "LitKind/TypeKind mismatch: I32");
+static_assert((int)LIT_F64 == (int)TYPE_F64, "LitKind/TypeKind mismatch: F64");
+static_assert((int)LIT_STR == (int)TYPE_STR, "LitKind/TypeKind mismatch: STR");
+static_assert((int)LIT_UNIT == (int)TYPE_UNIT, "LitKind/TypeKind mismatch: UNIT");
 
-const Type *literal_kind_to_type(LiteralKind kind) {
+const Type *lit_kind_to_type(LitKind kind) {
     return type_singleton((TypeKind)kind);
 }
 
-LiteralKind type_to_literal_kind(TypeKind kind) {
+LitKind type_to_lit_kind(TypeKind kind) {
     // Safe cast: validated by static_asserts above.
-    return (LiteralKind)kind;
+    return (LitKind)kind;
 }
 
-// ── Literal promotion ──────────────────────────────────────────────────
+// ── Lit promotion ──────────────────────────────────────────────────
 
-const Type *promote_literal(ASTNode *literal, const Type *target) {
-    if (literal == NULL || target == NULL) {
+const Type *promote_lit(ASTNode *lit, const Type *target) {
+    if (lit == NULL || target == NULL) {
         return NULL;
     }
 
-    // Handle negated literal: -(literal)
-    if (literal->kind == NODE_UNARY && literal->unary.op == TOKEN_MINUS &&
-        literal->unary.operand->kind == NODE_LITERAL) {
-        const Type *result = promote_literal(literal->unary.operand, target);
+    // Handle negated lit: -(lit)
+    if (lit->kind == NODE_UNARY && lit->unary.op == TOKEN_MINUS &&
+        lit->unary.operand->kind == NODE_LIT) {
+        const Type *result = promote_lit(lit->unary.operand, target);
         if (result != NULL) {
-            literal->type = result;
+            lit->type = result;
             return result;
         }
         return NULL;
     }
 
-    if (literal->kind != NODE_LITERAL) {
+    if (lit->kind != NODE_LIT) {
         return NULL;
     }
 
-    // Promote integer literal (i32 default) to any integer type
-    if (literal->literal.kind == LITERAL_I32 && type_is_integer(target)) {
-        literal->literal.kind = type_to_literal_kind(target->kind);
-        literal->type = target;
+    // Promote integer lit (i32 default) to any integer type
+    if (lit->lit.kind == LIT_I32 && type_is_integer(target)) {
+        lit->lit.kind = type_to_lit_kind(target->kind);
+        lit->type = target;
         return target;
     }
 
-    // Promote integer literal to float type
-    if (literal->literal.kind == LITERAL_I32 && type_is_float(target)) {
-        literal->literal.kind = (target->kind == TYPE_F32) ? LITERAL_F32 : LITERAL_F64;
-        literal->literal.float64_value = (double)literal->literal.integer_value;
-        literal->type = target;
+    // Promote integer lit to float type
+    if (lit->lit.kind == LIT_I32 && type_is_float(target)) {
+        lit->lit.kind = (target->kind == TYPE_F32) ? LIT_F32 : LIT_F64;
+        lit->lit.float64_value = (double)lit->lit.integer_value;
+        lit->type = target;
         return target;
     }
 
-    // Promote u32 literal to larger unsigned types
-    if (literal->literal.kind == LITERAL_U32 && type_is_unsigned_integer(target)) {
-        literal->literal.kind = type_to_literal_kind(target->kind);
-        literal->type = target;
+    // Promote u32 lit to larger unsigned types
+    if (lit->lit.kind == LIT_U32 && type_is_unsigned_integer(target)) {
+        lit->lit.kind = type_to_lit_kind(target->kind);
+        lit->type = target;
         return target;
     }
 
-    // Promote f64 literal to f32
-    if (literal->literal.kind == LITERAL_F64 && target->kind == TYPE_F32) {
-        literal->literal.kind = LITERAL_F32;
-        literal->type = target;
+    // Promote f64 lit to f32
+    if (lit->lit.kind == LIT_F64 && target->kind == TYPE_F32) {
+        lit->lit.kind = LIT_F32;
+        lit->type = target;
         return target;
     }
 

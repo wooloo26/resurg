@@ -22,13 +22,13 @@ typedef struct {
     bool dump_tt;            // --dump-tt: pretty-print Typed Tree and exit.
 } CompilerOptions;
 
-/** Create a compiler instance. */
+/** Create a compiler inst. */
 Compiler *compiler_create(void);
 /** Destroy the compiler and free all resources. */
 void compiler_destroy(Compiler *compiler);
 /**
  * Run the full compilation pipeline: lex → parse → sema → lower → codegen.
- * Returns 0 on success, 1 on compilation errors.
+ * Returns 0 on success, 1 on compilation errs.
  * Debug flags in @p options may short-circuit after an earlier stage.
  */
 int compiler_run(Compiler *compiler, const CompilerOptions *options);

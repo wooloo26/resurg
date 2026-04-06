@@ -38,6 +38,7 @@
 | `buf`       | Buffer                         |
 | `sym`       | Symbol                         |
 | `ref`       | Reference                      |
+| `var`       | Variable                       |
 | `loc`       | Location                       |
 | `idx`       | Index                          |
 | `pos`       | Position                       |
@@ -50,9 +51,9 @@
 | `ptr`       | Pointer                        |
 | `msg`       | Message                        |
 | `fmt`       | Format                         |
-| `sb`        | String Builder                 |
 | `recv`      | Receiver                       |
 | `len`       | Length                         |
+| `def`       | Definition                     |
 | `deref`     | Dereference                    |
 | `err`       | Error                          |
 | `inst`      | Instance                       |

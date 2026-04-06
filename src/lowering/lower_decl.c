@@ -2,88 +2,84 @@
 
 // ── Declaration lowering helpers ──────────────────────────────────────
 
-/** Lower AST parameters into TT parameter nodes and register them in scope. */
-static void lower_parameter_list(Lowering *low, ASTNode *const *param_asts, int32_t count,
-                                 TtNode ***out_params) {
+/** Lower AST params into TT param nodes and register them in scope. */
+static void lower_param_list(Lowering *low, ASTNode *const *param_asts, int32_t count,
+                             TTNode ***out_params) {
     for (int32_t i = 0; i < count; i++) {
         const ASTNode *param_ast = param_asts[i];
-        const char *param_name = param_ast->parameter.name;
-        const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERROR_INSTANCE;
+        const char *param_name = param_ast->param.name;
+        const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERR_INST;
 
-        TtSymbolSpec param_spec = {TT_SYMBOL_PARAMETER, param_name, param_type, false,
-                                   param_ast->location};
-        TtSymbol *param_sym = lowering_make_symbol(low, &param_spec);
+        TtSymSpec param_spec = {TT_SYM_PARAM, param_name, param_type, false, param_ast->loc};
+        TTSym *param_sym = lowering_make_sym(low, &param_spec);
         lowering_scope_add(low, param_name, param_sym);
 
-        TtNode *param_node = tt_new(low->tt_arena, TT_PARAMETER, param_type, param_ast->location);
-        param_node->parameter.symbol = param_sym;
-        param_node->parameter.name = param_name;
-        param_node->parameter.param_type = param_type;
-        BUFFER_PUSH(*out_params, param_node);
+        TTNode *param_node = tt_new(low->tt_arena, TT_PARAM, param_type, param_ast->loc);
+        param_node->param.sym = param_sym;
+        param_node->param.name = param_name;
+        param_node->param.param_type = param_type;
+        BUF_PUSH(*out_params, param_node);
     }
 }
 
-/** Lower a function body (block or expression-bodied). */
-static TtNode *lower_function_body(Lowering *low, const ASTNode *body_ast) {
+/** Lower a fn body (block or expr-bodied). */
+static TTNode *lower_fn_body(Lowering *low, const ASTNode *body_ast) {
     if (body_ast == NULL) {
         return NULL;
     }
     if (body_ast->kind == NODE_BLOCK) {
         return lower_block(low, body_ast);
     }
-    // Expression-bodied function: `fn f() = expr` → wrap in a block with result
-    TtNode *result = lower_expression(low, body_ast);
-    TtNode *body =
-        tt_new(low->tt_arena, TT_BLOCK,
-               body_ast->type != NULL ? body_ast->type : &TYPE_UNIT_INSTANCE, body_ast->location);
+    // Expression-bodied fn: `fn f() = expr` → wrap in a block with result
+    TTNode *result = lower_expr(low, body_ast);
+    TTNode *body = tt_new(low->tt_arena, TT_BLOCK,
+                          body_ast->type != NULL ? body_ast->type : &TYPE_UNIT_INST, body_ast->loc);
     body->block.result = result;
     return body;
 }
 
 // ── Declaration lowering ──────────────────────────────────────────────
 
-TtNode *lower_function_declaration(Lowering *low, const ASTNode *ast) {
-    const char *name = ast->function_declaration.name;
-    bool is_public = ast->function_declaration.is_public;
-    const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INSTANCE;
+TTNode *lower_fn_decl(Lowering *low, const ASTNode *ast) {
+    const char *name = ast->fn_decl.name;
+    bool is_pub = ast->fn_decl.is_pub;
+    const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
 
-    TtSymbolSpec func_spec = {TT_SYMBOL_FUNCTION, name, return_type, false, ast->location};
-    TtSymbol *func_sym = lowering_make_symbol(low, &func_spec);
+    TtSymSpec func_spec = {TT_SYM_FN, name, return_type, false, ast->loc};
+    TTSym *func_sym = lowering_make_sym(low, &func_spec);
     func_sym->mangled_name = arena_sprintf(low->tt_arena, "rsgu_%s", name);
     lowering_scope_add(low, name, func_sym);
 
     lowering_scope_enter(low);
 
-    TtNode **params = NULL;
-    lower_parameter_list(low, ast->function_declaration.parameters,
-                         BUFFER_LENGTH(ast->function_declaration.parameters), &params);
+    TTNode **params = NULL;
+    lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);
 
-    TtNode *body = lower_function_body(low, ast->function_declaration.body);
+    TTNode *body = lower_fn_body(low, ast->fn_decl.body);
 
     lowering_scope_leave(low);
 
-    TtNode *node =
-        tt_new(low->tt_arena, TT_FUNCTION_DECLARATION, &TYPE_UNIT_INSTANCE, ast->location);
-    node->function_declaration.name = name;
-    node->function_declaration.is_public = is_public;
-    node->function_declaration.symbol = func_sym;
-    node->function_declaration.params = params;
-    node->function_declaration.return_type = return_type;
-    node->function_declaration.body = body;
+    TTNode *node = tt_new(low->tt_arena, TT_FN_DECL, &TYPE_UNIT_INST, ast->loc);
+    node->fn_decl.name = name;
+    node->fn_decl.is_pub = is_pub;
+    node->fn_decl.sym = func_sym;
+    node->fn_decl.params = params;
+    node->fn_decl.return_type = return_type;
+    node->fn_decl.body = body;
     return node;
 }
 
-TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *struct_name,
-                                 const Type *struct_type) {
-    const char *method_name = ast->function_declaration.name;
-    const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INSTANCE;
+TTNode *lower_method_decl(Lowering *low, const ASTNode *ast, const char *struct_name,
+                          const Type *struct_type) {
+    const char *method_name = ast->fn_decl.name;
+    const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
     const char *key = arena_sprintf(low->tt_arena, "%s.%s", struct_name, method_name);
 
-    // Look up pre-registered symbol
-    TtSymbol *func_sym = lowering_scope_find(low, key);
+    // Look up pre-registered sym
+    TTSym *func_sym = lowering_scope_find(low, key);
     if (func_sym == NULL) {
-        TtSymbolSpec method_spec = {TT_SYMBOL_FUNCTION, key, return_type, false, ast->location};
-        func_sym = lowering_make_symbol(low, &method_spec);
+        TtSymSpec method_spec = {TT_SYM_FN, key, return_type, false, ast->loc};
+        func_sym = lowering_make_sym(low, &method_spec);
         func_sym->mangled_name =
             arena_sprintf(low->tt_arena, "rsgu_%s_%s", struct_name, method_name);
         lowering_scope_add(low, key, func_sym);
@@ -91,58 +87,55 @@ TtNode *lower_method_declaration(Lowering *low, const ASTNode *ast, const char *
 
     lowering_scope_enter(low);
 
-    // Lower receiver parameter
-    TtNode **params = NULL;
-    const char *receiver_name = ast->function_declaration.receiver_name;
-    bool is_mut_receiver = ast->function_declaration.is_mut_receiver;
-    bool is_pointer_receiver = ast->function_declaration.is_pointer_receiver;
+    // Lower recv param
+    TTNode **params = NULL;
+    const char *recv_name = ast->fn_decl.recv_name;
+    bool is_mut_recv = ast->fn_decl.is_mut_recv;
+    bool is_ptr_recv = ast->fn_decl.is_ptr_recv;
 
-    TtSymbolSpec recv_spec = {TT_SYMBOL_PARAMETER, receiver_name, struct_type, false,
-                              ast->location};
-    TtSymbol *recv_sym = lowering_make_symbol(low, &recv_spec);
-    recv_sym->is_pointer_receiver = is_pointer_receiver;
-    lowering_scope_add(low, receiver_name, recv_sym);
+    TtSymSpec recv_spec = {TT_SYM_PARAM, recv_name, struct_type, false, ast->loc};
+    TTSym *recv_sym = lowering_make_sym(low, &recv_spec);
+    recv_sym->is_ptr_recv = is_ptr_recv;
+    lowering_scope_add(low, recv_name, recv_sym);
 
-    // Store is_pointer_receiver on the method symbol for call-site lookup
-    func_sym->is_pointer_receiver = is_pointer_receiver;
+    // Store is_ptr_recv on the method sym for call-site lookup
+    func_sym->is_ptr_recv = is_ptr_recv;
 
-    TtNode *recv_param = tt_new(low->tt_arena, TT_PARAMETER, struct_type, ast->location);
-    recv_param->parameter.symbol = recv_sym;
-    recv_param->parameter.name = receiver_name;
-    recv_param->parameter.param_type = struct_type;
-    recv_param->parameter.is_receiver = true;
-    recv_param->parameter.is_mut_receiver = is_mut_receiver;
-    recv_param->parameter.is_pointer_receiver = is_pointer_receiver;
-    BUFFER_PUSH(params, recv_param);
+    TTNode *recv_param = tt_new(low->tt_arena, TT_PARAM, struct_type, ast->loc);
+    recv_param->param.sym = recv_sym;
+    recv_param->param.name = recv_name;
+    recv_param->param.param_type = struct_type;
+    recv_param->param.is_recv = true;
+    recv_param->param.is_mut_recv = is_mut_recv;
+    recv_param->param.is_ptr_recv = is_ptr_recv;
+    BUF_PUSH(params, recv_param);
 
-    // Set current receiver for via_pointer detection
-    TtSymbol *saved_receiver = low->current_receiver;
-    const char *saved_name = low->current_receiver_name;
-    bool saved_is_pointer = low->current_is_pointer_receiver;
-    low->current_receiver = recv_sym;
-    low->current_receiver_name = receiver_name;
-    low->current_is_pointer_receiver = is_pointer_receiver;
+    // Set current recv for via_ptr detection
+    TTSym *saved_recv = low->current_recv;
+    const char *saved_name = low->current_recv_name;
+    bool saved_is_ptr = low->current_is_ptr_recv;
+    low->current_recv = recv_sym;
+    low->current_recv_name = recv_name;
+    low->current_is_ptr_recv = is_ptr_recv;
 
-    // Lower other parameters
-    lower_parameter_list(low, ast->function_declaration.parameters,
-                         BUFFER_LENGTH(ast->function_declaration.parameters), &params);
+    // Lower other params
+    lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);
 
-    TtNode *body = lower_function_body(low, ast->function_declaration.body);
+    TTNode *body = lower_fn_body(low, ast->fn_decl.body);
 
-    // Restore receiver context
-    low->current_receiver = saved_receiver;
-    low->current_receiver_name = saved_name;
-    low->current_is_pointer_receiver = saved_is_pointer;
+    // Restore recv ctx
+    low->current_recv = saved_recv;
+    low->current_recv_name = saved_name;
+    low->current_is_ptr_recv = saved_is_ptr;
 
     lowering_scope_leave(low);
 
-    TtNode *node =
-        tt_new(low->tt_arena, TT_FUNCTION_DECLARATION, &TYPE_UNIT_INSTANCE, ast->location);
-    node->function_declaration.name = method_name;
-    node->function_declaration.is_public = false;
-    node->function_declaration.symbol = func_sym;
-    node->function_declaration.params = params;
-    node->function_declaration.return_type = return_type;
-    node->function_declaration.body = body;
+    TTNode *node = tt_new(low->tt_arena, TT_FN_DECL, &TYPE_UNIT_INST, ast->loc);
+    node->fn_decl.name = method_name;
+    node->fn_decl.is_pub = false;
+    node->fn_decl.sym = func_sym;
+    node->fn_decl.params = params;
+    node->fn_decl.return_type = return_type;
+    node->fn_decl.body = body;
     return node;
 }

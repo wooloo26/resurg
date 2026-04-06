@@ -10,22 +10,22 @@
 
 /** Every lexeme the lexer can produce. */
 typedef enum {
-    // Literals
-    TOKEN_INTEGER_LITERAL, // 42, 1_000
-    TOKEN_FLOAT_LITERAL,   // 3.14, 2.5e10
-    TOKEN_STRING_LITERAL,  // "hello"
-    TOKEN_CHAR_LITERAL,    // 'A', '\n'
-    TOKEN_TRUE,            // true
-    TOKEN_FALSE,           // false
+    // Lits
+    TOKEN_INTEGER_LIT, // 42, 1_000
+    TOKEN_FLOAT_LIT,   // 3.14, 2.5e10
+    TOKEN_STR_LIT,     // "hello"
+    TOKEN_CHAR_LIT,    // 'A', '\n'
+    TOKEN_TRUE,        // true
+    TOKEN_FALSE,       // false
 
     // Identifiers
-    TOKEN_IDENTIFIER, // foo, bar
+    TOKEN_ID, // foo, bar
 
     // Keywords
     TOKEN_MODULE,   // module
-    TOKEN_PUBLIC,   // pub
-    TOKEN_FUNCTION, // fn
-    TOKEN_VARIABLE, // var
+    TOKEN_PUB,      // pub
+    TOKEN_FN,       // fn
+    TOKEN_VAR,      // var
     TOKEN_IF,       // if
     TOKEN_ELSE,     // else
     TOKEN_LOOP,     // loop
@@ -44,25 +44,25 @@ typedef enum {
     TOKEN_DEFER,    // defer
 
     // Type keywords
-    TOKEN_BOOL,   // bool
-    TOKEN_I8,     // i8
-    TOKEN_I16,    // i16
-    TOKEN_I32,    // i32
-    TOKEN_I64,    // i64
-    TOKEN_I128,   // i128
-    TOKEN_U8,     // u8
-    TOKEN_U16,    // u16
-    TOKEN_U32,    // u32
-    TOKEN_U64,    // u64
-    TOKEN_U128,   // u128
-    TOKEN_ISIZE,  // isize
-    TOKEN_USIZE,  // usize
-    TOKEN_F32,    // f32
-    TOKEN_F64,    // f64
-    TOKEN_CHAR,   // char
-    TOKEN_STRING, // str
-    TOKEN_UNIT,   // unit
-    TOKEN_NEVER,  // never
+    TOKEN_BOOL,  // bool
+    TOKEN_I8,    // i8
+    TOKEN_I16,   // i16
+    TOKEN_I32,   // i32
+    TOKEN_I64,   // i64
+    TOKEN_I128,  // i128
+    TOKEN_U8,    // u8
+    TOKEN_U16,   // u16
+    TOKEN_U32,   // u32
+    TOKEN_U64,   // u64
+    TOKEN_U128,  // u128
+    TOKEN_ISIZE, // isize
+    TOKEN_USIZE, // usize
+    TOKEN_F32,   // f32
+    TOKEN_F64,   // f64
+    TOKEN_CHAR,  // char
+    TOKEN_STR,   // str
+    TOKEN_UNIT,  // unit
+    TOKEN_NEVER, // never
 
     // Operators - arithmetic
     TOKEN_PLUS,    // +
@@ -111,37 +111,37 @@ typedef enum {
     TOKEN_ARROW,         // ->
     TOKEN_SEMICOLON,     // ; (optional, for future use)
 
-    // String interpolation (inside strings)
+    // Str interpolation (inside strs)
     TOKEN_INTERPOLATION_START, // start of interpolation segment
     TOKEN_INTERPOLATION_END,   // end of interpolation segment
 
     // Special
-    TOKEN_NEWLINE, // significant newline (statement terminator)
+    TOKEN_NEWLINE, // significant newline (stmt terminator)
     TOKEN_EOF,     // end of file
-    TOKEN_ERROR,   // lexer error
+    TOKEN_ERR,     // lexer err
 } TokenKind;
 
 /**
- * A single lexeme with its kind, source text, location, and optional
- * parsed literal value.
+ * A single lexeme with its kind, source text, loc, and optional
+ * parsed lit value.
  */
 typedef struct {
     TokenKind kind;
-    const char *lexeme; // points into arena-duped source or interned string
-    int32_t length;
-    SourceLocation location;
+    const char *lexeme; // points into arena-duped source or interned str
+    int32_t len;
+    SourceLoc loc;
 
-    /** Parsed literal payload (valid only for literal token kinds). */
+    /** Parsed lit payload (valid only for lit token kinds). */
     union {
         uint64_t integer_value;
         double float_value;
-        char *string_value;  // unescaped, arena-allocated
-        uint32_t char_value; // Unicode scalar value (for TOKEN_CHAR_LITERAL)
-    } literal_value;
+        char *str_value;     // unescaped, arena-allocated
+        uint32_t char_value; // Unicode scalar value (for TOKEN_CHAR_LIT)
+    } lit_value;
 } Token;
 
-/** Return a human-readable name for @p kind (e.g. "IDENTIFIER", "+"). */
-const char *token_kind_string(TokenKind kind);
+/** Return a human-readable name for @p kind (e.g. "ID", "+"). */
+const char *token_kind_str(TokenKind kind);
 
 /** Return true if @p kind is a type keyword (bool, i8, ..., str, unit). */
 bool token_is_type_keyword(TokenKind kind);

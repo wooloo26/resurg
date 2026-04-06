@@ -6,7 +6,7 @@
 /**
  * @file types.h
  * @brief Resolved types produced by semantic analysis.  Primitive types use
- * singleton instances; compound types (arrays, tuples) are arena-allocated.
+ * singleton insts; compound types (arrays, tuples) are arena-allocated.
  */
 typedef enum {
     TYPE_BOOL,
@@ -25,16 +25,16 @@ typedef enum {
     TYPE_F32,
     TYPE_F64,
     TYPE_CHAR,
-    TYPE_STRING,
+    TYPE_STR,
     TYPE_UNIT,
-    TYPE_NEVER,   // bottom type (never completes)
-    TYPE_ARRAY,   // [N]T
-    TYPE_SLICE,   // []T
-    TYPE_TUPLE,   // (A, B, ...)
-    TYPE_STRUCT,  // struct { fields }
-    TYPE_POINTER, // *T
-    TYPE_ENUM,    // enum { variants }
-    TYPE_ERROR,   // sentinel for continued checking after type errors
+    TYPE_NEVER,  // bottom type (never completes)
+    TYPE_ARRAY,  // [N]T
+    TYPE_SLICE,  // []T
+    TYPE_TUPLE,  // (A, B, ...)
+    TYPE_STRUCT, // struct { fields }
+    TYPE_PTR,    // *T
+    TYPE_ENUM,   // enum { variants }
+    TYPE_ERR,    // sentinel for continued checking after type errs
 } TypeKind;
 
 typedef struct Type Type;
@@ -67,11 +67,11 @@ struct Type {
     TypeKind kind;
     union {
         struct {
-            const Type *element;
+            const Type *elem;
             int32_t size;
         } array;
         struct {
-            const Type **elements;
+            const Type **elems;
             int32_t count;
         } tuple;
         struct {
@@ -82,12 +82,12 @@ struct Type {
             int32_t embed_count;
         } struct_type;
         struct {
-            const Type *element;
+            const Type *elem;
         } slice;
         struct {
             const Type *pointee;
             bool is_mut;
-        } pointer;
+        } ptr;
         struct {
             const char *name;
             EnumVariant *variants;
@@ -98,36 +98,36 @@ struct Type {
 
 // ── Type accessors (never access union members directly) ───────────────
 
-/** Return the element type of an array type.  Asserts kind == TYPE_ARRAY. */
-const Type *type_array_element(const Type *type);
+/** Return the elem type of an array type.  Asserts kind == TYPE_ARRAY. */
+const Type *type_array_elem(const Type *type);
 /** Return the fixed size of an array type.  Asserts kind == TYPE_ARRAY. */
 int32_t type_array_size(const Type *type);
-/** Return the element types of a tuple type.  Asserts kind == TYPE_TUPLE. */
-const Type **type_tuple_elements(const Type *type);
-/** Return the element count of a tuple type.  Asserts kind == TYPE_TUPLE. */
+/** Return the elem types of a tuple type.  Asserts kind == TYPE_TUPLE. */
+const Type **type_tuple_elems(const Type *type);
+/** Return the elem count of a tuple type.  Asserts kind == TYPE_TUPLE. */
 int32_t type_tuple_count(const Type *type);
 
-/** Singleton type instances (avoids heap allocation for primitives). */
-extern const Type TYPE_BOOL_INSTANCE;
-extern const Type TYPE_I8_INSTANCE;
-extern const Type TYPE_I16_INSTANCE;
-extern const Type TYPE_I32_INSTANCE;
-extern const Type TYPE_I64_INSTANCE;
-extern const Type TYPE_I128_INSTANCE;
-extern const Type TYPE_U8_INSTANCE;
-extern const Type TYPE_U16_INSTANCE;
-extern const Type TYPE_U32_INSTANCE;
-extern const Type TYPE_U64_INSTANCE;
-extern const Type TYPE_U128_INSTANCE;
-extern const Type TYPE_ISIZE_INSTANCE;
-extern const Type TYPE_USIZE_INSTANCE;
-extern const Type TYPE_F32_INSTANCE;
-extern const Type TYPE_F64_INSTANCE;
-extern const Type TYPE_CHAR_INSTANCE;
-extern const Type TYPE_STRING_INSTANCE;
-extern const Type TYPE_UNIT_INSTANCE;
-extern const Type TYPE_NEVER_INSTANCE;
-extern const Type TYPE_ERROR_INSTANCE;
+/** Singleton type insts (avoids heap alloc for primitives). */
+extern const Type TYPE_BOOL_INST;
+extern const Type TYPE_I8_INST;
+extern const Type TYPE_I16_INST;
+extern const Type TYPE_I32_INST;
+extern const Type TYPE_I64_INST;
+extern const Type TYPE_I128_INST;
+extern const Type TYPE_U8_INST;
+extern const Type TYPE_U16_INST;
+extern const Type TYPE_U32_INST;
+extern const Type TYPE_U64_INST;
+extern const Type TYPE_U128_INST;
+extern const Type TYPE_ISIZE_INST;
+extern const Type TYPE_USIZE_INST;
+extern const Type TYPE_F32_INST;
+extern const Type TYPE_F64_INST;
+extern const Type TYPE_CHAR_INST;
+extern const Type TYPE_STR_INST;
+extern const Type TYPE_UNIT_INST;
+extern const Type TYPE_NEVER_INST;
+extern const Type TYPE_ERR_INST;
 
 /**
  * Resolve a Resurg type name ("i32", "str", ...) to its singleton.  Returns
@@ -136,8 +136,8 @@ extern const Type TYPE_ERROR_INSTANCE;
 const Type *type_from_name(const char *name);
 /** Return the Resurg-language name for @p type (e.g. "i32"). */
 const char *type_name(Arena *arena, const Type *type);
-/** Return the C type string used during code generation (e.g. "int32_t"). */
-const char *c_type_string(const Type *type);
+/** Return the C type str used during code generation (e.g. "int32_t"). */
+const char *c_type_str(const Type *type);
 /** Return true if both types are non-NULL and structurally equal. */
 bool type_equal(const Type *a, const Type *b);
 /** Return true if @p type is any numeric type (integer or float). */
@@ -151,17 +151,17 @@ bool type_is_unsigned_integer(const Type *type);
 /** Return true if @p type is any floating-point type. */
 bool type_is_float(const Type *type);
 
-/** Return the singleton instance for a primitive @p kind, or TYPE_ERROR for compounds. */
+/** Return the singleton inst for a primitive @p kind, or TYPE_ERR for compounds. */
 const Type *type_singleton(TypeKind kind);
 
-/** Create an array type [size]element. */
-Type *type_create_array(Arena *arena, const Type *element, int32_t size);
-/** Create a slice type []element. */
-Type *type_create_slice(Arena *arena, const Type *element);
-/** Return the element type of a slice type.  Asserts kind == TYPE_SLICE. */
-const Type *type_slice_element(const Type *type);
-/** Create a tuple type from an array of element types. */
-Type *type_create_tuple(Arena *arena, const Type **elements, int32_t count);
+/** Create an array type [size]elem. */
+Type *type_create_array(Arena *arena, const Type *elem, int32_t size);
+/** Create a slice type []elem. */
+Type *type_create_slice(Arena *arena, const Type *elem);
+/** Return the elem type of a slice type.  Asserts kind == TYPE_SLICE. */
+const Type *type_slice_elem(const Type *type);
+/** Create a tuple type from an array of elem types. */
+Type *type_create_tuple(Arena *arena, const Type **elems, int32_t count);
 
 /** Create a struct type with the given fields and embedded types. */
 Type *type_create_struct(Arena *arena, const char *name, StructField *fields, int32_t field_count,
@@ -176,12 +176,12 @@ int32_t type_struct_field_count(const Type *type);
 /** Look up a field by name in a struct type.  Returns NULL if not found. */
 const StructField *type_struct_find_field(const Type *type, const char *name);
 
-/** Create a pointer type *pointee. */
-Type *type_create_pointer(Arena *arena, const Type *pointee, bool is_mut);
-/** Return the pointee type of a pointer.  Asserts kind == TYPE_POINTER. */
-const Type *type_pointer_pointee(const Type *type);
-/** Return whether a pointer type is mutable.  Asserts kind == TYPE_POINTER. */
-bool type_pointer_is_mut(const Type *type);
+/** Create a ptr type *pointee. */
+Type *type_create_ptr(Arena *arena, const Type *pointee, bool is_mut);
+/** Return the pointee type of a ptr.  Asserts kind == TYPE_PTR. */
+const Type *type_ptr_pointee(const Type *type);
+/** Return whether a ptr type is mutable.  Asserts kind == TYPE_PTR. */
+bool type_ptr_is_mut(const Type *type);
 
 /** Create an enum type with the given variants. */
 Type *type_create_enum(Arena *arena, const char *name, EnumVariant *variants,

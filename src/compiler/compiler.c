@@ -6,7 +6,7 @@
 
 #include "core/common.h"
 #include "lexer/lexer.h"
-#include "rsg/codegen.h"
+#include "rsg/cgen.h"
 #include "rsg/compiler.h"
 #include "rsg/lowering.h"
 #include "rsg/parser.h"
@@ -30,7 +30,7 @@ struct Compiler {
 
 /**
  * Read the entire contents of @p path into a heap-allocated, NUL-terminated
- * buffer.  Fatally exits on I/O failure or if the file exceeds
+ * buf.  Fatally exits on I/O failure or if the file exceeds
  * MAX_SOURCE_SIZE.  The caller owns the returned memory.
  */
 static char *read_source_file(const char *path) {
@@ -50,40 +50,39 @@ static char *read_source_file(const char *path) {
     long size = (long)file_stat.st_size;
     if (size < 0 || size > MAX_SOURCE_SIZE) {
         fclose(file_handle);
-        rsg_fatal("cannot read '%s' (size error or file too large)", path);
+        rsg_fatal("cannot read '%s' (size err or file too large)", path);
     }
 
-    char *buffer = rsg_calloc((size_t)size + 1, 1);
-    size_t bytes_read = fread(buffer, 1, (size_t)size, file_handle);
+    char *buf = rsg_calloc((size_t)size + 1, 1);
+    size_t bytes_read = fread(buf, 1, (size_t)size, file_handle);
     fclose(file_handle);
     if (bytes_read != (size_t)size) {
-        free(buffer);
+        free(buf);
         rsg_fatal("failed to read '%s' (expected %ld bytes, got %zu)", path, size, bytes_read);
     }
-    return buffer;
+    return buf;
 }
 
 // ── Pipeline stages ────────────────────────────────────────────────────
 
-/** Run the lexer and optionally dump tokens.  Returns 0 on success, 1 on error. */
+/** Run the lexer and optionally dump tokens.  Returns 0 on success, 1 on err. */
 static int stage_lex(const CompilerOptions *options, const char *source, Arena *arena,
                      Token **out_tokens) {
     Lexer *lexer = lexer_create(source, options->input_file, arena);
     *out_tokens = lexer_scan_all(lexer);
     lexer_destroy(lexer);
 
-    for (int32_t i = 0; i < BUFFER_LENGTH(*out_tokens); i++) {
-        if ((*out_tokens)[i].kind == TOKEN_ERROR) {
+    for (int32_t i = 0; i < BUF_LEN(*out_tokens); i++) {
+        if ((*out_tokens)[i].kind == TOKEN_ERR) {
             return 1;
         }
     }
 
     if (options->dump_tokens) {
-        for (int32_t i = 0; i < BUFFER_LENGTH(*out_tokens); i++) {
+        for (int32_t i = 0; i < BUF_LEN(*out_tokens); i++) {
             Token *token = &(*out_tokens)[i];
-            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->location.line,
-                    token->location.column, token_kind_string(token->kind), token->length,
-                    token->lexeme);
+            fprintf(stderr, "%3d:%-3d  %-16s  '%.*s'\n", token->loc.line, token->loc.column,
+                    token_kind_str(token->kind), token->len, token->lexeme);
         }
         return -1; // sentinel: early exit requested
     }
@@ -95,33 +94,33 @@ static ASTNode *stage_parse(const CompilerOptions *options, Token *tokens, int32
                             Arena *arena, int *out_status) {
     Parser *parser = parser_create(tokens, count, arena, options->input_file);
     ASTNode *file_node = parser_parse(parser);
-    int32_t errors = parser_error_count(parser);
+    int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
 
     if (options->dump_ast) {
         ast_dump(file_node, 0);
         return NULL;
     }
-    if (errors > 0) {
+    if (errs > 0) {
         *out_status = 1;
         return NULL;
     }
     return file_node;
 }
 
-/** Run semantic analysis.  Returns true on success, false on errors. */
+/** Run semantic analysis.  Returns true on success, false on errs. */
 static bool stage_check(Arena *arena, ASTNode *file_node) {
-    SemanticAnalyzer *analyzer = semantic_analyzer_create(arena);
-    bool ok = semantic_analyzer_check(analyzer, file_node);
-    semantic_analyzer_destroy(analyzer);
+    Sema *analyzer = sema_create(arena);
+    bool ok = sema_check(analyzer, file_node);
+    sema_destroy(analyzer);
     return ok;
 }
 
 /** Lower the AST to typed tree, run TT passes, and optionally dump.  Returns NULL on early exit. */
-static TtNode *stage_lower(const CompilerOptions *options, Arena *tt_arena, ASTNode *file_node,
+static TTNode *stage_lower(const CompilerOptions *options, Arena *tt_arena, ASTNode *file_node,
                            Lowering **out_lowering) {
     *out_lowering = lowering_create(tt_arena);
-    TtNode *tt_root = lowering_lower(*out_lowering, file_node);
+    TTNode *tt_root = lowering_lower(*out_lowering, file_node);
 
     tt_pass_const_fold(tt_arena, tt_root);
     tt_pass_escape_analysis(tt_arena, tt_root);
@@ -134,7 +133,7 @@ static TtNode *stage_lower(const CompilerOptions *options, Arena *tt_arena, ASTN
 }
 
 /** Run code generation, emitting C source to the output file. */
-static void stage_emit(const CompilerOptions *options, Arena *arena, const TtNode *tt_root) {
+static void stage_emit(const CompilerOptions *options, Arena *arena, const TTNode *tt_root) {
     FILE *out = stdout;
     if (options->output_file != NULL) {
         out = fopen(options->output_file, "w");
@@ -142,9 +141,9 @@ static void stage_emit(const CompilerOptions *options, Arena *arena, const TtNod
             rsg_fatal("cannot open output '%s'", options->output_file);
         }
     }
-    CodeGenerator *code_generator = code_generator_create(out, arena);
-    code_generator_emit(code_generator, tt_root);
-    code_generator_destroy(code_generator);
+    CGen *cgen = cgen_create(out, arena);
+    cgen_emit(cgen, tt_root);
+    cgen_destroy(cgen);
     if (options->output_file != NULL) {
         fclose(out);
     }
@@ -168,7 +167,7 @@ int compiler_run(Compiler *compiler, const CompilerOptions *options) {
     compiler->arena = arena_create();
     compiler->tt_arena = arena_create();
     Token *tokens = NULL; /* buf */
-    TtNode *tt_root = NULL;
+    TTNode *tt_root = NULL;
     Lowering *lowering = NULL;
     int status = 0;
 
@@ -180,8 +179,7 @@ int compiler_run(Compiler *compiler, const CompilerOptions *options) {
     }
 
     // Stage 2: Parsing.
-    ASTNode *file_node =
-        stage_parse(options, tokens, BUFFER_LENGTH(tokens), compiler->arena, &status);
+    ASTNode *file_node = stage_parse(options, tokens, BUF_LEN(tokens), compiler->arena, &status);
     if (file_node == NULL) {
         goto cleanup;
     }
@@ -203,7 +201,7 @@ int compiler_run(Compiler *compiler, const CompilerOptions *options) {
 
 cleanup:
     lowering_destroy(lowering);
-    BUFFER_FREE(tokens);
+    BUF_FREE(tokens);
     free(source);
     source = NULL;
     arena_destroy(compiler->tt_arena);

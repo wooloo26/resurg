@@ -3,11 +3,11 @@
 // ── Token-stream navigation helpers ────────────────────────────────────
 
 const Token *parser_current_token(const Parser *parser) {
-    return &parser->tokens[parser->position];
+    return &parser->tokens[parser->pos];
 }
 
 const Token *parser_previous_token(const Parser *parser) {
-    return &parser->tokens[parser->position - 1];
+    return &parser->tokens[parser->pos - 1];
 }
 
 bool parser_at_end(const Parser *parser) {
@@ -20,7 +20,7 @@ bool parser_check(const Parser *parser, TokenKind kind) {
 
 const Token *parser_advance(Parser *parser) {
     if (!parser_at_end(parser)) {
-        parser->position++;
+        parser->pos++;
     }
     return parser_previous_token(parser);
 }
@@ -37,8 +37,8 @@ const Token *parser_expect(Parser *parser, TokenKind kind) {
     if (parser_check(parser, kind)) {
         return parser_advance(parser);
     }
-    rsg_error(parser_current_token(parser)->location, "expected '%s', got '%s'",
-              token_kind_string(kind), token_kind_string(parser_current_token(parser)->kind));
+    rsg_err(parser_current_token(parser)->loc, "expected '%s', got '%s'", token_kind_str(kind),
+            token_kind_str(parser_current_token(parser)->kind));
     return parser_current_token(parser);
 }
 
@@ -48,8 +48,8 @@ void parser_skip_newlines(Parser *parser) {
     }
 }
 
-SourceLocation parser_current_location(const Parser *parser) {
-    return parser_current_token(parser)->location;
+SourceLoc parser_current_loc(const Parser *parser) {
+    return parser_current_token(parser)->loc;
 }
 
 // ── Parser lifecycle ───────────────────────────────────────────────────
@@ -57,9 +57,9 @@ SourceLocation parser_current_location(const Parser *parser) {
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
     Parser *parser = rsg_malloc(sizeof(*parser));
     parser->tokens = tokens;
-    parser->position = 0;
+    parser->pos = 0;
     parser->count = count;
-    parser->error_count = 0;
+    parser->err_count = 0;
     parser->arena = arena;
     parser->file = file;
     return parser;
@@ -69,20 +69,20 @@ void parser_destroy(Parser *parser) {
     free(parser);
 }
 
-int32_t parser_error_count(const Parser *parser) {
-    return parser->error_count;
+int32_t parser_err_count(const Parser *parser) {
+    return parser->err_count;
 }
 
 ASTNode *parser_parse(Parser *parser) {
-    SourceLocation location = {.file = parser->file, .line = 1, .column = 1};
-    ASTNode *file = ast_new(parser->arena, NODE_FILE, location);
-    file->file.declarations = NULL;
+    SourceLoc loc = {.file = parser->file, .line = 1, .column = 1};
+    ASTNode *file = ast_new(parser->arena, NODE_FILE, loc);
+    file->file.decls = NULL;
 
     parser_skip_newlines(parser);
     while (!parser_at_end(parser)) {
-        ASTNode *declaration = parser_parse_declaration(parser);
-        if (declaration != NULL) {
-            BUFFER_PUSH(file->file.declarations, declaration);
+        ASTNode *decl = parser_parse_decl(parser);
+        if (decl != NULL) {
+            BUF_PUSH(file->file.decls, decl);
         }
         parser_skip_newlines(parser);
     }

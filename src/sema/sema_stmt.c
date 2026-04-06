@@ -6,30 +6,29 @@
  * Return true (and emit a diagnostic) if @p name starts with a prefix
  * reserved for the compiler or runtime.  Checked prefixes:
  *
- *   rsg_   – runtime functions / types
- *   rsgu_  – codegen-mangled user functions
- *   _rsg   – codegen temporaries and internal variables
+ *   rsg_   – runtime fns / types
+ *   rsgu_  – codegen-mangled user fns
+ *   _rsg   – codegen temporaries and internal vars
  *   _Rsg   – codegen compound-type names
  */
-static bool is_reserved_identifier(SemanticAnalyzer *analyzer, SourceLocation location,
-                                   const char *name) {
+static bool is_reserved_id(Sema *analyzer, SourceLoc loc, const char *name) {
     bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "rsgu_", 5) == 0 ||
                     strncmp(name, "_rsg", 4) == 0 || strncmp(name, "_Rsg", 4) == 0;
     if (reserved) {
-        SEMA_ERROR(analyzer, location,
-                   "identifier '%s' uses a prefix reserved for the compiler/runtime", name);
+        SEMA_ERR(analyzer, loc, "identifier '%s' uses a prefix reserved for the compiler/runtime",
+                 name);
     }
     return reserved;
 }
 
-// ── Statement / declaration checkers ───────────────────────────────────
+// ── Statement / decl checkers ───────────────────────────────────
 
-const Type *check_if(SemanticAnalyzer *analyzer, ASTNode *node) {
-    check_node(analyzer, node->if_expression.condition);
-    const Type *then_type = check_node(analyzer, node->if_expression.then_body);
+const Type *check_if(Sema *analyzer, ASTNode *node) {
+    check_node(analyzer, node->if_expr.cond);
+    const Type *then_type = check_node(analyzer, node->if_expr.then_body);
     const Type *else_type = NULL;
-    if (node->if_expression.else_body != NULL) {
-        else_type = check_node(analyzer, node->if_expression.else_body);
+    if (node->if_expr.else_body != NULL) {
+        else_type = check_node(analyzer, node->if_expr.else_body);
     }
 
     // Never-type coercion: if one branch is never, use the other
@@ -50,146 +49,141 @@ const Type *check_if(SemanticAnalyzer *analyzer, ASTNode *node) {
     if (then_type != NULL) {
         return then_type;
     }
-    return &TYPE_UNIT_INSTANCE;
+    return &TYPE_UNIT_INST;
 }
 
-const Type *check_block(SemanticAnalyzer *analyzer, ASTNode *node) {
+const Type *check_block(Sema *analyzer, ASTNode *node) {
     scope_push(analyzer, false);
     const Type *last_stmt_type = NULL;
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->block.statements); i++) {
-        last_stmt_type = check_node(analyzer, node->block.statements[i]);
+    for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
+        last_stmt_type = check_node(analyzer, node->block.stmts[i]);
     }
-    const Type *result_type = &TYPE_UNIT_INSTANCE;
+    const Type *result_type = &TYPE_UNIT_INST;
     if (node->block.result != NULL) {
         result_type = check_node(analyzer, node->block.result);
     } else if (last_stmt_type != NULL && last_stmt_type->kind == TYPE_NEVER) {
-        // Block whose last statement diverges (return/break/continue) is never.
-        result_type = &TYPE_NEVER_INSTANCE;
+        // Block whose last stmt diverges (return/break/continue) is never.
+        result_type = &TYPE_NEVER_INST;
     }
     scope_pop(analyzer);
     return result_type;
 }
 
-/** Promote array literal elements to match the declared element type. */
-static bool promote_array_elements(ASTNode *init, const Type *declared) {
-    for (int32_t i = 0; i < BUFFER_LENGTH(init->array_literal.elements); i++) {
-        ASTNode *elem = init->array_literal.elements[i];
-        if (promote_literal(elem, declared->array.element) == NULL && elem->type != NULL &&
-            !type_equal(elem->type, declared->array.element)) {
+/** Promote array lit elems to match the declared elem type. */
+static bool promote_array_elems(ASTNode *init, const Type *declared) {
+    for (int32_t i = 0; i < BUF_LEN(init->array_lit.elems); i++) {
+        ASTNode *elem = init->array_lit.elems[i];
+        if (promote_lit(elem, declared->array.elem) == NULL && elem->type != NULL &&
+            !type_equal(elem->type, declared->array.elem)) {
             return false;
         }
     }
     return true;
 }
 
-const Type *check_variable_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
+const Type *check_var_decl(Sema *analyzer, ASTNode *node) {
     const Type *init_type = NULL;
-    if (node->variable_declaration.initializer != NULL) {
-        init_type = check_node(analyzer, node->variable_declaration.initializer);
+    if (node->var_decl.init != NULL) {
+        init_type = check_node(analyzer, node->var_decl.init);
     }
 
-    const Type *declared = resolve_ast_type(analyzer, &node->variable_declaration.type);
+    const Type *declared = resolve_ast_type(analyzer, &node->var_decl.type);
 
     // Determine final type
-    const Type *variable_type;
+    const Type *var_type;
     if (declared != NULL) {
-        variable_type = declared;
-        // Promote literal initializer to match declared type
-        if (init_type != NULL && node->variable_declaration.initializer != NULL) {
-            promote_literal(node->variable_declaration.initializer, declared);
+        var_type = declared;
+        // Promote lit init to match declared type
+        if (init_type != NULL && node->var_decl.init != NULL) {
+            promote_lit(node->var_decl.init, declared);
 
-            // Promote array literal elements to match declared element type
-            ASTNode *init = node->variable_declaration.initializer;
-            bool is_array_mismatch =
-                init->kind == NODE_ARRAY_LITERAL && declared->kind == TYPE_ARRAY &&
-                init_type->kind == TYPE_ARRAY && !type_equal(declared, init_type);
+            // Promote array lit elems to match declared elem type
+            ASTNode *init = node->var_decl.init;
+            bool is_array_mismatch = init->kind == NODE_ARRAY_LIT && declared->kind == TYPE_ARRAY &&
+                                     init_type->kind == TYPE_ARRAY &&
+                                     !type_equal(declared, init_type);
             if (is_array_mismatch) {
-                if (promote_array_elements(init, declared)) {
+                if (promote_array_elems(init, declared)) {
                     init->type = declared;
                 }
             }
 
             // Re-read init_type after promotion
-            init_type = node->variable_declaration.initializer->type;
+            init_type = node->var_decl.init->type;
         }
-        // Check for type mismatch between declared and initializer (non-literal)
-        if (init_type != NULL && !type_equal(declared, init_type) &&
-            init_type->kind != TYPE_ERROR && declared->kind != TYPE_ERROR) {
-            SEMA_ERROR(analyzer, node->location, "type mismatch: expected '%s', got '%s'",
-                       type_name(analyzer->arena, declared), type_name(analyzer->arena, init_type));
+        // Check for type mismatch between declared and init (non-lit)
+        if (init_type != NULL && !type_equal(declared, init_type) && init_type->kind != TYPE_ERR &&
+            declared->kind != TYPE_ERR) {
+            SEMA_ERR(analyzer, node->loc, "type mismatch: expected '%s', got '%s'",
+                     type_name(analyzer->arena, declared), type_name(analyzer->arena, init_type));
         }
     } else if (init_type != NULL) {
-        variable_type = init_type;
+        var_type = init_type;
     } else {
-        SEMA_ERROR(analyzer, node->location, "cannot infer type for '%s'",
-                   node->variable_declaration.name);
-        variable_type = &TYPE_ERROR_INSTANCE;
+        SEMA_ERR(analyzer, node->loc, "cannot infer type for '%s'", node->var_decl.name);
+        var_type = &TYPE_ERR_INST;
     }
 
-    if (scope_lookup_current(analyzer, node->variable_declaration.name) != NULL) {
+    if (scope_lookup_current(analyzer, node->var_decl.name) != NULL) {
         // Same-scope rebinding is allowed (shadowing)
     }
 
-    is_reserved_identifier(analyzer, node->location, node->variable_declaration.name);
+    is_reserved_id(analyzer, node->loc, node->var_decl.name);
 
-    scope_define(analyzer,
-                 &(SymbolDef){node->variable_declaration.name, variable_type, false, SYM_VAR});
+    scope_define(analyzer, &(SymDef){node->var_decl.name, var_type, false, SYM_VAR});
 
     // Mark immutable bindings
-    if (node->variable_declaration.is_immut) {
-        Symbol *sym = scope_lookup_current(analyzer, node->variable_declaration.name);
+    if (node->var_decl.is_immut) {
+        Sym *sym = scope_lookup_current(analyzer, node->var_decl.name);
         if (sym != NULL) {
             sym->is_immut = true;
         }
     }
 
-    return variable_type;
+    return var_type;
 }
 
-void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
-    is_reserved_identifier(analyzer, function_node->location,
-                           function_node->function_declaration.name);
+void check_fn_body(Sema *analyzer, ASTNode *fn_node) {
+    is_reserved_id(analyzer, fn_node->loc, fn_node->fn_decl.name);
 
     scope_push(analyzer, false);
 
-    // Register parameters
-    for (int32_t i = 0; i < BUFFER_LENGTH(function_node->function_declaration.parameters); i++) {
-        ASTNode *parameter = function_node->function_declaration.parameters[i];
-        const Type *parameter_type = resolve_ast_type(analyzer, &parameter->parameter.type);
-        if (parameter_type == NULL) {
-            parameter_type = &TYPE_ERROR_INSTANCE;
+    // Register params
+    for (int32_t i = 0; i < BUF_LEN(fn_node->fn_decl.params); i++) {
+        ASTNode *param = fn_node->fn_decl.params[i];
+        const Type *param_type = resolve_ast_type(analyzer, &param->param.type);
+        if (param_type == NULL) {
+            param_type = &TYPE_ERR_INST;
         }
-        parameter->type = parameter_type;
-        is_reserved_identifier(analyzer, parameter->location, parameter->parameter.name);
-        scope_define(analyzer,
-                     &(SymbolDef){parameter->parameter.name, parameter_type, false, SYM_PARAM});
+        param->type = param_type;
+        is_reserved_id(analyzer, param->loc, param->param.name);
+        scope_define(analyzer, &(SymDef){param->param.name, param_type, false, SYM_PARAM});
     }
 
     // Check body
-    if (function_node->function_declaration.body != NULL) {
-        const Type *body_type = check_node(analyzer, function_node->function_declaration.body);
+    if (fn_node->fn_decl.body != NULL) {
+        const Type *body_type = check_node(analyzer, fn_node->fn_decl.body);
 
         // If return type not declared, infer from body
-        const Type *resolved_return =
-            resolve_ast_type(analyzer, &function_node->function_declaration.return_type);
+        const Type *resolved_return = resolve_ast_type(analyzer, &fn_node->fn_decl.return_type);
         if (resolved_return == NULL) {
-            resolved_return = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
+            resolved_return = body_type != NULL ? body_type : &TYPE_UNIT_INST;
         }
-        function_node->type = resolved_return;
+        fn_node->type = resolved_return;
 
-        // Update the function's symbol type to the resolved return type
-        Symbol *symbol = scope_lookup(analyzer, function_node->function_declaration.name);
-        if (symbol != NULL) {
-            symbol->type = resolved_return;
+        // Update the fn's sym type to the resolved return type
+        Sym *sym = scope_lookup(analyzer, fn_node->fn_decl.name);
+        if (sym != NULL) {
+            sym->type = resolved_return;
         }
 
-        // Update function signatures
-        const char *sig_key = function_node->function_declaration.name;
-        if (function_node->function_declaration.owner_struct != NULL) {
-            sig_key = arena_sprintf(analyzer->arena, "%s.%s",
-                                    function_node->function_declaration.owner_struct, sig_key);
+        // Update fn signatures
+        const char *sig_key = fn_node->fn_decl.name;
+        if (fn_node->fn_decl.owner_struct != NULL) {
+            sig_key =
+                arena_sprintf(analyzer->arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
         }
-        FunctionSignature *signature = sema_lookup_function(analyzer, sig_key);
+        FnSignature *signature = sema_lookup_fn(analyzer, sig_key);
         if (signature != NULL && signature->return_type->kind == TYPE_UNIT) {
             signature->return_type = resolved_return;
         }
@@ -199,34 +193,32 @@ void check_function_body(SemanticAnalyzer *analyzer, ASTNode *function_node) {
 }
 
 /** Shared logic for simple and compound assignment type-checking. */
-static const Type *check_assignment_common(SemanticAnalyzer *analyzer, ASTNode *target,
-                                           ASTNode *value) {
+static const Type *check_assignment_common(Sema *analyzer, ASTNode *target, ASTNode *value) {
     const Type *target_type = check_node(analyzer, target);
     check_node(analyzer, value);
-    promote_literal(value, target_type);
+    promote_lit(value, target_type);
 
     // Check immutability: cannot assign to immut bindings
-    if (target->kind == NODE_IDENTIFIER) {
-        Symbol *sym = scope_lookup(analyzer, target->identifier.name);
+    if (target->kind == NODE_ID) {
+        Sym *sym = scope_lookup(analyzer, target->id.name);
         if (sym != NULL && sym->is_immut) {
-            SEMA_ERROR(analyzer, target->location, "cannot assign to immutable variable '%s'",
-                       target->identifier.name);
+            SEMA_ERR(analyzer, target->loc, "cannot assign to immutable var '%s'", target->id.name);
         }
     }
 
-    return &TYPE_UNIT_INSTANCE;
+    return &TYPE_UNIT_INST;
 }
 
-const Type *check_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
+const Type *check_assign(Sema *analyzer, ASTNode *node) {
     return check_assignment_common(analyzer, node->assign.target, node->assign.value);
 }
 
-const Type *check_compound_assign(SemanticAnalyzer *analyzer, ASTNode *node) {
+const Type *check_compound_assign(Sema *analyzer, ASTNode *node) {
     return check_assignment_common(analyzer, node->compound_assign.target,
                                    node->compound_assign.value);
 }
 
-static const Type *check_loop(SemanticAnalyzer *analyzer, ASTNode *node) {
+static const Type *check_loop(Sema *analyzer, ASTNode *node) {
     const Type *saved_break_type = analyzer->loop_break_type;
     analyzer->loop_break_type = NULL;
     scope_push(analyzer, true);
@@ -234,40 +226,39 @@ static const Type *check_loop(SemanticAnalyzer *analyzer, ASTNode *node) {
     scope_pop(analyzer);
     const Type *result = analyzer->loop_break_type;
     analyzer->loop_break_type = saved_break_type;
-    return (result != NULL) ? result : &TYPE_NEVER_INSTANCE;
+    return (result != NULL) ? result : &TYPE_NEVER_INST;
 }
 
-static void check_while(SemanticAnalyzer *analyzer, ASTNode *node) {
-    const Type *cond_type = check_node(analyzer, node->while_loop.condition);
-    if (cond_type != NULL && cond_type->kind != TYPE_BOOL && cond_type->kind != TYPE_ERROR) {
-        SEMA_ERROR(analyzer, node->while_loop.condition->location,
-                   "condition must be 'bool', got '%s'", type_name(analyzer->arena, cond_type));
+static void check_while(Sema *analyzer, ASTNode *node) {
+    const Type *cond_type = check_node(analyzer, node->while_loop.cond);
+    if (cond_type != NULL && cond_type->kind != TYPE_BOOL && cond_type->kind != TYPE_ERR) {
+        SEMA_ERR(analyzer, node->while_loop.cond->loc, "condition must be 'bool', got '%s'",
+                 type_name(analyzer->arena, cond_type));
     }
     scope_push(analyzer, true);
     check_node(analyzer, node->while_loop.body);
     scope_pop(analyzer);
 }
 
-static void check_defer(SemanticAnalyzer *analyzer, ASTNode *node) {
-    check_node(analyzer, node->defer_statement.body);
+static void check_defer(Sema *analyzer, ASTNode *node) {
+    check_node(analyzer, node->defer_stmt.body);
 }
 
-static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
+static void check_for(Sema *analyzer, ASTNode *node) {
     if (node->for_loop.iterable != NULL) {
         // Slice iteration: for slice |v| or for slice |v, i|
         const Type *iter_type = check_node(analyzer, node->for_loop.iterable);
         scope_push(analyzer, true);
-        const Type *elem_type = &TYPE_ERROR_INSTANCE;
+        const Type *elem_type = &TYPE_ERR_INST;
         if (iter_type != NULL && iter_type->kind == TYPE_SLICE) {
-            elem_type = iter_type->slice.element;
+            elem_type = iter_type->slice.elem;
         }
-        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-        scope_define(analyzer,
-                     &(SymbolDef){node->for_loop.variable_name, elem_type, false, SYM_VAR});
-        if (node->for_loop.index_name != NULL) {
-            is_reserved_identifier(analyzer, node->location, node->for_loop.index_name);
-            scope_define(analyzer, &(SymbolDef){node->for_loop.index_name, &TYPE_I32_INSTANCE,
-                                                false, SYM_VAR});
+        is_reserved_id(analyzer, node->loc, node->for_loop.var_name);
+        scope_define(analyzer, &(SymDef){node->for_loop.var_name, elem_type, false, SYM_VAR});
+        if (node->for_loop.idx_name != NULL) {
+            is_reserved_id(analyzer, node->loc, node->for_loop.idx_name);
+            scope_define(analyzer,
+                         &(SymDef){node->for_loop.idx_name, &TYPE_I32_INST, false, SYM_VAR});
         }
         check_node(analyzer, node->for_loop.body);
         scope_pop(analyzer);
@@ -276,21 +267,20 @@ static void check_for(SemanticAnalyzer *analyzer, ASTNode *node) {
         check_node(analyzer, node->for_loop.start);
         check_node(analyzer, node->for_loop.end);
         scope_push(analyzer, true);
-        is_reserved_identifier(analyzer, node->location, node->for_loop.variable_name);
-        scope_define(analyzer, &(SymbolDef){node->for_loop.variable_name, &TYPE_I32_INSTANCE, false,
-                                            SYM_VAR});
+        is_reserved_id(analyzer, node->loc, node->for_loop.var_name);
+        scope_define(analyzer, &(SymDef){node->for_loop.var_name, &TYPE_I32_INST, false, SYM_VAR});
         check_node(analyzer, node->for_loop.body);
         scope_pop(analyzer);
     }
 }
 
-static void check_break_continue(SemanticAnalyzer *analyzer, ASTNode *node) {
+static void check_break_continue(Sema *analyzer, ASTNode *node) {
     if (!in_loop(analyzer)) {
-        SEMA_ERROR(analyzer, node->location, "'%s' outside of loop",
-                   node->kind == NODE_BREAK ? "break" : "continue");
+        SEMA_ERR(analyzer, node->loc, "'%s' outside of loop",
+                 node->kind == NODE_BREAK ? "break" : "continue");
     }
-    if (node->kind == NODE_BREAK && node->break_statement.value != NULL) {
-        const Type *val_type = check_node(analyzer, node->break_statement.value);
+    if (node->kind == NODE_BREAK && node->break_stmt.value != NULL) {
+        const Type *val_type = check_node(analyzer, node->break_stmt.value);
         if (analyzer->loop_break_type == NULL) {
             analyzer->loop_break_type = val_type;
         }
@@ -299,42 +289,40 @@ static void check_break_continue(SemanticAnalyzer *analyzer, ASTNode *node) {
 
 // ── Struct & destructure checkers ───────────────────────────────────────
 
-/** Type-check a single struct method: register receiver + parameters, check body. */
-static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method,
-                                     const char *struct_name, const Type *struct_type) {
+/** Type-check a single struct method: register recv + params, check body. */
+static void check_struct_method_body(Sema *analyzer, ASTNode *method, const char *struct_name,
+                                     const Type *struct_type) {
     scope_push(analyzer, false);
 
-    // Register receiver as a parameter with struct type
-    if (method->function_declaration.receiver_name != NULL) {
-        scope_define(analyzer, &(SymbolDef){method->function_declaration.receiver_name, struct_type,
-                                            false, SYM_PARAM});
+    // Register recv as a param with struct type
+    if (method->fn_decl.recv_name != NULL) {
+        scope_define(analyzer, &(SymDef){method->fn_decl.recv_name, struct_type, false, SYM_PARAM});
     }
 
-    // Register method parameters
-    for (int32_t j = 0; j < BUFFER_LENGTH(method->function_declaration.parameters); j++) {
-        ASTNode *param = method->function_declaration.parameters[j];
-        const Type *pt = resolve_ast_type(analyzer, &param->parameter.type);
+    // Register method params
+    for (int32_t j = 0; j < BUF_LEN(method->fn_decl.params); j++) {
+        ASTNode *param = method->fn_decl.params[j];
+        const Type *pt = resolve_ast_type(analyzer, &param->param.type);
         if (pt == NULL) {
-            pt = &TYPE_ERROR_INSTANCE;
+            pt = &TYPE_ERR_INST;
         }
         param->type = pt;
-        scope_define(analyzer, &(SymbolDef){param->parameter.name, pt, false, SYM_PARAM});
+        scope_define(analyzer, &(SymDef){param->param.name, pt, false, SYM_PARAM});
     }
 
     // Check body and infer return type
-    if (method->function_declaration.body != NULL) {
-        const Type *body_type = check_node(analyzer, method->function_declaration.body);
-        const Type *return_type =
-            resolve_ast_type(analyzer, &method->function_declaration.return_type);
+    if (method->fn_decl.body != NULL) {
+        const Type *body_type = check_node(analyzer, method->fn_decl.body);
+        const Type *return_type = resolve_ast_type(analyzer, &method->fn_decl.return_type);
         if (return_type == NULL) {
-            return_type = body_type != NULL ? body_type : &TYPE_UNIT_INSTANCE;
+            return_type = body_type != NULL ? body_type : &TYPE_UNIT_INST;
         }
         method->type = return_type;
 
         // Update method signature if return type was inferred
         const char *method_key =
-            arena_sprintf(analyzer->arena, "%s.%s", struct_name, method->function_declaration.name);
-        FunctionSignature *sig = sema_lookup_function(analyzer, method_key);
+            arena_sprintf(analyzer->arena, "%s.%s", struct_name, method->fn_decl.name);
+        FnSignature *sig = sema_lookup_fn(analyzer, method_key);
         if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
             sig->return_type = return_type;
         }
@@ -343,43 +331,43 @@ static void check_struct_method_body(SemanticAnalyzer *analyzer, ASTNode *method
 }
 
 /** Check enum method bodies (pass 2) — delegates to check_struct_method_body. */
-static const Type *check_enum_declaration_body(SemanticAnalyzer *analyzer, ASTNode *node) {
+static const Type *check_enum_decl_body(Sema *analyzer, ASTNode *node) {
     const Type *result = node->type;
-    EnumDefinition *edef = sema_lookup_enum(analyzer, node->enum_declaration.name);
+    EnumDef *edef = sema_lookup_enum(analyzer, node->enum_decl.name);
     if (edef == NULL) {
         return result;
     }
-    const Type *ptr_type = type_create_pointer(analyzer->arena, edef->type, false);
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->enum_declaration.methods); i++) {
-        check_struct_method_body(analyzer, node->enum_declaration.methods[i],
-                                 node->enum_declaration.name, ptr_type);
+    const Type *ptr_type = type_create_ptr(analyzer->arena, edef->type, false);
+    for (int32_t i = 0; i < BUF_LEN(node->enum_decl.methods); i++) {
+        check_struct_method_body(analyzer, node->enum_decl.methods[i], node->enum_decl.name,
+                                 ptr_type);
     }
     return result;
 }
 
-/** Pact declarations are validated during pass 1; nothing to check in pass 2. */
-static const Type *check_pact_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
+/** Pact decls are validated during pass 1; nothing to check in pass 2. */
+static const Type *check_pact_decl(Sema *analyzer, ASTNode *node) {
     (void)analyzer;
     (void)node;
-    return &TYPE_UNIT_INSTANCE;
+    return &TYPE_UNIT_INST;
 }
 
-static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode *node) {
-    StructDefinition *sdef = sema_lookup_struct(analyzer, node->struct_declaration.name);
+static const Type *check_struct_decl(Sema *analyzer, ASTNode *node) {
+    StructDef *sdef = sema_lookup_struct(analyzer, node->struct_decl.name);
     if (sdef == NULL) {
-        return &TYPE_UNIT_INSTANCE;
+        return &TYPE_UNIT_INST;
     }
     const Type *result = sdef->type;
 
     // Check method bodies in pass 2
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.methods); i++) {
-        check_struct_method_body(analyzer, node->struct_declaration.methods[i],
-                                 node->struct_declaration.name, sdef->type);
+    for (int32_t i = 0; i < BUF_LEN(node->struct_decl.methods); i++) {
+        check_struct_method_body(analyzer, node->struct_decl.methods[i], node->struct_decl.name,
+                                 sdef->type);
     }
 
-    // Check default value expressions for fields
-    for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_declaration.fields); i++) {
-        ASTStructField *f = &node->struct_declaration.fields[i];
+    // Check default value exprs for fields
+    for (int32_t i = 0; i < BUF_LEN(node->struct_decl.fields); i++) {
+        ASTStructField *f = &node->struct_decl.fields[i];
         if (f->default_value != NULL) {
             check_node(analyzer, f->default_value);
         }
@@ -387,22 +375,22 @@ static const Type *check_struct_declaration(SemanticAnalyzer *analyzer, ASTNode 
     return result;
 }
 
-static const Type *check_struct_destructure(SemanticAnalyzer *analyzer, ASTNode *node) {
+static const Type *check_struct_destructure(Sema *analyzer, ASTNode *node) {
     const Type *value_type = check_node(analyzer, node->struct_destructure.value);
     if (value_type != NULL && value_type->kind == TYPE_STRUCT) {
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->struct_destructure.field_names); i++) {
+        for (int32_t i = 0; i < BUF_LEN(node->struct_destructure.field_names); i++) {
             const char *fname = node->struct_destructure.field_names[i];
             const char *alias = (node->struct_destructure.aliases != NULL &&
-                                 i < BUFFER_LENGTH(node->struct_destructure.aliases))
+                                 i < BUF_LEN(node->struct_destructure.aliases))
                                     ? node->struct_destructure.aliases[i]
                                     : NULL;
             const char *var_name = (alias != NULL) ? alias : fname;
 
-            // Look up field in struct definition (includes promoted fields)
+            // Look up field in struct def (includes promoted fields)
             const Type *field_type = NULL;
-            StructDefinition *sdef = sema_lookup_struct(analyzer, value_type->struct_type.name);
+            StructDef *sdef = sema_lookup_struct(analyzer, value_type->struct_type.name);
             if (sdef != NULL) {
-                for (int32_t j = 0; j < BUFFER_LENGTH(sdef->fields); j++) {
+                for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
                     if (strcmp(sdef->fields[j].name, fname) == 0) {
                         field_type = sdef->fields[j].type;
                         break;
@@ -410,42 +398,42 @@ static const Type *check_struct_destructure(SemanticAnalyzer *analyzer, ASTNode 
                 }
             }
             if (field_type == NULL) {
-                SEMA_ERROR(analyzer, node->location, "no field '%s' on struct '%s'", fname,
-                           value_type->struct_type.name);
-                field_type = &TYPE_ERROR_INSTANCE;
+                SEMA_ERR(analyzer, node->loc, "no field '%s' on struct '%s'", fname,
+                         value_type->struct_type.name);
+                field_type = &TYPE_ERR_INST;
             }
-            scope_define(analyzer, &(SymbolDef){var_name, field_type, false, SYM_VAR});
+            scope_define(analyzer, &(SymDef){var_name, field_type, false, SYM_VAR});
         }
-    } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
-        SEMA_ERROR(analyzer, node->location, "struct destructuring requires a struct type");
+    } else if (value_type != NULL && value_type->kind != TYPE_ERR) {
+        SEMA_ERR(analyzer, node->loc, "struct destructuring requires a struct type");
     }
-    return &TYPE_UNIT_INSTANCE;
+    return &TYPE_UNIT_INST;
 }
 
-static const Type *check_tuple_destructure(SemanticAnalyzer *analyzer, ASTNode *node) {
+static const Type *check_tuple_destructure(Sema *analyzer, ASTNode *node) {
     const Type *value_type = check_node(analyzer, node->tuple_destructure.value);
     if (value_type != NULL && value_type->kind == TYPE_TUPLE) {
-        int32_t name_count = BUFFER_LENGTH(node->tuple_destructure.names);
+        int32_t name_count = BUF_LEN(node->tuple_destructure.names);
         int32_t tuple_count = value_type->tuple.count;
         bool has_rest = node->tuple_destructure.has_rest;
 
         if (has_rest) {
             if (name_count > tuple_count) {
-                SEMA_ERROR(analyzer, node->location,
-                           "too many names in tuple destructure with '..': "
-                           "tuple has %d elements, got %d names",
-                           tuple_count, name_count);
+                SEMA_ERR(analyzer, node->loc,
+                         "too many names in tuple destructure with '..': "
+                         "tuple has %d elems, got %d names",
+                         tuple_count, name_count);
             }
         } else {
             if (name_count != tuple_count) {
-                SEMA_ERROR(analyzer, node->location,
-                           "tuple destructure requires %d names but got %d"
-                           " (use '..' to ignore elements)",
-                           tuple_count, name_count);
+                SEMA_ERR(analyzer, node->loc,
+                         "tuple destructure requires %d names but got %d"
+                         " (use '..' to ignore elems)",
+                         tuple_count, name_count);
             }
         }
 
-        int32_t rest_pos = node->tuple_destructure.rest_position;
+        int32_t rest_pos = node->tuple_destructure.rest_pos;
         int32_t skipped = has_rest ? (tuple_count - name_count) : 0;
 
         for (int32_t i = 0; i < name_count && i < tuple_count; i++) {
@@ -461,26 +449,26 @@ static const Type *check_tuple_destructure(SemanticAnalyzer *analyzer, ASTNode *
                 continue;
             }
             scope_define(analyzer,
-                         &(SymbolDef){vname, value_type->tuple.elements[elem_idx], false, SYM_VAR});
+                         &(SymDef){vname, value_type->tuple.elems[elem_idx], false, SYM_VAR});
         }
-    } else if (value_type != NULL && value_type->kind != TYPE_ERROR) {
-        SEMA_ERROR(analyzer, node->location, "tuple destructuring requires a tuple type");
+    } else if (value_type != NULL && value_type->kind != TYPE_ERR) {
+        SEMA_ERR(analyzer, node->loc, "tuple destructuring requires a tuple type");
     }
-    return &TYPE_UNIT_INSTANCE;
+    return &TYPE_UNIT_INST;
 }
 
 // ── Node dispatch ──────────────────────────────────────────────────────
 
-const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
+const Type *check_node(Sema *analyzer, ASTNode *node) {
     if (node == NULL) {
-        return &TYPE_UNIT_INSTANCE;
+        return &TYPE_UNIT_INST;
     }
-    const Type *result = &TYPE_UNIT_INSTANCE;
+    const Type *result = &TYPE_UNIT_INST;
 
     switch (node->kind) {
     case NODE_FILE:
-        for (int32_t i = 0; i < BUFFER_LENGTH(node->file.declarations); i++) {
-            check_node(analyzer, node->file.declarations[i]);
+        for (int32_t i = 0; i < BUF_LEN(node->file.decls); i++) {
+            check_node(analyzer, node->file.decls[i]);
         }
         break;
 
@@ -492,38 +480,38 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         // Already processed in first pass
         break;
 
-    case NODE_FUNCTION_DECLARATION:
-        check_function_body(analyzer, node);
-        result = node->type; // preserve type set by check_function_body
+    case NODE_FN_DECL:
+        check_fn_body(analyzer, node);
+        result = node->type; // preserve type set by check_fn_body
         break;
 
-    case NODE_VARIABLE_DECLARATION:
-        result = check_variable_declaration(analyzer, node);
+    case NODE_VAR_DECL:
+        result = check_var_decl(analyzer, node);
         break;
 
-    case NODE_PARAMETER:
-        result = resolve_ast_type(analyzer, &node->parameter.type);
+    case NODE_PARAM:
+        result = resolve_ast_type(analyzer, &node->param.type);
         if (result == NULL) {
-            result = &TYPE_ERROR_INSTANCE;
+            result = &TYPE_ERR_INST;
         }
         break;
 
-    case NODE_EXPRESSION_STATEMENT:
-        check_node(analyzer, node->expression_statement.expression);
+    case NODE_EXPR_STMT:
+        check_node(analyzer, node->expr_stmt.expr);
         break;
 
     case NODE_BREAK:
     case NODE_CONTINUE:
         check_break_continue(analyzer, node);
-        result = &TYPE_NEVER_INSTANCE;
+        result = &TYPE_NEVER_INST;
         break;
 
-    case NODE_LITERAL:
-        result = check_literal(analyzer, node);
+    case NODE_LIT:
+        result = check_lit(analyzer, node);
         break;
 
-    case NODE_IDENTIFIER:
-        result = check_identifier(analyzer, node);
+    case NODE_ID:
+        result = check_id(analyzer, node);
         break;
 
     case NODE_UNARY:
@@ -550,8 +538,8 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         result = check_member(analyzer, node);
         break;
 
-    case NODE_INDEX:
-        result = check_index(analyzer, node);
+    case NODE_IDX:
+        result = check_idx(analyzer, node);
         break;
 
     case NODE_IF:
@@ -570,40 +558,40 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         result = check_block(analyzer, node);
         break;
 
-    case NODE_STRING_INTERPOLATION:
-        result = check_string_interpolation(analyzer, node);
+    case NODE_STR_INTERPOLATION:
+        result = check_str_interpolation(analyzer, node);
         break;
 
-    case NODE_ARRAY_LITERAL:
-        result = check_array_literal(analyzer, node);
+    case NODE_ARRAY_LIT:
+        result = check_array_lit(analyzer, node);
         break;
 
-    case NODE_SLICE_LITERAL:
-        result = check_slice_literal(analyzer, node);
+    case NODE_SLICE_LIT:
+        result = check_slice_lit(analyzer, node);
         break;
 
     case NODE_SLICE_EXPR:
         result = check_slice_expr(analyzer, node);
         break;
 
-    case NODE_TUPLE_LITERAL:
-        result = check_tuple_literal(analyzer, node);
+    case NODE_TUPLE_LIT:
+        result = check_tuple_lit(analyzer, node);
         break;
 
     case NODE_TYPE_CONVERSION:
         result = check_type_conversion(analyzer, node);
         break;
 
-    case NODE_STRUCT_DECLARATION:
-        result = check_struct_declaration(analyzer, node);
+    case NODE_STRUCT_DECL:
+        result = check_struct_decl(analyzer, node);
         break;
 
-    case NODE_PACT_DECLARATION:
-        result = check_pact_declaration(analyzer, node);
+    case NODE_PACT_DECL:
+        result = check_pact_decl(analyzer, node);
         break;
 
-    case NODE_STRUCT_LITERAL:
-        result = check_struct_literal(analyzer, node);
+    case NODE_STRUCT_LIT:
+        result = check_struct_lit(analyzer, node);
         break;
 
     case NODE_STRUCT_DESTRUCTURE:
@@ -622,15 +610,15 @@ const Type *check_node(SemanticAnalyzer *analyzer, ASTNode *node) {
         result = check_deref(analyzer, node);
         break;
 
-    case NODE_ENUM_DECLARATION:
-        result = check_enum_declaration_body(analyzer, node);
+    case NODE_ENUM_DECL:
+        result = check_enum_decl_body(analyzer, node);
         break;
 
     case NODE_RETURN:
-        if (node->return_statement.value != NULL) {
-            check_node(analyzer, node->return_statement.value);
+        if (node->return_stmt.value != NULL) {
+            check_node(analyzer, node->return_stmt.value);
         }
-        result = &TYPE_NEVER_INSTANCE;
+        result = &TYPE_NEVER_INST;
         break;
 
     case NODE_WHILE:

@@ -1,7 +1,7 @@
 #ifndef RG_PUB_LOWERING_H
 #define RG_PUB_LOWERING_H
 
-#include "types/type_tree.h"
+#include "types/tt.h"
 
 typedef struct ASTNode ASTNode;
 
@@ -11,14 +11,14 @@ typedef struct ASTNode ASTNode;
  */
 typedef struct Lowering Lowering;
 
-/** Create a lowering context that allocates TT nodes from @p tt_arena. */
+/** Create a lowering ctx that allocates TT nodes from @p tt_arena. */
 Lowering *lowering_create(Arena *tt_arena);
-/** Destroy the lowering context (does not destroy arenas). */
+/** Destroy the lowering ctx (does not destroy arenas). */
 void lowering_destroy(Lowering *lowering);
 /**
  * Lower a type-checked AST file node into a Typed Tree.
  * Returns the root TT_FILE node.
  */
-TtNode *lowering_lower(Lowering *lowering, const ASTNode *file);
+TTNode *lowering_lower(Lowering *lowering, const ASTNode *file);
 
 #endif // RG_PUB_LOWERING_H

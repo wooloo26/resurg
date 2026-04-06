@@ -2,7 +2,7 @@
 
 // ── Scope manipulation ─────────────────────────────────────────────────
 
-Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop) {
+Scope *scope_push(Sema *analyzer, bool is_loop) {
     Scope *scope = arena_alloc(analyzer->arena, sizeof(Scope));
     hash_table_init(&scope->table, analyzer->arena);
     scope->parent = analyzer->current_scope;
@@ -13,37 +13,37 @@ Scope *scope_push(SemanticAnalyzer *analyzer, bool is_loop) {
     return scope;
 }
 
-void scope_pop(SemanticAnalyzer *analyzer) {
+void scope_pop(Sema *analyzer) {
     analyzer->current_scope = analyzer->current_scope->parent;
 }
 
-void scope_define(SemanticAnalyzer *analyzer, const SymbolDef *def) {
-    Symbol *symbol = arena_alloc(analyzer->arena, sizeof(Symbol));
-    symbol->name = def->name;
-    symbol->type = def->type;
-    symbol->kind = def->kind;
-    symbol->is_public = def->is_public;
-    symbol->is_immut = false;
-    symbol->declaration = NULL;
-    symbol->owner = NULL;
-    hash_table_insert(&analyzer->current_scope->table, def->name, symbol);
+void scope_define(Sema *analyzer, const SymDef *def) {
+    Sym *sym = arena_alloc(analyzer->arena, sizeof(Sym));
+    sym->name = def->name;
+    sym->type = def->type;
+    sym->kind = def->kind;
+    sym->is_pub = def->is_pub;
+    sym->is_immut = false;
+    sym->decl = NULL;
+    sym->owner = NULL;
+    hash_table_insert(&analyzer->current_scope->table, def->name, sym);
 }
 
-Symbol *scope_lookup_current(const SemanticAnalyzer *analyzer, const char *name) {
+Sym *scope_lookup_current(const Sema *analyzer, const char *name) {
     return hash_table_lookup(&analyzer->current_scope->table, name);
 }
 
-Symbol *scope_lookup(const SemanticAnalyzer *analyzer, const char *name) {
+Sym *scope_lookup(const Sema *analyzer, const char *name) {
     for (Scope *scope = analyzer->current_scope; scope != NULL; scope = scope->parent) {
-        Symbol *symbol = hash_table_lookup(&scope->table, name);
-        if (symbol != NULL) {
-            return symbol;
+        Sym *sym = hash_table_lookup(&scope->table, name);
+        if (sym != NULL) {
+            return sym;
         }
     }
     return NULL;
 }
 
-bool in_loop(const SemanticAnalyzer *analyzer) {
+bool in_loop(const Sema *analyzer) {
     for (Scope *scope = analyzer->current_scope; scope != NULL; scope = scope->parent) {
         if (scope->is_loop) {
             return true;

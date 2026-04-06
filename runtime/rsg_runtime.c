@@ -2,7 +2,7 @@
 
 #include <setjmp.h>
 
-// Checked allocation helpers - abort on OOM.
+// Checked alloc helpers - abort on OOM.
 
 static void *checked_malloc(size_t size) {
     void *ptr = malloc(size);
@@ -24,143 +24,143 @@ static void *checked_realloc(void *ptr, size_t size) {
     return result;
 }
 
-/** Build an RsgString via printf-style formatting. */
-static RsgString rsg_string_from_format(const char *format, ...) {
-    va_list arguments;
-    va_start(arguments, format);
-    int32_t length = vsnprintf(NULL, 0, format, arguments);
-    va_end(arguments);
-    char *buffer = checked_malloc(length + 1);
-    va_start(arguments, format);
-    vsnprintf(buffer, length + 1, format, arguments);
-    va_end(arguments);
-    return (RsgString){
-        .data = buffer,
-        .length = length,
-        .reference_count = 1,
+/** Build an RsgStr via printf-style fmtting. */
+static RsgStr rsg_str_from_fmt(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    int32_t len = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    char *buf = checked_malloc(len + 1);
+    va_start(args, fmt);
+    vsnprintf(buf, len + 1, fmt, args);
+    va_end(args);
+    return (RsgStr){
+        .data = buf,
+        .len = len,
+        .ref_count = 1,
     };
 }
 
-// String constructors and conversions.
+// Str constructors and conversions.
 //
-// NOTE: String data is allocated outside the GC heap (via checked_malloc)
-// and managed by reference counting.  The tracing GC handles struct/value
-// allocations made through rsg_heap_alloc().
+// NOTE: Str data is allocated outside the GC heap (via checked_malloc)
+// and managed by ref counting.  The tracing GC handles struct/value
+// allocs made through rsg_heap_alloc().
 
-RsgString rsg_string_literal(const char *source) {
-    return (RsgString){
+RsgStr rsg_str_lit(const char *source) {
+    return (RsgStr){
         .data = source,
-        .length = (int32_t)strlen(source),
-        .reference_count = -1, // static
+        .len = (int32_t)strlen(source),
+        .ref_count = -1, // static
     };
 }
 
-RsgString rsg_string_new(const char *source, int32_t length) {
-    char *buffer = checked_malloc(length + 1);
-    memcpy(buffer, source, length);
-    buffer[length] = '\0';
-    return (RsgString){
-        .data = buffer,
-        .length = length,
-        .reference_count = 1,
+RsgStr rsg_str_new(const char *source, int32_t len) {
+    char *buf = checked_malloc(len + 1);
+    memcpy(buf, source, len);
+    buf[len] = '\0';
+    return (RsgStr){
+        .data = buf,
+        .len = len,
+        .ref_count = 1,
     };
 }
 
-RsgString rsg_string_empty(void) {
-    return rsg_string_literal("");
+RsgStr rsg_str_empty(void) {
+    return rsg_str_lit("");
 }
 
-RsgString rsg_string_concat(RsgString left, RsgString right) {
-    if (left.length > INT32_MAX - right.length) {
-        fprintf(stderr, "fatal: string concatenation overflow\n");
+RsgStr rsg_str_concat(RsgStr left, RsgStr right) {
+    if (left.len > INT32_MAX - right.len) {
+        fprintf(stderr, "fatal: str concatenation overflow\n");
         // NOLINTNEXTLINE(concurrency-mt-unsafe)
         exit(1);
     }
-    int32_t length = left.length + right.length;
-    char *buffer = checked_malloc(length + 1);
-    memcpy(buffer, left.data, left.length);
-    memcpy(buffer + left.length, right.data, right.length);
-    buffer[length] = '\0';
-    return (RsgString){
-        .data = buffer,
-        .length = length,
-        .reference_count = 1,
+    int32_t len = left.len + right.len;
+    char *buf = checked_malloc(len + 1);
+    memcpy(buf, left.data, left.len);
+    memcpy(buf + left.len, right.data, right.len);
+    buf[len] = '\0';
+    return (RsgStr){
+        .data = buf,
+        .len = len,
+        .ref_count = 1,
     };
 }
 
-RsgString rsg_string_from_i32(int32_t value) {
-    return rsg_string_from_format("%d", value);
+RsgStr rsg_str_from_i32(int32_t value) {
+    return rsg_str_from_fmt("%d", value);
 }
 
-RsgString rsg_string_from_u32(uint32_t value) {
-    return rsg_string_from_format("%u", value);
+RsgStr rsg_str_from_u32(uint32_t value) {
+    return rsg_str_from_fmt("%u", value);
 }
 
-RsgString rsg_string_from_i64(int64_t value) {
-    return rsg_string_from_format("%lld", (long long)value);
+RsgStr rsg_str_from_i64(int64_t value) {
+    return rsg_str_from_fmt("%lld", (long long)value);
 }
 
-RsgString rsg_string_from_u64(uint64_t value) {
-    return rsg_string_from_format("%llu", (unsigned long long)value);
+RsgStr rsg_str_from_u64(uint64_t value) {
+    return rsg_str_from_fmt("%llu", (unsigned long long)value);
 }
 
-RsgString rsg_string_from_f32(float value) {
-    return rsg_string_from_format("%g", (double)value);
+RsgStr rsg_str_from_f32(float value) {
+    return rsg_str_from_fmt("%g", (double)value);
 }
 
-RsgString rsg_string_from_f64(double value) {
-    return rsg_string_from_format("%g", value);
+RsgStr rsg_str_from_f64(double value) {
+    return rsg_str_from_fmt("%g", value);
 }
 
-RsgString rsg_string_from_bool(bool value) {
-    return rsg_string_literal(value ? "true" : "false");
+RsgStr rsg_str_from_bool(bool value) {
+    return rsg_str_lit(value ? "true" : "false");
 }
 
-RsgString rsg_string_from_char(char value) {
-    char buffer[2] = {value, '\0'};
-    return rsg_string_new(buffer, 1);
+RsgStr rsg_str_from_char(char value) {
+    char buf[2] = {value, '\0'};
+    return rsg_str_new(buf, 1);
 }
 
-// String builder implementation.
+// Str builder implementation.
 
-void rsg_string_builder_init(RsgStringBuilder *builder) {
+void rsg_str_builder_init(RsgStrBuilder *builder) {
     builder->capacity = 64;
-    builder->length = 0;
-    builder->buffer = checked_malloc(builder->capacity);
+    builder->len = 0;
+    builder->buf = checked_malloc(builder->capacity);
 }
 
-void rsg_string_builder_append(RsgStringBuilder *builder, const char *source, int32_t length) {
-    while (builder->length + length >= builder->capacity) {
+void rsg_str_builder_append(RsgStrBuilder *builder, const char *source, int32_t len) {
+    while (builder->len + len >= builder->capacity) {
         builder->capacity *= 2;
-        builder->buffer = checked_realloc(builder->buffer, builder->capacity);
+        builder->buf = checked_realloc(builder->buf, builder->capacity);
     }
-    memcpy(builder->buffer + builder->length, source, length);
-    builder->length += length;
+    memcpy(builder->buf + builder->len, source, len);
+    builder->len += len;
 }
 
-void rsg_string_builder_append_string(RsgStringBuilder *builder, RsgString source) {
-    rsg_string_builder_append(builder, source.data, source.length);
+void rsg_str_builder_append_str(RsgStrBuilder *builder, RsgStr source) {
+    rsg_str_builder_append(builder, source.data, source.len);
 }
 
-RsgString rsg_string_builder_finish(RsgStringBuilder *builder) {
-    RsgString result = rsg_string_new(builder->buffer, builder->length);
-    free(builder->buffer);
-    builder->buffer = NULL;
-    builder->length = builder->capacity = 0;
+RsgStr rsg_str_builder_finish(RsgStrBuilder *builder) {
+    RsgStr result = rsg_str_new(builder->buf, builder->len);
+    free(builder->buf);
+    builder->buf = NULL;
+    builder->len = builder->capacity = 0;
     return result;
 }
 
-bool rsg_string_equal(RsgString left, RsgString right) {
-    if (left.length != right.length) {
+bool rsg_str_equal(RsgStr left, RsgStr right) {
+    if (left.len != right.len) {
         return false;
     }
-    return memcmp(left.data, right.data, left.length) == 0;
+    return memcmp(left.data, right.data, left.len) == 0;
 }
 
-void rsg_assert(bool condition, const char *message, const char *file, int32_t line) {
-    if (!condition) {
-        if (message != NULL) {
-            fprintf(stderr, "assertion failed at %s:%d: %s\n", file, line, message);
+void rsg_assert(bool cond, const char *msg, const char *file, int32_t line) {
+    if (!cond) {
+        if (msg != NULL) {
+            fprintf(stderr, "assertion failed at %s:%d: %s\n", file, line, msg);
         } else {
             fprintf(stderr, "assertion failed at %s:%d\n", file, line);
         }
@@ -171,8 +171,8 @@ void rsg_assert(bool condition, const char *message, const char *file, int32_t l
 
 // Typed I/O - print values to stdout without a trailing newline.
 
-void rsg_print_string(RsgString source) {
-    fwrite(source.data, 1, source.length, stdout);
+void rsg_print_str(RsgStr source) {
+    fwrite(source.data, 1, source.len, stdout);
 }
 
 void rsg_print_i32(int32_t value) {
@@ -193,11 +193,11 @@ void rsg_print_bool(bool value) {
 
 // ── Tracing garbage collector ──────────────────────────────────────────
 //
-// Conservative mark-and-sweep.  Every rsg_heap_alloc allocation is
-// prepended with an RsgGcObject header and tracked in a sorted pointer
+// Conservative mark-and-sweep.  Every rsg_heap_alloc alloc is
+// prepended with an RsgGcObject header and tracked in a sorted ptr
 // array for O(log n) lookup.  Collection scans the C stack, register
 // spill area, and user-registered roots for values that look like
-// pointers into tracked allocations, marks them reachable, then frees
+// ptrs into tracked allocs, marks them reachable, then frees
 // everything else.
 //
 // Limitations (inherent to conservative collection):
@@ -208,12 +208,12 @@ void rsg_print_bool(bool value) {
 //     multi-threaded use requires external synchronization.
 
 typedef struct RsgGcObject {
-    size_t size; // user-visible allocation size (aligned)
+    size_t size; // user-visible alloc size (aligned)
     bool marked;
 } RsgGcObject;
 
-// Align every allocation so that interior-pointer scanning covers all
-// pointer-aligned slots without truncation.
+// Align every alloc so that interior-ptr scanning covers all
+// ptr-aligned slots without truncation.
 #define GC_ALIGN_UP(n) (((n) + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1))
 
 #define RSG_GC_INITIAL_THRESHOLD 256
@@ -226,7 +226,7 @@ static size_t g_gc_object_capacity;
 static size_t g_gc_threshold = RSG_GC_INITIAL_THRESHOLD;
 static uintptr_t g_gc_stack_bottom;
 
-/** Return user-visible data pointer for a tracked header. */
+/** Return user-visible data ptr for a tracked header. */
 static inline void *gc_object_data(RsgGcObject *object) {
     return (void *)(object + 1);
 }
@@ -300,19 +300,19 @@ static size_t g_gc_root_capacity;
 // ── worklist for iterative marking ──
 
 static RsgGcObject **g_gc_worklist;
-static size_t g_gc_worklist_length;
+static size_t g_gc_worklist_len;
 static size_t g_gc_worklist_capacity;
 
 static void gc_worklist_push(RsgGcObject *object) {
-    if (g_gc_worklist_length >= g_gc_worklist_capacity) {
+    if (g_gc_worklist_len >= g_gc_worklist_capacity) {
         g_gc_worklist_capacity = g_gc_worklist_capacity == 0 ? 64 : g_gc_worklist_capacity * 2;
         g_gc_worklist = (RsgGcObject **)checked_realloc(
             (void *)g_gc_worklist, g_gc_worklist_capacity * sizeof(RsgGcObject *));
     }
-    g_gc_worklist[g_gc_worklist_length++] = object;
+    g_gc_worklist[g_gc_worklist_len++] = object;
 }
 
-/** Mark @p value if it looks like a pointer to a tracked allocation. */
+/** Mark @p value if it looks like a ptr to a tracked alloc. */
 static void gc_mark_value(uintptr_t value) {
     RsgGcObject *object = gc_find_object(value);
     if (object == NULL || object->marked) {
@@ -322,10 +322,10 @@ static void gc_mark_value(uintptr_t value) {
     gc_worklist_push(object);
 }
 
-/** Drain the worklist, scanning each marked object for interior pointers. */
+/** Drain the worklist, scanning each marked object for interior ptrs. */
 static void gc_trace_worklist(void) {
-    while (g_gc_worklist_length > 0) {
-        RsgGcObject *object = g_gc_worklist[--g_gc_worklist_length];
+    while (g_gc_worklist_len > 0) {
+        RsgGcObject *object = g_gc_worklist[--g_gc_worklist_len];
         uintptr_t *scan = (uintptr_t *)gc_object_data(object);
         size_t word_count = object->size / sizeof(uintptr_t);
         for (size_t i = 0; i < word_count; i++) {
@@ -349,7 +349,7 @@ static void gc_mark_roots(void) {
         gc_mark_value(register_scan[i]);
     }
 
-    // Scan the C stack from current position to the recorded bottom.
+    // Scan the C stack from current pos to the recorded bottom.
     volatile uintptr_t stack_top_anchor;
     uintptr_t stack_top = (uintptr_t)&stack_top_anchor;
 
@@ -363,11 +363,11 @@ static void gc_mark_roots(void) {
         scan_end = (uintptr_t *)stack_top;
     }
 
-    for (uintptr_t *pointer = scan_start; pointer < scan_end; pointer++) {
-        gc_mark_value(*pointer);
+    for (uintptr_t *ptr = scan_start; ptr < scan_end; ptr++) {
+        gc_mark_value(*ptr);
     }
 
-    // Scan user-registered roots (global/static pointer slots).
+    // Scan user-registered roots (global/static ptr slots).
     for (size_t i = 0; i < g_gc_root_count; i++) {
         void *root_value = *g_gc_roots[i];
         if (root_value != NULL) {
@@ -394,7 +394,7 @@ static void gc_sweep(void) {
     g_gc_object_count = write;
 }
 
-// ── public GC API ──
+// ── pub GC API ──
 
 void rsg_gc_init(void *stack_bottom) {
     g_gc_stack_bottom = (uintptr_t)stack_bottom;
@@ -407,7 +407,7 @@ void rsg_gc_collect(void) {
     // Free the worklist — it is only needed during collection.
     free((void *)g_gc_worklist);
     g_gc_worklist = NULL;
-    g_gc_worklist_length = 0;
+    g_gc_worklist_len = 0;
     g_gc_worklist_capacity = 0;
 
     g_gc_threshold = g_gc_object_count < RSG_GC_INITIAL_THRESHOLD / 2 ? RSG_GC_INITIAL_THRESHOLD
@@ -455,13 +455,13 @@ RsgSlice rsg_slice_new(const void *src, int32_t count, size_t elem_size) {
     if (src != NULL && count > 0) {
         memcpy(data, src, total);
     }
-    return (RsgSlice){.data = data, .length = count};
+    return (RsgSlice){.data = data, .len = count};
 }
 
 RsgSlice rsg_slice_sub(RsgSlice slice, int32_t start, int32_t end, size_t elem_size) {
     return (RsgSlice){
         .data = (char *)slice.data + (size_t)start * elem_size,
-        .length = end - start,
+        .len = end - start,
     };
 }
 

@@ -207,18 +207,3 @@ fn test_pact_mixed_receivers() {
     d.set_name(new_name = "Buddy")
     assert(d.get_name() == "Buddy")
 }
-
-fn main() {
-    test_value_receiver_basic()
-    test_value_receiver_no_mutation()
-    test_pointer_receiver_mutates()
-    test_value_and_pointer_mix()
-    test_value_receiver_on_pointer()
-    test_expression_body_value_receiver()
-    test_rectangle_value_receivers()
-    test_rectangle_pointer_receiver()
-    test_method_in_expression()
-    test_pact_default_value_receiver()
-    test_pact_override_value_receiver()
-    test_pact_mixed_receivers()
-}

@@ -15,14 +15,14 @@ static noreturn void usage(void) {
                     "  --dump-tokens Print token stream and exit\n"
                     "  --dump-ast    Print AST and exit\n"
                     "  --dump-tt     Print Typed Tree and exit\n"
-                    "  --help        Show this message\n");
+                    "  --help        Show this msg\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
 }
 
 /**
  * Parse argv into a CompilerOptions struct.  Fatally exits on unrecognised
- * flags, missing arguments, or absent input file.
+ * flags, missing args, or absent input file.
  */
 static CompilerOptions parse_cli_args(int argc, char *argv[]) {
     CompilerOptions options = {0};
@@ -37,23 +37,23 @@ static CompilerOptions parse_cli_args(int argc, char *argv[]) {
             options.dump_tt = true;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) {
-                fprintf(stderr, "error: -o requires an argument\n");
+                fprintf(stderr, "err: -o requires an arg\n");
                 usage();
             }
             options.output_file = argv[i];
         } else if (argv[i][0] == '-') {
-            fprintf(stderr, "error: unknown option '%s'\n", argv[i]);
+            fprintf(stderr, "err: unknown option '%s'\n", argv[i]);
             usage();
         } else {
             if (options.input_file != NULL) {
-                fprintf(stderr, "error: multiple input files not supported\n");
+                fprintf(stderr, "err: multiple input files not supported\n");
                 usage();
             }
             options.input_file = argv[i];
         }
     }
     if (options.input_file == NULL) {
-        fprintf(stderr, "error: no input file\n");
+        fprintf(stderr, "err: no input file\n");
         usage();
     }
     return options;
