@@ -13,7 +13,16 @@ if [ -n "$ALL_C" ]; then
 fi
 
 echo "=== pre-commit: running clang-tidy ==="
-make tidy
+# Only tidy staged/new .c files (not all sources)
+TIDY_C=$(git diff --cached --name-only --diff-filter=ACM -- '*.c' | grep '\.c$' || true)
+if [ -n "$TIDY_C" ]; then
+    # Ensure compile_commands.json exists
+    make build/Makefile
+    echo "$TIDY_C" | xargs -P"$(nproc 2>/dev/null || echo 4)" -n1 clang-tidy --quiet -p build
+    echo "  clang-tidy passed"
+else
+    echo "  no staged .c files to tidy"
+fi
 
 echo "=== pre-commit: building ==="
 make all
