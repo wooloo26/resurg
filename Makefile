@@ -19,7 +19,7 @@ else
   JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 endif
 
-.PHONY: all clean configure run test format tidy setup
+.PHONY: all clean configure run test test-one clean-tests format tidy setup
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
@@ -61,25 +61,22 @@ run: all
 	@$(BUILD)/out$(EXE)
 
 # Run all test cases
-TESTS := $(wildcard tests/integration/**/*.rsg)
-TEST_TARGETS := $(patsubst %.rsg,%.test,$(TESTS))
-
 test: all
-ifeq ($(OS),Windows_NT)
-	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_all_tests.ps1 $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME) $(TESTS)
-else
-	@$(MAKE) --no-print-directory -j$(JOBS) $(TEST_TARGETS)
-	@echo '$(words $(TESTS)) tests passed.'
-endif
+	@python3 tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
+		--build=$(BUILD) --runtime=$(RUNTIME) -j$(JOBS)
 
-# Run a single test: make tests/integration/v0.1.0/primitives.test
-$(TEST_TARGETS): %.test: %.rsg all
+# Run a single test: make test-one FILE=tests/integration/v0.1.0/primitives.rsg
+test-one: all
+	@python3 tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
+		--build=$(BUILD) --runtime=$(RUNTIME) -j1 $(FILE)
+
+# Clean only test build artifacts (preserves the compiler)
+clean-tests:
 ifeq ($(OS),Windows_NT)
-	@powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_test.ps1 $< $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME)
+	@if exist $(BUILD)\tests rmdir /s /q $(BUILD)\tests
 else
-	@bash tests/run_test.sh $< $(TARGET) $(CC) "$(RT_LIB)" $(BUILD) $(RUNTIME)
+	@rm -rf $(BUILD)/tests
 endif
-	@echo   PASS  $<
 
 # Format all C sources with clang-format
 ALL_C := $(wildcard src/*.c src/*.h src/*/*.c src/*/*.h src/*/*/*.c src/*/*/*.h \
