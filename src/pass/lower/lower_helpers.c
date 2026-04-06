@@ -50,7 +50,7 @@ HirSym *lower_add_var(Lower *low, const HirSymSpec *spec) {
 }
 
 const char *lower_make_temp_name(Lower *low) {
-    return arena_sprintf(low->hir_arena, "_tt_tmp_%d", low->temp_counter++);
+    return arena_sprintf(low->hir_arena, "_hir_tmp_%d", low->temp_counter++);
 }
 
 HirNode *lower_make_var_ref(Lower *low, HirSym *sym, SrcLoc loc) {

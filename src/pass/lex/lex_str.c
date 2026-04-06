@@ -83,7 +83,7 @@ static Token scan_simple_str(Lex *lex, int32_t content_start, SrcLoc loc) {
     if (peek(lex) == '\0') {
         rsg_err(loc, "unterminated str lit");
         return build_token(lex, TOKEN_ERR, lex->src + content_start - 1,
-                          lex->pos - content_start + 1, loc);
+                           lex->pos - content_start + 1, loc);
     }
 
     char *value = copy_str_range(lex, content_start, lex->pos);

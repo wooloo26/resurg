@@ -14,7 +14,7 @@ static noreturn void usage(void) {
                     "  -o <file>     Output C file (default: stdout)\n"
                     "  --dump-tokens Print token stream and exit\n"
                     "  --dump-ast    Print AST and exit\n"
-                    "  --dump-tt     Print Typed Tree and exit\n"
+                    "  --dump-hir     Print HIR and exit\n"
                     "  --help        Show this msg\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
@@ -33,8 +33,8 @@ static PipelineOptions parse_cli_args(int argc, char *argv[]) {
             options.dump_tokens = true;
         } else if (strcmp(argv[i], "--dump-ast") == 0) {
             options.dump_ast = true;
-        } else if (strcmp(argv[i], "--dump-tt") == 0) {
-            options.dump_tt = true;
+        } else if (strcmp(argv[i], "--dump-hir") == 0) {
+            options.dump_hir = true;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) {
                 fprintf(stderr, "err: -o requires an arg\n");

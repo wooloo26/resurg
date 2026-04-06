@@ -2,7 +2,7 @@
 #define RSG_RUNTIME_H
 
 /**
- * @file runtime.h
+ * @file rsg_runtime.h
  * @brief Resurg runtime library - linked into every compiled program.
  *
  * Provides: immutable ref-counted strs, str interpolation

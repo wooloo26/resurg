@@ -21,7 +21,7 @@ else
   JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 endif
 
-.PHONY: all clean configure run test test-one clean-tests format tidy setup
+.PHONY: all clean configure run test test-one clean-tests format tidy lint setup
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
@@ -95,3 +95,6 @@ TIDY_SRCS := $(filter %.c,$(ALL_C))
 tidy: $(BUILD)/Makefile
 	@printf '%s\n' $(TIDY_SRCS) | xargs -P$(JOBS) -n1 clang-tidy --quiet -p $(BUILD)
 	@echo clang-tidy passed.
+
+# Unified lint: format + tidy
+lint: format tidy

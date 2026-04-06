@@ -32,7 +32,7 @@ HirNode *hir_new(Arena *arena, HirNodeKind kind, const Type *type, SrcLoc loc) {
     return node;
 }
 
-// ── TT dump ───────────────────────────────────────────────────────────
+// ── HIR dump ──────────────────────────────────────────────────────────
 
 /** Print @p indent levels of whitespace to stderr. */
 static void dump_indent(int32_t indent) {
@@ -421,7 +421,7 @@ static void hir_dump_children(HirNode **children, int32_t count, int32_t indent)
     }
 }
 
-// ── TT child visitor ──────────────────────────────────────────────────
+// ── HIR child visitor ─────────────────────────────────────────────────
 
 static void visit_buf(HirChildVisitor visitor, void *ctx, HirNode **buf, int32_t count) {
     for (int32_t i = 0; i < count; i++) {

@@ -5,7 +5,7 @@
 
 /**
  * @file hir_passes.h
- * @brief TT-to-TT transfmtion passes.
+ * @brief HIR-to-HIR transformation passes.
  *
  * Each pass walks the tree in-place, rewriting nodes.  Passes are
  * composable and order-independent unless noted otherwise.

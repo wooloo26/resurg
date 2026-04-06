@@ -8,7 +8,7 @@
  * @file _check.h
  * @brief Internal decls shared across check translation units.
  *
- * Not part of the pub API -- only included by pass/check/ files.
+ * Not part of the pub API -- only included by src/pass/check/ files.
  * For the semantic context (Sema, registration structs), see _sema.h.
  */
 

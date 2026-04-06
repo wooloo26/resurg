@@ -1,5 +1,5 @@
-#ifndef RSG_CGEN_TARSGET_H
-#define RSG_CGEN_TARSGET_H
+#ifndef RSG_CGEN_TARGET_H
+#define RSG_CGEN_TARGET_H
 
 #include "repr/hir.h"
 
@@ -20,4 +20,4 @@ struct CGenTarget {
     void (*destroy)(CGenTarget *self);
 };
 
-#endif // RSG_CGEN_TARSGET_H
+#endif // RSG_CGEN_TARGET_H

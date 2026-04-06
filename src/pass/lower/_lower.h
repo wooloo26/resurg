@@ -8,7 +8,7 @@
  * @file _lower.h
  * @brief Internal decls shared across lower translation units.
  *
- * Not part of the pub API -- only included by src/lower/ files.
+ * Not part of the pub API -- only included by src/pass/lower/ files.
  */
 
 // ── Struct defs ─────────────────────────────────────────────────
@@ -73,7 +73,7 @@ typedef struct {
 HirSym *lower_make_sym(Lower *low, const HirSymSpec *spec);
 /** Create a var sym, register it in scope, and return it. */
 HirSym *lower_add_var(Lower *low, const HirSymSpec *spec);
-/** Generate a unique temp name like _tt_tmp_0. */
+/** Generate a unique temp name like _hir_tmp_0. */
 const char *lower_make_temp_name(Lower *low);
 /** Create a HirVarRef node. */
 HirNode *lower_make_var_ref(Lower *low, HirSym *sym, SrcLoc loc);
@@ -101,6 +101,12 @@ HirNode *lower_expr(Lower *low, const ASTNode *ast);
 HirNode *lower_block(Lower *low, const ASTNode *ast);
 /** Lower a NODE_IF (used as both expr and stmt). */
 HirNode *lower_stmt_if(Lower *low, const ASTNode *ast);
+/** Lower a NODE_LOOP. */
+HirNode *lower_loop(Lower *low, const ASTNode *ast);
+/** Lower a NODE_WHILE. */
+HirNode *lower_while(Lower *low, const ASTNode *ast);
+/** Lower a NODE_FOR (dispatches to slice or range variant). */
+HirNode *lower_for(Lower *low, const ASTNode *ast);
 /** Lower a NODE_STR_INTERPOLATION. */
 HirNode *lower_str_interpolation(Lower *low, const ASTNode *ast);
 /** Lower a NODE_MATCH. */

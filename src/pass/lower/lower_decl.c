@@ -2,7 +2,7 @@
 
 // ── Declaration lower helpers ──────────────────────────────────────
 
-/** Lower AST params into TT param nodes and register them in scope. */
+/** Lower AST params into HIR param nodes and register them in scope. */
 static void lower_param_list(Lower *low, ASTNode *const *param_asts, int32_t count,
                              HirNode ***out_params) {
     for (int32_t i = 0; i < count; i++) {

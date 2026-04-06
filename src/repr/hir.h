@@ -1,15 +1,15 @@
-#ifndef RSG_TYPE_TREE_H
-#define RSG_TYPE_TREE_H
+#ifndef RSG_HIR_H
+#define RSG_HIR_H
 
 #include "core/common.h"
 #include "core/token.h"
 #include "repr/types.h"
 
 /**
- * @file tt.h
- * @brief Typed Tree — fully typed, desugared intermediate representation.
+ * @file hir.h
+ * @brief HIR — fully typed, desugared intermediate representation.
  *
- * Every Typed Tree node carries a resolved type (never NULL), desugared constructs,
+ * Every HIR node carries a resolved type (never NULL), desugared constructs,
  * scope-resolved ids (HirSym with owned name and type), and no
  * syntactic sugar.
  */
@@ -19,7 +19,7 @@ typedef struct HirSym HirSym;
 
 // ── HirSym ───────────────────────────────────────────────────────────
 
-/** Sym kind in the TT — authoritative for lower and codegen. */
+/** Sym kind in the HIR — authoritative for lower and codegen. */
 typedef enum {
     HIR_SYM_VAR,
     HIR_SYM_PARAM,
@@ -29,8 +29,8 @@ typedef enum {
 } HirSymKind;
 
 /**
- * TT sym — owns name and type directly.
- * HirSym.kind is authoritative in TT/codegen.
+ * HIR sym — owns name and type directly.
+ * HirSym.kind is authoritative in HIR/codegen.
  */
 struct HirSym {
     HirSymKind kind;
@@ -387,16 +387,16 @@ typedef struct {
 /** Allocate a HirSym from @p arena using grouped @p spec. */
 HirSym *hir_sym_new(Arena *arena, const HirSymSpec *spec);
 
-// ── TT dump ───────────────────────────────────────────────────────────
+// ── HIR dump ──────────────────────────────────────────────────────────
 
 /** Recursively pretty-print @p node to stderr at @p indent levels. */
 void hir_dump(const HirNode *node, int32_t indent);
 
-// ── TT child visitor ──────────────────────────────────────────────────
+// ── HIR child visitor ─────────────────────────────────────────────────
 
 /** Callback invoked for each child ptr of a HirNode. */
 typedef void (*HirChildVisitor)(void *ctx, HirNode **child_ptr);
 /** Call @p visitor for every child ptr in @p node. */
 void hir_visit_children(HirNode *node, HirChildVisitor visitor, void *ctx);
 
-#endif // RSG_TYPE_TREE_H
+#endif // RSG_HIR_H

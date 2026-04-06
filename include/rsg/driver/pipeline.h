@@ -19,7 +19,7 @@ typedef struct {
     const char *output_file; // -o destination; NULL means stdout.
     bool dump_tokens;        // --dump-tokens: print token stream and exit.
     bool dump_ast;           // --dump-ast: pretty-print AST and exit.
-    bool dump_tt;            // --dump-tt: pretty-print Typed Tree and exit.
+    bool dump_hir;           // --dump-hir: pretty-print HIR and exit.
 } PipelineOptions;
 
 /** Create a pipeline inst. */

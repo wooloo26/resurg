@@ -288,7 +288,7 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
                                    &(BuiltinCallSpec){"rsg_assert", &TYPE_UNIT_INST, args, loc});
 }
 
-/** Lower a buf of AST expr nodes into a buf of TT nodes. */
+/** Lower a buf of AST expr nodes into a buf of HIR nodes. */
 static HirNode **lower_elem_list(Lower *low, ASTNode **ast_elems) {
     HirNode **elems = NULL;
     for (int32_t i = 0; i < BUF_LEN(ast_elems); i++) {

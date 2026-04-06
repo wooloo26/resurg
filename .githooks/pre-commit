@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "=== pre-commit: formatting ==="
 # Collect all staged C sources and format them
-ALL_C=$(git diff --cached --name-only --diff-filter=ACM -- 'src/*.c' 'src/*.h' 'runtime/*.c' 'runtime/*.h' 2>/dev/null)
+ALL_C=$(git diff --cached --name-only --diff-filter=ACM -- 'src/*.c' 'src/*.h' 'include/*.h' 'runtime/*.c' 'runtime/*.h' 2>/dev/null)
 if [ -n "$ALL_C" ]; then
     for f in $ALL_C; do
         clang-format --style=file -i "$f"

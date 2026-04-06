@@ -7,7 +7,7 @@
  * @file _parse.h
  * @brief Internal decls shared across parser translation units.
  *
- * Not part of the pub API -- only included by lib/frontend/parser/ files.
+ * Not part of the pub API -- only included by src/pass/parse/ files.
  */
 
 // ── Struct def ──────────────────────────────────────────────────
@@ -54,6 +54,11 @@ ASTType parser_parse_type(Parser *parser);
 
 /** Expression dispatch — returns a parsed expr AST node. */
 ASTNode *parser_parse_expr(Parser *parser);
+
+// ── Match / pattern parsing (parser/match.c) ──────────────────────
+
+/** Parse a match expression: match operand { pattern => body, ... }. */
+ASTNode *parser_parse_match(Parser *parser);
 
 // ── Statement / block parsing (parser/stmt.c) ─────────────────────
 

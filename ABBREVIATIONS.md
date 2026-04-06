@@ -4,7 +4,7 @@
 | ----------- | ------------------------------ |
 | `rsg`       | Resurg                         |
 | `AST`/`ast` | Abstract Syntax Tree           |
-| `TT`/`tt`   | Typed Tree                     |
+| `HIR`/`hir` | High-level IR                  |
 | `IR`/`ir`   | Intermediate Representation    |
 | `sema`      | Semantic Analysis              |
 | `cgen`      | Code Generator/Generation      |

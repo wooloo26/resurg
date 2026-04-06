@@ -7,7 +7,7 @@
  * @file _lex.h
  * @brief Internal decls shared across lex translation units.
  *
- * Not part of the pub API -- only included by src/lex/ files.
+ * Not part of the pub API -- only included by src/pass/lex/ files.
  */
 
 // ── Struct def ──────────────────────────────────────────────────
