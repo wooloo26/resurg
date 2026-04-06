@@ -11,7 +11,7 @@ fn test_array_basic() {
 
 // ── array with type-prefixed literal (inference) ──
 fn test_array_inferred() {
-    arr := [3]i32[10, 20, 30]
+    arr := [3]i32{10, 20, 30}
     assert(arr[0] == 10)
     assert(arr[1] == 20)
     assert(arr[2] == 30)
@@ -84,7 +84,7 @@ fn test_array_function() {
 
 // ── array returned from function ──
 fn make_pair(a: i32, b: i32) -> [2]i32 {
-    [2]i32[a, b]
+    [2]i32{a, b}
 }
 
 fn test_array_return() {
@@ -116,9 +116,9 @@ fn test_array_expression() {
 
 // ── array equality ──
 fn test_array_equality() {
-    a := [3]i32[1, 2, 3]
-    b := [3]i32[1, 2, 3]
-    c := [3]i32[3, 2, 1]
+    a := [3]i32{1, 2, 3}
+    b := [3]i32{1, 2, 3}
+    c := [3]i32{3, 2, 1}
     assert(a == b)
     assert(a != c)
 }

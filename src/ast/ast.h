@@ -135,8 +135,8 @@ typedef enum {
     NODE_FOR,                // for i := 0..N { ... }
     NODE_BLOCK,              // { stmts; optional trailing expr }
     NODE_STR_INTERPOLATION,  // "hello {name}, {1+2}"
-    NODE_ARRAY_LIT,          // [1, 2, 3] or [3]i32[1, 2, 3]
-    NODE_SLICE_LIT,          // []i32[1, 2, 3]
+    NODE_ARRAY_LIT,          // [1, 2, 3] or [3]i32{1, 2, 3}
+    NODE_SLICE_LIT,          // []i32{1, 2, 3}
     NODE_SLICE_EXPR,         // arr[..], s[1..4], s[2..], s[..3]
     NODE_TUPLE_LIT,          // (1, true, "hi")
     NODE_TYPE_CONVERSION,    // i64(100), f32(3.14)

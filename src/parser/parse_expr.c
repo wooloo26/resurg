@@ -181,36 +181,36 @@ static ASTNode *parse_enum_struct_lit(Parser *parser, ASTNode *member_node) {
 }
 
 /**
- * Parse an array lit: [expr, ...] or [N]T[expr, ...].
+ * Parse an array lit: [expr, ...] or [N]T{expr, ...}.
  * The opening '[' has NOT been consumed yet.
  */
 static ASTNode *parse_array_lit(Parser *parser) {
     SourceLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_LEFT_BRACKET);
 
-    // Check for slice lit: []T[values]
-    // Pattern: ']', type-keyword-or-id, '['
+    // Check for slice lit: []T{values}
+    // Pattern: ']', type-keyword-or-id, '{'
     if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
         int32_t save_pos = parser->pos;
         parser_advance(parser); // consume ']'
         if (token_is_type_keyword(parser_current_token(parser)->kind) ||
             parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET)) {
-            // This is []T[values] — a slice lit
+            // This is []T{values} — a slice lit
             ASTNode *node = ast_new(parser->arena, NODE_SLICE_LIT, loc);
             node->slice_lit.elem_type = parser_parse_type(parser);
             node->slice_lit.elems = NULL;
-            parser_expect(parser, TOKEN_LEFT_BRACKET);
-            if (!parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            parser_expect(parser, TOKEN_LEFT_BRACE);
+            if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
                 parse_comma_separated(parser, &node->slice_lit.elems);
             }
-            parser_expect(parser, TOKEN_RIGHT_BRACKET);
+            parser_expect(parser, TOKEN_RIGHT_BRACE);
             return node;
         }
         // Not a slice lit, restore pos — this is an empty array []
         parser->pos = save_pos;
     }
 
-    // Check if this is [N]T[values] (typed array lit)
+    // Check if this is [N]T{values} (typed array lit)
     // Pattern: INTEGER_LIT, ']', type-keyword-or-id
     bool has_size_and_bracket = parser_check(parser, TOKEN_INTEGER_LIT) &&
                                 parser->pos + 1 < parser->count &&
@@ -229,12 +229,12 @@ static ASTNode *parse_array_lit(Parser *parser) {
         node->array_lit.size = size;
         node->array_lit.elems = NULL;
 
-        // Parse [values]
-        parser_expect(parser, TOKEN_LEFT_BRACKET);
-        if (!parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+        // Parse {values}
+        parser_expect(parser, TOKEN_LEFT_BRACE);
+        if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
             parse_comma_separated(parser, &node->array_lit.elems);
         }
-        parser_expect(parser, TOKEN_RIGHT_BRACKET);
+        parser_expect(parser, TOKEN_RIGHT_BRACE);
         return node;
     }
 
@@ -318,7 +318,7 @@ static ASTNode *parse_primary(Parser *parser) {
         return node;
     }
 
-    // Array lit: [N]T[elems] (typed) or handled via var decl ctx
+    // Array lit: [N]T{elems} (typed) or handled via var decl ctx
     if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
         return parse_array_lit(parser);
     }

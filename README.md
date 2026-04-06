@@ -192,6 +192,8 @@ x := {  // equals x: never =
 
 Code after a `panic` call is unreachable. If no `recover` catches the panic, the program terminates with a diagnostic.
 
+**Semantics:** When a function calls `panic`, execution of that function **stops immediately** — no code after the `panic` site runs. Any deferred blocks execute in LIFO order. If a `defer` block calls `recover()`, the panic is caught and the function **returns from the defer block** (not from the panic site). The function's return value is whatever was set before or inside the `defer`.
+
 ```rsg
 fn explode() {
     panic("something went terribly wrong")
@@ -200,11 +202,15 @@ fn explode() {
 fn safe_call() -> ?str {
     var result: ?str = None
     defer {
+        // This runs after panic stops execution.
+        // recover() catches the panic and returns Some(message).
+        // The function returns 'result' as set here — not from the panic site.
         if Some(msg) := recover() {
             result = Some(msg)
         }
     }
-    explode()
+    explode()    // panic here — execution stops, defer runs, function returns
+    // unreachable: this line never executes after panic
     result
 }
 
@@ -237,15 +243,15 @@ fn build_tree() -> *Node {
 ```rsg
 // declaration forms
 arr: [5]i32 = [1, 2, 3, 4, 5]
-arr2 := [5]i32[1, 2, 3, 4, 5]
+arr2 := [5]i32{1, 2, 3, 4, 5}
 
 // arrays are values — assignment copies
-a := [3]i32[10, 20, 30]
+a := [3]i32{10, 20, 30}
 b := a                   // b is an independent copy
 b[0] = 99               // a[0] is still 10
 
 // equality comparison
-[3]i32[1, 2, 3] == [3]i32[1, 2, 3]  // true
+[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
 
 // when the left-hand side has a type annotation, the literal can omit the type prefix
 var arr: [3]i32 = [1, 2, 3]
@@ -258,7 +264,7 @@ var arr: [3]i32 = [1, 2, 3]
 x := 42
 px := &x                    // *i32
 
-arr := [3]i32[1, 2, 3]
+arr := [3]i32{1, 2, 3}
 pa := &arr                  // *[3]i32
 
 // Literals are not addressable
@@ -279,22 +285,23 @@ opt: ?i32 = Some(42)
 po := &opt                  // *?i32
 ```
 
-**Slices:** `[]T` is a GC-backed fat pointer (data + length). Array-to-slice copies into GC storage. Sub-slicing shares backing storage.
+**Slices:** `[]T` is a GC-backed fat pointer (data + length). Array-to-slice (`arr[..]`) **copies** array data into GC storage — the slice and the original array are independent. Sub-slicing shares backing storage with its parent slice (no copy).
 
 ```rsg
-arr := [5]i32[1, 2, 3, 4, 5]
+arr := [5]i32{1, 2, 3, 4, 5}
 
-// array → slice: copies data into GC storage
-s: []i32 = arr[..]       // equals s := []i32[1, 2, 3, 4, 5]
+// array → slice: copies data into GC storage (arr and s are independent)
+s: []i32 = arr[..]       // equals s := []i32{1, 2, 3, 4, 5}
+s[0] = 99                // arr[0] is still 1 — independent memory
 
-// sub-slicing: shares backing storage (no copy)
+// sub-slicing: shares backing storage with the parent slice (no copy)
 t := s[1..4]             // [2, 3, 4]
 u := s[2..]              // [3, 4, 5]
 v := s[..3]              // [1, 2, 3]
 
-// slices are reference types — aliases see mutations
+// slices are reference types — sub-slices see mutations
 x := s[1..4]
-x[0] = 99                // s[1] is now 99 too
+x[0] = 99                // s[1] is now 99 too (shared storage)
 
 // slice of slices
 matrix: [][]*i32 = []

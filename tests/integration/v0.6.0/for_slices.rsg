@@ -4,7 +4,7 @@ module test_for_slices
 // ── for over slice with value ──
 
 fn test_for_slice_value() {
-    s := []i32[10, 20, 30]
+    s := []i32{10, 20, 30}
     sum := 0
     for s |v| {
         sum = sum + v
@@ -15,7 +15,7 @@ fn test_for_slice_value() {
 // ── for over slice with value and index ──
 
 fn test_for_slice_value_index() {
-    s := []str["a", "b", "c"]
+    s := []str{"a", "b", "c"}
     count := 0
     idx_sum := 0
     for s |v, i| {
@@ -29,7 +29,7 @@ fn test_for_slice_value_index() {
 // ── for over empty slice ──
 
 fn test_for_empty_slice() {
-    s := []i32[]
+    s := []i32{}
     count := 0
     for s |v| {
         count = count + 1
@@ -40,7 +40,7 @@ fn test_for_empty_slice() {
 // ── for over slice index used for access ──
 
 fn test_for_slice_index_access() {
-    s := []i32[5, 10, 15, 20]
+    s := []i32{5, 10, 15, 20}
     sum := 0
     for s |v, i| {
         sum = sum + v * (i + 1)
@@ -51,7 +51,7 @@ fn test_for_slice_index_access() {
 // ── for over single element slice ──
 
 fn test_for_single_element() {
-    s := []i32[42]
+    s := []i32{42}
     total := 0
     for s |v| {
         total = total + v
@@ -62,7 +62,7 @@ fn test_for_single_element() {
 // ── for over slice with break ──
 
 fn test_for_slice_break() {
-    s := []i32[1, 2, 3, 4, 5]
+    s := []i32{1, 2, 3, 4, 5}
     sum := 0
     for s |v| {
         if v == 4 { break }
@@ -74,7 +74,7 @@ fn test_for_slice_break() {
 // ── for over slice with continue ──
 
 fn test_for_slice_continue() {
-    s := []i32[1, 2, 3, 4, 5]
+    s := []i32{1, 2, 3, 4, 5}
     sum := 0
     for s |v| {
         if v % 2 == 0 { continue }
@@ -86,7 +86,7 @@ fn test_for_slice_continue() {
 // ── for over sub-slice ──
 
 fn test_for_sub_slice() {
-    s := []i32[10, 20, 30, 40, 50]
+    s := []i32{10, 20, 30, 40, 50}
     t := s[1..4]
     sum := 0
     for t |v| {
@@ -98,9 +98,9 @@ fn test_for_sub_slice() {
 // ── nested for over slices ──
 
 fn test_nested_for_slices() {
-    row1 := []i32[1, 2]
-    row2 := []i32[3, 4]
-    matrix := [][]i32[row1, row2]
+    row1 := []i32{1, 2}
+    row2 := []i32{3, 4}
+    matrix := [][]i32{row1, row2}
     total := 0
     for matrix |row| {
         for row |v| {
