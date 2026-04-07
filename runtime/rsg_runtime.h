@@ -93,6 +93,15 @@ void rsg_print_i32(int32_t value);
 void rsg_print_u32(uint32_t value);
 void rsg_print_f64(double value);
 void rsg_print_bool(bool value);
+void rsg_print_char(char value);
+
+/** Print to stdout with a trailing newline. */
+void rsg_println_str(RsgStr src);
+void rsg_println_i32(int32_t value);
+void rsg_println_u32(uint32_t value);
+void rsg_println_f64(double value);
+void rsg_println_bool(bool value);
+void rsg_println_char(char value);
 
 /** Allocate @p size bytes on the GC-managed heap; abort on OOM. */
 void *rsg_heap_alloc(size_t size);
@@ -138,5 +147,17 @@ void rsg_gc_add_root(void **root);
  * considers @p root a src of liveness.
  */
 void rsg_gc_remove_root(void **root);
+
+/**
+ * Fat pointer for first-class function values (fn types).
+ * @c fn is the actual function (cast at call site to the correct
+ * signature with an extra leading @c void* env param).
+ * @c env holds captured state (NULL for plain function references
+ * and non-capturing closures).
+ */
+typedef struct {
+    void (*fn)(void);
+    void *env;
+} RsgFn;
 
 #endif // RSG_RUNTIME_H

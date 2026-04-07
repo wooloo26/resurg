@@ -126,6 +126,8 @@ static const char *hir_node_kind_str(HirNodeKind kind) {
         return "EnumDecl";
     case HIR_MATCH:
         return "Match";
+    case HIR_CLOSURE:
+        return "Closure";
     }
     return "?";
 }
@@ -412,6 +414,12 @@ void hir_dump(const HirNode *node, int32_t indent) {
     case HIR_MATCH:
         dump_match_node(node, indent);
         break;
+
+    case HIR_CLOSURE:
+        fprintf(stderr, " \"%s\"\n", node->closure.fn_name);
+        hir_dump_children(node->closure.params, BUF_LEN(node->closure.params), indent + 1);
+        hir_dump(node->closure.body, indent + 1);
+        break;
     }
 }
 
@@ -547,6 +555,10 @@ void hir_visit_children(HirNode *node, HirChildVisitor visitor, void *ctx) {
         visit_buf(visitor, ctx, node->match_expr.arm_conds, BUF_LEN(node->match_expr.arm_conds));
         visit_buf(visitor, ctx, node->match_expr.arm_guards, BUF_LEN(node->match_expr.arm_guards));
         visit_buf(visitor, ctx, node->match_expr.arm_bodies, BUF_LEN(node->match_expr.arm_bodies));
+        break;
+    case HIR_CLOSURE:
+        visit_buf(visitor, ctx, node->closure.params, BUF_LEN(node->closure.params));
+        visitor(ctx, &node->closure.body);
         break;
     default:
         break;

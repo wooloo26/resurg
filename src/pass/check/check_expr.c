@@ -58,7 +58,7 @@ static void check_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
         const Type *param_type = sig->param_types[i];
         promote_lit(arg, param_type);
         const Type *arg_type = arg->type;
-        if (arg_type != NULL && param_type != NULL && !type_equal(arg_type, param_type) &&
+        if (arg_type != NULL && param_type != NULL && !type_assignable(arg_type, param_type) &&
             arg_type->kind != TYPE_ERR && param_type->kind != TYPE_ERR) {
             SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
                      type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
@@ -110,6 +110,28 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         }
         SEMA_ERR(sema, node->loc, "undefined variable '%s'", node->id.name);
         return &TYPE_ERR_INST;
+    }
+    // Track captured variable references for Fn/FnMut auto-inference
+    if (sema->closure_scope != NULL && sym->kind != SYM_FN && sym->kind != SYM_TYPE) {
+        bool found_local = false;
+        for (Scope *s = sema->current_scope; s != NULL && s != sema->closure_scope->parent;
+             s = s->parent) {
+            if (hash_table_lookup(&s->table, node->id.name) != NULL) {
+                found_local = true;
+                break;
+            }
+        }
+        if (!found_local) {
+            sema->closure_has_capture = true;
+        }
+    }
+    // Function symbols used as values → construct fn type
+    if (sym->kind == SYM_FN) {
+        FnSig *sig = sema_lookup_fn(sema, node->id.name);
+        if (sig != NULL) {
+            return type_create_fn(sema->arena, sig->param_types, sig->param_count, sig->return_type,
+                                  FN_PLAIN);
+        }
     }
     return sym->type;
 }
@@ -320,6 +342,33 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
         }
     }
 
+    // Call through fn-typed struct field: obj.field(args)
+    if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
+        const StructField *sf = type_struct_find_field(obj_type, method_name);
+        if (sf != NULL && sf->type != NULL && sf->type->kind == TYPE_FN) {
+            node->call.callee->type = sf->type;
+            int32_t arg_count = BUF_LEN(node->call.args);
+            int32_t fn_param_count = sf->type->fn_type.param_count;
+            if (arg_count != fn_param_count) {
+                SEMA_ERR(sema, node->loc, "expected %d args, got %d", fn_param_count, arg_count);
+            } else {
+                for (int32_t i = 0; i < arg_count; i++) {
+                    const Type *param_type = sf->type->fn_type.params[i];
+                    promote_lit(node->call.args[i], param_type);
+                    const Type *arg_type = node->call.args[i]->type;
+                    if (arg_type != NULL && param_type != NULL &&
+                        !type_assignable(arg_type, param_type) && arg_type->kind != TYPE_ERR &&
+                        param_type->kind != TYPE_ERR) {
+                        SEMA_ERR(
+                            sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
+                            type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
+                    }
+                }
+            }
+            return sf->type->fn_type.return_type;
+        }
+    }
+
     *out_fn_name = method_name;
     return NULL;
 }
@@ -333,15 +382,59 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         if (result != NULL) {
             return result;
         }
+    } else if (node->call.callee->kind == NODE_CLOSURE) {
+        // Inline closure call: (|x| expr)(args)
+        for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+            check_node(sema, node->call.args[i]);
+        }
+        // Infer closure param types from arg types
+        int32_t param_count = BUF_LEN(node->call.callee->closure.params);
+        int32_t arg_count = BUF_LEN(node->call.args);
+        const Type **param_types = NULL;
+        for (int32_t i = 0; i < param_count; i++) {
+            const Type *pt = (i < arg_count && node->call.args[i]->type != NULL)
+                                 ? node->call.args[i]->type
+                                 : &TYPE_ERR_INST;
+            BUF_PUSH(param_types, pt);
+        }
+        const Type *expected_fn =
+            type_create_fn(sema->arena, param_types, param_count, NULL, FN_PLAIN);
+        const Type *saved = sema->expected_type;
+        sema->expected_type = expected_fn;
+        const Type *callee_type = check_closure(sema, node->call.callee);
+        sema->expected_type = saved;
+        node->call.callee->type = callee_type;
+        if (callee_type != NULL && callee_type->kind == TYPE_FN) {
+            return callee_type->fn_type.return_type;
+        }
+        return &TYPE_ERR_INST;
     }
 
-    // Check args
+    // Check args — set expected_type per-param so closures can infer types
+    FnSig *early_sig = (fn_name != NULL) ? sema_lookup_fn(sema, fn_name) : NULL;
+    const Type *callee_fn_type = NULL;
+    if (early_sig == NULL && fn_name != NULL) {
+        Sym *callee_sym = scope_lookup(sema, fn_name);
+        if (callee_sym != NULL && callee_sym->type != NULL && callee_sym->type->kind == TYPE_FN) {
+            callee_fn_type = callee_sym->type;
+        }
+    }
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+        const Type *saved = sema->expected_type;
+        if (early_sig != NULL && i < early_sig->param_count) {
+            sema->expected_type = early_sig->param_types[i];
+        } else if (callee_fn_type != NULL && i < callee_fn_type->fn_type.param_count) {
+            sema->expected_type = callee_fn_type->fn_type.params[i];
+        }
         check_node(sema, node->call.args[i]);
+        sema->expected_type = saved;
     }
 
     // Built-in fns
     if (fn_name != NULL && strcmp(fn_name, "assert") == 0) {
+        return &TYPE_UNIT_INST;
+    }
+    if (fn_name != NULL && (strcmp(fn_name, "print") == 0 || strcmp(fn_name, "println") == 0)) {
         return &TYPE_UNIT_INST;
     }
 
@@ -501,6 +594,28 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         if (sym != NULL && sym->kind == SYM_FN) {
             return sym->type;
         }
+        // Call through fn-typed variable: f(args)
+        if (sym != NULL && sym->type != NULL && sym->type->kind == TYPE_FN) {
+            int32_t arg_count = BUF_LEN(node->call.args);
+            int32_t fn_param_count = sym->type->fn_type.param_count;
+            if (arg_count != fn_param_count) {
+                SEMA_ERR(sema, node->loc, "expected %d args, got %d", fn_param_count, arg_count);
+            } else {
+                for (int32_t i = 0; i < arg_count; i++) {
+                    const Type *param_type = sym->type->fn_type.params[i];
+                    promote_lit(node->call.args[i], param_type);
+                    const Type *arg_type = node->call.args[i]->type;
+                    if (arg_type != NULL && param_type != NULL &&
+                        !type_assignable(arg_type, param_type) && arg_type->kind != TYPE_ERR &&
+                        param_type->kind != TYPE_ERR) {
+                        SEMA_ERR(
+                            sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
+                            type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
+                    }
+                }
+            }
+            return sym->type->fn_type.return_type;
+        }
         if (sym == NULL) {
             // Handle bare Some(x) → Option<T> variant constructor
             if (strcmp(fn_name, "Some") == 0 && BUF_LEN(node->call.args) == 1) {
@@ -559,6 +674,33 @@ const Type *check_call(Sema *sema, ASTNode *node) {
             SEMA_ERR(sema, node->loc, "undefined function '%s'", fn_name);
         }
     }
+
+    // General expression callee: idx, member field, etc.
+    if (fn_name == NULL && node->call.callee->kind != NODE_CLOSURE) {
+        const Type *ct = check_node(sema, node->call.callee);
+        if (ct != NULL && ct->kind == TYPE_FN) {
+            int32_t arg_count = BUF_LEN(node->call.args);
+            int32_t fn_param_count = ct->fn_type.param_count;
+            if (arg_count != fn_param_count) {
+                SEMA_ERR(sema, node->loc, "expected %d args, got %d", fn_param_count, arg_count);
+            } else {
+                for (int32_t i = 0; i < arg_count; i++) {
+                    const Type *param_type = ct->fn_type.params[i];
+                    promote_lit(node->call.args[i], param_type);
+                    const Type *arg_type = node->call.args[i]->type;
+                    if (arg_type != NULL && param_type != NULL &&
+                        !type_assignable(arg_type, param_type) && arg_type->kind != TYPE_ERR &&
+                        param_type->kind != TYPE_ERR) {
+                        SEMA_ERR(
+                            sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
+                            type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
+                    }
+                }
+            }
+            return ct->fn_type.return_type;
+        }
+    }
+
     return &TYPE_ERR_INST;
 }
 
@@ -723,8 +865,9 @@ const Type *check_tuple_lit(Sema *sema, ASTNode *node) {
 void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_type) {
     promote_lit(value_node, expected_type);
     const Type *actual_type = value_node->type;
-    if (actual_type != NULL && expected_type != NULL && !type_equal(actual_type, expected_type) &&
-        actual_type->kind != TYPE_ERR && expected_type->kind != TYPE_ERR) {
+    if (actual_type != NULL && expected_type != NULL &&
+        !type_assignable(actual_type, expected_type) && actual_type->kind != TYPE_ERR &&
+        expected_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, value_node->loc, "type mismatch: expected '%s', got '%s'",
                  type_name(sema->arena, expected_type), type_name(sema->arena, actual_type));
     }
@@ -849,18 +992,28 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     for (int32_t i = 0; i < provided_count; i++) {
         const char *fname = node->struct_lit.field_names[i];
         ASTNode *fvalue = node->struct_lit.field_values[i];
-        check_node(sema, fvalue);
 
-        // Look up the field in the struct def
-        bool found = false;
+        // Find the field type for expected_type propagation
+        const Type *field_type = NULL;
         for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
             if (strcmp(sdef->fields[j].name, fname) == 0) {
-                found = true;
-                check_field_match(sema, fvalue, sdef->fields[j].type);
+                field_type = sdef->fields[j].type;
                 break;
             }
         }
-        if (!found) {
+
+        // Set expected type before checking (aids closure param inference)
+        const Type *saved_expected = sema->expected_type;
+        if (field_type != NULL) {
+            sema->expected_type = field_type;
+        }
+        check_node(sema, fvalue);
+        sema->expected_type = saved_expected;
+
+        // Validate the field type
+        if (field_type != NULL) {
+            check_field_match(sema, fvalue, field_type);
+        } else {
             SEMA_ERR(sema, node->loc, "no field '%s' on struct '%s'", fname, struct_name);
         }
     }
@@ -914,4 +1067,75 @@ const Type *check_deref(Sema *sema, ASTNode *node) {
         return &TYPE_ERR_INST;
     }
     return inner_type->ptr.pointee;
+}
+
+const Type *check_closure(Sema *sema, ASTNode *node) {
+    const Type *expected = sema->expected_type;
+    int32_t param_count = BUF_LEN(node->closure.params);
+    const Type **param_types = NULL;
+
+    // Determine fn_kind from expected type (NULL means auto-infer)
+    FnTypeKind fn_kind = FN_PLAIN;
+    bool infer_fn_kind = (expected == NULL || expected->kind != TYPE_FN);
+    if (!infer_fn_kind) {
+        fn_kind = expected->fn_type.fn_kind;
+    }
+
+    for (int32_t i = 0; i < param_count; i++) {
+        ASTNode *param = node->closure.params[i];
+        const Type *pt = resolve_ast_type(sema, &param->param.type);
+        if (pt == NULL && expected != NULL && expected->kind == TYPE_FN &&
+            i < expected->fn_type.param_count) {
+            pt = expected->fn_type.params[i];
+        }
+        if (pt == NULL) {
+            pt = &TYPE_ERR_INST;
+        }
+        param->type = pt;
+        BUF_PUSH(param_types, pt);
+    }
+
+    scope_push(sema, false);
+    for (int32_t i = 0; i < param_count; i++) {
+        scope_define(
+            sema, &(SymDef){node->closure.params[i]->param.name, param_types[i], false, SYM_VAR});
+    }
+
+    // Save and set closure context for capture mutation checking
+    Scope *saved_closure_scope = sema->closure_scope;
+    FnTypeKind saved_closure_fn_kind = sema->closure_fn_kind;
+    bool saved_has_capture = sema->closure_has_capture;
+    bool saved_captures_mutated = sema->closure_captures_mutated;
+
+    // Always set up closure scope so capture tracking works
+    sema->closure_scope = sema->current_scope;
+    sema->closure_fn_kind = infer_fn_kind ? FN_CLOSURE_MUT : fn_kind;
+    if (infer_fn_kind) {
+        sema->closure_has_capture = false;
+        sema->closure_captures_mutated = false;
+    }
+
+    const Type *body_type = check_node(sema, node->closure.body);
+
+    // Auto-infer fn_kind from capture analysis
+    if (infer_fn_kind) {
+        if (sema->closure_captures_mutated) {
+            fn_kind = FN_CLOSURE_MUT;
+        } else if (sema->closure_has_capture) {
+            fn_kind = FN_CLOSURE;
+        }
+    }
+
+    sema->closure_scope = saved_closure_scope;
+    sema->closure_fn_kind = saved_closure_fn_kind;
+    sema->closure_has_capture = saved_has_capture;
+    sema->closure_captures_mutated = saved_captures_mutated;
+    scope_pop(sema);
+
+    const Type *return_type = resolve_ast_type(sema, &node->closure.return_type);
+    if (return_type == NULL) {
+        return_type = (body_type != NULL) ? body_type : &TYPE_UNIT_INST;
+    }
+
+    return type_create_fn(sema->arena, param_types, param_count, return_type, fn_kind);
 }

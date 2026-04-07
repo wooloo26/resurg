@@ -170,8 +170,8 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
             init_type = node->var_decl.init->type;
         }
         // Check for type mismatch between declared and init (non-lit)
-        if (init_type != NULL && !type_equal(declared, init_type) && init_type->kind != TYPE_ERR &&
-            declared->kind != TYPE_ERR) {
+        if (init_type != NULL && !type_assignable(init_type, declared) &&
+            init_type->kind != TYPE_ERR && declared->kind != TYPE_ERR) {
             SEMA_ERR(sema, node->loc, "type mismatch: expected '%s', got '%s'",
                      type_name(sema->arena, declared), type_name(sema->arena, init_type));
         }
@@ -223,13 +223,16 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
         // Pre-resolve return type for bidirectional inference (Ok/Err/None)
         const Type *pre_return = resolve_ast_type(sema, &fn_node->fn_decl.return_type);
         const Type *save_fn_return = sema->fn_return_type;
+        const Type *save_expected = sema->expected_type;
         if (pre_return != NULL) {
             sema->fn_return_type = pre_return;
+            sema->expected_type = pre_return;
         }
 
         const Type *body_type = check_node(sema, fn_node->fn_decl.body);
 
         sema->fn_return_type = save_fn_return;
+        sema->expected_type = save_expected;
 
         // If return type not declared, infer from body
         const Type *resolved_return = pre_return;
@@ -274,6 +277,30 @@ static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode 
         Sym *sym = scope_lookup(sema, target->id.name);
         if (sym != NULL && sym->is_immut) {
             SEMA_ERR(sema, target->loc, "cannot assign to immutable var '%s'", target->id.name);
+        }
+        // Check Fn closure: cannot mutate captured variables
+        if (sema->closure_scope != NULL &&
+            (sema->closure_fn_kind == FN_CLOSURE || sema->closure_fn_kind == FN_CLOSURE_MUT)) {
+            const char *name = target->id.name;
+            // Search only within the closure scope (closure params + body locals)
+            bool found_local = false;
+            for (Scope *s = sema->current_scope; s != NULL && s != sema->closure_scope->parent;
+                 s = s->parent) {
+                if (hash_table_lookup(&s->table, name) != NULL) {
+                    found_local = true;
+                    break;
+                }
+            }
+            if (!found_local) {
+                if (sema->closure_fn_kind == FN_CLOSURE) {
+                    SEMA_ERR(sema, target->loc,
+                             "cannot assign mutable closure to Fn: "
+                             "captured variable '%s' is mutated",
+                             name);
+                } else {
+                    sema->closure_captures_mutated = true;
+                }
+            }
         }
     }
 
@@ -768,6 +795,10 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_DEREF:
         result = check_deref(sema, node);
+        break;
+
+    case NODE_CLOSURE:
+        result = check_closure(sema, node);
         break;
 
     case NODE_ENUM_DECL:

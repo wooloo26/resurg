@@ -19,7 +19,8 @@ typedef struct CGen CGen;
 struct CGen {
     CGenTarget base; // must be first (upcasting)
     FILE *output;
-    Arena *arena; // for temp str building
+    FILE *real_output; // original output for companion fns
+    Arena *arena;      // for temp str building
     int32_t indent;
     const char *module;           // current module name (may be NULL)
     int32_t temp_counter;         // monotonic counter for _rsg_tmp_N
@@ -27,6 +28,7 @@ struct CGen {
     const Type **compound_types;  /* buf */
     const HirNode **defer_bodies; /* buf – active defers in current fn */
     bool in_deferred_fn;          // true when current fn has defers
+    HashTable wrapper_set;        // dedup for fn ref wrappers
 };
 
 // ── Output helpers (emit_helpers.c) ─────────────────────────────────

@@ -77,6 +77,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_PIPE_PIPE] = {"||", 0},
     [TOKEN_BANG] = {"!", 0},
     [TOKEN_PIPE] = {"|", 0},
+    [TOKEN_PIPE_GREATER] = {"|>", 0},
     [TOKEN_COLON_EQUAL] = {":=", 0},
     [TOKEN_EQUAL] = {"=", 0},
     [TOKEN_PLUS_EQUAL] = {"+=", 0},

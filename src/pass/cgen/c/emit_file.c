@@ -234,6 +234,7 @@ static void emit_module_and_types(CGen *cgen, const HirNode *file) {
 
 /** Emit forward decls, then full defs, for all fns. */
 static void emit_fns(CGen *cgen, const HirNode *file) {
+    // Forward declarations
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         const HirNode *decl = file->file.decls[i];
         if (decl->kind == HIR_FN_DECL) {
@@ -242,12 +243,32 @@ static void emit_fns(CGen *cgen, const HirNode *file) {
     }
     emit(cgen, "\n");
 
+    // Emit function bodies to a temp file so companion functions
+    // (wrappers, closures) are written to real_output first.
+    FILE *real_out = cgen->output;
+    cgen->real_output = real_out;
+    FILE *body_tmp = tmpfile();
+    cgen->output = body_tmp;
+
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         const HirNode *decl = file->file.decls[i];
         if (decl->kind == HIR_FN_DECL) {
             emit_fn_decl(cgen, decl, false);
         }
     }
+
+    // Flush: write companion functions (on real_out), then body buffer
+    FILE *saved_body = cgen->output;
+    cgen->output = real_out;
+    cgen->real_output = NULL;
+
+    rewind(saved_body);
+    char buf[4096];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), saved_body)) > 0) {
+        fwrite(buf, 1, n, real_out);
+    }
+    fclose(saved_body);
 }
 
 /** Emit `_rsg_top_level()` wrapper if any top-level stmts exist. */

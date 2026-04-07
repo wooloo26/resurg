@@ -181,6 +181,7 @@ Deferred calls execute in LIFO order exclusively when the enclosing function exi
 ```rsg
 f := open(path)!
 defer f.close() // Executes only on function return, ignoring block structure
+```
 
 ### Assert
 
@@ -644,6 +645,9 @@ Expression or block bodies. Named args at call site. No nested functions; closur
 ```rsg
 fn add(a: i32, b: i32) = a + b
 
+var add_fn: fn(i32, i32) -> i32 = add
+var add_fn_lambda: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b
+
 fn sum(values: []i32) -> i32 {
     total := 0
     for values |v| total += v
@@ -656,8 +660,20 @@ set_name(mut user = &myUser, name = "Bob")
 Closures:
 
 ```rsg
-list.map(|x| x * 2).filter(|x| x > 10)
-list.map(|x| x + offset)     // captures offset
+offset := 10
+var cb: Fn(i32) -> i32 = |x| x + offset    // captures offset, readonly
+// or cb := |x| x + offset
+
+fn map(values: []i32, predicate: Fn(i32) -> i32) -> []i32 { ... } // fn is subtyping of Fn
+
+map(list, cb)
+
+count := 0
+var cb: FnMut(i32) -> i32 = |x| { 
+    count += 1          
+    x + count 
+}
+// or cb := ...
 ```
 
 ### Pipe Operator

@@ -1,18 +1,11 @@
 #include "_parse.h"
 
-// ── Operator classification ─────────────────────────────────────────────
+// ── Forward declarations ────────────────────────────────────────────
 
-static bool is_compound_assignment_op(TokenKind op) {
-    return op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL ||
-           op == TOKEN_SLASH_EQUAL;
-}
-
-// ── Operator precedence ────────────────────────────────────────────────
-
-/** Operator precedence levels for Pratt-style parsing. */
 typedef enum {
     PRECEDENCE_NONE,       //
     PRECEDENCE_ASSIGN,     // = += -= *= /=
+    PRECEDENCE_PIPE,       // |>
     PRECEDENCE_OR,         // ||
     PRECEDENCE_AND,        // &&
     PRECEDENCE_EQUALITY,   // == !=
@@ -23,6 +16,15 @@ typedef enum {
     PRECEDENCE_CALL,       // () .
     PRECEDENCE_PRIMARY,    //
 } Precedence;
+
+static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence);
+
+// ── Operator classification ─────────────────────────────────────────────
+
+static bool is_compound_assignment_op(TokenKind op) {
+    return op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL ||
+           op == TOKEN_SLASH_EQUAL;
+}
 
 static Precedence token_precedence(TokenKind kind) {
     switch (kind) {
@@ -51,6 +53,8 @@ static Precedence token_precedence(TokenKind kind) {
     case TOKEN_SLASH:
     case TOKEN_PERCENT:
         return PRECEDENCE_FACTOR;
+    case TOKEN_PIPE_GREATER:
+        return PRECEDENCE_PIPE;
     default:
         return PRECEDENCE_NONE;
     }
@@ -194,7 +198,8 @@ static ASTNode *parse_array_lit(Parser *parser) {
         int32_t save_pos = parser->pos;
         parser_advance(parser); // consume ']'
         if (token_is_type_keyword(parser_current_token(parser)->kind) ||
-            parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET)) {
+            parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET) ||
+            parser_check(parser, TOKEN_FN)) {
             // This is []T{values} — a slice lit
             ASTNode *node = ast_new(parser->arena, NODE_SLICE_LIT, loc);
             node->slice_lit.elem_type = parser_parse_type(parser);
@@ -217,7 +222,8 @@ static ASTNode *parse_array_lit(Parser *parser) {
                                 parser->tokens[parser->pos + 1].kind == TOKEN_RIGHT_BRACKET;
     bool has_type_after = has_size_and_bracket && parser->pos + 2 < parser->count &&
                           (token_is_type_keyword(parser->tokens[parser->pos + 2].kind) ||
-                           parser->tokens[parser->pos + 2].kind == TOKEN_ID);
+                           parser->tokens[parser->pos + 2].kind == TOKEN_ID ||
+                           parser->tokens[parser->pos + 2].kind == TOKEN_FN);
     if (has_type_after) {
         int32_t size = (int32_t)parser_current_token(parser)->lit_value.integer_value;
         parser_advance(parser); // consume size
@@ -354,6 +360,50 @@ static ASTNode *parse_primary(Parser *parser) {
     }
     if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         return parser_parse_block(parser);
+    }
+
+    // Closure: |params| body  or  || body
+    if (parser_check(parser, TOKEN_PIPE)) {
+        parser_advance(parser); // consume '|'
+        ASTNode *node = ast_new(parser->arena, NODE_CLOSURE, loc);
+        node->closure.params = NULL;
+        node->closure.return_type.kind = AST_TYPE_INFERRED;
+        if (!parser_check(parser, TOKEN_PIPE)) {
+            do {
+                SrcLoc param_loc = parser_current_loc(parser);
+                ASTNode *param = ast_new(parser->arena, NODE_PARAM, param_loc);
+                param->param.is_mut = false;
+                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
+                if (parser_match(parser, TOKEN_COLON)) {
+                    param->param.type = parser_parse_type(parser);
+                } else {
+                    param->param.type.kind = AST_TYPE_INFERRED;
+                }
+                BUF_PUSH(node->closure.params, param);
+            } while (parser_match(parser, TOKEN_COMMA));
+        }
+        parser_expect(parser, TOKEN_PIPE);
+        if (parser_match(parser, TOKEN_ARROW)) {
+            node->closure.return_type = parser_parse_type(parser);
+        }
+        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+            node->closure.body = parser_parse_block(parser);
+        } else {
+            node->closure.body = parse_precedence(parser, PRECEDENCE_PIPE + 1);
+        }
+        return node;
+    }
+    if (parser_check(parser, TOKEN_PIPE_PIPE)) {
+        parser_advance(parser); // consume '||'
+        ASTNode *node = ast_new(parser->arena, NODE_CLOSURE, loc);
+        node->closure.params = NULL;
+        node->closure.return_type.kind = AST_TYPE_INFERRED;
+        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+            node->closure.body = parser_parse_block(parser);
+        } else {
+            node->closure.body = parse_precedence(parser, PRECEDENCE_PIPE + 1);
+        }
+        return node;
     }
     const char *token_name = token_kind_str(parser_current_token(parser)->kind);
     rsg_err(loc, "expected expr, got '%s'", token_name);
@@ -667,6 +717,43 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
             node->compound_assign.target = left;
             node->compound_assign.value = parse_precedence(parser, precedence);
             left = node;
+            continue;
+        }
+
+        // Pipe operator: desugar a |> f into f(a), a |> f(b) into f(a, b)
+        if (op == TOKEN_PIPE_GREATER) {
+            ASTNode *rhs = parse_precedence(parser, precedence + 1);
+            if (rhs->kind == NODE_CALL) {
+                // a |> f(b, c) → f(a, b, c): prepend left to existing args
+                int32_t old_count = BUF_LEN(rhs->call.args);
+                ASTNode **new_args = NULL;
+                const char **new_names = NULL;
+                bool *new_mut = NULL;
+                BUF_PUSH(new_args, left);
+                BUF_PUSH(new_names, (const char *)NULL);
+                BUF_PUSH(new_mut, false);
+                for (int32_t i = 0; i < old_count; i++) {
+                    BUF_PUSH(new_args, rhs->call.args[i]);
+                    BUF_PUSH(new_names,
+                             i < BUF_LEN(rhs->call.arg_names) ? rhs->call.arg_names[i] : NULL);
+                    BUF_PUSH(new_mut,
+                             i < BUF_LEN(rhs->call.arg_is_mut) ? rhs->call.arg_is_mut[i] : false);
+                }
+                rhs->call.args = new_args;
+                rhs->call.arg_names = new_names;
+                rhs->call.arg_is_mut = new_mut;
+                left = rhs;
+            } else {
+                // a |> f → f(a)
+                ASTNode *call = ast_new(parser->arena, NODE_CALL, loc);
+                call->call.callee = rhs;
+                call->call.args = NULL;
+                call->call.arg_names = NULL;
+                call->call.arg_is_mut = NULL;
+                call->call.type_args = NULL;
+                BUF_PUSH(call->call.args, left);
+                left = call;
+            }
             continue;
         }
 

@@ -120,6 +120,10 @@ Sema *sema_create(Arena *arena) {
     sema->loop_break_type = NULL;
     sema->expected_type = NULL;
     sema->fn_return_type = NULL;
+    sema->closure_scope = NULL;
+    sema->closure_fn_kind = FN_PLAIN;
+    sema->closure_has_capture = false;
+    sema->closure_captures_mutated = false;
     sema->file_node = NULL;
     hash_table_init(&sema->type_alias_table, NULL);
     hash_table_init(&sema->fn_table, NULL);

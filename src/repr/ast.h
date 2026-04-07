@@ -27,6 +27,7 @@ typedef enum {
     AST_TYPE_PTR,      // *T
     AST_TYPE_OPTION,   // ?T
     AST_TYPE_RESULT,   // T ! E
+    AST_TYPE_FN,       // fn(Params) -> Return
 } ASTTypeKind;
 
 struct ASTType {
@@ -47,6 +48,10 @@ struct ASTType {
     // AST_TYPE_RESULT fields
     ASTType *result_ok;  // value type of T ! E
     ASTType *result_err; // error type of T ! E
+    // AST_TYPE_FN fields
+    ASTType **fn_param_types; /* buf - param types for fn(A, B) -> R */
+    ASTType *fn_return_type;  // return type (NULL = unit)
+    FnTypeKind fn_kind;       // FN_PLAIN / FN_CLOSURE / FN_CLOSURE_MUT
     // Generic type args for Name<T, U> syntax
     ASTType **type_args; /* buf - NULL for non-generic types */
 };
@@ -164,6 +169,7 @@ typedef enum {
     NODE_ENUM_INIT,          // Enum.Variant or Enum.Variant(args) or Enum.Variant { fields }
     NODE_OPTIONAL_CHAIN,     // expr?.member (optional chaining)
     NODE_TRY,                // expr! (error propagation / unwrap)
+    NODE_CLOSURE,            // |params| body
 } NodeKind;
 
 /** Sub-kind for NODE_LIT - indicates which payload field is active. */
@@ -493,6 +499,13 @@ struct ASTNode {
         struct {
             ASTNode *value; // may be NULL (break with value for loop exprs)
         } break_stmt;
+
+        // NODE_CLOSURE
+        struct {
+            ASTNode **params;    /* buf - NODE_PARAM */
+            ASTType return_type; // may be AST_TYPE_INFERRED
+            ASTNode *body;       // expr or block
+        } closure;
     };
 };
 

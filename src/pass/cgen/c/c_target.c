@@ -19,6 +19,7 @@ static void c_target_emit(CGenTarget *self, const HirNode *file) {
 static void c_target_destroy(CGenTarget *self) {
     CGen *cgen = (CGen *)self;
     clear_compound_types(cgen);
+    hash_table_destroy(&cgen->wrapper_set);
     free(cgen);
 }
 
@@ -37,6 +38,8 @@ CGenTarget *cgen_create(FILE *output, Arena *arena) {
     cgen->compound_types = NULL;
     cgen->defer_bodies = NULL;
     cgen->in_deferred_fn = false;
+    cgen->real_output = NULL;
+    hash_table_init(&cgen->wrapper_set, NULL);
     return &cgen->base;
 }
 

@@ -370,6 +370,13 @@ void ast_dump(const ASTNode *node, int32_t level) {
         fprintf(stderr, "Try\n");
         ast_dump(node->try_expr.operand, level + 1);
         break;
+    case NODE_CLOSURE:
+        fprintf(stderr, "Closure(%d params)\n", BUF_LEN(node->closure.params));
+        for (int32_t i = 0; i < BUF_LEN(node->closure.params); i++) {
+            ast_dump(node->closure.params[i], level + 1);
+        }
+        ast_dump(node->closure.body, level + 1);
+        break;
     }
 }
 
@@ -517,6 +524,14 @@ ASTNode *ast_clone(Arena *arena, ASTNode *src) {
         break;
     case NODE_PARAM:
         dst->param = src->param;
+        break;
+    case NODE_CLOSURE:
+        dst->closure.return_type = src->closure.return_type;
+        dst->closure.params = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->closure.params); i++) {
+            BUF_PUSH(dst->closure.params, ast_clone(arena, src->closure.params[i]));
+        }
+        dst->closure.body = ast_clone(arena, src->closure.body);
         break;
     default:
         // Shallow copy for any unhandled kinds

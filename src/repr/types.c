@@ -63,6 +63,7 @@ static const TypeInfoEntry TYPE_INFO[] = {
     [TYPE_UNIT] = {"unit", "void", &TYPE_UNIT_INST, 0},
     [TYPE_NEVER] = {"never", "void", &TYPE_NEVER_INST, 0},
     [TYPE_ERR] = {"<err>", "/* err */", &TYPE_ERR_INST, 0},
+    [TYPE_FN] = {NULL, "RsgFn", NULL, 0},
 };
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
@@ -133,12 +134,38 @@ const char *type_name(Arena *arena, const Type *type) {
     if (type->kind == TYPE_ENUM) {
         return type->enum_type.name;
     }
+    if (type->kind == TYPE_FN) {
+        const char *prefix = "fn(";
+        if (type->fn_type.fn_kind == FN_CLOSURE) {
+            prefix = "Fn(";
+        } else if (type->fn_type.fn_kind == FN_CLOSURE_MUT) {
+            prefix = "FnMut(";
+        }
+        const char *result = prefix;
+        for (int32_t i = 0; i < type->fn_type.param_count; i++) {
+            if (i > 0) {
+                result = arena_sprintf(arena, "%s, %s", result,
+                                       type_name(arena, type->fn_type.params[i]));
+            } else {
+                result =
+                    arena_sprintf(arena, "%s%s", result, type_name(arena, type->fn_type.params[i]));
+            }
+        }
+        if (type_equal(type->fn_type.return_type, &TYPE_UNIT_INST)) {
+            return arena_sprintf(arena, "%s)", result);
+        }
+        return arena_sprintf(arena, "%s) -> %s", result,
+                             type_name(arena, type->fn_type.return_type));
+    }
     return "<unknown>";
 }
 
 const char *c_type_str(const Type *type) {
     if (type == NULL) {
         return "/* ? */";
+    }
+    if (type->kind == TYPE_FN) {
+        return "RsgFn";
     }
     const TypeInfoEntry *info = type_info_lookup(type->kind);
     return info != NULL ? info->c_name : "/* ? */";
@@ -176,6 +203,20 @@ bool type_equal(const Type *a, const Type *b) {
     }
     if (a->kind == TYPE_ENUM) {
         return strcmp(a->enum_type.name, b->enum_type.name) == 0;
+    }
+    if (a->kind == TYPE_FN) {
+        if (a->fn_type.fn_kind != b->fn_type.fn_kind) {
+            return false;
+        }
+        if (a->fn_type.param_count != b->fn_type.param_count) {
+            return false;
+        }
+        for (int32_t i = 0; i < a->fn_type.param_count; i++) {
+            if (!type_equal(a->fn_type.params[i], b->fn_type.params[i])) {
+                return false;
+            }
+        }
+        return type_equal(a->fn_type.return_type, b->fn_type.return_type);
     }
     return true;
 }
@@ -345,4 +386,56 @@ const EnumVariant *type_enum_find_variant(const Type *type, const char *name) {
         }
     }
     return NULL;
+}
+
+Type *type_create_fn(Arena *arena, const Type **params, int32_t param_count,
+                     const Type *return_type, FnTypeKind fn_kind) {
+    Type *type = type_create(arena, TYPE_FN);
+    type->fn_type.params = params;
+    type->fn_type.param_count = param_count;
+    type->fn_type.return_type = return_type;
+    type->fn_type.fn_kind = fn_kind;
+    return type;
+}
+
+const Type **type_fn_params(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_FN);
+    return type->fn_type.params;
+}
+
+int32_t type_fn_param_count(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_FN);
+    return type->fn_type.param_count;
+}
+
+const Type *type_fn_return_type(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_FN);
+    return type->fn_type.return_type;
+}
+
+FnTypeKind type_fn_kind(const Type *type) {
+    assert(type != NULL && type->kind == TYPE_FN);
+    return type->fn_type.fn_kind;
+}
+
+bool type_assignable(const Type *from, const Type *to) {
+    if (type_equal(from, to)) {
+        return true;
+    }
+    // fn subtyping: fn ⊆ Fn ⊆ FnMut
+    if (from != NULL && to != NULL && from->kind == TYPE_FN && to->kind == TYPE_FN) {
+        if (from->fn_type.param_count != to->fn_type.param_count) {
+            return false;
+        }
+        for (int32_t i = 0; i < from->fn_type.param_count; i++) {
+            if (!type_equal(from->fn_type.params[i], to->fn_type.params[i])) {
+                return false;
+            }
+        }
+        if (!type_equal(from->fn_type.return_type, to->fn_type.return_type)) {
+            return false;
+        }
+        return from->fn_type.fn_kind <= to->fn_type.fn_kind;
+    }
+    return false;
 }

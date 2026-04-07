@@ -107,6 +107,25 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
         }
         return &TYPE_ERR_INST;
     }
+    // fn(T1, T2) -> R → TYPE_FN
+    if (ast_type->kind == AST_TYPE_FN) {
+        const Type **params = NULL;
+        for (int32_t i = 0; i < BUF_LEN(ast_type->fn_param_types); i++) {
+            const Type *pt = resolve_ast_type(sema, ast_type->fn_param_types[i]);
+            if (pt == NULL) {
+                pt = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(params, pt);
+        }
+        const Type *ret = NULL;
+        if (ast_type->fn_return_type != NULL) {
+            ret = resolve_ast_type(sema, ast_type->fn_return_type);
+        }
+        if (ret == NULL) {
+            ret = &TYPE_UNIT_INST;
+        }
+        return type_create_fn(sema->arena, params, BUF_LEN(params), ret, ast_type->fn_kind);
+    }
     // AST_TYPE_NAME
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {

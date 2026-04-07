@@ -111,6 +111,9 @@ typedef enum {
     // Enum-related
     HIR_ENUM_DECL,
     HIR_MATCH,
+
+    // First-class functions
+    HIR_CLOSURE,
 } HirNodeKind;
 
 // ── HirNode ─────────────────────────────────────────────────────────────
@@ -367,6 +370,17 @@ struct HirNode {
             HirNode **arm_bodies;   /* buf - body expr per arm */
             HirNode **arm_bindings; /* buf - block of binding stmts (NULL if none) */
         } match_expr;
+
+        // HIR_CLOSURE
+        struct {
+            const char *fn_name;        // generated unique name
+            HirNode **params;           /* buf - HIR_PARAM nodes */
+            HirNode *body;              // closure body
+            const char **capture_names; /* buf - mangled names of captured vars */
+            HirSym **capture_syms;      /* buf - syms of captured vars */
+            const Type *return_type;
+            bool is_fn_mut; // true for FnMut: captures are mutable
+        } closure;
     };
 };
 

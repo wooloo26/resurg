@@ -34,8 +34,16 @@ typedef enum {
     TYPE_STRUCT, // struct { fields }
     TYPE_PTR,    // *T
     TYPE_ENUM,   // enum { variants }
+    TYPE_FN,     // fn(Params) -> Return
     TYPE_ERR,    // sentinel for continued checking after type errs
 } TypeKind;
+
+/** Distinguishes fn/Fn/FnMut function type kinds. */
+typedef enum {
+    FN_PLAIN,       // fn(P) -> R  — plain function type
+    FN_CLOSURE,     // Fn(P) -> R  — closure, readonly captures
+    FN_CLOSURE_MUT, // FnMut(P) -> R — closure, mutable captures
+} FnTypeKind;
 
 typedef struct Type Type;
 
@@ -93,6 +101,12 @@ struct Type {
             EnumVariant *variants;
             int32_t variant_count;
         } enum_type;
+        struct {
+            const Type **params;
+            int32_t param_count;
+            const Type *return_type;
+            FnTypeKind fn_kind;
+        } fn_type;
     };
 };
 
@@ -202,5 +216,19 @@ const EnumVariant *type_enum_variants(const Type *type);
 int32_t type_enum_variant_count(const Type *type);
 /** Find a variant by name.  Returns NULL if not found. */
 const EnumVariant *type_enum_find_variant(const Type *type, const char *name);
+
+/** Create a function type fn/Fn/FnMut(params) -> return_type. */
+Type *type_create_fn(Arena *arena, const Type **params, int32_t param_count,
+                     const Type *return_type, FnTypeKind fn_kind);
+/** Return the param types of a fn type.  Asserts kind == TYPE_FN. */
+const Type **type_fn_params(const Type *type);
+/** Return the param count of a fn type.  Asserts kind == TYPE_FN. */
+int32_t type_fn_param_count(const Type *type);
+/** Return the return type of a fn type.  Asserts kind == TYPE_FN. */
+const Type *type_fn_return_type(const Type *type);
+/** Return the fn kind (FN_PLAIN, FN_CLOSURE, FN_CLOSURE_MUT). */
+FnTypeKind type_fn_kind(const Type *type);
+/** Return true if @p from is assignable to @p to (includes fn subtyping). */
+bool type_assignable(const Type *from, const Type *to);
 
 #endif // RSG_TYPES_H

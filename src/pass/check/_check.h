@@ -35,6 +35,7 @@ const Type *check_tuple_lit(Sema *sema, ASTNode *node);
 const Type *check_struct_lit(Sema *sema, ASTNode *node);
 const Type *check_address_of(Sema *sema, ASTNode *node);
 const Type *check_deref(Sema *sema, ASTNode *node);
+const Type *check_closure(Sema *sema, ASTNode *node);
 void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_type);
 
 // ── Pattern / match checking (check_match.c) ──────────────────────

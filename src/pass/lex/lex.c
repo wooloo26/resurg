@@ -181,6 +181,9 @@ static Token scan_comparison_or_logical(Lex *lex, char c, SrcLoc loc) {
         if (match(lex, '|')) {
             return build_token(lex, TOKEN_PIPE_PIPE, "||", 2, loc);
         }
+        if (match(lex, '>')) {
+            return build_token(lex, TOKEN_PIPE_GREATER, "|>", 2, loc);
+        }
         return build_token(lex, TOKEN_PIPE, "|", 1, loc);
     default:
         break;

@@ -1,0 +1,56 @@
+// v0.9.0 — println: print with trailing newline
+// EXPECT-STDOUT: hello world
+// EXPECT-STDOUT: 42
+// EXPECT-STDOUT: 3.14
+// EXPECT-STDOUT: true
+// EXPECT-STDOUT: false
+// EXPECT-STDOUT: a
+// EXPECT-STDOUT: line one
+// EXPECT-STDOUT: line two
+// EXPECT-STDOUT: value is 10
+module test_println
+
+// ── println with string literal ──
+
+fn test_println_str() {
+    println("hello world")
+}
+
+// ── println with integer ──
+
+fn test_println_i32() {
+    println(42)
+}
+
+// ── println with float ──
+
+fn test_println_f64() {
+    println(3.14)
+}
+
+// ── println with bool ──
+
+fn test_println_bool() {
+    println(true)
+    println(false)
+}
+
+// ── println with char ──
+
+fn test_println_char() {
+    println('a')
+}
+
+// ── multiple println calls produce separate lines ──
+
+fn test_println_multiple_lines() {
+    println("line one")
+    println("line two")
+}
+
+// ── println with string interpolation ──
+
+fn test_println_interpolation() {
+    x := 10
+    println("value is {x}")
+}

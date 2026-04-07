@@ -166,6 +166,8 @@ static const char *type_tag(CGen *gen, const Type *type) {
         return arena_sprintf(gen->arena, "_%s", type->struct_type.name);
     case TYPE_ENUM:
         return arena_sprintf(gen->arena, "Enum_%s", type->enum_type.name);
+    case TYPE_FN:
+        return "RsgFn";
     default:
         return type_name(gen->arena, type);
     }

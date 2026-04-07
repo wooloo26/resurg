@@ -27,6 +27,7 @@ struct Lower {
     const char *current_module;
     int32_t temp_counter;
     int32_t shadow_counter;
+    int32_t closure_counter;
     const Type **compound_types; /* buf */
     HirSym *current_recv;        // non-NULL inside method body
     const char *current_recv_name;

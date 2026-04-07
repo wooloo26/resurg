@@ -154,12 +154,13 @@ Null safety and error handling.
 
 Higher-order programming and code organization.
 
-- [ ] `println`
-- [ ] Closures / lambdas (`|x| x * 2`)
-- [ ] Closure variable capture
-- [ ] Function types (`fn(i32) -> bool`)
-- [ ] First-class functions (pass, return, store)
-- [ ] Pipe operator (`|>` first-arg forwarding)
+- [x] `println`
+- [x] Closures / lambdas (`|x| x * 2`)
+- [x] Closure variable capture
+- [x] Function types (`fn(i32) -> bool`)
+- [x] First-class functions (pass, return, store)
+- [x] Pipe operator (`|>` first-arg forwarding)
+- [x] `Fn`, `FnMut`
 
 ## v0.9.1 — Extensions & Module System
 
@@ -169,13 +170,28 @@ Higher-order programming and code organization.
 - [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
 - [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
   
-## v0.9.2 — Ecosystem & Runtime
+## v0.9.2 — Before Ecosystem
+
+- [ ] Variadic Arguments
+- [ ] Comments: `/* */`
+- [ ] Documentation Comments
+  
+## v0.9.3 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
 - [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
 - [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
 - [ ] `assert` rewritten on top of `panic`
+
+## v0.9.4 — Higher Generics
+
+- [ ] F-bounded polymorphism
+- [ ] `immut`-aware generic constraints
+- [ ] Default generics (only support `struct`, `enum`, `pact`, `type`)
+- [ ] `where`
+- [ ] Template Literal Types
+- [ ] Associated Types
 
 ## v1.0.0 — Stable Release
 
@@ -198,19 +214,18 @@ Language completeness, tooling, and ecosystem.
 ## v1.0.3 — Utilities
 
 - [ ] Benchmark support
-- [ ] Documentation generator
 - [ ] Full specification freeze
 
 ## Future — Post-1.0
 
 - [ ] Debugger & devtool suite (`rsg-debug`, profiler, memory tracker)
-- [ ] C++20 back-end
-- [ ] Go back-end
-- [ ] Typescript back-end
+- [ ] C++20 , Go, Typescript back-end
 - [ ] Readable code
 - [ ] Cross-compilation support
 - [ ] REPL / interpreter mode
+- [ ] Concurrency
+- [ ] Macro / Comptime
+- [ ] Self-hosting compiler (Resurg-in-Resurg)
 - [ ] Website
 - [ ] Playground (web-based)
-- [ ] Self-hosting compiler (Resurg-in-Resurg)
-- [ ] Generics: F-bounded polymorphism, `immut`-aware generic constraints
+- [ ] WASM, x86-64, ARM64, LLVM IR, RISC-V, JVM back-end

@@ -60,7 +60,10 @@ static HirNode *lower_id(Lower *low, const ASTNode *ast) {
         HirSymSpec id_spec = {HIR_SYM_VAR, name, ast->type, false, ast->loc};
         sym = lower_add_var(low, &id_spec);
     }
-    return lower_make_var_ref(low, sym, ast->loc);
+    HirNode *node = hir_new(low->hir_arena, HIR_VAR_REF,
+                            ast->type != NULL ? ast->type : hir_sym_type(sym), ast->loc);
+    node->var_ref.sym = sym;
+    return node;
 }
 
 static HirNode *lower_unary(Lower *low, const ASTNode *ast) {
@@ -250,6 +253,70 @@ static bool is_assert_callee(const ASTNode *callee) {
     return strcmp(callee->id.name, "assert") == 0;
 }
 
+/** Return true if the callee AST resolves to "print" or "println". */
+static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
+    if (callee->kind != NODE_ID) {
+        return false;
+    }
+    if (strcmp(callee->id.name, "println") == 0) {
+        *out_newline = true;
+        return true;
+    }
+    if (strcmp(callee->id.name, "print") == 0) {
+        *out_newline = false;
+        return true;
+    }
+    return false;
+}
+
+/** Return the rsg_print[ln]_* fn name for @p type. */
+static const char *lookup_print_fn(const Type *type, bool newline) {
+    if (type == NULL) {
+        return NULL;
+    }
+    static const struct {
+        TypeKind kind;
+        const char *print_name;
+        const char *println_name;
+    } dispatch[] = {
+        {TYPE_STR, "rsg_print_str", "rsg_println_str"},
+        {TYPE_I32, "rsg_print_i32", "rsg_println_i32"},
+        {TYPE_U32, "rsg_print_u32", "rsg_println_u32"},
+        {TYPE_F64, "rsg_print_f64", "rsg_println_f64"},
+        {TYPE_BOOL, "rsg_print_bool", "rsg_println_bool"},
+        {TYPE_CHAR, "rsg_print_char", "rsg_println_char"},
+    };
+    for (size_t i = 0; i < sizeof(dispatch) / sizeof(dispatch[0]); i++) {
+        if (type->kind == dispatch[i].kind) {
+            return newline ? dispatch[i].println_name : dispatch[i].print_name;
+        }
+    }
+    return NULL;
+}
+
+/**
+ * Expand print/println(arg) → rsg_print[ln]_TYPE(arg).
+ *
+ * Dispatches to the type-specific runtime fn based on the arg type.
+ */
+static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
+    SrcLoc loc = ast->loc;
+    int32_t arg_count = BUF_LEN(ast->call.args);
+    if (arg_count == 0) {
+        return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
+    }
+
+    HirNode *arg = lower_expr(low, ast->call.args[0]);
+    const char *fn_name = lookup_print_fn(arg->type, newline);
+    if (fn_name == NULL) {
+        return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
+    }
+
+    HirNode **args = NULL;
+    BUF_PUSH(args, arg);
+    return lower_make_builtin_call(low, &(BuiltinCallSpec){fn_name, &TYPE_UNIT_INST, args, loc});
+}
+
 /**
  * Expand assert(cond, msg?) → rsg_assert(cond, msg_or_null, file, line).
  *
@@ -425,6 +492,11 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
 static HirNode *lower_call(Lower *low, const ASTNode *ast) {
     if (is_assert_callee(ast->call.callee)) {
         return lower_assert_call(low, ast);
+    }
+
+    bool newline = false;
+    if (is_print_callee(ast->call.callee, &newline)) {
+        return lower_print_call(low, ast, newline);
     }
 
     if (ast->call.callee->kind == NODE_MEMBER) {
@@ -911,6 +983,149 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
     return block;
 }
 
+/** Recursively scan AST for NODE_ID references that aren't closure params. */
+static void scan_captures(const ASTNode *ast, const char **param_names, int32_t param_count,
+                          Lower *low, const char ***out_names, HirSym ***out_syms) {
+    if (ast == NULL) {
+        return;
+    }
+    if (ast->kind == NODE_ID) {
+        const char *name = ast->id.name;
+        // Skip if it's a closure param
+        for (int32_t i = 0; i < param_count; i++) {
+            if (strcmp(name, param_names[i]) == 0) {
+                return;
+            }
+        }
+        // Skip if already captured
+        for (int32_t i = 0; i < BUF_LEN(*out_names); i++) {
+            if (strcmp(name, (*out_syms)[i]->name) == 0) {
+                return;
+            }
+        }
+        // Check if it refers to a local variable in enclosing scope
+        HirSym *sym = lower_scope_lookup(low, name);
+        if (sym != NULL && (sym->kind == HIR_SYM_VAR || sym->kind == HIR_SYM_PARAM)) {
+            BUF_PUSH(*out_names, sym->mangled_name);
+            BUF_PUSH(*out_syms, sym);
+        }
+        return;
+    }
+    if (ast->kind == NODE_CLOSURE) {
+        return; // Don't scan into nested closures
+    }
+    // Recurse into children based on node kind
+    switch (ast->kind) {
+    case NODE_UNARY:
+        scan_captures(ast->unary.operand, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_BINARY:
+        scan_captures(ast->binary.left, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ast->binary.right, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_CALL:
+        scan_captures(ast->call.callee, param_names, param_count, low, out_names, out_syms);
+        for (int32_t i = 0; i < BUF_LEN(ast->call.args); i++) {
+            scan_captures(ast->call.args[i], param_names, param_count, low, out_names, out_syms);
+        }
+        break;
+    case NODE_BLOCK:
+        for (int32_t i = 0; i < BUF_LEN(ast->block.stmts); i++) {
+            scan_captures(ast->block.stmts[i], param_names, param_count, low, out_names, out_syms);
+        }
+        if (ast->block.result != NULL) {
+            scan_captures(ast->block.result, param_names, param_count, low, out_names, out_syms);
+        }
+        break;
+    case NODE_IF:
+        scan_captures(ast->if_expr.cond, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ast->if_expr.then_body, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ast->if_expr.else_body, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_RETURN:
+        scan_captures(ast->return_stmt.value, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_VAR_DECL:
+        scan_captures(ast->var_decl.init, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_EXPR_STMT:
+        scan_captures(ast->expr_stmt.expr, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_MEMBER:
+        scan_captures(ast->member.object, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_IDX:
+        scan_captures(ast->idx_access.object, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ast->idx_access.idx, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_ASSIGN:
+        scan_captures(ast->assign.target, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ast->assign.value, param_names, param_count, low, out_names, out_syms);
+        break;
+    case NODE_LIT:
+    case NODE_STR_INTERPOLATION:
+        break;
+    default:
+        break;
+    }
+}
+
+static HirNode *lower_closure(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    const Type *fn_type = ast->type;
+
+    // Generate a unique name for the closure function
+    const char *fn_name = arena_sprintf(low->hir_arena, "_rsg_closure_%d", low->closure_counter++);
+
+    // Collect closure param names for capture scanner
+    int32_t param_count = BUF_LEN(ast->closure.params);
+    const char **param_names = NULL;
+    for (int32_t i = 0; i < param_count; i++) {
+        BUF_PUSH(param_names, ast->closure.params[i]->param.name);
+    }
+
+    // Scan for captured variables
+    const char **capture_names = NULL;
+    HirSym **capture_syms = NULL;
+    scan_captures(ast->closure.body, param_names, param_count, low, &capture_names, &capture_syms);
+
+    // Lower closure params to HIR_PARAM
+    HirNode **hir_params = NULL;
+    lower_scope_enter(low);
+    for (int32_t i = 0; i < param_count; i++) {
+        const ASTNode *p = ast->closure.params[i];
+        HirSymSpec spec = {HIR_SYM_PARAM, p->param.name, p->type, p->param.is_mut, p->loc};
+        HirSym *sym = lower_make_sym(low, &spec);
+        lower_scope_define(low, p->param.name, sym);
+        HirNode *hir_param = hir_new(low->hir_arena, HIR_PARAM, p->type, p->loc);
+        hir_param->param.sym = sym;
+        BUF_PUSH(hir_params, hir_param);
+    }
+
+    // Define captured vars in closure scope so body can reference them
+    for (int32_t i = 0; i < BUF_LEN(capture_syms); i++) {
+        lower_scope_define(low, capture_syms[i]->name, capture_syms[i]);
+    }
+
+    // Lower closure body
+    HirNode *body = lower_expr(low, ast->closure.body);
+    lower_scope_leave(low);
+
+    // Build HIR_CLOSURE
+    const Type *return_type = fn_type->fn_type.return_type;
+    HirNode *node = hir_new(low->hir_arena, HIR_CLOSURE, fn_type, loc);
+    node->closure.fn_name = fn_name;
+    node->closure.params = hir_params;
+    node->closure.body = body;
+    node->closure.capture_names = capture_names;
+    node->closure.capture_syms = capture_syms;
+    node->closure.return_type = return_type;
+    node->closure.is_fn_mut = (fn_type->fn_type.fn_kind == FN_CLOSURE_MUT);
+
+    BUF_FREE(param_names);
+    return node;
+}
+
 HirNode *lower_expr(Lower *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -980,6 +1195,8 @@ HirNode *lower_expr(Lower *low, const ASTNode *ast) {
         return lower_optional_chain(low, ast);
     case NODE_TRY:
         return lower_try_expr(low, ast);
+    case NODE_CLOSURE:
+        return lower_closure(low, ast);
     default:
         break;
     }

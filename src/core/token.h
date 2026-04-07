@@ -85,6 +85,7 @@ typedef enum {
     TOKEN_PIPE_PIPE,           // ||
     TOKEN_BANG,                // !
     TOKEN_PIPE,                // |
+    TOKEN_PIPE_GREATER,        // |>
 
     // Operators - assignment
     TOKEN_COLON_EQUAL, // :=

@@ -74,6 +74,63 @@ ASTType parser_parse_type(Parser *parser) {
         return type;
     }
 
+    // Function type: fn(T1, T2) -> R
+    if (parser_check(parser, TOKEN_FN) && parser->pos + 1 < parser->count &&
+        parser->tokens[parser->pos + 1].kind == TOKEN_LEFT_PAREN) {
+        type.kind = AST_TYPE_FN;
+        type.fn_kind = FN_PLAIN;
+        parser_advance(parser); // consume 'fn'
+        parser_expect(parser, TOKEN_LEFT_PAREN);
+        type.fn_param_types = NULL;
+        if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+            do {
+                ASTType *param = arena_alloc(parser->arena, sizeof(ASTType));
+                *param = parser_parse_type(parser);
+                BUF_PUSH(type.fn_param_types, param);
+            } while (parser_match(parser, TOKEN_COMMA));
+        }
+        parser_expect(parser, TOKEN_RIGHT_PAREN);
+        type.fn_return_type = NULL;
+        if (parser_match(parser, TOKEN_ARROW)) {
+            type.fn_return_type = arena_alloc(parser->arena, sizeof(ASTType));
+            *type.fn_return_type = parser_parse_type(parser);
+        }
+        return type;
+    }
+
+    // Closure types: Fn(T1, T2) -> R  or  FnMut(T1, T2) -> R
+    if (parser_check(parser, TOKEN_ID) && parser->pos + 1 < parser->count &&
+        parser->tokens[parser->pos + 1].kind == TOKEN_LEFT_PAREN) {
+        const char *name = parser_current_token(parser)->lexeme;
+        FnTypeKind fk = FN_PLAIN;
+        if (strcmp(name, "Fn") == 0) {
+            fk = FN_CLOSURE;
+        } else if (strcmp(name, "FnMut") == 0) {
+            fk = FN_CLOSURE_MUT;
+        }
+        if (fk != FN_PLAIN) {
+            type.kind = AST_TYPE_FN;
+            type.fn_kind = fk;
+            parser_advance(parser); // consume 'Fn' / 'FnMut'
+            parser_expect(parser, TOKEN_LEFT_PAREN);
+            type.fn_param_types = NULL;
+            if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+                do {
+                    ASTType *param = arena_alloc(parser->arena, sizeof(ASTType));
+                    *param = parser_parse_type(parser);
+                    BUF_PUSH(type.fn_param_types, param);
+                } while (parser_match(parser, TOKEN_COMMA));
+            }
+            parser_expect(parser, TOKEN_RIGHT_PAREN);
+            type.fn_return_type = NULL;
+            if (parser_match(parser, TOKEN_ARROW)) {
+                type.fn_return_type = arena_alloc(parser->arena, sizeof(ASTType));
+                *type.fn_return_type = parser_parse_type(parser);
+            }
+            return type;
+        }
+    }
+
     if (token_is_type_keyword(parser_current_token(parser)->kind) ||
         parser_check(parser, TOKEN_ID)) {
         type.name = parser_advance(parser)->lexeme;
