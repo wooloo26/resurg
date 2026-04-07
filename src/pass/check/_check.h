@@ -71,6 +71,7 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
 const Type *check_enum_decl_body(Sema *sema, ASTNode *node);
 const Type *check_pact_decl(Sema *sema, ASTNode *node);
 const Type *check_struct_decl(Sema *sema, ASTNode *node);
+const Type *check_ext_decl(Sema *sema, ASTNode *node);
 const Type *check_struct_destructure(Sema *sema, ASTNode *node);
 const Type *check_tuple_destructure(Sema *sema, ASTNode *node);
 

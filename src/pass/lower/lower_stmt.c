@@ -274,7 +274,9 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
         const char *method_name = method->fn_decl.name;
         const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INST;
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
-        const char *mangled = arena_sprintf(low->hir_arena, "rsgu_%s_%s", type_name, method_name);
+        const char *mangled =
+            arena_sprintf(low->hir_arena, "rsgu_%s_%s",
+                          lower_mangle_name(low->hir_arena, type_name), method_name);
         HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
         HirSym *sym = lower_make_sym(low, &sym_spec);
         sym->mangled_name = mangled;
@@ -283,34 +285,80 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
     }
 }
 
-/** Pre-register all fn decls into scope before lower bodies. */
-static void preregister_fns(Lower *low, const ASTNode *file_ast) {
-    for (int32_t i = 0; i < BUF_LEN(file_ast->file.decls); i++) {
-        const ASTNode *decl = file_ast->file.decls[i];
-        if (decl->kind == NODE_FN_DECL) {
-            // Skip generic fn templates
-            if (BUF_LEN(decl->fn_decl.type_params) > 0) {
-                continue;
-            }
-            const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
-            HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
-            HirSym *sym = lower_make_sym(low, &fn_spec);
-            sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s", decl->fn_decl.name);
-            lower_scope_define(low, decl->fn_decl.name, sym);
+/** Replace '.' with '_' in a C identifier string. */
+const char *lower_mangle_name(Arena *arena, const char *name) {
+    char *buf = arena_alloc(arena, strlen(name) + 1);
+    for (size_t i = 0; name[i] != '\0'; i++) {
+        buf[i] = (name[i] == '.') ? '_' : name[i];
+    }
+    buf[strlen(name)] = '\0';
+    return buf;
+}
+
+/** Forward declaration for recursive module preregistration. */
+static void preregister_decl_list(Lower *low, ASTNode *const *decls, int32_t count);
+
+/** Pre-register a single decl (fn/struct/enum/ext/module). */
+static void preregister_single_decl(Lower *low, const ASTNode *decl) {
+    if (decl->kind == NODE_FN_DECL) {
+        if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+            return;
         }
-        if (decl->kind == NODE_STRUCT_DECL) {
-            if (BUF_LEN(decl->struct_decl.type_params) > 0) {
-                continue;
-            }
-            preregister_type_methods(low, decl->struct_decl.name, decl->struct_decl.methods);
+        const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
+        HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
+        HirSym *sym = lower_make_sym(low, &fn_spec);
+        sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s",
+                                          lower_mangle_name(low->hir_arena, decl->fn_decl.name));
+        lower_scope_define(low, decl->fn_decl.name, sym);
+    }
+    if (decl->kind == NODE_STRUCT_DECL) {
+        if (BUF_LEN(decl->struct_decl.type_params) > 0) {
+            return;
         }
-        if (decl->kind == NODE_ENUM_DECL) {
-            if (BUF_LEN(decl->enum_decl.type_params) > 0) {
-                continue;
+        preregister_type_methods(low, decl->struct_decl.name, decl->struct_decl.methods);
+    }
+    if (decl->kind == NODE_ENUM_DECL) {
+        if (BUF_LEN(decl->enum_decl.type_params) > 0) {
+            return;
+        }
+        preregister_type_methods(low, decl->enum_decl.name, decl->enum_decl.methods);
+    }
+    if (decl->kind == NODE_EXT_DECL) {
+        if (BUF_LEN(decl->ext_decl.type_params) > 0) {
+            return;
+        }
+        preregister_type_methods(low, decl->ext_decl.target_name, decl->ext_decl.methods);
+    }
+    if (decl->kind == NODE_MODULE && decl->module.decls != NULL) {
+        preregister_decl_list(low, decl->module.decls, BUF_LEN(decl->module.decls));
+    }
+    if (decl->kind == NODE_USE_DECL) {
+        const char *mod_path = decl->use_decl.module_path;
+        for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {
+            const char *name = decl->use_decl.imported_names[i];
+            const char *alias =
+                (decl->use_decl.aliases != NULL && i < BUF_LEN(decl->use_decl.aliases) &&
+                 decl->use_decl.aliases[i] != NULL)
+                    ? decl->use_decl.aliases[i]
+                    : name;
+            const char *qualified = arena_sprintf(low->hir_arena, "%s.%s", mod_path, name);
+            HirSym *target_sym = lower_scope_lookup(low, qualified);
+            if (target_sym != NULL) {
+                lower_scope_define(low, alias, target_sym);
             }
-            preregister_type_methods(low, decl->enum_decl.name, decl->enum_decl.methods);
         }
     }
+}
+
+static void preregister_decl_list(Lower *low, ASTNode *const *decls, int32_t count) {
+    for (int32_t i = 0; i < count; i++) {
+        preregister_single_decl(low, decls[i]);
+    }
+}
+
+/** Pre-register all fn decls into scope before lower bodies. */
+static void preregister_fns(Lower *low, const ASTNode *file_ast) {
+    preregister_decl_list(low, file_ast->file.decls, BUF_LEN(file_ast->file.decls));
 }
 
 /** Lower methods and append to @p decls. */
@@ -378,6 +426,64 @@ static HirNode *lower_file(Lower *low, const ASTNode *ast) {
 
         // Pact decls are compile-time only; skip during lower
         if (decl_ast->kind == NODE_PACT_DECL) {
+            continue;
+        }
+
+        // Ext decls: lower methods, skip the ext node itself
+        if (decl_ast->kind == NODE_EXT_DECL) {
+            if (BUF_LEN(decl_ast->ext_decl.type_params) > 0) {
+                continue;
+            }
+            const char *target = decl_ast->ext_decl.target_name;
+            const Type *recv_type = decl_ast->type;
+            if (recv_type != NULL) {
+                lower_methods_into(low, decl_ast->ext_decl.methods, target, recv_type, &decls);
+            }
+            continue;
+        }
+
+        // Use decls are compile-time only; skip during lower
+        if (decl_ast->kind == NODE_USE_DECL) {
+            continue;
+        }
+
+        // Nested module: emit inner declarations into the flat list
+        if (decl_ast->kind == NODE_MODULE && decl_ast->module.decls != NULL) {
+            for (int32_t j = 0; j < BUF_LEN(decl_ast->module.decls); j++) {
+                const ASTNode *inner = decl_ast->module.decls[j];
+                if (inner->kind == NODE_STRUCT_DECL) {
+                    if (BUF_LEN(inner->struct_decl.type_params) > 0) {
+                        continue;
+                    }
+                    emit_struct_with_methods(low, inner, &decls);
+                    continue;
+                }
+                if (inner->kind == NODE_ENUM_DECL) {
+                    if (BUF_LEN(inner->enum_decl.type_params) > 0) {
+                        continue;
+                    }
+                    emit_enum_with_methods(low, inner, &decls);
+                    continue;
+                }
+                if (inner->kind == NODE_PACT_DECL) {
+                    continue;
+                }
+                if (inner->kind == NODE_EXT_DECL) {
+                    if (BUF_LEN(inner->ext_decl.type_params) > 0) {
+                        continue;
+                    }
+                    const Type *recv_type = inner->type;
+                    if (recv_type != NULL) {
+                        lower_methods_into(low, inner->ext_decl.methods,
+                                           inner->ext_decl.target_name, recv_type, &decls);
+                    }
+                    continue;
+                }
+                HirNode *inner_hir = lower_node(low, inner);
+                if (inner_hir != NULL) {
+                    BUF_PUSH(decls, inner_hir);
+                }
+            }
             continue;
         }
 
@@ -481,6 +587,12 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
 
     case NODE_PACT_DECL:
         return NULL;
+
+    case NODE_EXT_DECL:
+        return NULL; // handled in lower_file
+
+    case NODE_USE_DECL:
+        return NULL; // compile-time only
 
     case NODE_RETURN:
         return lower_return(low, ast);

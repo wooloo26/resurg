@@ -180,6 +180,59 @@ const Type *check_member(Sema *sema, ASTNode *node) {
         object_type = object_type->ptr.pointee;
     }
 
+    // Module member access: mod::item
+    if (object_type != NULL && object_type->kind == TYPE_MODULE) {
+        const char *mod_name = object_type->module_type.name;
+        const char *member = node->member.member;
+        const char *qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, member);
+
+        // Try struct: mod::StructName
+        StructDef *sdef = sema_lookup_struct(sema, qualified);
+        if (sdef != NULL) {
+            // Rewrite node to look like a direct struct ref
+            node->kind = NODE_ID;
+            node->id.name = qualified;
+            return sdef->type;
+        }
+
+        // Try enum: mod::EnumName
+        EnumDef *edef = sema_lookup_enum(sema, qualified);
+        if (edef != NULL) {
+            node->kind = NODE_ID;
+            node->id.name = qualified;
+            return edef->type;
+        }
+
+        // Try type alias: mod::TypeName
+        const Type *talias = sema_lookup_type_alias(sema, qualified);
+        if (talias != NULL) {
+            return talias;
+        }
+
+        // Try sub-module: mod::inner
+        Sym *sub = scope_lookup(sema, qualified);
+        if (sub != NULL && sub->type != NULL && sub->type->kind == TYPE_MODULE) {
+            return sub->type;
+        }
+
+        // Try fn (for fn-as-value): mod::fn_name
+        FnSig *sig = sema_lookup_fn(sema, qualified);
+        if (sig != NULL) {
+            node->kind = NODE_ID;
+            node->id.name = qualified;
+            // Return fn type
+            const Type **params = NULL;
+            for (int32_t i = 0; i < sig->param_count; i++) {
+                BUF_PUSH(params, sig->param_types[i]);
+            }
+            FnTypeSpec fn_spec = {params, sig->param_count, sig->return_type, FN_PLAIN};
+            return type_create_fn(sema->arena, &fn_spec);
+        }
+
+        SEMA_ERR(sema, node->loc, "'%s' not found in module '%s'", member, mod_name);
+        return &TYPE_ERR_INST;
+    }
+
     // Slice .len access
     if (object_type != NULL && object_type->kind == TYPE_SLICE) {
         if (strcmp(node->member.member, "len") == 0) {

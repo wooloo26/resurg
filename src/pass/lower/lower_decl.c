@@ -48,7 +48,8 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
 
     HirSymSpec func_spec = {HIR_SYM_FN, name, return_type, false, ast->loc};
     HirSym *func_sym = lower_make_sym(low, &func_spec);
-    func_sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s", name);
+    func_sym->mangled_name =
+        arena_sprintf(low->hir_arena, "rsgu_%s", lower_mangle_name(low->hir_arena, name));
     lower_scope_define(low, name, func_sym);
 
     lower_scope_enter(low);
@@ -86,7 +87,8 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
         HirSymSpec method_spec = {HIR_SYM_FN, key, return_type, false, ast->loc};
         func_sym = lower_make_sym(low, &method_spec);
         func_sym->mangled_name =
-            arena_sprintf(low->hir_arena, "rsgu_%s_%s", struct_name, method_name);
+            arena_sprintf(low->hir_arena, "rsgu_%s_%s",
+                          lower_mangle_name(low->hir_arena, struct_name), method_name);
         lower_scope_define(low, key, func_sym);
     }
 

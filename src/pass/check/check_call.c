@@ -213,6 +213,58 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
         obj_type = obj_type->ptr.pointee;
     }
 
+    // Module-qualified call: mod::fn(args) or mod::Enum::Variant(args)
+    if (obj_type != NULL && obj_type->kind == TYPE_MODULE) {
+        const char *mod_name = obj_type->module_type.name;
+        const char *qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
+
+        // Try as fn call: mod::fn(args)
+        FnSig *sig = sema_lookup_fn(sema, qualified);
+        if (sig != NULL) {
+            // Visibility check: fn must be pub for external access
+            if (!sig->is_pub) {
+                SEMA_ERR(sema, node->loc, "'%s' is private in module '%s'", method_name, mod_name);
+                return &TYPE_ERR_INST;
+            }
+            // Rewrite callee to a simple id with the qualified name
+            node->call.callee->kind = NODE_ID;
+            node->call.callee->id.name = qualified;
+            for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+                check_node(sema, node->call.args[i]);
+            }
+            return resolve_call(sema, node, sig);
+        }
+
+        // Try as struct lit or enum access: mod::Type
+        StructDef *sdef = sema_lookup_struct(sema, qualified);
+        if (sdef != NULL) {
+            node->call.callee->member.object->type = sdef->type;
+            // Return the struct type — the caller will handle struct lit or method dispatch
+            *out_fn_name = method_name;
+            return NULL;
+        }
+
+        EnumDef *edef = sema_lookup_enum(sema, qualified);
+        if (edef != NULL) {
+            // Replace the object with the qualified enum type for further dispatch
+            node->call.callee->member.object->type = edef->type;
+            node->call.callee->member.object->id.name = qualified;
+            obj_type = edef->type;
+            // Fall through to enum variant handling below
+        }
+
+        // Try as sub-module: mod::inner::...
+        const Type *sub_mod = (const Type *)hash_table_lookup(&sema->type_alias_table, qualified);
+        if (sub_mod == NULL) {
+            // Check scope for the qualified name as a module
+            Sym *mod_sym = scope_lookup(sema, qualified);
+            if (mod_sym != NULL && mod_sym->type != NULL && mod_sym->type->kind == TYPE_MODULE) {
+                obj_type = mod_sym->type;
+                // Continue — this falls through to the rest of the dispatch
+            }
+        }
+    }
+
     if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
         const Type *result = check_enum_variant_call(sema, node, obj_type, method_name);
         if (result != NULL) {
@@ -240,6 +292,21 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
         if (sf != NULL && sf->type != NULL && sf->type->kind == TYPE_FN) {
             node->call.callee->type = sf->type;
             return check_fn_type_call(sema, node, sf->type);
+        }
+    }
+
+    // Extension method call on primitive types (i32, str, bool, f64, etc.)
+    if (obj_type != NULL) {
+        const char *prim_name = type_name(sema->arena, obj_type);
+        if (prim_name != NULL) {
+            const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
+            FnSig *sig = sema_lookup_fn(sema, method_key);
+            if (sig != NULL) {
+                for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+                    check_node(sema, node->call.args[i]);
+                }
+                return resolve_call(sema, node, sig);
+            }
         }
     }
 

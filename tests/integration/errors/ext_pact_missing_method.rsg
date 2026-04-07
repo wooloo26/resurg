@@ -1,0 +1,20 @@
+// TEST: compile_error
+// EXPECT-ERROR: missing required method 'describe' from pact 'Describable'
+module test_err
+
+pact Describable {
+    fn describe() -> str
+}
+
+struct Foo {
+    x: i32 = 0
+}
+
+ext Foo impl Describable {
+    // intentionally missing describe()
+    fn other(*f) -> i32 { f.x }
+}
+
+fn main() {
+    f := Foo {}
+}

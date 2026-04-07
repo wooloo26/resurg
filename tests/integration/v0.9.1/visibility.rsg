@@ -1,0 +1,32 @@
+// v0.9.1 — Private-by-default module resolution
+module test_visibility
+
+// ── module with mixed visibility ──
+
+module config {
+    pub fn get_max() -> i32 = 100
+    pub fn get_computed() -> i32 = 42
+}
+
+// ── public items are accessible ──
+
+fn test_public_fn_access() {
+    assert(config::get_max() == 100)
+    assert(config::get_computed() == 42)
+}
+
+// ── use imported public item ──
+
+use config { get_max }
+
+fn test_use_imported() {
+    assert(get_max() == 100)
+}
+
+// ── use with alias ──
+
+use config { get_computed as compute }
+
+fn test_use_alias() {
+    assert(compute() == 42)
+}

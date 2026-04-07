@@ -103,6 +103,8 @@ typedef struct {
 HirNode *lower_make_field_access(Lower *low, const FieldAccessSpec *spec);
 /** Create a HirCall node for a builtin runtime fn. */
 HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec);
+/** Sanitize a name for C identifiers (replace '.' with '_'). */
+const char *lower_mangle_name(Arena *arena, const char *name);
 
 // ── Cross-file dispatch ───────────────────────────────────────────────
 

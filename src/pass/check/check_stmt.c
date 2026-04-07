@@ -477,6 +477,10 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_MODULE:
         sema->current_scope->module_name = node->module.name;
+        // Check nested module body declarations
+        for (int32_t i = 0; i < BUF_LEN(node->module.decls); i++) {
+            check_node(sema, node->module.decls[i]);
+        }
         break;
 
     case NODE_TYPE_ALIAS:
@@ -623,6 +627,15 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_ENUM_DECL:
         result = check_enum_decl_body(sema, node);
+        break;
+
+    case NODE_EXT_DECL:
+        check_ext_decl(sema, node);
+        result = node->type; // preserve recv_type set by check_ext_decl
+        break;
+
+    case NODE_USE_DECL:
+        // Use declarations are handled during resolve; nothing to check
         break;
 
     case NODE_RETURN:

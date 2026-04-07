@@ -131,6 +131,8 @@ typedef enum {
     NODE_STRUCT_DECL, // struct def
     NODE_ENUM_DECL,   // enum def
     NODE_PACT_DECL,   // pact def
+    NODE_EXT_DECL,    // ext block
+    NODE_USE_DECL,    // use import
     NODE_RETURN,      // return expr
     NODE_DEFER,       // defer { ... }
 
@@ -208,6 +210,8 @@ struct ASTNode {
         // NODE_MODULE
         struct {
             const char *name;
+            bool is_pub;
+            ASTNode **decls; /* buf - NULL for flat module decl */
         } module;
 
         // NODE_FILE
@@ -218,6 +222,7 @@ struct ASTNode {
         // NODE_TYPE_ALIAS
         struct {
             const char *name;
+            bool is_pub;
             ASTType alias_type;
             ASTTypeParam *type_params; /* buf - generic type params */
         } type_alias;
@@ -393,6 +398,7 @@ struct ASTNode {
         // NODE_STRUCT_DECL
         struct {
             const char *name;
+            bool is_pub;
             ASTStructField *fields;    /* buf */
             ASTNode **methods;         /* buf - NODE_FN_DECL */
             const char **embedded;     /* buf - embedded struct names */
@@ -447,6 +453,7 @@ struct ASTNode {
         // NODE_ENUM_DECL
         struct {
             const char *name;
+            bool is_pub;
             ASTEnumVariant *variants;  /* buf */
             ASTNode **methods;         /* buf - NODE_FN_DECL */
             ASTTypeParam *type_params; /* buf - generic type params */
@@ -471,11 +478,28 @@ struct ASTNode {
         // NODE_PACT_DECL
         struct {
             const char *name;
+            bool is_pub;
             ASTStructField *fields;    /* buf - required fields */
             ASTNode **methods;         /* buf - required + default methods */
             const char **super_pacts;  /* buf - constraint alias pact names */
             ASTTypeParam *type_params; /* buf - generic type params */
         } pact_decl;
+
+        // NODE_EXT_DECL
+        struct {
+            const char *target_name;   // type being extended
+            ASTType *target_type_args; /* buf - for ext Pair<i32, str> */
+            ASTTypeParam *type_params; /* buf - for ext<T, U> */
+            const char **impl_pacts;   /* buf - pact names (ext T impl P) */
+            ASTNode **methods;         /* buf - NODE_FN_DECL */
+        } ext_decl;
+
+        // NODE_USE_DECL
+        struct {
+            const char *module_path;     // module name
+            const char **imported_names; /* buf - names to import */
+            const char **aliases;        /* buf - aliases (NULL = use name) */
+        } use_decl;
 
         // NODE_RETURN
         struct {

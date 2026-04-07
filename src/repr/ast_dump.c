@@ -373,5 +373,14 @@ void ast_dump(const ASTNode *node, int32_t level) {
         }
         ast_dump(node->closure.body, level + 1);
         break;
+    case NODE_EXT_DECL:
+        fprintf(stderr, "ExtDecl(%s)\n", node->ext_decl.target_name);
+        for (int32_t i = 0; i < BUF_LEN(node->ext_decl.methods); i++) {
+            ast_dump(node->ext_decl.methods[i], level + 1);
+        }
+        break;
+    case NODE_USE_DECL:
+        fprintf(stderr, "UseDecl(%s)\n", node->use_decl.module_path);
+        break;
     }
 }

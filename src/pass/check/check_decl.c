@@ -97,6 +97,47 @@ const Type *check_struct_decl(Sema *sema, ASTNode *node) {
     return result;
 }
 
+// ── Ext decl checking ───────────────────────────────────────────────────
+
+const Type *check_ext_decl(Sema *sema, ASTNode *node) {
+    const char *target_name = node->ext_decl.target_name;
+
+    // Skip generic ext templates (checked during monomorphization)
+    if (BUF_LEN(node->ext_decl.type_params) > 0) {
+        return &TYPE_UNIT_INST;
+    }
+
+    // Determine receiver type for method body checking
+    const Type *recv_type = NULL;
+    const Type *check_recv_type = NULL;
+
+    StructDef *sdef = sema_lookup_struct(sema, target_name);
+    if (sdef != NULL) {
+        recv_type = sdef->type;
+        check_recv_type = sdef->type;
+    }
+    EnumDef *edef = (recv_type == NULL) ? sema_lookup_enum(sema, target_name) : NULL;
+    if (edef != NULL) {
+        recv_type = edef->type; // raw TYPE_ENUM for lower pass
+        check_recv_type = type_create_ptr(sema->arena, edef->type, false); // ptr for scope
+    }
+    if (recv_type == NULL) {
+        // Primitive type — look up the singleton instance
+        recv_type = type_from_name(target_name);
+        check_recv_type = recv_type;
+    }
+    if (recv_type == NULL) {
+        return &TYPE_UNIT_INST;
+    }
+
+    for (int32_t i = 0; i < BUF_LEN(node->ext_decl.methods); i++) {
+        check_struct_method_body(sema, node->ext_decl.methods[i], target_name, check_recv_type);
+    }
+
+    node->type = recv_type;
+    return &TYPE_UNIT_INST;
+}
+
 // ── Destructure checkers ────────────────────────────────────────────────
 
 const Type *check_struct_destructure(Sema *sema, ASTNode *node) {

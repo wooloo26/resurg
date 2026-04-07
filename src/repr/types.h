@@ -36,6 +36,7 @@ typedef enum {
     TYPE_ENUM,   // enum { variants }
     TYPE_FN,     // fn(Params) -> Return
     TYPE_ERR,    // sentinel for continued checking after type errs
+    TYPE_MODULE, // namespace type for nested modules
 } TypeKind;
 
 /** Distinguishes fn/Fn/FnMut function type kinds. */
@@ -107,6 +108,9 @@ struct Type {
             const Type *return_type;
             FnTypeKind fn_kind;
         } fn_type;
+        struct {
+            const char *name;
+        } module_type;
     };
 };
 
@@ -237,5 +241,8 @@ const Type *type_fn_return_type(const Type *type);
 FnTypeKind type_fn_kind(const Type *type);
 /** Return true if @p from is assignable to @p to (includes fn subtyping). */
 bool type_assignable(const Type *from, const Type *to);
+
+/** Create a module type with the given name. */
+Type *type_create_module(Arena *arena, const char *name);
 
 #endif // RSG_TYPES_H

@@ -1,0 +1,114 @@
+// v0.9.1 — Generic extension methods: ext<T, U> Pair<T, U> { ... }
+// SKIP: generic ext monomorphization not yet implemented
+module test_ext_generics
+
+// ── generic struct ──
+
+struct Pair<T, U> {
+    first: T
+    second: U
+}
+
+// ── generic extension with type parameters ──
+
+ext<T, U> Pair<T, U> {
+    fn get_first(*p) -> T {
+        p.first
+    }
+
+    fn get_second(*p) -> U {
+        p.second
+    }
+}
+
+fn test_generic_ext_basic() {
+    p := Pair<i32, str> { first = 42, second = "hello" }
+    assert(p.get_first() == 42)
+    assert(p.get_second() == "hello")
+}
+
+fn test_generic_ext_different_types() {
+    p := Pair<bool, f64> { first = true, second = 3.14 }
+    assert(p.get_first() == true)
+    assert(p.get_second() == 3.14)
+}
+
+// ── generic ext method with own type parameter ──
+
+struct Wrapper<T> {
+    value: T
+}
+
+ext<T> Wrapper<T> {
+    fn unwrap(*w) -> T {
+        w.value
+    }
+
+    fn map<U>(w, f: fn(T) -> U) -> Wrapper<U> {
+        Wrapper<U> { value = f(w.value) }
+    }
+}
+
+fn test_generic_ext_unwrap() {
+    w := Wrapper<i32> { value = 99 }
+    assert(w.unwrap() == 99)
+}
+
+fn test_generic_ext_map() {
+    w := Wrapper<i32> { value = 5 }
+    w2 := w.map(|x| x * 2)
+    assert(w2.unwrap() == 10)
+}
+
+// ── specialized extension for concrete type ──
+
+ext Pair<i32, i32> {
+    fn sum(*p) -> i32 {
+        p.first + p.second
+    }
+
+    fn product(*p) -> i32 {
+        p.first * p.second
+    }
+}
+
+fn test_specialized_ext() {
+    p := Pair<i32, i32> { first = 3, second = 4 }
+    assert(p.sum() == 7)
+    assert(p.product() == 12)
+}
+
+// ── generic ext alongside struct-defined methods ──
+
+struct Box<T> {
+    item: T
+
+    fn peek(*b) -> T { b.item }
+}
+
+ext<T> Box<T> {
+    fn replace(b, new_item: T) -> Box<T> {
+        Box<T> { item = new_item }
+    }
+}
+
+fn test_generic_ext_alongside_struct_methods() {
+    b := Box<i32> { item = 10 }
+    assert(b.peek() == 10)
+
+    b2 := b.replace(20)
+    assert(b2.peek() == 20)
+}
+
+// ── generic ext and specialized ext on same type ──
+
+fn test_generic_and_specialized_together() {
+    // generic ext methods work
+    p := Pair<i32, i32> { first = 5, second = 10 }
+    assert(p.get_first() == 5)
+    assert(p.get_second() == 10)
+
+    // specialized ext methods also work
+    assert(p.sum() == 15)
+    assert(p.product() == 50)
+}

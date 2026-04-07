@@ -157,6 +157,9 @@ const char *type_name(Arena *arena, const Type *type) {
         return arena_sprintf(arena, "%s) -> %s", result,
                              type_name(arena, type->fn_type.return_type));
     }
+    if (type->kind == TYPE_MODULE) {
+        return type->module_type.name;
+    }
     return "<unknown>";
 }
 
@@ -217,6 +220,9 @@ bool type_equal(const Type *a, const Type *b) {
             }
         }
         return type_equal(a->fn_type.return_type, b->fn_type.return_type);
+    }
+    if (a->kind == TYPE_MODULE) {
+        return strcmp(a->module_type.name, b->module_type.name) == 0;
     }
     return true;
 }
@@ -437,4 +443,10 @@ bool type_assignable(const Type *from, const Type *to) {
         return from->fn_type.fn_kind <= to->fn_type.fn_kind;
     }
     return false;
+}
+
+Type *type_create_module(Arena *arena, const char *name) {
+    Type *type = type_create(arena, TYPE_MODULE);
+    type->module_type.name = name;
+    return type;
 }

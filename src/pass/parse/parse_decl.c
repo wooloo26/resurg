@@ -426,6 +426,149 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     return node;
 }
 
+// ── Ext decl ────────────────────────────────────────────────────
+
+/**
+ * Parse ext block:
+ *   ext [<TypeParams>] TypeName [<TypeArgs>] [impl Pact [+ Pact2]] { methods }
+ */
+static ASTNode *parse_ext_decl(Parser *parser) {
+    SrcLoc loc = parser_current_loc(parser);
+    parser_expect(parser, TOKEN_EXT);
+
+    ASTNode *node = ast_new(parser->arena, NODE_EXT_DECL, loc);
+    node->ext_decl.type_params = NULL;
+    node->ext_decl.target_name = NULL;
+    node->ext_decl.target_type_args = NULL;
+    node->ext_decl.impl_pacts = NULL;
+    node->ext_decl.methods = NULL;
+
+    // Optional type params: ext<T, U>
+    node->ext_decl.type_params = parse_type_params(parser);
+
+    // Target type name (struct, enum, or primitive type keyword)
+    if (parser_check(parser, TOKEN_ID)) {
+        node->ext_decl.target_name = parser_advance(parser)->lexeme;
+    } else if (token_is_type_keyword(parser_current_token(parser)->kind)) {
+        node->ext_decl.target_name = parser_advance(parser)->lexeme;
+    } else {
+        rsg_err(parser_current_loc(parser), "expected type name after 'ext'");
+        return node;
+    }
+
+    // Optional type args: ext Pair<i32, str> or ext<T, U> Pair<T, U>
+    if (parser_match(parser, TOKEN_LESS)) {
+        do {
+            ASTType *ta = arena_alloc_zero(parser->arena, sizeof(ASTType));
+            *ta = parser_parse_type(parser);
+            BUF_PUSH(node->ext_decl.target_type_args, *ta);
+        } while (parser_match(parser, TOKEN_COMMA));
+        parser_expect(parser, TOKEN_GREATER);
+    }
+
+    // Optional pact impl: ext Type impl Pact1 + Pact2
+    if (parser_match(parser, TOKEN_IMPL)) {
+        do {
+            const char *pact_name = parser_expect(parser, TOKEN_ID)->lexeme;
+            BUF_PUSH(node->ext_decl.impl_pacts, pact_name);
+        } while (parser_match(parser, TOKEN_PLUS));
+    }
+
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        if (parser_check(parser, TOKEN_FN)) {
+            ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name);
+            BUF_PUSH(node->ext_decl.methods, method);
+        } else {
+            rsg_err(parser_current_loc(parser), "expected method in ext block");
+            parser_advance(parser);
+        }
+        parser_skip_newlines(parser);
+    }
+
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+    return node;
+}
+
+// ── Use decl ────────────────────────────────────────────────────
+
+/**
+ * Parse use import:
+ *   use module_name { name1, name2 as alias, ... }
+ *   use module_name
+ */
+static ASTNode *parse_use_decl(Parser *parser) {
+    SrcLoc loc = parser_current_loc(parser);
+    parser_expect(parser, TOKEN_USE);
+
+    ASTNode *node = ast_new(parser->arena, NODE_USE_DECL, loc);
+    node->use_decl.module_path = parser_expect(parser, TOKEN_ID)->lexeme;
+    node->use_decl.imported_names = NULL;
+    node->use_decl.aliases = NULL;
+
+    parser_skip_newlines(parser);
+
+    // Selective import: use module { name1, name2 as alias }
+    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
+        parser_skip_newlines(parser);
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            const char *name = parser_expect(parser, TOKEN_ID)->lexeme;
+            BUF_PUSH(node->use_decl.imported_names, name);
+
+            // Check for alias: name as alias
+            if (parser_check(parser, TOKEN_ID) &&
+                strcmp(parser_current_token(parser)->lexeme, "as") == 0) {
+                parser_advance(parser); // consume 'as'
+                const char *alias = parser_expect(parser, TOKEN_ID)->lexeme;
+                BUF_PUSH(node->use_decl.aliases, alias);
+            } else {
+                BUF_PUSH(node->use_decl.aliases, name);
+            }
+
+            parser_match(parser, TOKEN_COMMA);
+            parser_skip_newlines(parser);
+        }
+        parser_expect(parser, TOKEN_RIGHT_BRACE);
+    }
+
+    return node;
+}
+
+// ── Nested module decl ──────────────────────────────────────────
+
+/**
+ * Parse nested module: module name { decls }
+ * or flat module declaration: module name
+ */
+static ASTNode *parse_module_decl(Parser *parser, bool is_pub) {
+    SrcLoc loc = parser_current_loc(parser);
+    parser_advance(parser); // consume 'module'
+    ASTNode *node = ast_new(parser->arena, NODE_MODULE, loc);
+    node->module.name = parser_expect(parser, TOKEN_ID)->lexeme;
+    node->module.is_pub = is_pub;
+    node->module.decls = NULL;
+
+    parser_skip_newlines(parser);
+
+    // Nested module body: module name { decls }
+    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
+        parser_skip_newlines(parser);
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            ASTNode *decl = parser_parse_decl(parser);
+            if (decl != NULL) {
+                BUF_PUSH(node->module.decls, decl);
+            }
+            parser_skip_newlines(parser);
+        }
+        parser_expect(parser, TOKEN_RIGHT_BRACE);
+    }
+
+    return node;
+}
+
 // ── Top-level decl dispatch ─────────────────────────────────────
 
 ASTNode *parser_parse_decl(Parser *parser) {
@@ -433,11 +576,17 @@ ASTNode *parser_parse_decl(Parser *parser) {
 
     // module
     if (parser_check(parser, TOKEN_MODULE)) {
-        SrcLoc loc = parser_current_loc(parser);
-        parser_advance(parser); // consume 'module'
-        ASTNode *node = ast_new(parser->arena, NODE_MODULE, loc);
-        node->module.name = parser_expect(parser, TOKEN_ID)->lexeme;
-        return node;
+        return parse_module_decl(parser, false);
+    }
+
+    // ext
+    if (parser_check(parser, TOKEN_EXT)) {
+        return parse_ext_decl(parser);
+    }
+
+    // use
+    if (parser_check(parser, TOKEN_USE)) {
+        return parse_use_decl(parser);
     }
 
     // struct
@@ -461,20 +610,51 @@ ASTNode *parser_parse_decl(Parser *parser) {
         parser_advance(parser); // consume 'type'
         ASTNode *node = ast_new(parser->arena, NODE_TYPE_ALIAS, loc);
         node->type_alias.name = parser_expect(parser, TOKEN_ID)->lexeme;
+        node->type_alias.is_pub = false;
         node->type_alias.type_params = parse_type_params(parser);
         parser_expect(parser, TOKEN_EQUAL);
         node->type_alias.alias_type = parser_parse_type(parser);
         return node;
     }
 
-    // pub fn ...
+    // pub ...
     if (parser_check(parser, TOKEN_PUB)) {
         parser_advance(parser); // consume 'pub'
         parser_skip_newlines(parser);
         if (parser_check(parser, TOKEN_FN)) {
             return parse_fn_decl(parser, true);
         }
-        rsg_err(parser_current_loc(parser), "expected 'fn' after 'pub'");
+        if (parser_check(parser, TOKEN_STRUCT)) {
+            ASTNode *node = parse_struct_decl(parser);
+            node->struct_decl.is_pub = true;
+            return node;
+        }
+        if (parser_check(parser, TOKEN_ENUM)) {
+            ASTNode *node = parse_enum_decl(parser);
+            node->enum_decl.is_pub = true;
+            return node;
+        }
+        if (parser_check(parser, TOKEN_PACT)) {
+            ASTNode *node = parse_pact_decl(parser);
+            node->pact_decl.is_pub = true;
+            return node;
+        }
+        if (parser_check(parser, TOKEN_TYPE)) {
+            SrcLoc loc = parser_current_loc(parser);
+            parser_advance(parser); // consume 'type'
+            ASTNode *node = ast_new(parser->arena, NODE_TYPE_ALIAS, loc);
+            node->type_alias.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            node->type_alias.is_pub = true;
+            node->type_alias.type_params = parse_type_params(parser);
+            parser_expect(parser, TOKEN_EQUAL);
+            node->type_alias.alias_type = parser_parse_type(parser);
+            return node;
+        }
+        if (parser_check(parser, TOKEN_MODULE)) {
+            return parse_module_decl(parser, true);
+        }
+        rsg_err(parser_current_loc(parser),
+                "expected 'fn', 'struct', 'enum', 'pact', 'type', or 'module' after 'pub'");
         return NULL;
     }
 

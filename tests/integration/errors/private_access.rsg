@@ -1,0 +1,12 @@
+// TEST: compile_error
+// EXPECT-ERROR: private
+module test_err
+
+module secret {
+    fn hidden() -> i32 = 42
+    pub fn visible() -> i32 = hidden()
+}
+
+fn main() {
+    secret::hidden()
+}

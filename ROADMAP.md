@@ -164,11 +164,11 @@ Higher-order programming and code organization.
 
 ## v0.9.1 — Extensions & Module System
 
-- [ ] Extension methods (`ext User { … }`, `ext str { … }`)
-- [ ] `use` imports
-- [ ] Private-by-default module resolution
-- [ ] `pub` visibility on all declarations
-- [ ] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+- [x] Extension methods (`ext User { … }`, `ext str { … }`)
+- [x] `use` imports
+- [x] Private-by-default module resolution
+- [x] `pub` visibility on all declarations
+- [x] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
 
 ## v0.9.2 — Higher Generics
 
@@ -184,6 +184,7 @@ Higher-order programming and code organization.
 - [ ] Template Literal Types
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
+- [ ] Module
   
 ## v0.9.4 — Ecosystem & Runtime
 

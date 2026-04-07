@@ -42,6 +42,9 @@ typedef enum {
     TOKEN_RETURN,   // return
     TOKEN_WHILE,    // while
     TOKEN_DEFER,    // defer
+    TOKEN_EXT,      // ext
+    TOKEN_USE,      // use
+    TOKEN_IMPL,     // impl
 
     // Type keywords
     TOKEN_BOOL,  // bool

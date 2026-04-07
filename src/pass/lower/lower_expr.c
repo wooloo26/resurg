@@ -489,6 +489,20 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         }
     }
 
+    // Primitive ext methods: look up "type_name.method_name"
+    if (obj_type != NULL) {
+        const char *prim_name = type_name(low->hir_arena, obj_type);
+        if (prim_name != NULL) {
+            const char *method_name = member_ast->member.member;
+            const char *key = arena_sprintf(low->hir_arena, "%s.%s", prim_name, method_name);
+            HirSym *method_sym = lower_scope_lookup(low, key);
+            if (method_sym != NULL) {
+                HirNode *recv = lower_expr(low, member_ast->member.object);
+                return build_method_call(low, ast, recv, method_sym);
+            }
+        }
+    }
+
     return NULL;
 }
 

@@ -351,7 +351,10 @@ static const char *emit_method_call_expr(CGen *cgen, const HirNode *node) {
     const char *recv = emit_expr(cgen, node->method_call.recv);
     int32_t arg_count = BUF_LEN(node->method_call.args);
     bool recv_is_ptr =
-        node->method_call.recv->type != NULL && node->method_call.recv->type->kind == TYPE_PTR;
+        (node->method_call.recv->type != NULL && node->method_call.recv->type->kind == TYPE_PTR) ||
+        (node->method_call.recv->kind == HIR_VAR_REF &&
+         node->method_call.recv->var_ref.sym != NULL &&
+         node->method_call.recv->var_ref.sym->is_ptr_recv);
     const char *recv_expr;
     if (node->method_call.is_ptr_recv) {
         // Pointer recv: needs a ptr

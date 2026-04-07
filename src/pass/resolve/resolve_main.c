@@ -44,6 +44,14 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
  * conformances, enums, type aliases, fn sigs) into the sema tables.
  */
 static void register_all_decls(Sema *sema, ASTNode *file) {
+    // Register nested modules first (their decls need to be available for other registrations)
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_MODULE && decl->module.decls != NULL) {
+            register_module_decl(sema, decl);
+        }
+    }
+
     // Register pacts first (they must be available when validating struct conformances)
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
@@ -106,6 +114,30 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
 
         if (decl->kind == NODE_FN_DECL) {
             register_fn_sig(sema, decl);
+        }
+    }
+
+    // Register extension methods (after struct/enum/pact are all registered)
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_EXT_DECL) {
+            register_ext_decl(sema, decl);
+        }
+    }
+
+    // Validate ext-impl-pact conformances
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_EXT_DECL && BUF_LEN(decl->ext_decl.impl_pacts) > 0) {
+            enforce_ext_pact_conformances(sema, decl);
+        }
+    }
+
+    // Resolve use imports (after all modules' decls are registered)
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_USE_DECL) {
+            register_use_decl(sema, decl);
         }
     }
 }
