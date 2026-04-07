@@ -139,6 +139,27 @@ fn main() {
 }
 ```
 
+### Variadic Arguments
+
+```rsg
+fn sum(values: ..i32) -> i32 {
+    total := 0
+    for values |v| total += v
+    total
+}
+
+sum(1, 2, 3)           // 6
+
+nums := []i32{1, 2, 3}
+sum(..nums)             // 6
+// Mix spread and individual args
+sum(0, ..nums, 99)     // 105
+
+fn first_or_default(values: ..i32, default: i32) -> i32 {
+    // ERROR: variadic must be last parameter
+}
+```
+
 ---
 
 ## 3. Safety Model
@@ -473,6 +494,7 @@ any := Msg::Write("any")
 
 enum Color { Red, Green, Blue }
 enum Status { Active = 1, Inactive = 0, Pending = 2 }
+enum Direction { north = "north", south = "south", west = "west", east = "east"}
 ```
 
 ### Pattern Matching
@@ -545,16 +567,15 @@ struct Dog: Animal + Printable {
 
 ### Extension Methods
 
+support Primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`
+
 ```rsg
 pact Display {
     fn join(*s, sep: str) -> str
 }
 
-ext str {
+ext str impl Display {
     fn last_char(*s) -> char { s[s.len() - 1] }
-}
-
-ext []Display {
     fn join(*s, sep: str) -> str { ... }
 }
 ```
@@ -562,8 +583,6 @@ ext []Display {
 ### Generics
 
 Pact-bounded type parameters. Monomorphized at compile time. Constraint aliases supported.
-
-Future: F-bounded polymorphism, `immut`
 
 ```rsg
 fn max<T: Ord>(a: T, b: T) -> T {
@@ -593,8 +612,253 @@ enum Either<L, R> {
 type Callback<T> = fn(T) -> bool
 type ListBox = Box<List>
 
-ext<T: Display> []T {
-    fn join(*s, sep: str) -> str { ... }
+ext<T, U> Pair<T, U> { ... }
+ext Pair<i32, i64>  { ... }
+```
+
+### Default Generics
+
+Type parameters can have defaults. Only supported on `struct`, `enum`, `pact`, and `type` — not on `fn`.
+
+```rsg
+struct Map<K, V = str> {
+    entries: [](K, V)
+
+    fn insert(mut *self, key: K, value: V) { ... }
+    fn get(*self, key: K) -> ?V { ... }
+}
+
+// V defaults to str when omitted
+config := Map<str> { entries = [] }
+config.insert("host", "localhost")
+
+// Override the default explicitly
+scores := Map<str, i32> { entries = [] }
+scores.insert("alice", 100)
+
+enum Result<T, E = str> {
+    Ok(T),
+    Err(E),
+}
+
+// E defaults to str
+var x: Result<i32> = Ok(42)          // same as Result<i32, str>
+var y: Result<i32, u32> = Err(404)   // override default
+
+pact Collection<T, Idx = usize> {
+    fn at(*self, index: Idx) -> ?T
+}
+
+type StringMap<V = str> = Map<str, V>
+
+// NOT allowed on functions:
+// fn bad<T = i32>(x: T) -> T { x }  // ERROR: default generics not supported on fn
+```
+
+### `Self` & `*Self` Type
+
+`Self` refers to the concrete implementing type inside `struct`, `enum`, `pact`, and `ext` blocks. `*Self` is the pointer form.
+
+```rsg
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+
+    /// Creates a new Point at the origin.
+    fn origin() -> Self {
+        Self { x = 0.0, y = 0.0 }
+    }
+
+    /// Returns a copy translated by (dx, dy).
+    fn translate(p, dx: f64, dy: f64) -> Self {
+        Self { x = p.x + dx, y = p.y + dy }
+    }
+
+    /// Mutates in place.
+    fn reset(mut *self) {
+        self.x = 0.0
+        self.y = 0.0
+    }
+}
+
+p := Point::origin()          // Self resolves to Point
+q := p.translate(1.0, 2.0)   // returns Point
+
+pact Clonable {
+    /// Returns an independent copy of the receiver.
+    fn clone(*self) -> Self
+}
+
+struct Config: Clonable {
+    name: str
+    fn clone(*self) -> Self {
+        Self { name = self.name }
+    }
+}
+
+enum Token {
+    Number(f64),
+    Ident(str),
+
+    fn dummy() -> Self {
+        Self::Number(0.0)   // Self resolves to Token
+    }
+}
+
+ext str {
+    fn empty() -> Self { "" }  // Self resolves to str
+}
+```
+
+### Recursive Generics
+
+```rsg
+struct Node<T> {
+    value: T
+    next: ?Node<T>
+}
+```
+
+### `comptime` Generics
+
+```rsg
+struct ArrayWrapper<T, comptime N: usize> {
+    data: [N]T
+}
+
+wrapper := ArrayWrapper<i32, 5> { data: [1, 2, 3, 4, 5] }
+```
+
+### `where` Clauses
+
+Complex generic bounds can be moved to a `where` clause for readability. Equivalent to inline bounds but scales better with many constraints.
+
+```rsg
+// Inline bounds — works but gets noisy
+fn merge<T: Ord + Display + Clone, U: Into<T> + Clone>(a: []T, b: []U) -> []T { ... }
+
+// Same thing with a where clause
+fn merge<T, U>(a: []T, b: []U) -> []T
+where
+    T: Ord + Display + Clone,
+    U: Into<T> + Clone,
+{
+    ...
+}
+
+struct Registry<K, V>
+where
+    K: Hash + Eq + Display,
+    V: Clone,
+{
+    entries: [](K, V)
+}
+
+pact Transformer<In, Out>
+where
+    In: Parseable,
+    Out: Serializable + Display,
+{
+    fn transform(*self, input: In) -> Out
+}
+
+// where can also express relationships between parameters
+fn zip_with<A, B, C>(xs: []A, ys: []B, f: fn(A, B) -> C) -> []C
+where
+    A: Clone,
+    B: Clone,
+{
+    ...
+}
+```
+
+### Template Literal Types
+
+String literal types can be constructed and combined at the type level, enabling type-safe string patterns.
+
+```rsg
+// Template literal types — construct string types from parts
+enum Verb { Get = "get", Set = "set" }
+type Method = "{Verb}_{str}"
+// Expands to: "get_name" | "get_age" | "set_name" | "set_age"
+
+// With generic parameters
+type Prefixed<P, S> = "{P}_{S}"
+```
+
+### Associated Types
+
+Pacts can declare associated types — type members that conforming structs must define concretely. Useful when the related type depends on the implementor.
+
+```rsg
+pact Iterator {
+    type Item                    // associated type — no default
+
+    fn next(mut *self) -> ?Self::Item
+    fn has_next(*self) -> bool
+}
+
+struct RangeIter: Iterator {
+    type Item = i32              // concrete associated type
+
+    current: i32
+    end: i32
+
+    fn next(mut *self) -> ?i32 {
+        if self.current < self.end {
+            val := self.current
+            self.current += 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    fn has_next(*self) -> bool {
+        self.current < self.end
+    }
+}
+
+// Use the associated type in generic constraints
+fn collect_all<I: Iterator>(mut iter: *I) -> []I::Item {
+    var result: []I::Item = []
+    while Some(item) := iter.next() {
+        result = result + [item]
+    }
+    result
+}
+
+// Associated types with bounds
+pact Collection {
+    type Element: Display
+    type Index = usize           // associated type with default
+
+    fn at(*self, index: Self::Index) -> ?Self::Element
+    fn len(*self) -> usize
+}
+
+struct TextLine: Collection {
+    type Element = char          // char conforms to Display
+    // Index uses the default: usize
+
+    chars: []char
+
+    fn at(*self, index: usize) -> ?char {
+        if index < self.chars.len() { Some(self.chars[index]) } else { None }
+    }
+
+    fn len(*self) -> usize { self.chars.len() }
+}
+
+// Associated types avoid extra generic parameters
+// Instead of: pact Graph<N: Display, E> { ... }
+// Prefer:
+pact Graph {
+    type Node: Display
+    type Edge
+
+    fn neighbors(*self, node: *Self::Node) -> []Self::Node
+    fn weight(*self, edge: *Self::Edge) -> f64
 }
 ```
 
@@ -603,6 +867,8 @@ ext<T: Display> []T {
 ## 6. Modules
 
 Each `.rsg` file = module. Private by default.
+
+`pub` support `fn`, `struct`, `enum`, `type`, `var`, `pact`.
 
 ```rsg
 module math
@@ -698,18 +964,75 @@ data |> |x| x + 1 |> println
 ### Keywords
 
 ```plain
-break  continue  defer  else   enum   false  fn
+break  continue  defer  else   enum   false  fn     impl
 for    if        loop   match  module mut    pact   pub
 immut  return    struct true   type   use    var    while
+where  comptime
 ```
 
 **Reserved (future):**
 
 ```plain
-async  await  comptime  macro  spawn  where
+async  await  macro  spawn
 ```
 
-Conventions: `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` constants. Comments: `//`.
+Conventions: `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` constants. Comments: `//`, `///`.
+
+### Documentation Comments
+
+```rsg
+/// Single-line doc comment — attaches to the immediately following declaration.
+
+/// Computes the greatest common divisor of two integers.
+///
+/// Uses the Euclidean algorithm. Both arguments must be non-negative.
+///
+/// ## Examples
+/// ```rsg
+/// gcd(12, 8)   // 4
+/// gcd(7, 0)    // 7
+/// ```
+///
+/// @param a  First non-negative integer.
+/// @param b  Second non-negative integer.
+/// @return   The GCD of `a` and `b`.
+fn gcd(a: i32, b: i32) -> i32 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+/// A 2D point in Cartesian space.
+struct Point {
+    /// Horizontal coordinate.
+    x: f64 = 0.0
+    /// Vertical coordinate.
+    y: f64 = 0.0
+
+    /// Returns the Euclidean distance from the origin.
+    fn magnitude(*p) -> f64 { ... }
+}
+
+/// Represents a network message.
+enum Msg {
+    /// Signals a clean shutdown.
+    Quit,
+    /// Carries a position update.
+    Move { x: i32, y: i32 },
+    /// Carries a text payload.
+    Write(str),
+}
+
+/// Any type that can be converted to a human-readable string.
+pact Display {
+    /// Returns the display representation.
+    fn to_string() -> str
+}
+
+/// Extends `str` with utility methods.
+ext str {
+    /// Returns `true` if the string is empty.
+    fn is_empty(*s) -> bool { s.len() == 0 }
+}
+```
 
 ### Operators (Resurg-specific)
 

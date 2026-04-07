@@ -165,33 +165,33 @@ Higher-order programming and code organization.
 ## v0.9.1 — Extensions & Module System
 
 - [ ] Extension methods (`ext User { … }`, `ext str { … }`)
-- [ ] `use` imports (path, selective, aliased)
+- [ ] `use` imports
 - [ ] Private-by-default module resolution
-- [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
-- [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
+- [ ] `pub` visibility on all declarations
+- [ ] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+
+## v0.9.2 — Higher Generics
+
+- [ ] Recursive Generics
+- [ ] `comptime` Generics
+- [ ] Default generics (only support `struct`, `enum`, `pact`, `type`)
+- [ ] `where`
+- [ ] Template Literal Types
+- [ ] `Self` and `*Self` type (only support `struct`, `enum`, `pact`, `ext`)
+- [ ] Associated Types
   
-## v0.9.2 — Before Ecosystem
+## v0.9.3 — Before Ecosystem
 
 - [ ] Variadic Arguments
-- [ ] Comments: `/* */`
 - [ ] Documentation Comments
   
-## v0.9.3 — Ecosystem & Runtime
+## v0.9.4 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
 - [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
 - [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
 - [ ] `assert` rewritten on top of `panic`
-
-## v0.9.4 — Higher Generics
-
-- [ ] F-bounded polymorphism
-- [ ] `immut`-aware generic constraints
-- [ ] Default generics (only support `struct`, `enum`, `pact`, `type`)
-- [ ] `where`
-- [ ] Template Literal Types
-- [ ] Associated Types
 
 ## v1.0.0 — Stable Release
 
