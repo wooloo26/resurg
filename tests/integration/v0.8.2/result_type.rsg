@@ -1,0 +1,95 @@
+// v0.8.2 — Result type: T ! E sugar for Result<T, E> { Ok(T), Err(E) }
+module test_result_type
+
+// ── Ok wraps a success value ──
+
+fn test_result_ok_i32() {
+    var x: i32 ! str = Ok(42)
+    match x {
+        Ok(v) => assert(v == 42),
+        Err(_) => assert(false),
+    }
+}
+
+fn test_result_ok_str() {
+    var x: str ! str = Ok("success")
+    match x {
+        Ok(v) => assert(v == "success"),
+        Err(_) => assert(false),
+    }
+}
+
+// ── Err wraps an error value ──
+
+fn test_result_err() {
+    var x: i32 ! str = Err("something failed")
+    match x {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "something failed"),
+    }
+}
+
+// ── function returning T ! E ──
+
+fn divide(a: f64, b: f64) -> f64 ! str {
+    if b == 0.0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn test_function_returning_result_ok() {
+    result := divide(10.0, 2.0)
+    match result {
+        Ok(v) => assert(v == 5.0),
+        Err(_) => assert(false),
+    }
+}
+
+fn test_function_returning_result_err() {
+    result := divide(10.0, 0.0)
+    match result {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "division by zero"),
+    }
+}
+
+// ── result with different error types ──
+
+fn parse_positive(s: str) -> i32 ! str {
+    if s == "42" { Ok(42) }
+    else { Err("not a valid positive number") }
+}
+
+fn test_result_parse() {
+    r := parse_positive("42")
+    match r {
+        Ok(v) => assert(v == 42),
+        Err(_) => assert(false),
+    }
+
+    r2 := parse_positive("abc")
+    match r2 {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "not a valid positive number"),
+    }
+}
+
+// ── result with bool value type ──
+
+fn check_even(n: i32) -> bool ! str {
+    if n < 0 { Err("negative number") }
+    else { Ok(n % 2 == 0) }
+}
+
+fn test_result_bool() {
+    r := check_even(4)
+    match r {
+        Ok(v) => assert(v == true),
+        Err(_) => assert(false),
+    }
+
+    r2 := check_even(-1)
+    match r2 {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "negative number"),
+    }
+}

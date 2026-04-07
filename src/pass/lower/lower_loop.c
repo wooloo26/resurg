@@ -120,6 +120,64 @@ HirNode *lower_loop(Lower *low, const ASTNode *ast) {
 HirNode *lower_while(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
 
+    // while-let: desugar to loop { match pattern_init { P => body, _ => break } }
+    if (ast->while_loop.pattern != NULL) {
+        HirNode *operand = lower_expr(low, ast->while_loop.pattern_init);
+        const Type *op_type = operand->type;
+
+        const char *tmp = lower_make_temp_name(low);
+        HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, op_type, false, loc});
+
+        HirNode **arm_conds = NULL;
+        HirNode **arm_guards = NULL;
+        HirNode **arm_bodies = NULL;
+        HirNode **arm_bindings = NULL;
+
+        // Arm 0: pattern match → body
+        HirNode *cond = lower_pattern_cond(low, ast->while_loop.pattern,
+                                           lower_make_var_ref(low, tmp_sym, loc), op_type, loc);
+        BUF_PUSH(arm_conds, cond);
+        BUF_PUSH(arm_guards, NULL);
+
+        lower_scope_enter(low);
+        lower_pattern_bindings(low, ast->while_loop.pattern, op_type);
+        HirNode *body = lower_block(low, ast->while_loop.body);
+        HirNode *binds =
+            lower_arm_bindings_block(low, ast->while_loop.pattern, tmp_sym, op_type, loc);
+        BUF_PUSH(arm_bodies, body);
+        BUF_PUSH(arm_bindings, binds);
+        lower_scope_leave(low);
+
+        // Arm 1: wildcard → break
+        BUF_PUSH(arm_conds, NULL);
+        BUF_PUSH(arm_guards, NULL);
+        HirNode *break_node = hir_new(low->hir_arena, HIR_BREAK, &TYPE_UNIT_INST, loc);
+        HirNode **break_stmts = NULL;
+        BUF_PUSH(break_stmts, break_node);
+        HirNode *break_block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
+        break_block->block.stmts = break_stmts;
+        break_block->block.result = NULL;
+        BUF_PUSH(arm_bodies, break_block);
+        BUF_PUSH(arm_bindings, NULL);
+
+        HirNode *match = hir_new(low->hir_arena, HIR_MATCH, &TYPE_UNIT_INST, loc);
+        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, operand);
+        match->match_expr.arm_conds = arm_conds;
+        match->match_expr.arm_guards = arm_guards;
+        match->match_expr.arm_bodies = arm_bodies;
+        match->match_expr.arm_bindings = arm_bindings;
+
+        HirNode **loop_stmts = NULL;
+        BUF_PUSH(loop_stmts, match);
+        HirNode *loop_body = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
+        loop_body->block.stmts = loop_stmts;
+        loop_body->block.result = NULL;
+
+        HirNode *loop_node = hir_new(low->hir_arena, HIR_LOOP, &TYPE_UNIT_INST, loc);
+        loop_node->loop.body = loop_body;
+        return loop_node;
+    }
+
     HirNode *cond = lower_expr(low, ast->while_loop.cond);
 
     // Build: if !cond { break }

@@ -53,11 +53,15 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
 
     lower_scope_enter(low);
 
+    const Type *saved_return_type = low->fn_return_type;
+    low->fn_return_type = return_type;
+
     HirNode **params = NULL;
     lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);
 
     HirNode *body = lower_fn_body(low, ast->fn_decl.body);
 
+    low->fn_return_type = saved_return_type;
     lower_scope_leave(low);
 
     HirNode *node = hir_new(low->hir_arena, HIR_FN_DECL, &TYPE_UNIT_INST, ast->loc);
@@ -115,9 +119,11 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     HirSym *saved_recv = low->current_recv;
     const char *saved_name = low->current_recv_name;
     bool saved_is_ptr = low->current_is_ptr_recv;
+    const Type *saved_return_type = low->fn_return_type;
     low->current_recv = recv_sym;
     low->current_recv_name = recv_name;
     low->current_is_ptr_recv = is_ptr_recv;
+    low->fn_return_type = return_type;
 
     // Lower other params
     lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);
@@ -128,6 +134,7 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     low->current_recv = saved_recv;
     low->current_recv_name = saved_name;
     low->current_is_ptr_recv = saved_is_ptr;
+    low->fn_return_type = saved_return_type;
 
     lower_scope_leave(low);
 

@@ -3,6 +3,16 @@
 ASTType parser_parse_type(Parser *parser) {
     ASTType type = {.kind = AST_TYPE_NAME, .loc = parser_current_loc(parser)};
 
+    // Option type: ?T
+    if (parser_check(parser, TOKEN_QUESTION)) {
+        type.kind = AST_TYPE_OPTION;
+        parser_advance(parser); // consume '?'
+        ASTType *elem = arena_alloc(parser->arena, sizeof(ASTType));
+        *elem = parser_parse_type(parser);
+        type.option_elem = elem;
+        return type;
+    }
+
     // Pointer type: *T
     if (parser_check(parser, TOKEN_STAR)) {
         type.kind = AST_TYPE_PTR;
@@ -84,5 +94,19 @@ ASTType parser_parse_type(Parser *parser) {
         } while (parser_match(parser, TOKEN_COMMA));
         parser_expect(parser, TOKEN_GREATER);
     }
+
+    // Result type: T ! E (postfix on any type)
+    if (parser_check(parser, TOKEN_BANG)) {
+        parser_advance(parser); // consume '!'
+        ASTType result_type = {.kind = AST_TYPE_RESULT, .loc = type.loc};
+        ASTType *ok_type = arena_alloc(parser->arena, sizeof(ASTType));
+        *ok_type = type;
+        ASTType *err_type = arena_alloc(parser->arena, sizeof(ASTType));
+        *err_type = parser_parse_type(parser);
+        result_type.result_ok = ok_type;
+        result_type.result_err = err_type;
+        return result_type;
+    }
+
     return type;
 }

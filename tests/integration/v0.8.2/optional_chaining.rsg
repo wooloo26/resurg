@@ -1,0 +1,71 @@
+// v0.8.2 — Optional chaining: ?. operator
+module test_optional_chaining
+
+struct Address {
+    city: str = ""
+}
+
+struct User {
+    name: str = ""
+    address: ?*Address = None
+}
+
+// ── basic optional chaining ──
+
+fn get_user(id: i32) -> ?*User {
+    if id == 1 {
+        addr := &Address { city = "Paris" }
+        Some(&User { name = "Alice", address = Some(addr) })
+    } else if id == 2 {
+        Some(&User { name = "Bob" })
+    } else {
+        None
+    }
+}
+
+fn test_chaining_some() {
+    user := get_user(1)
+    city := user?.address?.city
+    match city {
+        Some(c) => assert(c == "Paris"),
+        None => assert(false),
+    }
+}
+
+fn test_chaining_none_middle() {
+    user := get_user(2)
+    city := user?.address?.city
+    match city {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+fn test_chaining_none_root() {
+    user := get_user(99)
+    city := user?.address?.city
+    match city {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── single-level optional chaining ──
+
+fn test_single_chaining() {
+    user := get_user(1)
+    name := user?.name
+    match name {
+        Some(n) => assert(n == "Alice"),
+        None => assert(false),
+    }
+}
+
+fn test_single_chaining_none() {
+    user := get_user(99)
+    name := user?.name
+    match name {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}

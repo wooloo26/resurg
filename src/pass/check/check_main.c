@@ -163,6 +163,8 @@ Sema *sema_create(Arena *arena) {
     sema->current_scope = NULL;
     sema->err_count = 0;
     sema->loop_break_type = NULL;
+    sema->expected_type = NULL;
+    sema->fn_return_type = NULL;
     sema->file_node = NULL;
     hash_table_init(&sema->type_alias_table, NULL);
     hash_table_init(&sema->fn_table, NULL);
@@ -736,6 +738,75 @@ bool sema_check(Sema *sema, ASTNode *file) {
         if (decl->kind == NODE_PACT_DECL) {
             register_pact_def(sema, decl);
         }
+    }
+
+    // Inject built-in generic enum templates: Option<T> and Result<T, E>
+    // Must come before struct registration, since struct fields may use ?T / T!E.
+    {
+        SrcLoc bltin = {.file = "<builtin>", .line = 0, .column = 0};
+
+        // enum Option<T> { None, Some(T) }
+        ASTNode *opt = ast_new(sema->arena, NODE_ENUM_DECL, bltin);
+        opt->enum_decl.name = "Option";
+        opt->enum_decl.variants = NULL;
+        opt->enum_decl.methods = NULL;
+        opt->enum_decl.type_params = NULL;
+
+        ASTTypeParam tp_t = {.name = "T", .bounds = NULL};
+        BUF_PUSH(opt->enum_decl.type_params, tp_t);
+
+        ASTEnumVariant v_none = {.name = "None",
+                                 .kind = VARIANT_UNIT,
+                                 .tuple_types = NULL,
+                                 .fields = NULL,
+                                 .discriminant = NULL};
+        BUF_PUSH(opt->enum_decl.variants, v_none);
+
+        ASTType some_inner = {.kind = AST_TYPE_NAME, .name = "T", .type_args = NULL};
+        ASTType *some_types = NULL;
+        BUF_PUSH(some_types, some_inner);
+        ASTEnumVariant v_some = {.name = "Some",
+                                 .kind = VARIANT_TUPLE,
+                                 .tuple_types = some_types,
+                                 .fields = NULL,
+                                 .discriminant = NULL};
+        BUF_PUSH(opt->enum_decl.variants, v_some);
+
+        register_enum_def(sema, opt);
+
+        // enum Result<T, E> { Ok(T), Err(E) }
+        ASTNode *res = ast_new(sema->arena, NODE_ENUM_DECL, bltin);
+        res->enum_decl.name = "Result";
+        res->enum_decl.variants = NULL;
+        res->enum_decl.methods = NULL;
+        res->enum_decl.type_params = NULL;
+
+        ASTTypeParam tp_t2 = {.name = "T", .bounds = NULL};
+        ASTTypeParam tp_e = {.name = "E", .bounds = NULL};
+        BUF_PUSH(res->enum_decl.type_params, tp_t2);
+        BUF_PUSH(res->enum_decl.type_params, tp_e);
+
+        ASTType ok_inner = {.kind = AST_TYPE_NAME, .name = "T", .type_args = NULL};
+        ASTType *ok_types = NULL;
+        BUF_PUSH(ok_types, ok_inner);
+        ASTEnumVariant v_ok = {.name = "Ok",
+                               .kind = VARIANT_TUPLE,
+                               .tuple_types = ok_types,
+                               .fields = NULL,
+                               .discriminant = NULL};
+        BUF_PUSH(res->enum_decl.variants, v_ok);
+
+        ASTType err_inner = {.kind = AST_TYPE_NAME, .name = "E", .type_args = NULL};
+        ASTType *err_types = NULL;
+        BUF_PUSH(err_types, err_inner);
+        ASTEnumVariant v_err = {.name = "Err",
+                                .kind = VARIANT_TUPLE,
+                                .tuple_types = err_types,
+                                .fields = NULL,
+                                .discriminant = NULL};
+        BUF_PUSH(res->enum_decl.variants, v_err);
+
+        register_enum_def(sema, res);
     }
 
     // Register structs (they may be refd by type aliases and fns)

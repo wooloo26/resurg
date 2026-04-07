@@ -119,41 +119,42 @@ Dynamic-length data.
   
 ## v0.8.0 — Generics Core
 
-- [ ] Generic function syntax (`fn max<T: Ord>(a: T, b: T) -> T`)
-- [ ] Pact-bounded type parameters (`T: Ord + Display`)
-- [ ] Multiple generic parameters with mixed bounds (`fn merge<T: Ord, U: Clone>(...)`)
-- [ ] Generic pacts (`pact B<T> { Into<T>; Clone }`)
-- [ ] Compile-time monomorphization
-- [ ] Constraint alias expansion in type inference
+- [x] Generic function syntax (`fn max<T: Ord>(a: T, b: T) -> T`)
+- [x] Pact-bounded type parameters (`T: Ord + Display`)
+- [x] Multiple generic parameters with mixed bounds (`fn merge<T: Ord, U: Clone>(...)`)
+- [x] Generic pacts (`pact B<T> { Into<T>; Clone }`)
+- [x] Compile-time monomorphization
+- [x] Constraint alias expansion in type inference
 
 ## v0.8.1 — Generic ADTs & Extensions
 
 Parametric polymorphism for types and surface APIs.
 
-- [ ] Generic structs: `struct Pair<T, U> { first: T, second: U }`
-- [ ] Generic methods on types: `fn map<V>(…) -> Pair<V, U>`
-- [ ] Generic enums: `enum Either<L, R> { Left(L), Right(R) }`
-- [ ] Methods on generic enums with self-references: `fn unwrap_left(*e) -> L`
-- [ ] Generic type aliases: `type Callback<T> = fn(T) -> bool`
-- [ ] Type argument inference at call/instantiation site: `Pair { ... }` or `max(a, b)`
+- [x] Generic structs: `struct Pair<T, U> { first: T, second: U }`
+- [x] Generic methods on types: `fn map<V>(…) -> Pair<V, U>`
+- [x] Generic enums: `enum Either<L, R> { Left(L), Right(R) }`
+- [x] Methods on generic enums with self-references: `fn unwrap_left(*e) -> L`
+- [x] Generic type aliases: `type Callback<T> = fn(T) -> bool`
+- [x] Type argument inference at call/instantiation site: `Pair { ... }` or `max(a, b)`
 
 ## v0.8.2 — Option & Result
 
 Null safety and error handling.
 
-- [ ] `?T` option type (`Some(v)` / `None`)
-- [ ] `T ! E` result type (`Ok(v)` / `Err(e)`)
-- [ ] Option/Result pattern matching (`Some(v)`, `Ok(v)`, `Err(e)`)
-- [ ] Optional chaining (`?.`)
-- [ ] Postfix `!` error propagation
-- [ ] Default `None` for `var x: ?T`
-- [ ] `if` pattern binding (`if Some(x) := expr { … }`)
-- [ ] `while` pattern binding (`while Some(x) := expr { … }`)
+- [x] `?T` option type (`Some(v)` / `None`)
+- [x] `T ! E` result type (`Ok(v)` / `Err(e)`)
+- [x] Option/Result pattern matching (`Some(v)`, `Ok(v)`, `Err(e)`)
+- [x] Optional chaining (`?.`)
+- [x] Postfix `!` error propagation
+- [x] Default `None` for `var x: ?T`
+- [x] `if` pattern binding (`if Some(x) := expr { … }`)
+- [x] `while` pattern binding (`while Some(x) := expr { … }`)
 
 ## v0.9.0 — Closures, Extensions & Modules
 
 Higher-order programming and code organization.
 
+- [ ] `println`
 - [ ] Closures / lambdas (`|x| x * 2`)
 - [ ] Closure variable capture
 - [ ] Function types (`fn(i32) -> bool`)
@@ -168,6 +169,14 @@ Higher-order programming and code organization.
 - [ ] `pub` visibility on all declarations (`fn`, `struct`, `enum`, `type`, `var`, `pact`)
 - [ ] Generic extension methods: `ext<T: Display> []T { fn join(...) }`
   
+## v0.9.2 — Ecosystem & Runtime
+
+- [ ] Comprehensive standard library (`std/io`, …)
+- [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
+- [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
+- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
+- [ ] `assert` rewritten on top of `panic`
+
 ## v1.0.0 — Stable Release
 
 Language completeness, tooling, and ecosystem.
@@ -181,20 +190,12 @@ Language completeness, tooling, and ecosystem.
 - [ ] Linter (`rsg-lint` / static analysis)
 - [ ] Test framework (`test` blocks or attribute)
 
-## v1.0.2 — Ecosystem & Runtime
-
-- [ ] Comprehensive standard library (`std/io`, …)
-- [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
-- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
-- [ ] `assert` rewritten on top of `panic`
-- [ ] Prelude (`panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
-
-## v1.0.3 — Package manager
+## v1.0.2 — Package manager
 
 - [ ] Package manager (dependency resolution, versioning)
 - [ ] Unified devtool (`rsg` CLI: build/run/test/lint/fmt integration)
 
-## v1.0.4 — Utilities
+## v1.0.3 — Utilities
 
 - [ ] Benchmark support
 - [ ] Documentation generator
@@ -206,12 +207,10 @@ Language completeness, tooling, and ecosystem.
 - [ ] C++20 back-end
 - [ ] Go back-end
 - [ ] Typescript back-end
+- [ ] Readable code
 - [ ] Cross-compilation support
-- [ ] Compile-time evaluation (`comptime`)
-- [ ] Async / concurrency primitives
 - [ ] REPL / interpreter mode
+- [ ] Website
 - [ ] Playground (web-based)
-- [ ] Multi-file compilation
-- [ ] Direct C import
 - [ ] Self-hosting compiler (Resurg-in-Resurg)
 - [ ] Generics: F-bounded polymorphism, `immut`-aware generic constraints

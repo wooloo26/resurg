@@ -1,0 +1,50 @@
+// v0.8.2 — while pattern binding: while Some(x) := expr { ... }
+module test_while_pattern_binding
+
+struct Iterator {
+    items: []i32
+    index: i32 = 0
+}
+
+fn iter_next(mut iter: *Iterator) -> ?i32 {
+    if iter.index < iter.items.len {
+        val := iter.items[iter.index]
+        iter.index = iter.index + 1
+        Some(val)
+    } else {
+        None
+    }
+}
+
+// ── while-let consumes iterator ──
+
+fn test_while_let_iterator() {
+    iter := &Iterator { items = []i32{1, 2, 3} }
+    sum := 0
+    while Some(v) := iter_next(mut iter) {
+        sum = sum + v
+    }
+    assert(sum == 6)
+}
+
+// ── while-let empty iterator ──
+
+fn test_while_let_empty() {
+    iter := &Iterator { items = []i32{} }
+    count := 0
+    while Some(_) := iter_next(mut iter) {
+        count = count + 1
+    }
+    assert(count == 0)
+}
+
+// ── while-let sum ──
+
+fn test_while_let_sum() {
+    iter := &Iterator { items = []i32{10, 20, 30} }
+    sum := 0
+    while Some(v) := iter_next(mut iter) {
+        sum = sum + v
+    }
+    assert(sum == 60)
+}

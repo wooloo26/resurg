@@ -110,6 +110,8 @@ typedef enum {
     TOKEN_FAT_ARROW,     // =>
     TOKEN_ARROW,         // ->
     TOKEN_SEMICOLON,     // ; (optional, for future use)
+    TOKEN_QUESTION,      // ?
+    TOKEN_QUESTION_DOT,  // ?.
 
     // Str interpolation (inside strs)
     TOKEN_INTERPOLATION_START, // start of interpolation segment

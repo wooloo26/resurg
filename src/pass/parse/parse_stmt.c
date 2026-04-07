@@ -62,7 +62,23 @@ static ASTNode *parse_while(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_WHILE);
     ASTNode *node = ast_new(parser->arena, NODE_WHILE, loc);
-    node->while_loop.cond = parser_parse_expr(parser);
+
+    bool saved = parser->no_struct_lit;
+    parser->no_struct_lit = true;
+
+    if (parser_is_pattern_binding(parser)) {
+        node->while_loop.pattern = parser_parse_pattern(parser);
+        parser_expect(parser, TOKEN_COLON_EQUAL);
+        node->while_loop.pattern_init = parser_parse_expr(parser);
+        node->while_loop.cond = NULL;
+    } else {
+        node->while_loop.cond = parser_parse_expr(parser);
+        node->while_loop.pattern = NULL;
+        node->while_loop.pattern_init = NULL;
+    }
+
+    parser->no_struct_lit = saved;
+
     node->while_loop.body = parser_parse_block(parser);
     return node;
 }

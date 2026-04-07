@@ -80,6 +80,34 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
         }
         return type_create_ptr(sema->arena, pointee, false);
     }
+    // ?T → Option<T>
+    if (ast_type->kind == AST_TYPE_OPTION) {
+        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
+        if (gdef == NULL) {
+            SEMA_ERR(sema, ast_type->loc, "built-in Option enum not found");
+            return &TYPE_ERR_INST;
+        }
+        ASTType val_args[1] = {*ast_type->option_elem};
+        const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 1, ast_type->loc);
+        if (mangled != NULL) {
+            return sema_lookup_type_alias(sema, mangled);
+        }
+        return &TYPE_ERR_INST;
+    }
+    // T ! E → Result<T, E>
+    if (ast_type->kind == AST_TYPE_RESULT) {
+        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Result");
+        if (gdef == NULL) {
+            SEMA_ERR(sema, ast_type->loc, "built-in Result enum not found");
+            return &TYPE_ERR_INST;
+        }
+        ASTType val_args[2] = {*ast_type->result_ok, *ast_type->result_err};
+        const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 2, ast_type->loc);
+        if (mangled != NULL) {
+            return sema_lookup_type_alias(sema, mangled);
+        }
+        return &TYPE_ERR_INST;
+    }
     // AST_TYPE_NAME
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {

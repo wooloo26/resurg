@@ -401,14 +401,14 @@ static ASTNode *parse_postfix(Parser *parser) {
         SrcLoc loc = parser_current_loc(parser);
 
         // Struct lit: Identifier { field = expr, ... }
-        if (left->kind == NODE_ID && is_struct_lit_ahead(parser)) {
+        if (!parser->no_struct_lit && left->kind == NODE_ID && is_struct_lit_ahead(parser)) {
             left = parse_struct_lit(parser, left);
             continue;
         }
 
         // Enum struct variant lit: Enum::Variant { field = expr, ... }
-        if (left->kind == NODE_MEMBER && left->member.object->kind == NODE_ID &&
-            is_struct_lit_ahead(parser)) {
+        if (!parser->no_struct_lit && left->kind == NODE_MEMBER &&
+            left->member.object->kind == NODE_ID && is_struct_lit_ahead(parser)) {
             left = parse_enum_struct_lit(parser, left);
             continue;
         }
@@ -573,6 +573,38 @@ static ASTNode *parse_postfix(Parser *parser) {
             left = node;
             continue;
         }
+        // Optional chaining: expr?.member
+        if (parser_match(parser, TOKEN_QUESTION_DOT)) {
+            ASTNode *node = ast_new(parser->arena, NODE_OPTIONAL_CHAIN, loc);
+            node->optional_chain.object = left;
+            node->optional_chain.member = parser_expect(parser, TOKEN_ID)->lexeme;
+            left = node;
+            continue;
+        }
+        // Postfix try / error propagation: expr!
+        if (parser_check(parser, TOKEN_BANG)) {
+            // Distinguish postfix ! from prefix unary ! by checking if next token
+            // could start an expression (in which case it's binary/prefix, not postfix).
+            // Postfix ! should be followed by non-expression starters.
+            int32_t next_pos = parser->pos + 1;
+            if (next_pos < parser->count) {
+                TokenKind next = parser->tokens[next_pos].kind;
+                // If the ! is followed by an expression-starter, it's prefix unary, not postfix.
+                // Otherwise (newline, semicolon, }, ), comma, etc.) it's postfix.
+                bool is_postfix =
+                    (next == TOKEN_NEWLINE || next == TOKEN_SEMICOLON ||
+                     next == TOKEN_RIGHT_PAREN || next == TOKEN_RIGHT_BRACE ||
+                     next == TOKEN_RIGHT_BRACKET || next == TOKEN_COMMA || next == TOKEN_EOF ||
+                     next == TOKEN_DOT || next == TOKEN_QUESTION_DOT);
+                if (is_postfix) {
+                    parser_advance(parser); // consume '!'
+                    ASTNode *node = ast_new(parser->arena, NODE_TRY, loc);
+                    node->try_expr.operand = left;
+                    left = node;
+                    continue;
+                }
+            }
+        }
         break;
     }
     return left;
@@ -655,7 +687,23 @@ static ASTNode *parse_if(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_IF);
     ASTNode *node = ast_new(parser->arena, NODE_IF, loc);
-    node->if_expr.cond = parser_parse_expr(parser);
+
+    bool saved = parser->no_struct_lit;
+    parser->no_struct_lit = true;
+
+    if (parser_is_pattern_binding(parser)) {
+        node->if_expr.pattern = parser_parse_pattern(parser);
+        parser_expect(parser, TOKEN_COLON_EQUAL);
+        node->if_expr.pattern_init = parser_parse_expr(parser);
+        node->if_expr.cond = NULL;
+    } else {
+        node->if_expr.cond = parser_parse_expr(parser);
+        node->if_expr.pattern = NULL;
+        node->if_expr.pattern_init = NULL;
+    }
+
+    parser->no_struct_lit = saved;
+
     node->if_expr.then_body = parser_parse_block(parser);
     node->if_expr.else_body = NULL;
     parser_skip_newlines(parser);

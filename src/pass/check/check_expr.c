@@ -60,6 +60,29 @@ static bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound
     return true;
 }
 
+/** Append a C-identifier-safe form of @p tname to @p buf at @p len. */
+static int32_t append_mangled_type(char *buf, int32_t len, int32_t cap, const char *tname) {
+    for (const char *p = tname; *p != '\0' && len < cap - 1; p++) {
+        switch (*p) {
+        case '*':
+            len += snprintf(buf + len, (size_t)(cap - len), "ptr_");
+            break;
+        case '[':
+        case ']':
+        case '(':
+        case ')':
+        case ',':
+        case ' ':
+            break; // skip
+        default:
+            buf[len++] = *p;
+            break;
+        }
+    }
+    buf[len] = '\0';
+    return len;
+}
+
 /** Build a mangled name for a generic instantiation: "fn__type1_type2". */
 static const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args,
                                       int32_t count) {
@@ -71,7 +94,7 @@ static const char *build_mangled_name(Sema *sema, const char *base, const Type *
             len += snprintf(buf + len, sizeof(buf) - (size_t)len, "_");
         }
         const char *tname = type_name(sema->arena, type_args[i]);
-        len += snprintf(buf + len, sizeof(buf) - (size_t)len, "%s", tname);
+        len = append_mangled_type(buf, len, (int32_t)sizeof(buf), tname);
     }
     return arena_sprintf(sema->arena, "%s", buf);
 }
@@ -155,6 +178,31 @@ const Type *check_lit(Sema *sema, ASTNode *node) {
 const Type *check_id(Sema *sema, ASTNode *node) {
     Sym *sym = scope_lookup(sema, node->id.name);
     if (sym == NULL) {
+        // Handle bare `None` — resolve from expected type or fn return type
+        if (strcmp(node->id.name, "None") == 0) {
+            const Type *ctx = sema->expected_type;
+            if (ctx == NULL || ctx->kind != TYPE_ENUM) {
+                ctx = sema->fn_return_type;
+            }
+            if (ctx != NULL && ctx->kind == TYPE_ENUM) {
+                const EnumVariant *variant = type_enum_find_variant(ctx, "None");
+                if (variant != NULL) {
+                    // Rewrite to enum variant call for lowering
+                    node->kind = NODE_CALL;
+                    ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
+                    callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
+                    callee_member->member.object->id.name = type_enum_name(ctx);
+                    callee_member->member.object->type = ctx;
+                    callee_member->member.member = "None";
+                    node->call.callee = callee_member;
+                    node->call.args = NULL;
+                    node->call.arg_names = NULL;
+                    node->call.arg_is_mut = NULL;
+                    node->call.type_args = NULL;
+                    return ctx;
+                }
+            }
+        }
         SEMA_ERR(sema, node->loc, "undefined variable '%s'", node->id.name);
         return &TYPE_ERR_INST;
     }
@@ -549,6 +597,60 @@ const Type *check_call(Sema *sema, ASTNode *node) {
             return sym->type;
         }
         if (sym == NULL) {
+            // Handle bare Some(x) → Option<T> variant constructor
+            if (strcmp(fn_name, "Some") == 0 && BUF_LEN(node->call.args) == 1) {
+                const Type *arg_type = node->call.args[0]->type;
+                if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
+                    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
+                    if (gdef != NULL) {
+                        ASTType val_arg = {.kind = AST_TYPE_NAME,
+                                           .name = type_name(sema->arena, arg_type),
+                                           .type_args = NULL,
+                                           .loc = node->loc};
+                        hash_table_insert(&sema->type_param_table, val_arg.name, (void *)arg_type);
+                        const char *mangled =
+                            instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
+                        hash_table_remove(&sema->type_param_table, val_arg.name);
+                        if (mangled != NULL) {
+                            const Type *opt_type = sema_lookup_type_alias(sema, mangled);
+                            if (opt_type != NULL) {
+                                ASTNode *callee_member =
+                                    ast_new(sema->arena, NODE_MEMBER, node->loc);
+                                callee_member->member.object =
+                                    ast_new(sema->arena, NODE_ID, node->loc);
+                                callee_member->member.object->id.name = mangled;
+                                callee_member->member.object->type = opt_type;
+                                callee_member->member.member = "Some";
+                                node->call.callee = callee_member;
+                                return check_enum_variant_call(sema, node, opt_type, "Some");
+                            }
+                        }
+                    }
+                }
+            }
+            // Handle bare Ok(x) / Err(x) → Result<T, E> variant constructor
+            if ((strcmp(fn_name, "Ok") == 0 || strcmp(fn_name, "Err") == 0) &&
+                BUF_LEN(node->call.args) == 1) {
+                const Type *expected = sema->expected_type;
+                if (expected == NULL) {
+                    expected = sema->fn_return_type;
+                }
+                if (expected != NULL && expected->kind == TYPE_ENUM) {
+                    const Type *arg_type = node->call.args[0]->type;
+                    if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
+                        const EnumVariant *variant = type_enum_find_variant(expected, fn_name);
+                        if (variant != NULL) {
+                            ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
+                            callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
+                            callee_member->member.object->id.name = type_enum_name(expected);
+                            callee_member->member.object->type = expected;
+                            callee_member->member.member = fn_name;
+                            node->call.callee = callee_member;
+                            return check_enum_variant_call(sema, node, expected, fn_name);
+                        }
+                    }
+                }
+            }
             SEMA_ERR(sema, node->loc, "undefined function '%s'", fn_name);
         }
     }
@@ -1272,8 +1374,8 @@ static void mark_variant_covered(const Type *operand_type, const char *name,
 }
 
 /** Check a pattern and bind vars in the current scope. */
-static void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
-                          bool *variant_covered, bool *has_wildcard) {
+void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bool *variant_covered,
+                   bool *has_wildcard) {
     switch (pattern->kind) {
     case PATTERN_WILDCARD:
         *has_wildcard = true;

@@ -30,7 +30,8 @@ struct Lower {
     const Type **compound_types; /* buf */
     HirSym *current_recv;        // non-NULL inside method body
     const char *current_recv_name;
-    bool current_is_ptr_recv; // true if current method has ptr recv
+    bool current_is_ptr_recv;   // true if current method has ptr recv
+    const Type *fn_return_type; // return type of current fn (for try)
 };
 
 // ── Scope manipulation ────────────────────────────────────────────────
@@ -111,6 +112,17 @@ HirNode *lower_for(Lower *low, const ASTNode *ast);
 HirNode *lower_str_interpolation(Lower *low, const ASTNode *ast);
 /** Lower a NODE_MATCH. */
 HirNode *lower_match(Lower *low, const ASTNode *ast);
+
+// ── Pattern helpers (from lower_match.c) ──────────────────────────────
+
+/** Lower a match arm cond from the AST pattern. */
+HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *operand_ref,
+                            const Type *operand_type, SrcLoc loc);
+/** Register match arm bindings: extract vars from variant patterns. */
+void lower_pattern_bindings(Lower *low, const ASTPattern *pattern, const Type *operand_type);
+/** Build the bindings block for a single match arm. */
+HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym *operand_sym,
+                                  const Type *operand_type, SrcLoc loc);
 /** Lower a NODE_FN_DECL. */
 HirNode *lower_fn_decl(Lower *low, const ASTNode *ast);
 /** Lower a method decl inside a struct. */

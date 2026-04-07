@@ -3,8 +3,8 @@
 // ── Match / pattern lower ──────────────────────────────────────────
 
 /** Lower a match arm cond from the AST pattern. */
-static HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *operand_ref,
-                                   const Type *operand_type, SrcLoc loc) {
+HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *operand_ref,
+                            const Type *operand_type, SrcLoc loc) {
     switch (pattern->kind) {
     case PATTERN_WILDCARD:
     case PATTERN_BINDING:
@@ -73,8 +73,7 @@ static HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNod
 }
 
 /** Register match arm bindings: extract vars from variant patterns. */
-static void lower_pattern_bindings(Lower *low, const ASTPattern *pattern,
-                                   const Type *operand_type) {
+void lower_pattern_bindings(Lower *low, const ASTPattern *pattern, const Type *operand_type) {
     if (pattern->kind == PATTERN_BINDING && pattern->name != NULL) {
         HirSym *var_sym = lower_add_var(
             low, &(HirSymSpec){HIR_SYM_VAR, pattern->name, operand_type, false, pattern->loc});
@@ -122,8 +121,8 @@ static void lower_pattern_bindings(Lower *low, const ASTPattern *pattern,
  * Extracts vars from the pattern and initializes them from the
  * match operand.  Returns NULL when no bindings are needed.
  */
-static HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym *operand_sym,
-                                         const Type *operand_type, SrcLoc loc) {
+HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym *operand_sym,
+                                  const Type *operand_type, SrcLoc loc) {
     HirNode **bind_stmts = NULL;
 
     switch (pattern->kind) {

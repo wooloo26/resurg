@@ -17,8 +17,9 @@ struct Parser {
     int32_t pos;
     int32_t count;
     int32_t err_count;
-    Arena *arena;     // AST alloc arena
-    const char *file; // src filename for diagnostics
+    Arena *arena;       // AST alloc arena
+    const char *file;   // src filename for diagnostics
+    bool no_struct_lit; // suppress struct-lit parsing in if/while conditions
 };
 
 // ── Token-stream navigation (parser/helpers.c) ────────────────────────
@@ -55,10 +56,18 @@ ASTType parser_parse_type(Parser *parser);
 /** Expression dispatch — returns a parsed expr AST node. */
 ASTNode *parser_parse_expr(Parser *parser);
 
+// ── Lookahead helpers (parser/helpers.c) ────────────────────────────
+
+/** Return true when the token stream starting at the current position
+ *  looks like a pattern-binding form: `Pattern := expr`. */
+bool parser_is_pattern_binding(const Parser *parser);
+
 // ── Match / pattern parsing (parser/match.c) ──────────────────────
 
 /** Parse a match expression: match operand { pattern => body, ... }. */
 ASTNode *parser_parse_match(Parser *parser);
+/** Parse a single pattern (for if-let/while-let/match arms). */
+ASTPattern *parser_parse_pattern(Parser *parser);
 
 // ── Statement / block parsing (parser/stmt.c) ─────────────────────
 

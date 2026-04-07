@@ -98,6 +98,8 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_FAT_ARROW] = {"=>", 0},
     [TOKEN_ARROW] = {"->", 0},
     [TOKEN_SEMICOLON] = {";", 0},
+    [TOKEN_QUESTION] = {"?", 0},
+    [TOKEN_QUESTION_DOT] = {"?.", 0},
     [TOKEN_INTERPOLATION_START] = {"INTERPOLATION_START", 0},
     [TOKEN_INTERPOLATION_END] = {"INTERPOLATION_END", 0},
     [TOKEN_NEWLINE] = {"NEWLINE", 0},

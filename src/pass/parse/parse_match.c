@@ -133,6 +133,10 @@ static ASTPattern *parse_pattern(Parser *parser) {
     return pattern;
 }
 
+ASTPattern *parser_parse_pattern(Parser *parser) {
+    return parse_pattern(parser);
+}
+
 // ── Match expr ───────────────────────────────────────────────────
 
 ASTNode *parser_parse_match(Parser *parser) {

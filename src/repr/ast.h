@@ -25,6 +25,8 @@ typedef enum {
     AST_TYPE_SLICE,    // []T
     AST_TYPE_TUPLE,    // (A, B, ...)
     AST_TYPE_PTR,      // *T
+    AST_TYPE_OPTION,   // ?T
+    AST_TYPE_RESULT,   // T ! E
 } ASTTypeKind;
 
 struct ASTType {
@@ -40,6 +42,11 @@ struct ASTType {
     ASTType **tuple_elems; /* buf */
     // AST_TYPE_PTR fields
     ASTType *ptr_elem; // pointee type
+    // AST_TYPE_OPTION fields
+    ASTType *option_elem; // inner type of ?T
+    // AST_TYPE_RESULT fields
+    ASTType *result_ok;  // value type of T ! E
+    ASTType *result_err; // error type of T ! E
     // Generic type args for Name<T, U> syntax
     ASTType **type_args; /* buf - NULL for non-generic types */
 };
@@ -155,6 +162,8 @@ typedef enum {
     NODE_DEREF,              // *expr (ptr deref)
     NODE_MATCH,              // match expr { arms }
     NODE_ENUM_INIT,          // Enum.Variant or Enum.Variant(args) or Enum.Variant { fields }
+    NODE_OPTIONAL_CHAIN,     // expr?.member (optional chaining)
+    NODE_TRY,                // expr! (error propagation / unwrap)
 } NodeKind;
 
 /** Sub-kind for NODE_LIT - indicates which payload field is active. */
@@ -312,7 +321,9 @@ struct ASTNode {
         struct {
             ASTNode *cond;
             ASTNode *then_body;
-            ASTNode *else_body; // may be NULL
+            ASTNode *else_body;    // may be NULL
+            ASTPattern *pattern;   // for if-let: if Some(x) := expr { ... }
+            ASTNode *pattern_init; // expr in if-let (may be NULL)
         } if_expr;
 
         // NODE_LOOP
@@ -416,6 +427,17 @@ struct ASTNode {
             ASTNode *operand;
         } deref;
 
+        // NODE_OPTIONAL_CHAIN
+        struct {
+            ASTNode *object;
+            const char *member;
+        } optional_chain;
+
+        // NODE_TRY
+        struct {
+            ASTNode *operand;
+        } try_expr;
+
         // NODE_ENUM_DECL
         struct {
             const char *name;
@@ -458,6 +480,8 @@ struct ASTNode {
         struct {
             ASTNode *cond;
             ASTNode *body;
+            ASTPattern *pattern;   // for while-let: while Some(x) := expr { ... }
+            ASTNode *pattern_init; // expr in while-let (may be NULL)
         } while_loop;
 
         // NODE_DEFER

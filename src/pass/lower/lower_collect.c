@@ -77,6 +77,7 @@ Lower *lower_create(Arena *hir_arena) {
     low->current_recv = NULL;
     low->current_recv_name = NULL;
     low->current_is_ptr_recv = false;
+    low->fn_return_type = NULL;
     return low;
 }
 

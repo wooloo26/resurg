@@ -3,6 +3,52 @@
 // ── Statement / control-flow lower ─────────────────────────────────
 
 HirNode *lower_stmt_if(Lower *low, const ASTNode *ast) {
+    // if-let: desugar to HIR_MATCH with 2 arms
+    if (ast->if_expr.pattern != NULL) {
+        HirNode *operand = lower_expr(low, ast->if_expr.pattern_init);
+        const Type *op_type = operand->type;
+        SrcLoc loc = ast->loc;
+
+        const char *tmp = lower_make_temp_name(low);
+        HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, op_type, false, loc});
+
+        HirNode **arm_conds = NULL;
+        HirNode **arm_guards = NULL;
+        HirNode **arm_bodies = NULL;
+        HirNode **arm_bindings = NULL;
+
+        // Arm 0: pattern match
+        HirNode *cond = lower_pattern_cond(low, ast->if_expr.pattern,
+                                           lower_make_var_ref(low, tmp_sym, loc), op_type, loc);
+        BUF_PUSH(arm_conds, cond);
+        BUF_PUSH(arm_guards, NULL);
+
+        lower_scope_enter(low);
+        lower_pattern_bindings(low, ast->if_expr.pattern, op_type);
+        HirNode *then = lower_node(low, ast->if_expr.then_body);
+        HirNode *binds = lower_arm_bindings_block(low, ast->if_expr.pattern, tmp_sym, op_type, loc);
+        BUF_PUSH(arm_bodies, then);
+        BUF_PUSH(arm_bindings, binds);
+        lower_scope_leave(low);
+
+        // Arm 1: wildcard (else)
+        BUF_PUSH(arm_conds, NULL);
+        BUF_PUSH(arm_guards, NULL);
+        HirNode *else_body = ast->if_expr.else_body != NULL
+                                 ? lower_node(low, ast->if_expr.else_body)
+                                 : hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
+        BUF_PUSH(arm_bodies, else_body);
+        BUF_PUSH(arm_bindings, NULL);
+
+        HirNode *match = hir_new(low->hir_arena, HIR_MATCH, ast->type, loc);
+        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, operand);
+        match->match_expr.arm_conds = arm_conds;
+        match->match_expr.arm_guards = arm_guards;
+        match->match_expr.arm_bodies = arm_bodies;
+        match->match_expr.arm_bindings = arm_bindings;
+        return match;
+    }
+
     HirNode *cond = lower_expr(low, ast->if_expr.cond);
     HirNode *then_body = lower_node(low, ast->if_expr.then_body);
     HirNode *else_body = NULL;

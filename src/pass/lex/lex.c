@@ -245,6 +245,9 @@ static Token scan_punctuation(Lex *lex, char c, SrcLoc loc) {
         return build_token(lex, TOKEN_COMMA, ",", 1, loc);
     case ';':
         return build_token(lex, TOKEN_SEMICOLON, ";", 1, loc);
+    case '?':
+        return match(lex, '.') ? build_token(lex, TOKEN_QUESTION_DOT, "?.", 2, loc)
+                               : build_token(lex, TOKEN_QUESTION, "?", 1, loc);
     case '=':
     case '!':
     case '<':

@@ -52,6 +52,41 @@ SrcLoc parser_current_loc(const Parser *parser) {
     return parser_current_token(parser)->loc;
 }
 
+// ── Pattern-binding lookahead ──────────────────────────────────────────
+
+bool parser_is_pattern_binding(const Parser *parser) {
+    if (!parser_check(parser, TOKEN_ID)) {
+        return false;
+    }
+    int32_t pos = parser->pos + 1;
+    if (pos >= parser->count) {
+        return false;
+    }
+
+    // ID :=  (simple binding pattern)
+    if (parser->tokens[pos].kind == TOKEN_COLON_EQUAL) {
+        return true;
+    }
+
+    // ID( ... ) :=  (tuple variant pattern, e.g. Some(x) := expr)
+    if (parser->tokens[pos].kind == TOKEN_LEFT_PAREN) {
+        pos++; // skip '('
+        int depth = 1;
+        while (pos < parser->count && depth > 0) {
+            if (parser->tokens[pos].kind == TOKEN_LEFT_PAREN) {
+                depth++;
+            } else if (parser->tokens[pos].kind == TOKEN_RIGHT_PAREN) {
+                depth--;
+            }
+            pos++;
+        }
+        // pos is now past the closing ')'
+        return pos < parser->count && parser->tokens[pos].kind == TOKEN_COLON_EQUAL;
+    }
+
+    return false;
+}
+
 // ── Parser lifecycle ───────────────────────────────────────────────────
 
 Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
@@ -62,6 +97,7 @@ Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const ch
     parser->err_count = 0;
     parser->arena = arena;
     parser->file = file;
+    parser->no_struct_lit = false;
     return parser;
 }
 

@@ -38,6 +38,12 @@ const Type *check_deref(Sema *sema, ASTNode *node);
 const Type *check_match(Sema *sema, ASTNode *node);
 const Type *check_enum_init(Sema *sema, ASTNode *node);
 
+// ── Pattern checking (check_expr.c) ───────────────────────────────
+
+/** Check a pattern against an operand type, binding sub-pattern vars. */
+void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bool *variant_covered,
+                   bool *has_wildcard);
+
 // ── Generic instantiation (check_expr.c) ──────────────────────────
 
 const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,

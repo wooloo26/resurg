@@ -117,6 +117,8 @@ struct Sema {
     Scope *current_scope;
     int32_t err_count;
     const Type *loop_break_type; // break value type in current loop (NULL if no break-with-value)
+    const Type *expected_type;   // expected type for current expr (bidirectional inference)
+    const Type *fn_return_type;  // return type of the enclosing function (for Ok/Err/None)
     ASTNode *file_node;          // root file node (for appending monomorphized fns)
     HashTable type_alias_table;  // name → const Type*
     HashTable fn_table;          // name → FnSig*

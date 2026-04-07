@@ -362,5 +362,13 @@ void ast_dump(const ASTNode *node, int32_t level) {
             ast_dump(node->slice_expr.end, level + 1);
         }
         break;
+    case NODE_OPTIONAL_CHAIN:
+        fprintf(stderr, "OptionalChain(.%s)\n", node->optional_chain.member);
+        ast_dump(node->optional_chain.object, level + 1);
+        break;
+    case NODE_TRY:
+        fprintf(stderr, "Try\n");
+        ast_dump(node->try_expr.operand, level + 1);
+        break;
     }
 }

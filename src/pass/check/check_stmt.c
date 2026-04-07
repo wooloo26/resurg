@@ -23,6 +23,39 @@ static bool is_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
 // ── Statement / decl checkers ───────────────────────────────────
 
 const Type *check_if(Sema *sema, ASTNode *node) {
+    if (node->if_expr.pattern != NULL) {
+        // if-let pattern binding: if Some(x) := expr { ... }
+        const Type *init_type = check_node(sema, node->if_expr.pattern_init);
+
+        // Push a scope for pattern bindings visible inside then_body
+        scope_push(sema, false);
+        if (init_type != NULL && init_type->kind == TYPE_ENUM) {
+            // Use the full check_pattern from check_match with dummy tracking
+            int32_t vc = type_enum_variant_count(init_type);
+            bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
+            bool has_wildcard = false;
+            check_pattern(sema, node->if_expr.pattern, init_type, variant_covered, &has_wildcard);
+        }
+        const Type *then_type = check_node(sema, node->if_expr.then_body);
+        scope_pop(sema);
+
+        const Type *else_type = NULL;
+        if (node->if_expr.else_body != NULL) {
+            else_type = check_node(sema, node->if_expr.else_body);
+        }
+
+        if (then_type != NULL && then_type->kind == TYPE_NEVER && else_type != NULL) {
+            return else_type;
+        }
+        if (else_type != NULL && else_type->kind == TYPE_NEVER && then_type != NULL) {
+            return then_type;
+        }
+        if (else_type != NULL && then_type != NULL && then_type->kind != TYPE_UNIT) {
+            return then_type;
+        }
+        return &TYPE_UNIT_INST;
+    }
+
     check_node(sema, node->if_expr.cond);
     const Type *then_type = check_node(sema, node->if_expr.then_body);
     const Type *else_type = NULL;
@@ -81,17 +114,42 @@ static bool promote_array_elem_lits(ASTNode *init, const Type *declared) {
 }
 
 const Type *check_var_decl(Sema *sema, ASTNode *node) {
+    const Type *declared = resolve_ast_type(sema, &node->var_decl.type);
+
+    // Set expected type before checking init for bidirectional inference
+    const Type *save_expected = sema->expected_type;
+    if (declared != NULL) {
+        sema->expected_type = declared;
+    }
+
     const Type *init_type = NULL;
     if (node->var_decl.init != NULL) {
         init_type = check_node(sema, node->var_decl.init);
     }
 
-    const Type *declared = resolve_ast_type(sema, &node->var_decl.type);
+    sema->expected_type = save_expected;
 
     // Determine final type
     const Type *var_type;
     if (declared != NULL) {
         var_type = declared;
+        if (init_type == NULL && node->var_decl.init == NULL && declared->kind == TYPE_ENUM &&
+            type_enum_find_variant(declared, "None") != NULL) {
+            // Default None for `var x: ?T` (Option type, no init)
+            ASTNode *none_init = ast_new(sema->arena, NODE_CALL, node->loc);
+            ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
+            callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
+            callee_member->member.object->id.name = type_enum_name(declared);
+            callee_member->member.object->type = declared;
+            callee_member->member.member = "None";
+            none_init->call.callee = callee_member;
+            none_init->call.args = NULL;
+            none_init->call.arg_names = NULL;
+            none_init->call.arg_is_mut = NULL;
+            none_init->call.type_args = NULL;
+            none_init->type = declared;
+            node->var_decl.init = none_init;
+        }
         // Promote lit init to match declared type
         if (init_type != NULL && node->var_decl.init != NULL) {
             promote_lit(node->var_decl.init, declared);
@@ -161,10 +219,19 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
 
     // Check body
     if (fn_node->fn_decl.body != NULL) {
+        // Pre-resolve return type for bidirectional inference (Ok/Err/None)
+        const Type *pre_return = resolve_ast_type(sema, &fn_node->fn_decl.return_type);
+        const Type *save_fn_return = sema->fn_return_type;
+        if (pre_return != NULL) {
+            sema->fn_return_type = pre_return;
+        }
+
         const Type *body_type = check_node(sema, fn_node->fn_decl.body);
 
+        sema->fn_return_type = save_fn_return;
+
         // If return type not declared, infer from body
-        const Type *resolved_return = resolve_ast_type(sema, &fn_node->fn_decl.return_type);
+        const Type *resolved_return = pre_return;
         if (resolved_return == NULL) {
             resolved_return = body_type != NULL ? body_type : &TYPE_UNIT_INST;
         }
@@ -193,7 +260,12 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
 /** Shared logic for simple and compound assignment type-checking. */
 static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode *value) {
     const Type *target_type = check_node(sema, target);
+
+    const Type *saved_expected = sema->expected_type;
+    sema->expected_type = target_type;
     check_node(sema, value);
+    sema->expected_type = saved_expected;
+
     promote_lit(value, target_type);
 
     // Check immutability: cannot assign to immut bindings
@@ -227,6 +299,22 @@ static const Type *check_loop(Sema *sema, ASTNode *node) {
 }
 
 static void check_while(Sema *sema, ASTNode *node) {
+    if (node->while_loop.pattern != NULL) {
+        // while-let pattern binding: while Some(x) := expr { ... }
+        const Type *init_type = check_node(sema, node->while_loop.pattern_init);
+        scope_push(sema, true);
+        if (init_type != NULL && init_type->kind == TYPE_ENUM) {
+            int32_t vc = type_enum_variant_count(init_type);
+            bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
+            bool has_wildcard = false;
+            check_pattern(sema, node->while_loop.pattern, init_type, variant_covered,
+                          &has_wildcard);
+        }
+        check_node(sema, node->while_loop.body);
+        scope_pop(sema);
+        return;
+    }
+
     const Type *cond_type = check_node(sema, node->while_loop.cond);
     if (cond_type != NULL && cond_type->kind != TYPE_BOOL && cond_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, node->while_loop.cond->loc, "condition must be 'bool', got '%s'",
@@ -364,7 +452,11 @@ static const Type *check_struct_decl(Sema *sema, ASTNode *node) {
     for (int32_t i = 0; i < BUF_LEN(node->struct_decl.fields); i++) {
         ASTStructField *f = &node->struct_decl.fields[i];
         if (f->default_value != NULL) {
+            const Type *saved = sema->expected_type;
+            const Type *field_type = resolve_ast_type(sema, &f->type);
+            sema->expected_type = field_type;
             check_node(sema, f->default_value);
+            sema->expected_type = saved;
         }
     }
     return result;
@@ -614,7 +706,10 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_RETURN:
         if (node->return_stmt.value != NULL) {
+            const Type *save_expected = sema->expected_type;
+            sema->expected_type = sema->fn_return_type;
             check_node(sema, node->return_stmt.value);
+            sema->expected_type = save_expected;
         }
         result = &TYPE_NEVER_INST;
         break;
@@ -634,6 +729,81 @@ const Type *check_node(Sema *sema, ASTNode *node) {
     case NODE_ENUM_INIT:
         result = check_enum_init(sema, node);
         break;
+
+    case NODE_OPTIONAL_CHAIN: {
+        // expr?.member — if expr is Option<*T>, result is Option<field_type>
+        const Type *obj_type = check_node(sema, node->optional_chain.object);
+        if (obj_type == NULL || obj_type->kind == TYPE_ERR) {
+            break;
+        }
+        // Must be an Option enum with Some(T) where T is a ptr/struct
+        if (obj_type->kind != TYPE_ENUM) {
+            SEMA_ERR(sema, node->loc, "optional chaining requires Option type, got '%s'",
+                     type_name(sema->arena, obj_type));
+            break;
+        }
+        const EnumVariant *some_var = type_enum_find_variant(obj_type, "Some");
+        if (some_var == NULL || some_var->kind != ENUM_VARIANT_TUPLE ||
+            some_var->tuple_count != 1) {
+            SEMA_ERR(sema, node->loc, "optional chaining requires Option type");
+            break;
+        }
+        const Type *inner = some_var->tuple_types[0];
+        // Auto-deref ptr
+        if (inner->kind == TYPE_PTR) {
+            inner = inner->ptr.pointee;
+        }
+        // Look up member on inner type
+        if (inner->kind == TYPE_STRUCT) {
+            const StructField *field = type_struct_find_field(inner, node->optional_chain.member);
+            if (field != NULL) {
+                const Type *field_type = field->type;
+                // Check if field_type is already Option — if so, don't double-wrap
+                if (field_type->kind == TYPE_ENUM &&
+                    type_enum_find_variant(field_type, "Some") != NULL) {
+                    result = field_type;
+                } else {
+                    // Instantiate Option<field_type>
+                    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
+                    if (gdef != NULL) {
+                        ASTType val_arg = {.kind = AST_TYPE_NAME,
+                                           .name = type_name(sema->arena, field_type),
+                                           .type_args = NULL,
+                                           .loc = node->loc};
+                        hash_table_insert(&sema->type_param_table, val_arg.name,
+                                          (void *)field_type);
+                        const char *mangled =
+                            instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
+                        hash_table_remove(&sema->type_param_table, val_arg.name);
+                        if (mangled != NULL) {
+                            result = sema_lookup_type_alias(sema, mangled);
+                        }
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    case NODE_TRY: {
+        // expr! — unwrap Result<T, E>, propagate Err
+        const Type *operand_type = check_node(sema, node->try_expr.operand);
+        if (operand_type == NULL || operand_type->kind == TYPE_ERR) {
+            break;
+        }
+        if (operand_type->kind != TYPE_ENUM) {
+            SEMA_ERR(sema, node->loc, "postfix '!' requires Result type, got '%s'",
+                     type_name(sema->arena, operand_type));
+            break;
+        }
+        const EnumVariant *ok_var = type_enum_find_variant(operand_type, "Ok");
+        if (ok_var == NULL || ok_var->kind != ENUM_VARIANT_TUPLE || ok_var->tuple_count != 1) {
+            SEMA_ERR(sema, node->loc, "postfix '!' requires Result type with Ok variant");
+            break;
+        }
+        result = ok_var->tuple_types[0]; // unwrap to T
+        break;
+    }
     }
 
     node->type = result;

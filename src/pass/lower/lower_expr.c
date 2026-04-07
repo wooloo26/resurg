@@ -718,6 +718,189 @@ static HirNode *lower_struct_lit(Lower *low, const ASTNode *ast) {
     return node;
 }
 
+/**
+ * Desugar `expr?.member` → block that checks Some/None and wraps result.
+ *
+ * { var __tmp = expr;
+ *   if __tmp._tag == SOME_TAG {
+ *       Some(__tmp._data.Some._0.member)
+ *   } else { None } }
+ */
+static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    HirNode *object = lower_expr(low, ast->optional_chain.object);
+    const Type *obj_type = object->type;
+    const Type *result_type = ast->type;
+
+    const char *tmp = lower_make_temp_name(low);
+    HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, obj_type, false, loc});
+
+    const EnumVariant *some_v = type_enum_find_variant(obj_type, "Some");
+    const Type *inner_type = some_v->tuple_types[0];
+
+    const EnumVariant *res_some = type_enum_find_variant(result_type, "Some");
+    const EnumVariant *res_none = type_enum_find_variant(result_type, "None");
+
+    // Tag check: __tmp._tag == SOME_TAG
+    HirNode *tag = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
+    tag->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
+    tag->struct_field_access.field = "_tag";
+    tag->struct_field_access.via_ptr = false;
+
+    HirNode *some_tag = lower_make_int_lit(
+        low, &(IntLitSpec){(uint64_t)some_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
+    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
+    cond->binary.op = TOKEN_EQUAL_EQUAL;
+    cond->binary.left = tag;
+    cond->binary.right = some_tag;
+
+    // Then: extract inner, access field, wrap in Some
+    HirNode *inner = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, inner_type, loc);
+    inner->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
+    inner->struct_field_access.field = "_data.Some._0";
+    inner->struct_field_access.via_ptr = false;
+
+    bool via_ptr = inner_type->kind == TYPE_PTR;
+    const Type *deref_type = via_ptr ? type_ptr_pointee(inner_type) : inner_type;
+    const StructField *sf = type_struct_find_field(deref_type, ast->optional_chain.member);
+    const Type *field_type = sf != NULL ? sf->type : &TYPE_ERR_INST;
+
+    HirNode *field = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, field_type, loc);
+    field->struct_field_access.object = inner;
+    field->struct_field_access.field = ast->optional_chain.member;
+    field->struct_field_access.via_ptr = via_ptr;
+
+    HirNode *then_val;
+    if (type_equal(field_type, result_type)) {
+        // Field is already Option — propagate directly (no double-wrap)
+        then_val = field;
+    } else {
+        // Wrap in Some of result type
+        const char **sfn = NULL;
+        HirNode **sfv = NULL;
+        BUF_PUSH(sfn, "_tag");
+        BUF_PUSH(sfv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)res_some->discriminant,
+                                                            &TYPE_I32_INST, TYPE_I32, loc}));
+        BUF_PUSH(sfn, "_data.Some._0");
+        BUF_PUSH(sfv, field);
+        then_val = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
+        then_val->struct_lit.field_names = sfn;
+        then_val->struct_lit.field_values = sfv;
+    }
+    BUF_PUSH(low->compound_types, result_type);
+
+    // Else: None of result type
+    const char **nfn = NULL;
+    HirNode **nfv = NULL;
+    BUF_PUSH(nfn, "_tag");
+    BUF_PUSH(nfv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)res_none->discriminant,
+                                                        &TYPE_I32_INST, TYPE_I32, loc}));
+    HirNode *none_lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
+    none_lit->struct_lit.field_names = nfn;
+    none_lit->struct_lit.field_values = nfv;
+
+    // Build if
+    HirNode *if_node = hir_new(low->hir_arena, HIR_IF, result_type, loc);
+    if_node->if_expr.cond = cond;
+    if_node->if_expr.then_body = then_val;
+    if_node->if_expr.else_body = none_lit;
+
+    // Wrap in block: { var __tmp = expr; if_node }
+    HirNode **stmts = NULL;
+    BUF_PUSH(stmts, lower_make_var_decl(low, tmp_sym, object));
+    HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, result_type, loc);
+    block->block.stmts = stmts;
+    block->block.result = if_node;
+    return block;
+}
+
+/**
+ * Desugar `expr!` → extract Ok value or return Err from function.
+ *
+ * { var __tmp = expr;
+ *   if __tmp._tag == ERR_TAG {
+ *       return { _tag: ERR_TAG, _data.Err._0: __tmp._data.Err._0 };
+ *   }
+ *   __tmp._data.Ok._0 }
+ */
+static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    HirNode *operand = lower_expr(low, ast->try_expr.operand);
+    const Type *op_type = operand->type;
+    const Type *ok_type = ast->type;
+
+    const char *tmp = lower_make_temp_name(low);
+    HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, op_type, false, loc});
+
+    const EnumVariant *err_v = type_enum_find_variant(op_type, "Err");
+
+    // Tag check: __tmp._tag == ERR_TAG
+    HirNode *tag = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
+    tag->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
+    tag->struct_field_access.field = "_tag";
+    tag->struct_field_access.via_ptr = false;
+
+    HirNode *err_tag = lower_make_int_lit(
+        low, &(IntLitSpec){(uint64_t)err_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
+    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
+    cond->binary.op = TOKEN_EQUAL_EQUAL;
+    cond->binary.left = tag;
+    cond->binary.right = err_tag;
+
+    // Extract err data: __tmp._data.Err._0
+    const Type *err_type = err_v->tuple_count > 0 ? err_v->tuple_types[0] : &TYPE_UNIT_INST;
+    HirNode *err_data = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, err_type, loc);
+    err_data->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
+    err_data->struct_field_access.field = "_data.Err._0";
+    err_data->struct_field_access.via_ptr = false;
+
+    // Build Err return value using the fn return type
+    const Type *ret_type = low->fn_return_type;
+    const EnumVariant *ret_err = type_enum_find_variant(ret_type, "Err");
+
+    const char **efn = NULL;
+    HirNode **efv = NULL;
+    BUF_PUSH(efn, "_tag");
+    BUF_PUSH(efv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)ret_err->discriminant,
+                                                        &TYPE_I32_INST, TYPE_I32, loc}));
+    BUF_PUSH(efn, "_data.Err._0");
+    BUF_PUSH(efv, err_data);
+    HirNode *err_lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, ret_type, loc);
+    err_lit->struct_lit.field_names = efn;
+    err_lit->struct_lit.field_values = efv;
+    BUF_PUSH(low->compound_types, ret_type);
+
+    // Return the Err
+    HirNode *ret = hir_new(low->hir_arena, HIR_RETURN, ret_type, loc);
+    ret->return_stmt.value = err_lit;
+
+    HirNode **ret_stmts = NULL;
+    BUF_PUSH(ret_stmts, ret);
+    HirNode *ret_block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
+    ret_block->block.stmts = ret_stmts;
+    ret_block->block.result = NULL;
+
+    HirNode *guard = hir_new(low->hir_arena, HIR_IF, &TYPE_UNIT_INST, loc);
+    guard->if_expr.cond = cond;
+    guard->if_expr.then_body = ret_block;
+    guard->if_expr.else_body = NULL;
+
+    // Extract ok data: __tmp._data.Ok._0
+    HirNode *ok_data = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ok_type, loc);
+    ok_data->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
+    ok_data->struct_field_access.field = "_data.Ok._0";
+    ok_data->struct_field_access.via_ptr = false;
+
+    // Block: { var __tmp = expr; if err { return Err }; __tmp._data.Ok._0 }
+    HirNode **stmts = NULL;
+    BUF_PUSH(stmts, lower_make_var_decl(low, tmp_sym, operand));
+    BUF_PUSH(stmts, guard);
+    HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, ok_type, loc);
+    block->block.stmts = stmts;
+    block->block.result = ok_data;
+    return block;
+}
+
 HirNode *lower_expr(Lower *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -783,6 +966,10 @@ HirNode *lower_expr(Lower *low, const ASTNode *ast) {
         return lower_enum_struct_init(low, &spec, ast->enum_init.field_names,
                                       ast->enum_init.field_values);
     }
+    case NODE_OPTIONAL_CHAIN:
+        return lower_optional_chain(low, ast);
+    case NODE_TRY:
+        return lower_try_expr(low, ast);
     default:
         break;
     }
