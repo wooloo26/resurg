@@ -388,13 +388,12 @@ const EnumVariant *type_enum_find_variant(const Type *type, const char *name) {
     return NULL;
 }
 
-Type *type_create_fn(Arena *arena, const Type **params, int32_t param_count,
-                     const Type *return_type, FnTypeKind fn_kind) {
+Type *type_create_fn(Arena *arena, const FnTypeSpec *spec) {
     Type *type = type_create(arena, TYPE_FN);
-    type->fn_type.params = params;
-    type->fn_type.param_count = param_count;
-    type->fn_type.return_type = return_type;
-    type->fn_type.fn_kind = fn_kind;
+    type->fn_type.params = spec->params;
+    type->fn_type.param_count = spec->param_count;
+    type->fn_type.return_type = spec->return_type;
+    type->fn_type.fn_kind = spec->fn_kind;
     return type;
 }
 

@@ -88,8 +88,8 @@ const Type *check_id(Sema *sema, ASTNode *node) {
     if (sym->kind == SYM_FN) {
         FnSig *sig = sema_lookup_fn(sema, node->id.name);
         if (sig != NULL) {
-            return type_create_fn(sema->arena, sig->param_types, sig->param_count, sig->return_type,
-                                  FN_PLAIN);
+            FnTypeSpec fn_spec = {sig->param_types, sig->param_count, sig->return_type, FN_PLAIN};
+            return type_create_fn(sema->arena, &fn_spec);
         }
     }
     return sym->type;
@@ -365,9 +365,9 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) > 0) {
         GenericStructDef *gdef = sema_lookup_generic_struct(sema, struct_name);
         if (gdef != NULL) {
-            const char *mangled =
-                instantiate_generic_struct(sema, gdef, node->struct_lit.type_args,
-                                           BUF_LEN(node->struct_lit.type_args), node->loc);
+            GenericInstArgs inst_args = {node->struct_lit.type_args,
+                                         BUF_LEN(node->struct_lit.type_args), node->loc};
+            const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
             if (mangled != NULL) {
                 node->struct_lit.name = mangled;
                 struct_name = mangled;
@@ -432,8 +432,8 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
                     arg.name = type_name(sema->arena, inferred_args[i]);
                     BUF_PUSH(synth_args, arg);
                 }
-                const char *mangled =
-                    instantiate_generic_struct(sema, gdef, synth_args, num_params, node->loc);
+                GenericInstArgs inst_args = {synth_args, num_params, node->loc};
+                const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
                 if (mangled != NULL) {
                     node->struct_lit.name = mangled;
                     struct_name = mangled;
@@ -599,5 +599,6 @@ const Type *check_closure(Sema *sema, ASTNode *node) {
         return_type = (body_type != NULL) ? body_type : &TYPE_UNIT_INST;
     }
 
-    return type_create_fn(sema->arena, param_types, param_count, return_type, fn_kind);
+    FnTypeSpec fn_spec = {param_types, param_count, return_type, fn_kind};
+    return type_create_fn(sema->arena, &fn_spec);
 }

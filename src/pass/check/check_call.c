@@ -169,8 +169,9 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
         const char *enum_name = node->call.callee->member.object->id.name;
         GenericEnumDef *gdef = sema_lookup_generic_enum(sema, enum_name);
         if (gdef != NULL) {
-            const char *mangled = instantiate_generic_enum(
-                sema, gdef, node->call.type_args, BUF_LEN(node->call.type_args), node->loc);
+            GenericInstArgs inst_args = {node->call.type_args, BUF_LEN(node->call.type_args),
+                                         node->loc};
+            const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
             if (mangled != NULL) {
                 node->call.callee->member.object->id.name = mangled;
                 EnumDef *edef = sema_lookup_enum(sema, mangled);
@@ -269,8 +270,8 @@ const Type *check_call(Sema *sema, ASTNode *node) {
                                  : &TYPE_ERR_INST;
             BUF_PUSH(param_types, pt);
         }
-        const Type *expected_fn =
-            type_create_fn(sema->arena, param_types, param_count, NULL, FN_PLAIN);
+        FnTypeSpec fn_spec = {param_types, param_count, NULL, FN_PLAIN};
+        const Type *expected_fn = type_create_fn(sema->arena, &fn_spec);
         const Type *saved = sema->expected_type;
         sema->expected_type = expected_fn;
         const Type *callee_type = check_closure(sema, node->call.callee);
@@ -500,8 +501,8 @@ const Type *check_call(Sema *sema, ASTNode *node) {
                                            .type_args = NULL,
                                            .loc = node->loc};
                         hash_table_insert(&sema->type_param_table, val_arg.name, (void *)arg_type);
-                        const char *mangled =
-                            instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
+                        GenericInstArgs inst_args = {&val_arg, 1, node->loc};
+                        const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
                         hash_table_remove(&sema->type_param_table, val_arg.name);
                         if (mangled != NULL) {
                             const Type *opt_type = sema_lookup_type_alias(sema, mangled);

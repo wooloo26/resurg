@@ -149,65 +149,71 @@ static HirNode *build_elem_access(Lower *low, const ElemAccessSpec *spec) {
     return elem;
 }
 
+/** Grouped params for a binary equality lowering. */
+typedef struct {
+    HirNode *left;
+    HirNode *right;
+    TokenKind op;
+    SrcLoc loc;
+} EqualitySpec;
+
 /**
  * Expand compound (array/tuple) equality:
  * `a == b` → `{ var l=a; var r=b; l[0]==r[0] && l[1]==r[1] && ... }`
  */
-static HirNode *lower_compound_equality(Lower *low, HirNode *left, HirNode *right, TokenKind op,
-                                        SrcLoc loc) {
-    const Type *type = left->type;
+static HirNode *lower_compound_equality(Lower *low, const EqualitySpec *eq) {
+    const Type *type = eq->left->type;
     bool is_array = (type->kind == TYPE_ARRAY);
     int32_t count = is_array ? type->array.size : type->tuple.count;
-    bool is_equal = (op == TOKEN_EQUAL_EQUAL);
+    bool is_equal = (eq->op == TOKEN_EQUAL_EQUAL);
     TokenKind elem_op = is_equal ? TOKEN_EQUAL_EQUAL : TOKEN_BANG_EQUAL;
     TokenKind join_op = is_equal ? TOKEN_AMPERSAND_AMPERSAND : TOKEN_PIPE_PIPE;
 
     const char *left_name = lower_make_temp_name(low);
-    HirSymSpec left_spec = {HIR_SYM_VAR, left_name, type, false, loc};
+    HirSymSpec left_spec = {HIR_SYM_VAR, left_name, type, false, eq->loc};
     HirSym *left_sym = lower_add_var(low, &left_spec);
 
     const char *right_name = lower_make_temp_name(low);
-    HirSymSpec right_spec = {HIR_SYM_VAR, right_name, type, false, loc};
+    HirSymSpec right_spec = {HIR_SYM_VAR, right_name, type, false, eq->loc};
     HirSym *right_sym = lower_add_var(low, &right_spec);
 
     HirNode *result = NULL;
     HirNodeKind access_kind = is_array ? HIR_IDX : HIR_TUPLE_IDX;
     for (int32_t i = 0; i < count; i++) {
         const Type *elem_type = is_array ? type->array.elem : type->tuple.elems[i];
-        ElemAccessSpec left_ea = {left_sym, i, elem_type, access_kind, loc};
-        ElemAccessSpec right_ea = {right_sym, i, elem_type, access_kind, loc};
+        ElemAccessSpec left_ea = {left_sym, i, elem_type, access_kind, eq->loc};
+        ElemAccessSpec right_ea = {right_sym, i, elem_type, access_kind, eq->loc};
         HirNode *left_elem = build_elem_access(low, &left_ea);
         HirNode *right_elem = build_elem_access(low, &right_ea);
         HirNode *cmp = build_equality_check(low, left_elem, right_elem, elem_op);
-        result = join_comparison(low, result, cmp, join_op, loc);
+        result = join_comparison(low, result, cmp, join_op, eq->loc);
     }
 
     if (result == NULL) {
-        HirNode *lit = hir_new(low->hir_arena, HIR_BOOL_LIT, &TYPE_BOOL_INST, loc);
+        HirNode *lit = hir_new(low->hir_arena, HIR_BOOL_LIT, &TYPE_BOOL_INST, eq->loc);
         lit->bool_lit.value = is_equal;
         return lit;
     }
 
     HirNode **stmts = NULL;
-    BUF_PUSH(stmts, lower_make_var_decl(low, left_sym, left));
-    BUF_PUSH(stmts, lower_make_var_decl(low, right_sym, right));
+    BUF_PUSH(stmts, lower_make_var_decl(low, left_sym, eq->left));
+    BUF_PUSH(stmts, lower_make_var_decl(low, right_sym, eq->right));
 
-    HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_BOOL_INST, loc);
+    HirNode *block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_BOOL_INST, eq->loc);
     block->block.stmts = stmts;
     block->block.result = result;
     return block;
 }
 
 /** Lower str equality: rsg_str_equal(l, r), negated for !=. */
-static HirNode *lower_str_equality(Lower *low, HirNode *left, HirNode *right, TokenKind op,
-                                   SrcLoc loc) {
+static HirNode *lower_str_equality(Lower *low, const EqualitySpec *eq) {
     HirNode **args = NULL;
-    BUF_PUSH(args, left);
-    BUF_PUSH(args, right);
+    BUF_PUSH(args, eq->left);
+    BUF_PUSH(args, eq->right);
     HirNode *call = lower_make_builtin_call(
-        low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, loc});
-    if (op == TOKEN_BANG_EQUAL) {
-        return build_bool_negate(low, call, loc);
+        low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, eq->loc});
+    if (eq->op == TOKEN_BANG_EQUAL) {
+        return build_bool_negate(low, call, eq->loc);
     }
     return call;
 }
@@ -221,7 +227,7 @@ static HirNode *lower_binary(Lower *low, const ASTNode *ast) {
     // Str equality/inequality → rsg_str_equal call
     if (left_type != NULL && left_type->kind == TYPE_STR &&
         (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
-        return lower_str_equality(low, left, right, op, ast->loc);
+        return lower_str_equality(low, &(EqualitySpec){left, right, op, ast->loc});
     }
 
     // Unit equality/inequality → constant true/false
@@ -235,7 +241,7 @@ static HirNode *lower_binary(Lower *low, const ASTNode *ast) {
     // Array/tuple equality/inequality → elem-wise comparison
     if (left_type != NULL && (left_type->kind == TYPE_ARRAY || left_type->kind == TYPE_TUPLE) &&
         (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL)) {
-        return lower_compound_equality(low, left, right, op, ast->loc);
+        return lower_compound_equality(low, &(EqualitySpec){left, right, op, ast->loc});
     }
 
     HirNode *node = hir_new(low->hir_arena, HIR_BINARY, ast->type, ast->loc);
@@ -408,12 +414,9 @@ static HirSym *find_promoted_method(Lower *low, const Type *struct_type, const c
             arena_sprintf(low->hir_arena, "%s.%s", embed_type->struct_type.name, method_name);
         HirSym *method_sym = lower_scope_lookup(low, embed_key);
         if (method_sym != NULL) {
-            HirNode *embed_access =
-                hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, embed_type, (*recv_ptr)->loc);
-            embed_access->struct_field_access.object = *recv_ptr;
-            embed_access->struct_field_access.field = embed_type->struct_type.name;
-            embed_access->struct_field_access.via_ptr = via_ptr;
-            *recv_ptr = embed_access;
+            *recv_ptr = lower_make_field_access(
+                low, &(FieldAccessSpec){*recv_ptr, embed_type->struct_type.name, embed_type,
+                                        via_ptr, (*recv_ptr)->loc});
             return method_sym;
         }
     }
@@ -540,11 +543,8 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
     // Slice .len → struct field access on "len" (matches RsgSlice C field)
     if (lookup_type != NULL && lookup_type->kind == TYPE_SLICE &&
         strcmp(ast->member.member, "len") == 0) {
-        HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ast->type, ast->loc);
-        node->struct_field_access.object = object;
-        node->struct_field_access.field = "len";
-        node->struct_field_access.via_ptr = via_ptr;
-        return node;
+        return lower_make_field_access(
+            low, &(FieldAccessSpec){object, "len", ast->type, via_ptr, ast->loc});
     }
 
     // Struct field access
@@ -559,11 +559,8 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
         // Direct field
         const StructField *sf = type_struct_find_field(lookup_type, field_name);
         if (sf != NULL) {
-            HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ast->type, ast->loc);
-            node->struct_field_access.object = object;
-            node->struct_field_access.field = field_name;
-            node->struct_field_access.via_ptr = via_ptr;
-            return node;
+            return lower_make_field_access(
+                low, &(FieldAccessSpec){object, field_name, ast->type, via_ptr, ast->loc});
         }
 
         // Promoted field from embedded struct
@@ -574,11 +571,8 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
         }
 
         // Fallback (shouldn't reach after sema)
-        HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ast->type, ast->loc);
-        node->struct_field_access.object = object;
-        node->struct_field_access.field = field_name;
-        node->struct_field_access.via_ptr = via_ptr;
-        return node;
+        return lower_make_field_access(
+            low, &(FieldAccessSpec){object, field_name, ast->type, via_ptr, ast->loc});
     }
 
     // Enum variant access: EnumType.Variant → enum init
@@ -824,10 +818,9 @@ static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
     const EnumVariant *res_none = type_enum_find_variant(result_type, "None");
 
     // Tag check: __tmp._tag == SOME_TAG
-    HirNode *tag = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
-    tag->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
-    tag->struct_field_access.field = "_tag";
-    tag->struct_field_access.via_ptr = false;
+    HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, loc);
+    HirNode *tag = lower_make_field_access(
+        low, &(FieldAccessSpec){tmp_ref, "_tag", &TYPE_I32_INST, false, loc});
 
     HirNode *some_tag = lower_make_int_lit(
         low, &(IntLitSpec){(uint64_t)some_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
@@ -837,20 +830,17 @@ static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
     cond->binary.right = some_tag;
 
     // Then: extract inner, access field, wrap in Some
-    HirNode *inner = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, inner_type, loc);
-    inner->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
-    inner->struct_field_access.field = "_data.Some._0";
-    inner->struct_field_access.via_ptr = false;
+    HirNode *inner =
+        lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, tmp_sym, loc),
+                                                        "_data.Some._0", inner_type, false, loc});
 
     bool via_ptr = inner_type->kind == TYPE_PTR;
     const Type *deref_type = via_ptr ? type_ptr_pointee(inner_type) : inner_type;
     const StructField *sf = type_struct_find_field(deref_type, ast->optional_chain.member);
     const Type *field_type = sf != NULL ? sf->type : &TYPE_ERR_INST;
 
-    HirNode *field = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, field_type, loc);
-    field->struct_field_access.object = inner;
-    field->struct_field_access.field = ast->optional_chain.member;
-    field->struct_field_access.via_ptr = via_ptr;
+    HirNode *field = lower_make_field_access(
+        low, &(FieldAccessSpec){inner, ast->optional_chain.member, field_type, via_ptr, loc});
 
     HirNode *then_val;
     if (type_equal(field_type, result_type)) {
@@ -917,10 +907,9 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
     const EnumVariant *err_v = type_enum_find_variant(op_type, "Err");
 
     // Tag check: __tmp._tag == ERR_TAG
-    HirNode *tag = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
-    tag->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
-    tag->struct_field_access.field = "_tag";
-    tag->struct_field_access.via_ptr = false;
+    HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, loc);
+    HirNode *tag = lower_make_field_access(
+        low, &(FieldAccessSpec){tmp_ref, "_tag", &TYPE_I32_INST, false, loc});
 
     HirNode *err_tag = lower_make_int_lit(
         low, &(IntLitSpec){(uint64_t)err_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
@@ -931,10 +920,9 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
 
     // Extract err data: __tmp._data.Err._0
     const Type *err_type = err_v->tuple_count > 0 ? err_v->tuple_types[0] : &TYPE_UNIT_INST;
-    HirNode *err_data = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, err_type, loc);
-    err_data->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
-    err_data->struct_field_access.field = "_data.Err._0";
-    err_data->struct_field_access.via_ptr = false;
+    HirNode *err_data =
+        lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, tmp_sym, loc),
+                                                        "_data.Err._0", err_type, false, loc});
 
     // Build Err return value using the fn return type
     const Type *ret_type = low->fn_return_type;
@@ -968,10 +956,9 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
     guard->if_expr.else_body = NULL;
 
     // Extract ok data: __tmp._data.Ok._0
-    HirNode *ok_data = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ok_type, loc);
-    ok_data->struct_field_access.object = lower_make_var_ref(low, tmp_sym, loc);
-    ok_data->struct_field_access.field = "_data.Ok._0";
-    ok_data->struct_field_access.via_ptr = false;
+    HirNode *ok_data =
+        lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, tmp_sym, loc),
+                                                        "_data.Ok._0", ok_type, false, loc});
 
     // Block: { var __tmp = expr; if err { return Err }; __tmp._data.Ok._0 }
     HirNode **stmts = NULL;

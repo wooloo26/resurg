@@ -217,9 +217,16 @@ int32_t type_enum_variant_count(const Type *type);
 /** Find a variant by name.  Returns NULL if not found. */
 const EnumVariant *type_enum_find_variant(const Type *type, const char *name);
 
+/** Params for creating a function type. */
+typedef struct {
+    const Type **params;
+    int32_t param_count;
+    const Type *return_type;
+    FnTypeKind fn_kind;
+} FnTypeSpec;
+
 /** Create a function type fn/Fn/FnMut(params) -> return_type. */
-Type *type_create_fn(Arena *arena, const Type **params, int32_t param_count,
-                     const Type *return_type, FnTypeKind fn_kind);
+Type *type_create_fn(Arena *arena, const FnTypeSpec *spec);
 /** Return the param types of a fn type.  Asserts kind == TYPE_FN. */
 const Type **type_fn_params(const Type *type);
 /** Return the param count of a fn type.  Asserts kind == TYPE_FN. */

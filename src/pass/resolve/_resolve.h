@@ -125,6 +125,13 @@ void inject_builtin_enums(Sema *sema);
 
 // ── Generic instantiation (sema_generic.c) ─────────────────────────────
 
+/** Grouped params for a generic instantiation request. */
+typedef struct {
+    ASTType *type_args;
+    int32_t type_arg_count;
+    SrcLoc loc;
+} GenericInstArgs;
+
 /** Check if @p type satisfies the pact bound @p bound_name (recursively). */
 bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
 /** Build a mangled name for a generic instantiation: "base__type1_type2". */
@@ -134,14 +141,13 @@ const char *build_mangled_name(Sema *sema, const char *base, const Type **type_a
  * Creates a concrete struct def with a mangled name and registers it.
  * Uses sema->method_checker (if set) to type-check method bodies.
  */
-const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
-                                       int32_t type_arg_count, SrcLoc loc);
+const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
+                                       const GenericInstArgs *args);
 /**
  * Instantiate a generic enum with the given type args.
  * Creates a concrete enum def with a mangled name and registers it.
  * Uses sema->method_checker (if set) to type-check method bodies.
  */
-const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
-                                     int32_t type_arg_count, SrcLoc loc);
+const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, const GenericInstArgs *args);
 
 #endif // RSG__RESOLVE_H

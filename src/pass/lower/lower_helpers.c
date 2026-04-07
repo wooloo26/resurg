@@ -81,17 +81,13 @@ HirNode *lower_resolve_promoted_field(Lower *low, const FieldLookup *lookup) {
         const Type *embed_type = lookup->struct_type->struct_type.embedded[i];
         const StructField *sf = type_struct_find_field(embed_type, lookup->field_name);
         if (sf != NULL) {
-            HirNode *embed_access =
-                hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, embed_type, lookup->loc);
-            embed_access->struct_field_access.object = lookup->object;
-            embed_access->struct_field_access.field = embed_type->struct_type.name;
-            embed_access->struct_field_access.via_ptr = lookup->via_ptr;
+            HirNode *embed_access = lower_make_field_access(
+                low, &(FieldAccessSpec){lookup->object, embed_type->struct_type.name, embed_type,
+                                        lookup->via_ptr, lookup->loc});
 
             HirNode *field_node =
-                hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, sf->type, lookup->loc);
-            field_node->struct_field_access.object = embed_access;
-            field_node->struct_field_access.field = lookup->field_name;
-            field_node->struct_field_access.via_ptr = false;
+                lower_make_field_access(low, &(FieldAccessSpec){embed_access, lookup->field_name,
+                                                                sf->type, false, lookup->loc});
             return field_node;
         }
     }
@@ -124,5 +120,13 @@ HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec) {
     HirNode *node = hir_new(low->hir_arena, HIR_CALL, spec->return_type, spec->loc);
     node->call.callee = callee;
     node->call.args = spec->args;
+    return node;
+}
+
+HirNode *lower_make_field_access(Lower *low, const FieldAccessSpec *spec) {
+    HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, spec->type, spec->loc);
+    node->struct_field_access.object = spec->object;
+    node->struct_field_access.field = spec->field;
+    node->struct_field_access.via_ptr = spec->via_ptr;
     return node;
 }

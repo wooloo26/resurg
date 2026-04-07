@@ -90,6 +90,17 @@ TokenKind lower_compound_to_base_op(TokenKind op);
  * Returns a two-level HIR_STRUCT_FIELD_ACCESS chain (embed → field) on hit, or NULL.
  */
 HirNode *lower_resolve_promoted_field(Lower *low, const FieldLookup *lookup);
+/** Grouped params for building a struct field access node. */
+typedef struct {
+    HirNode *object;
+    const char *field;
+    const Type *type;
+    bool via_ptr;
+    SrcLoc loc;
+} FieldAccessSpec;
+
+/** Create a HIR_STRUCT_FIELD_ACCESS node. */
+HirNode *lower_make_field_access(Lower *low, const FieldAccessSpec *spec);
 /** Create a HirCall node for a builtin runtime fn. */
 HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec);
 

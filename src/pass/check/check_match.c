@@ -189,9 +189,9 @@ const Type *check_enum_init(Sema *sema, ASTNode *node) {
     if (edef == NULL && BUF_LEN(node->enum_init.type_args) > 0) {
         GenericEnumDef *gdef = sema_lookup_generic_enum(sema, enum_name);
         if (gdef != NULL) {
-            const char *mangled =
-                instantiate_generic_enum(sema, gdef, node->enum_init.type_args,
-                                         BUF_LEN(node->enum_init.type_args), node->loc);
+            GenericInstArgs inst_args = {node->enum_init.type_args,
+                                         BUF_LEN(node->enum_init.type_args), node->loc};
+            const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
             if (mangled != NULL) {
                 node->enum_init.enum_name = mangled;
                 enum_name = mangled;

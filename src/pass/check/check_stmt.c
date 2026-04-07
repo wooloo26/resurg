@@ -603,7 +603,8 @@ static const Type *check_optional_chain(Sema *sema, ASTNode *node) {
                        .type_args = NULL,
                        .loc = node->loc};
     hash_table_insert(&sema->type_param_table, val_arg.name, (void *)field_type);
-    const char *mangled = instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
+    GenericInstArgs inst_args = {&val_arg, 1, node->loc};
+    const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
     hash_table_remove(&sema->type_param_table, val_arg.name);
     if (mangled != NULL) {
         return sema_lookup_type_alias(sema, mangled);

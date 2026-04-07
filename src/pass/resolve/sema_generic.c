@@ -182,24 +182,45 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
 
 // ── Generic struct instantiation ──────────────────────────────────
 
-const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
-                                       int32_t type_arg_count, SrcLoc loc) {
-    int32_t expected = gdef->type_param_count;
-    if (type_arg_count != expected) {
-        SEMA_ERR(sema, loc, "wrong number of type arguments for '%s': expected %d, got %d",
-                 gdef->name, expected, type_arg_count);
+/**
+ * Validate type arg count, resolve args, mangle name, and push type params.
+ * Returns the mangled name on success (caller must proceed with instantiation),
+ * or NULL if an error occurred.  Sets @p *out_resolved to the resolved args buf
+ * (caller must BUF_FREE) and @p *out_mangled to the mangled name.
+ *
+ * If the type was already instantiated (lookup hit), returns the mangled name
+ * and sets @p *out_resolved to NULL — caller should skip body instantiation.
+ */
+static const char *generic_inst_preamble(Sema *sema, const char *name, int32_t type_param_count,
+                                         const GenericInstArgs *args, const Type ***out_resolved) {
+    if (args->type_arg_count != type_param_count) {
+        SEMA_ERR(sema, args->loc, "wrong number of type arguments for '%s': expected %d, got %d",
+                 name, type_param_count, args->type_arg_count);
+        *out_resolved = NULL;
         return NULL;
     }
 
-    const Type **resolved_args = resolve_type_args(sema, type_args, type_arg_count);
-    const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
+    const Type **resolved = resolve_type_args(sema, args->type_args, args->type_arg_count);
+    const char *mangled = build_mangled_name(sema, name, resolved, args->type_arg_count);
 
+    *out_resolved = resolved;
+    return mangled;
+}
+
+const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
+                                       const GenericInstArgs *args) {
+    const Type **resolved_args = NULL;
+    const char *mangled =
+        generic_inst_preamble(sema, gdef->name, gdef->type_param_count, args, &resolved_args);
+    if (mangled == NULL) {
+        return NULL;
+    }
     if (sema_lookup_struct(sema, mangled) != NULL) {
         BUF_FREE(resolved_args);
         return mangled;
     }
 
-    push_type_params(sema, gdef->type_params, resolved_args, expected);
+    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count);
 
     // Build concrete struct field types
     ASTNode *orig = gdef->decl;
@@ -272,7 +293,7 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    pop_type_params(sema, gdef->type_params, expected);
+    pop_type_params(sema, gdef->type_params, gdef->type_param_count);
 
     BUF_FREE(resolved_args);
     return mangled;
@@ -280,24 +301,20 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
 
 // ── Generic enum instantiation ────────────────────────────────────
 
-const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
-                                     int32_t type_arg_count, SrcLoc loc) {
-    int32_t expected = gdef->type_param_count;
-    if (type_arg_count != expected) {
-        SEMA_ERR(sema, loc, "wrong number of type arguments for '%s': expected %d, got %d",
-                 gdef->name, expected, type_arg_count);
+const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
+                                     const GenericInstArgs *args) {
+    const Type **resolved_args = NULL;
+    const char *mangled =
+        generic_inst_preamble(sema, gdef->name, gdef->type_param_count, args, &resolved_args);
+    if (mangled == NULL) {
         return NULL;
     }
-
-    const Type **resolved_args = resolve_type_args(sema, type_args, type_arg_count);
-    const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
-
     if (sema_lookup_enum(sema, mangled) != NULL) {
         BUF_FREE(resolved_args);
         return mangled;
     }
 
-    push_type_params(sema, gdef->type_params, resolved_args, expected);
+    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count);
 
     // Build concrete enum variants
     ASTNode *orig = gdef->decl;
@@ -394,7 +411,7 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    pop_type_params(sema, gdef->type_params, expected);
+    pop_type_params(sema, gdef->type_params, gdef->type_param_count);
 
     BUF_FREE(resolved_args);
     return mangled;

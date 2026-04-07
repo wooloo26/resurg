@@ -132,10 +132,9 @@ static void lower_struct_destructure_into(Lower *low, const ASTNode *ast, HirNod
         const StructField *sf = type_struct_find_field(struct_type, fname);
         if (sf != NULL) {
             field_type = sf->type;
-            field_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, field_type, ast->loc);
-            field_access->struct_field_access.object = lower_make_var_ref(low, tmp_sym, ast->loc);
-            field_access->struct_field_access.field = fname;
-            field_access->struct_field_access.via_ptr = false;
+            field_access = lower_make_field_access(
+                low, &(FieldAccessSpec){lower_make_var_ref(low, tmp_sym, ast->loc), fname,
+                                        field_type, false, ast->loc});
         } else {
             // Check promoted fields from embedded structs
             HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, ast->loc);

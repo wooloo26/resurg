@@ -55,10 +55,8 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, const Pattern
         if (variant == NULL) {
             return NULL;
         }
-        HirNode *tag_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
-        tag_access->struct_field_access.object = operand->ref;
-        tag_access->struct_field_access.field = "_tag";
-        tag_access->struct_field_access.via_ptr = false;
+        HirNode *tag_access = lower_make_field_access(
+            low, &(FieldAccessSpec){operand->ref, "_tag", &TYPE_I32_INST, false, loc});
 
         HirNode *tag_val = lower_make_int_lit(
             low, &(IntLitSpec){(uint64_t)variant->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
@@ -148,12 +146,11 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern,
             if (bsym == NULL) {
                 continue;
             }
-            HirNode *data_access =
-                hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, variant->tuple_types[j], loc);
-            data_access->struct_field_access.object = lower_make_var_ref(low, operand->sym, loc);
-            data_access->struct_field_access.field =
-                arena_sprintf(low->hir_arena, "_data.%s._%d", pattern->name, j);
-            data_access->struct_field_access.via_ptr = false;
+            HirNode *data_access = lower_make_field_access(
+                low,
+                &(FieldAccessSpec){lower_make_var_ref(low, operand->sym, loc),
+                                   arena_sprintf(low->hir_arena, "_data.%s._%d", pattern->name, j),
+                                   variant->tuple_types[j], false, loc});
             BUF_PUSH(bind_stmts, lower_make_var_decl(low, bsym, data_access));
         }
         break;
@@ -170,11 +167,11 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern,
                 continue;
             }
             const Type *ftype = hir_sym_type(bsym);
-            HirNode *data_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ftype, loc);
-            data_access->struct_field_access.object = lower_make_var_ref(low, operand->sym, loc);
-            data_access->struct_field_access.field =
-                arena_sprintf(low->hir_arena, "_data.%s.%s", pattern->name, fname);
-            data_access->struct_field_access.via_ptr = false;
+            HirNode *data_access = lower_make_field_access(
+                low, &(FieldAccessSpec){
+                         lower_make_var_ref(low, operand->sym, loc),
+                         arena_sprintf(low->hir_arena, "_data.%s.%s", pattern->name, fname), ftype,
+                         false, loc});
             BUF_PUSH(bind_stmts, lower_make_var_decl(low, bsym, data_access));
         }
         break;

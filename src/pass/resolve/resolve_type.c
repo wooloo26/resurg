@@ -86,7 +86,8 @@ static const Type *resolve_option_type(Sema *sema, const ASTType *ast_type) {
         return &TYPE_ERR_INST;
     }
     ASTType val_args[1] = {*ast_type->option_elem};
-    const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 1, ast_type->loc);
+    GenericInstArgs inst_args = {val_args, 1, ast_type->loc};
+    const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
     if (mangled != NULL) {
         return sema_lookup_type_alias(sema, mangled);
     }
@@ -100,7 +101,8 @@ static const Type *resolve_result_type(Sema *sema, const ASTType *ast_type) {
         return &TYPE_ERR_INST;
     }
     ASTType val_args[2] = {*ast_type->result_ok, *ast_type->result_err};
-    const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 2, ast_type->loc);
+    GenericInstArgs inst_args = {val_args, 2, ast_type->loc};
+    const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
     if (mangled != NULL) {
         return sema_lookup_type_alias(sema, mangled);
     }
@@ -123,7 +125,8 @@ static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
     if (ret == NULL) {
         ret = &TYPE_UNIT_INST;
     }
-    return type_create_fn(sema->arena, params, BUF_LEN(params), ret, ast_type->fn_kind);
+    FnTypeSpec fn_spec = {params, BUF_LEN(params), ret, ast_type->fn_kind};
+    return type_create_fn(sema->arena, &fn_spec);
 }
 
 static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
@@ -177,8 +180,8 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
             for (int32_t i = 0; i < got; i++) {
                 BUF_PUSH(val_args, *ast_type->type_args[i]);
             }
-            const char *mangled =
-                instantiate_generic_struct(sema, gsdef, val_args, got, ast_type->loc);
+            GenericInstArgs inst_args = {val_args, got, ast_type->loc};
+            const char *mangled = instantiate_generic_struct(sema, gsdef, &inst_args);
             BUF_FREE(val_args);
             if (mangled != NULL) {
                 return sema_lookup_type_alias(sema, mangled);
@@ -193,8 +196,8 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
             for (int32_t i = 0; i < got; i++) {
                 BUF_PUSH(val_args, *ast_type->type_args[i]);
             }
-            const char *mangled =
-                instantiate_generic_enum(sema, gedef, val_args, got, ast_type->loc);
+            GenericInstArgs inst_args = {val_args, got, ast_type->loc};
+            const char *mangled = instantiate_generic_enum(sema, gedef, &inst_args);
             BUF_FREE(val_args);
             if (mangled != NULL) {
                 return sema_lookup_type_alias(sema, mangled);
