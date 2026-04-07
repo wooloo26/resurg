@@ -112,16 +112,21 @@ struct PactDef {
     const char **super_pacts;  /* buf - constraint alias refs */
 };
 
+/** Callback for type-checking a method body during generic instantiation. */
+typedef void (*MethodChecker)(struct Sema *sema, ASTNode *method, const char *owner_name,
+                              const Type *owner_type);
+
 struct Sema {
     Arena *arena;
     Scope *current_scope;
     int32_t err_count;
-    const Type *loop_break_type; // break value type in current loop (NULL if no break-with-value)
-    const Type *expected_type;   // expected type for current expr (bidirectional inference)
-    const Type *fn_return_type;  // return type of the enclosing function (for Ok/Err/None)
-    Scope *closure_scope;        // scope of the enclosing Fn/FnMut closure (NULL if none)
-    FnTypeKind closure_fn_kind;  // fn kind of the enclosing closure (FN_PLAIN when not in closure)
-    bool closure_has_capture;    // true when any variable outside closure_scope is referenced
+    MethodChecker method_checker; // set by check pass; NULL during resolve
+    const Type *loop_break_type;  // break value type in current loop (NULL if no break-with-value)
+    const Type *expected_type;    // expected type for current expr (bidirectional inference)
+    const Type *fn_return_type;   // return type of the enclosing function (for Ok/Err/None)
+    Scope *closure_scope;         // scope of the enclosing Fn/FnMut closure (NULL if none)
+    FnTypeKind closure_fn_kind;   // fn kind of the enclosing closure (FN_PLAIN when not in closure)
+    bool closure_has_capture;     // true when any variable outside closure_scope is referenced
     bool closure_captures_mutated;  // true when a captured variable is mutated (FnMut inference)
     ASTNode *file_node;             // root file node (for appending monomorphized fns)
     HashTable type_alias_table;     // name → const Type*

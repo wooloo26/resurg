@@ -1,4 +1,4 @@
-#include "pass/check/_check.h"
+#include "_sema.h"
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 

@@ -123,4 +123,25 @@ void register_pact_def(Sema *sema, ASTNode *decl);
 void validate_struct_conformances(Sema *sema, ASTNode *decl, StructDef *def);
 void inject_builtin_enums(Sema *sema);
 
+// ── Generic instantiation (sema_generic.c) ─────────────────────────────
+
+/** Check if @p type satisfies the pact bound @p bound_name (recursively). */
+bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
+/** Build a mangled name for a generic instantiation: "base__type1_type2". */
+const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args, int32_t count);
+/**
+ * Instantiate a generic struct with the given type args.
+ * Creates a concrete struct def with a mangled name and registers it.
+ * Uses sema->method_checker (if set) to type-check method bodies.
+ */
+const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
+                                       int32_t type_arg_count, SrcLoc loc);
+/**
+ * Instantiate a generic enum with the given type args.
+ * Creates a concrete enum def with a mangled name and registers it.
+ * Uses sema->method_checker (if set) to type-check method bodies.
+ */
+const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
+                                     int32_t type_arg_count, SrcLoc loc);
+
 #endif // RSG__RESOLVE_H

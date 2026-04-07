@@ -1,4 +1,13 @@
-#include "_check.h"
+#include "_sema.h"
+
+/**
+ * @file sema_generic.c
+ * @brief Generic instantiation — shared by resolve, check, and mono passes.
+ *
+ * Contains pact bound checking, name mangling, and generic struct/enum
+ * instantiation.  Method body checking is dispatched through the
+ * sema->method_checker callback (set by the check pass, NULL during resolve).
+ */
 
 // ── Pact bound checking ───────────────────────────────────────────
 
@@ -173,11 +182,6 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
 
 // ── Generic struct instantiation ──────────────────────────────────
 
-/**
- * Instantiate a generic struct with the given type args.
- * Creates a concrete struct def with a mangled name and registers it.
- * Returns the mangled name, or NULL on error.
- */
 const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
                                        int32_t type_arg_count, SrcLoc loc) {
     int32_t expected = gdef->type_param_count;
@@ -253,14 +257,16 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
     }
     synth->type = def->type;
 
-    // Clone and type-check method bodies with type param substitutions
+    // Clone and type-check method bodies (via callback if available)
     for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.methods); i++) {
         ASTNode *method = orig->struct_decl.methods[i];
         ASTNode *clone = ast_clone(sema->arena, method);
         clone->fn_decl.owner_struct = mangled;
         clone->fn_decl.type_params = NULL;
         BUF_PUSH(synth->struct_decl.methods, clone);
-        check_struct_method_body(sema, clone, mangled, def->type);
+        if (sema->method_checker != NULL) {
+            sema->method_checker(sema, clone, mangled, def->type);
+        }
     }
 
     // Append to file decls for lowering
@@ -274,11 +280,6 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
 
 // ── Generic enum instantiation ────────────────────────────────────
 
-/**
- * Instantiate a generic enum with the given type args.
- * Creates a concrete enum def with a mangled name and registers it.
- * Returns the mangled name, or NULL on error.
- */
 const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
                                      int32_t type_arg_count, SrcLoc loc) {
     int32_t expected = gdef->type_param_count;
@@ -377,7 +378,7 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
     }
     synth->type = enum_type;
 
-    // Clone and type-check method bodies with type param substitutions
+    // Clone and type-check method bodies (via callback if available)
     const Type *ptr_type = type_create_ptr(sema->arena, enum_type, false);
     for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
         ASTNode *method = orig->enum_decl.methods[i];
@@ -385,7 +386,9 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
         mclone->fn_decl.owner_struct = mangled;
         mclone->fn_decl.type_params = NULL;
         BUF_PUSH(synth->enum_decl.methods, mclone);
-        check_struct_method_body(sema, mclone, mangled, ptr_type);
+        if (sema->method_checker != NULL) {
+            sema->method_checker(sema, mclone, mangled, ptr_type);
+        }
     }
 
     // Append to file decls for lowering

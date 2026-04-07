@@ -23,7 +23,6 @@ const Type *check_lit(Sema *sema, ASTNode *node);
 const Type *check_id(Sema *sema, ASTNode *node);
 const Type *check_unary(Sema *sema, ASTNode *node);
 const Type *check_binary(Sema *sema, ASTNode *node);
-const Type *check_call(Sema *sema, ASTNode *node);
 const Type *check_member(Sema *sema, ASTNode *node);
 const Type *check_idx(Sema *sema, ASTNode *node);
 const Type *check_type_conversion(Sema *sema, ASTNode *node);
@@ -37,6 +36,10 @@ const Type *check_address_of(Sema *sema, ASTNode *node);
 const Type *check_deref(Sema *sema, ASTNode *node);
 const Type *check_closure(Sema *sema, ASTNode *node);
 void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_type);
+
+// ── Call checking (check_call.c) ──────────────────────────────────
+
+const Type *check_call(Sema *sema, ASTNode *node);
 
 // ── Pattern / match checking (check_match.c) ──────────────────────
 
@@ -53,23 +56,11 @@ typedef struct {
 void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
                    MatchCoverage *coverage);
 
-// ── Generic instantiation (check_generic.c) ──────────────────────
-
-bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
-const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args, int32_t count);
-const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
-                                       int32_t type_arg_count, SrcLoc loc);
-const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
-                                     int32_t type_arg_count, SrcLoc loc);
-
 // ── Statement checking (check_stmt.c) ─────────────────────────────
 
 const Type *check_if(Sema *sema, ASTNode *node);
 const Type *check_block(Sema *sema, ASTNode *node);
 const Type *check_var_decl(Sema *sema, ASTNode *node);
-void check_fn_body(Sema *sema, ASTNode *fn_node);
-void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
-                              const Type *struct_type);
 const Type *check_assign(Sema *sema, ASTNode *node);
 const Type *check_compound_assign(Sema *sema, ASTNode *node);
 

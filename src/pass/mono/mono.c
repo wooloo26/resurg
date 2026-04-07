@@ -1,6 +1,7 @@
 #include "rsg/pass/mono/mono.h"
 
-#include "pass/check/_check.h"
+#include "pass/resolve/_sema.h"
+#include "rsg/pass/check/check.h"
 
 /**
  * @file mono.c

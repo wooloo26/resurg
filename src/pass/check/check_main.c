@@ -8,6 +8,7 @@
 // ── Public API ─────────────────────────────────────────────────────────
 
 bool sema_check(Sema *sema, ASTNode *file) {
+    sema->method_checker = check_struct_method_body;
     check_node(sema, file);
     return sema->err_count == 0;
 }

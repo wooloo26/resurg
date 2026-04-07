@@ -125,6 +125,7 @@ Sema *sema_create(Arena *arena) {
     sema->closure_has_capture = false;
     sema->closure_captures_mutated = false;
     sema->file_node = NULL;
+    sema->method_checker = NULL;
     hash_table_init(&sema->type_alias_table, NULL);
     hash_table_init(&sema->fn_table, NULL);
     hash_table_init(&sema->struct_table, NULL);
