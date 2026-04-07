@@ -120,7 +120,7 @@ void register_fn_sig(Sema *sema, ASTNode *decl);
 void register_struct_def(Sema *sema, ASTNode *decl);
 void register_enum_def(Sema *sema, ASTNode *decl);
 void register_pact_def(Sema *sema, ASTNode *decl);
-void validate_struct_conformances(Sema *sema, ASTNode *decl, StructDef *def);
+void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def);
 void inject_builtin_enums(Sema *sema);
 
 // ── Generic instantiation (sema_generic.c) ─────────────────────────────

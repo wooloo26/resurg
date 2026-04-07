@@ -48,10 +48,10 @@ static const Keyword KEYWORDS[] = {
 static const int32_t KEYWORD_COUNT = (int32_t)(sizeof(KEYWORDS) / sizeof(KEYWORDS[0]));
 
 /**
- * Look up @p text (len @p len) in the keyword table.  Returns
- * TOKEN_ID if no keyword matches.
+ * Classify @p text (len @p len) as a keyword or identifier.
+ * Returns the keyword's TokenKind, or TOKEN_ID if no keyword matches.
  */
-static TokenKind lookup_keyword(const char *text, int32_t len) {
+static TokenKind classify_keyword(const char *text, int32_t len) {
     for (int32_t i = 0; i < KEYWORD_COUNT; i++) {
         if ((int32_t)strlen(KEYWORDS[i].word) == len && memcmp(KEYWORDS[i].word, text, len) == 0) {
             return KEYWORDS[i].kind;
@@ -144,7 +144,7 @@ static Token scan_ident(Lex *lex, SrcLoc loc) {
     }
 
     int32_t len = (int32_t)(lex->src + lex->pos - start);
-    TokenKind kind = lookup_keyword(start, len);
+    TokenKind kind = classify_keyword(start, len);
 
     if (kind == TOKEN_ID && is_reserved_keyword(start, len)) {
         rsg_err(loc, "'%.*s' is a reserved keyword", len, start);

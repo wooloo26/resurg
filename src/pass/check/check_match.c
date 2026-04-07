@@ -14,9 +14,9 @@ static int32_t find_variant_idx(const Type *enum_type, const char *name) {
     return -1;
 }
 
-/** Mark a variant as covered if the pattern matches an enum variant by name. */
-static void mark_variant_covered(const Type *operand_type, const char *name,
-                                 bool *variant_covered) {
+/** Record variant coverage if the pattern matches an enum variant by name. */
+static void record_variant_coverage(const Type *operand_type, const char *name,
+                                    bool *variant_covered) {
     if (variant_covered == NULL) {
         return;
     }
@@ -39,7 +39,7 @@ static void check_variant_tuple_pattern(Sema *sema, ASTPattern *pattern, const T
         SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
         return;
     }
-    mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
+    record_variant_coverage(operand_type, pattern->name, coverage->variant_covered);
     for (int32_t i = 0; i < BUF_LEN(pattern->sub_patterns); i++) {
         ASTPattern *sub = pattern->sub_patterns[i];
         if (sub->kind == PATTERN_BINDING && i < variant->tuple_count) {
@@ -59,7 +59,7 @@ static void check_variant_struct_pattern(Sema *sema, ASTPattern *pattern, const 
         SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
         return;
     }
-    mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
+    record_variant_coverage(operand_type, pattern->name, coverage->variant_covered);
     for (int32_t i = 0; i < BUF_LEN(pattern->field_names); i++) {
         const char *fname = pattern->field_names[i];
         for (int32_t j = 0; j < variant->field_count; j++) {
@@ -115,7 +115,7 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
 
     case PATTERN_VARIANT_UNIT:
         if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
-            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
+            record_variant_coverage(operand_type, pattern->name, coverage->variant_covered);
         }
         break;
 

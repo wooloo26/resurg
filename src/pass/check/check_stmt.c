@@ -137,19 +137,7 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
         if (init_type == NULL && node->var_decl.init == NULL && declared->kind == TYPE_ENUM &&
             type_enum_find_variant(declared, "None") != NULL) {
             // Default None for `var x: ?T` (Option type, no init)
-            ASTNode *none_init = ast_new(sema->arena, NODE_CALL, node->loc);
-            ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
-            callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
-            callee_member->member.object->id.name = type_enum_name(declared);
-            callee_member->member.object->type = declared;
-            callee_member->member.member = "None";
-            none_init->call.callee = callee_member;
-            none_init->call.args = NULL;
-            none_init->call.arg_names = NULL;
-            none_init->call.arg_is_mut = NULL;
-            none_init->call.type_args = NULL;
-            none_init->type = declared;
-            node->var_decl.init = none_init;
+            node->var_decl.init = build_none_variant_call(sema->arena, declared, node->loc);
         }
         // Promote lit init to match declared type
         if (init_type != NULL && node->var_decl.init != NULL) {

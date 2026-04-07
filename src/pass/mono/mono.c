@@ -15,7 +15,7 @@
 // ── Static helpers ─────────────────────────────────────────────────
 
 /** Clone, check, and emit all pending generic fn instantiations. */
-static void process_pending_generics(Sema *sema, ASTNode *file) {
+static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
     // Append synthetic decls from generic struct/enum instantiation
     for (int32_t i = 0; i < BUF_LEN(sema->synthetic_decls); i++) {
         BUF_PUSH(file->file.decls, sema->synthetic_decls[i]);
@@ -72,7 +72,7 @@ static void process_pending_generics(Sema *sema, ASTNode *file) {
 // ── Public API ─────────────────────────────────────────────────────────
 
 bool sema_mono(Sema *sema, ASTNode *file) {
-    process_pending_generics(sema, file);
+    instantiate_pending_generics(sema, file);
     scope_pop(sema); // global scope (pushed by sema_resolve)
     return sema->err_count == 0;
 }

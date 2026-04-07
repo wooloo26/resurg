@@ -64,4 +64,12 @@ const Type *check_var_decl(Sema *sema, ASTNode *node);
 const Type *check_assign(Sema *sema, ASTNode *node);
 const Type *check_compound_assign(Sema *sema, ASTNode *node);
 
+// ── Shared helpers ─────────────────────────────────────────────────
+
+/** Build a NODE_CALL AST node that calls EnumType.None() on @p enum_type. */
+ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc);
+
+/** Find a promoted field from embedded structs. Returns NULL if not found. */
+const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *field_name);
+
 #endif // RSG__CHECK_H

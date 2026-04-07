@@ -83,13 +83,13 @@ static HirNode *build_bool_negate(Lower *low, HirNode *expr, SrcLoc loc) {
 }
 
 /**
- * Build an elem comparison for equality expansion.
+ * Build an equality check for a single elem pair.
  *
  * For TYPE_STR elems, emits rsg_str_equal(l, r) (negated for !=).
  * Otherwise emits a plain binary comparison.
  */
-static HirNode *build_elem_comparison(Lower *low, HirNode *left_elem, HirNode *right_elem,
-                                      TokenKind elem_op) {
+static HirNode *build_equality_check(Lower *low, HirNode *left_elem, HirNode *right_elem,
+                                     TokenKind elem_op) {
     SrcLoc loc = left_elem->loc;
     const Type *elem_type = left_elem->type;
     if (elem_type->kind == TYPE_STR) {
@@ -178,7 +178,7 @@ static HirNode *lower_compound_equality(Lower *low, HirNode *left, HirNode *righ
         ElemAccessSpec right_ea = {right_sym, i, elem_type, access_kind, loc};
         HirNode *left_elem = build_elem_access(low, &left_ea);
         HirNode *right_elem = build_elem_access(low, &right_ea);
-        HirNode *cmp = build_elem_comparison(low, left_elem, right_elem, elem_op);
+        HirNode *cmp = build_equality_check(low, left_elem, right_elem, elem_op);
         result = join_comparison(low, result, cmp, join_op, loc);
     }
 
@@ -269,8 +269,8 @@ static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
     return false;
 }
 
-/** Return the rsg_print[ln]_* fn name for @p type. */
-static const char *lookup_print_fn(const Type *type, bool newline) {
+/** Resolve the rsg_print[ln]_* fn name for @p type from the dispatch table. */
+static const char *resolve_print_fn(const Type *type, bool newline) {
     if (type == NULL) {
         return NULL;
     }
@@ -307,7 +307,7 @@ static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
     }
 
     HirNode *arg = lower_expr(low, ast->call.args[0]);
-    const char *fn_name = lookup_print_fn(arg->type, newline);
+    const char *fn_name = resolve_print_fn(arg->type, newline);
     if (fn_name == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
     }

@@ -1,5 +1,37 @@
 #include "_check.h"
 
+// ── Shared helpers ─────────────────────────────────────────────────────
+
+ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc) {
+    ASTNode *call = ast_new(arena, NODE_CALL, loc);
+    ASTNode *callee = ast_new(arena, NODE_MEMBER, loc);
+    callee->member.object = ast_new(arena, NODE_ID, loc);
+    callee->member.object->id.name = type_enum_name(enum_type);
+    callee->member.object->type = enum_type;
+    callee->member.member = "None";
+    call->call.callee = callee;
+    call->call.args = NULL;
+    call->call.arg_names = NULL;
+    call->call.arg_is_mut = NULL;
+    call->call.type_args = NULL;
+    call->type = enum_type;
+    return call;
+}
+
+const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *field_name) {
+    for (int32_t ei = 0; ei < BUF_LEN(sdef->embedded); ei++) {
+        StructDef *embed_def = sema_lookup_struct(sema, sdef->embedded[ei]);
+        if (embed_def != NULL) {
+            for (int32_t fi = 0; fi < BUF_LEN(embed_def->fields); fi++) {
+                if (strcmp(embed_def->fields[fi].name, field_name) == 0) {
+                    return embed_def->fields[fi].type;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
 // ── Operator classification ────────────────────────────────────────────
 
 static bool binary_op_yields_bool(TokenKind op) {
@@ -27,17 +59,10 @@ const Type *check_id(Sema *sema, ASTNode *node) {
                 const EnumVariant *variant = type_enum_find_variant(ctx, "None");
                 if (variant != NULL) {
                     // Rewrite to enum variant call for lowering
-                    node->kind = NODE_CALL;
-                    ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
-                    callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
-                    callee_member->member.object->id.name = type_enum_name(ctx);
-                    callee_member->member.object->type = ctx;
-                    callee_member->member.member = "None";
-                    node->call.callee = callee_member;
-                    node->call.args = NULL;
-                    node->call.arg_names = NULL;
-                    node->call.arg_is_mut = NULL;
-                    node->call.type_args = NULL;
+                    ASTNode *none_call = build_none_variant_call(sema->arena, ctx, node->loc);
+                    node->kind = none_call->kind;
+                    node->call = none_call->call;
+                    node->type = ctx;
                     return ctx;
                 }
             }
@@ -183,15 +208,9 @@ const Type *check_member(Sema *sema, ASTNode *node) {
         // Check promoted fields from embedded structs
         StructDef *sdef = sema_lookup_struct(sema, object_type->struct_type.name);
         if (sdef != NULL) {
-            for (int32_t ei = 0; ei < BUF_LEN(sdef->embedded); ei++) {
-                StructDef *embed_def = sema_lookup_struct(sema, sdef->embedded[ei]);
-                if (embed_def != NULL) {
-                    for (int32_t fi = 0; fi < BUF_LEN(embed_def->fields); fi++) {
-                        if (strcmp(embed_def->fields[fi].name, field_name) == 0) {
-                            return embed_def->fields[fi].type;
-                        }
-                    }
-                }
+            const Type *promoted = find_promoted_field(sema, sdef, field_name);
+            if (promoted != NULL) {
+                return promoted;
             }
         }
 

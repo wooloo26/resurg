@@ -436,7 +436,7 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     hash_table_insert(&sema->pact_table, pact_name, def);
 }
 
-void validate_struct_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
+void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
     for (int32_t ci = 0; ci < BUF_LEN(decl->struct_decl.conformances); ci++) {
         const char *pact_name = decl->struct_decl.conformances[ci];
         PactDef *pact = sema_lookup_pact(sema, pact_name);

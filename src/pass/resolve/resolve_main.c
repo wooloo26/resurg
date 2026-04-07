@@ -11,8 +11,8 @@
 
 // ── Static helpers ─────────────────────────────────────────────────
 
-/** Reset all hash tables and buffers for a fresh compilation. */
-static void sema_reset_tables(Sema *sema) {
+/** Destroy and reinitialize all hash tables and buffers for a fresh compilation. */
+static void sema_destroy_and_reinit_tables(Sema *sema) {
     hash_table_destroy(&sema->fn_table);
     hash_table_init(&sema->fn_table, NULL);
     hash_table_destroy(&sema->type_alias_table);
@@ -70,7 +70,7 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         if (decl->kind == NODE_STRUCT_DECL && BUF_LEN(decl->struct_decl.conformances) > 0) {
             StructDef *def = sema_lookup_struct(sema, decl->struct_decl.name);
             if (def != NULL) {
-                validate_struct_conformances(sema, decl, def);
+                enforce_pact_conformances(sema, decl, def);
             }
         }
     }
@@ -160,7 +160,7 @@ void sema_destroy(Sema *sema) {
 }
 
 bool sema_resolve(Sema *sema, ASTNode *file) {
-    sema_reset_tables(sema);
+    sema_destroy_and_reinit_tables(sema);
     sema->file_node = file;
     scope_push(sema, false); // global scope
     register_all_decls(sema, file);

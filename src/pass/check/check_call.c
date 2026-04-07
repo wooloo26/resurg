@@ -10,8 +10,18 @@
 
 // ── Named-arg helpers ─────────────────────────────────────────────
 
+/** Find the index of a named parameter in @p sig. Returns -1 if not found. */
+static int32_t find_param_index(const FnSig *sig, const char *name) {
+    for (int32_t j = 0; j < sig->param_count; j++) {
+        if (strcmp(sig->param_names[j], name) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
 /**
- * Reorder call args to match param poss using named labels.
+ * Reorder call args to match param positions using named labels.
  * Clears @p node->call.arg_names after reordering.
  */
 static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
@@ -26,13 +36,7 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     for (int32_t i = 0; i < arg_count; i++) {
         const char *aname = node->call.arg_names[i];
         if (aname != NULL) {
-            int32_t idx = -1;
-            for (int32_t j = 0; j < sig->param_count; j++) {
-                if (strcmp(sig->param_names[j], aname) == 0) {
-                    idx = j;
-                    break;
-                }
-            }
+            int32_t idx = find_param_index(sig, aname);
             if (idx < 0) {
                 SEMA_ERR(sema, node->call.args[i]->loc, "no parameter named '%s'", aname);
             } else {
@@ -47,10 +51,9 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
 }
 
 /**
- * Validate arg count against @p sig and type-check each arg.
- * Promotes lit args to match the corresponding param type.
+ * Validate arg count against @p sig, promote lit args, and type-check each arg.
  */
-static void check_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
+static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     int32_t arg_count = BUF_LEN(node->call.args);
     if (arg_count != sig->param_count) {
         SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
@@ -118,7 +121,7 @@ static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type
 /** Reorder named args, validate, and apply a resolved fn sig to a call. */
 static const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig) {
     reorder_named_args(sema, node, sig);
-    check_call_args(sema, node, sig);
+    check_and_promote_call_args(sema, node, sig);
     node->type = sig->return_type;
     return sig->return_type;
 }
