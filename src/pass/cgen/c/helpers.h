@@ -34,7 +34,7 @@ struct CGen {
 /** Emit whitespace for the current indentation level. */
 void emit_indent(CGen *cgen);
 /** Emit fmtted text (no indent, no newline). */
-void _emit(CGen *cgen, const char *fmt, ...);
+void emit(CGen *cgen, const char *fmt, ...);
 /** Emit an indented, newline-terminated fmtted line. */
 void emit_line(CGen *cgen, const char *fmt, ...);
 

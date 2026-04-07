@@ -97,7 +97,7 @@ void emit_compound_typedefs(CGen *cgen) {
     }
 
     if (count > 0) {
-        _emit(cgen, "\n");
+        emit(cgen, "\n");
     }
 }
 

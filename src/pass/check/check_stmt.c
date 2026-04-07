@@ -546,6 +546,75 @@ static const Type *check_tuple_destructure(Sema *sema, ASTNode *node) {
 
 // ── Node dispatch ──────────────────────────────────────────────────────
 
+/** Check `expr?.member` — optional chaining on Option types. */
+static const Type *check_optional_chain(Sema *sema, ASTNode *node) {
+    const Type *obj_type = check_node(sema, node->optional_chain.object);
+    if (obj_type == NULL || obj_type->kind == TYPE_ERR) {
+        return NULL;
+    }
+    if (obj_type->kind != TYPE_ENUM) {
+        SEMA_ERR(sema, node->loc, "optional chaining requires Option type, got '%s'",
+                 type_name(sema->arena, obj_type));
+        return NULL;
+    }
+    const EnumVariant *some_var = type_enum_find_variant(obj_type, "Some");
+    if (some_var == NULL || some_var->kind != ENUM_VARIANT_TUPLE || some_var->tuple_count != 1) {
+        SEMA_ERR(sema, node->loc, "optional chaining requires Option type");
+        return NULL;
+    }
+    const Type *inner = some_var->tuple_types[0];
+    if (inner->kind == TYPE_PTR) {
+        inner = inner->ptr.pointee;
+    }
+    if (inner->kind != TYPE_STRUCT) {
+        return NULL;
+    }
+    const StructField *field = type_struct_find_field(inner, node->optional_chain.member);
+    if (field == NULL) {
+        return NULL;
+    }
+    const Type *field_type = field->type;
+    // Already Option — don't double-wrap
+    if (field_type->kind == TYPE_ENUM && type_enum_find_variant(field_type, "Some") != NULL) {
+        return field_type;
+    }
+    // Instantiate Option<field_type>
+    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
+    if (gdef == NULL) {
+        return NULL;
+    }
+    ASTType val_arg = {.kind = AST_TYPE_NAME,
+                       .name = type_name(sema->arena, field_type),
+                       .type_args = NULL,
+                       .loc = node->loc};
+    hash_table_insert(&sema->type_param_table, val_arg.name, (void *)field_type);
+    const char *mangled = instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
+    hash_table_remove(&sema->type_param_table, val_arg.name);
+    if (mangled != NULL) {
+        return sema_lookup_type_alias(sema, mangled);
+    }
+    return NULL;
+}
+
+/** Check `expr!` — unwrap Result<T, E>, propagate Err. */
+static const Type *check_try(Sema *sema, ASTNode *node) {
+    const Type *operand_type = check_node(sema, node->try_expr.operand);
+    if (operand_type == NULL || operand_type->kind == TYPE_ERR) {
+        return NULL;
+    }
+    if (operand_type->kind != TYPE_ENUM) {
+        SEMA_ERR(sema, node->loc, "postfix '!' requires Result type, got '%s'",
+                 type_name(sema->arena, operand_type));
+        return NULL;
+    }
+    const EnumVariant *ok_var = type_enum_find_variant(operand_type, "Ok");
+    if (ok_var == NULL || ok_var->kind != ENUM_VARIANT_TUPLE || ok_var->tuple_count != 1) {
+        SEMA_ERR(sema, node->loc, "postfix '!' requires Result type with Ok variant");
+        return NULL;
+    }
+    return ok_var->tuple_types[0];
+}
+
 const Type *check_node(Sema *sema, ASTNode *node) {
     if (node == NULL) {
         return &TYPE_UNIT_INST;
@@ -732,77 +801,18 @@ const Type *check_node(Sema *sema, ASTNode *node) {
         break;
 
     case NODE_OPTIONAL_CHAIN: {
-        // expr?.member — if expr is Option<*T>, result is Option<field_type>
-        const Type *obj_type = check_node(sema, node->optional_chain.object);
-        if (obj_type == NULL || obj_type->kind == TYPE_ERR) {
-            break;
-        }
-        // Must be an Option enum with Some(T) where T is a ptr/struct
-        if (obj_type->kind != TYPE_ENUM) {
-            SEMA_ERR(sema, node->loc, "optional chaining requires Option type, got '%s'",
-                     type_name(sema->arena, obj_type));
-            break;
-        }
-        const EnumVariant *some_var = type_enum_find_variant(obj_type, "Some");
-        if (some_var == NULL || some_var->kind != ENUM_VARIANT_TUPLE ||
-            some_var->tuple_count != 1) {
-            SEMA_ERR(sema, node->loc, "optional chaining requires Option type");
-            break;
-        }
-        const Type *inner = some_var->tuple_types[0];
-        // Auto-deref ptr
-        if (inner->kind == TYPE_PTR) {
-            inner = inner->ptr.pointee;
-        }
-        // Look up member on inner type
-        if (inner->kind == TYPE_STRUCT) {
-            const StructField *field = type_struct_find_field(inner, node->optional_chain.member);
-            if (field != NULL) {
-                const Type *field_type = field->type;
-                // Check if field_type is already Option — if so, don't double-wrap
-                if (field_type->kind == TYPE_ENUM &&
-                    type_enum_find_variant(field_type, "Some") != NULL) {
-                    result = field_type;
-                } else {
-                    // Instantiate Option<field_type>
-                    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
-                    if (gdef != NULL) {
-                        ASTType val_arg = {.kind = AST_TYPE_NAME,
-                                           .name = type_name(sema->arena, field_type),
-                                           .type_args = NULL,
-                                           .loc = node->loc};
-                        hash_table_insert(&sema->type_param_table, val_arg.name,
-                                          (void *)field_type);
-                        const char *mangled =
-                            instantiate_generic_enum(sema, gdef, &val_arg, 1, node->loc);
-                        hash_table_remove(&sema->type_param_table, val_arg.name);
-                        if (mangled != NULL) {
-                            result = sema_lookup_type_alias(sema, mangled);
-                        }
-                    }
-                }
-            }
+        const Type *chain = check_optional_chain(sema, node);
+        if (chain != NULL) {
+            result = chain;
         }
         break;
     }
 
     case NODE_TRY: {
-        // expr! — unwrap Result<T, E>, propagate Err
-        const Type *operand_type = check_node(sema, node->try_expr.operand);
-        if (operand_type == NULL || operand_type->kind == TYPE_ERR) {
-            break;
+        const Type *try_type = check_try(sema, node);
+        if (try_type != NULL) {
+            result = try_type;
         }
-        if (operand_type->kind != TYPE_ENUM) {
-            SEMA_ERR(sema, node->loc, "postfix '!' requires Result type, got '%s'",
-                     type_name(sema->arena, operand_type));
-            break;
-        }
-        const EnumVariant *ok_var = type_enum_find_variant(operand_type, "Ok");
-        if (ok_var == NULL || ok_var->kind != ENUM_VARIANT_TUPLE || ok_var->tuple_count != 1) {
-            SEMA_ERR(sema, node->loc, "postfix '!' requires Result type with Ok variant");
-            break;
-        }
-        result = ok_var->tuple_types[0]; // unwrap to T
         break;
     }
     }

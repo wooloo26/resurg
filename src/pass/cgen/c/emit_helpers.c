@@ -8,7 +8,7 @@ void emit_indent(CGen *cgen) {
     }
 }
 
-void _emit(CGen *cgen, const char *fmt, ...) {
+void emit(CGen *cgen, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vfprintf(cgen->output, fmt, args);

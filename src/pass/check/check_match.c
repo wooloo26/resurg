@@ -28,6 +28,49 @@ static void mark_variant_covered(const Type *operand_type, const char *name,
 
 // ── Pattern checking ───────────────────────────────────────────────
 
+/** Check a variant-tuple pattern: bind positional sub-patterns to tuple types. */
+static void check_variant_tuple_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
+                                        MatchCoverage *coverage) {
+    if (operand_type == NULL || operand_type->kind != TYPE_ENUM) {
+        return;
+    }
+    const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+    if (variant == NULL) {
+        SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
+        return;
+    }
+    mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
+    for (int32_t i = 0; i < BUF_LEN(pattern->sub_patterns); i++) {
+        ASTPattern *sub = pattern->sub_patterns[i];
+        if (sub->kind == PATTERN_BINDING && i < variant->tuple_count) {
+            scope_define(sema, &(SymDef){sub->name, variant->tuple_types[i], false, SYM_VAR});
+        }
+    }
+}
+
+/** Check a variant-struct pattern: bind named fields to their types. */
+static void check_variant_struct_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
+                                         MatchCoverage *coverage) {
+    if (operand_type == NULL || operand_type->kind != TYPE_ENUM) {
+        return;
+    }
+    const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+    if (variant == NULL) {
+        SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
+        return;
+    }
+    mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
+    for (int32_t i = 0; i < BUF_LEN(pattern->field_names); i++) {
+        const char *fname = pattern->field_names[i];
+        for (int32_t j = 0; j < variant->field_count; j++) {
+            if (strcmp(variant->fields[j].name, fname) == 0) {
+                scope_define(sema, &(SymDef){fname, variant->fields[j].type, false, SYM_VAR});
+                break;
+            }
+        }
+    }
+}
+
 /** Check a pattern and bind vars in the current scope. */
 void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
                    MatchCoverage *coverage) {
@@ -77,46 +120,11 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
         break;
 
     case PATTERN_VARIANT_TUPLE:
-        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
-            const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
-            if (variant == NULL) {
-                SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
-                break;
-            }
-            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
-            // Bind sub-patterns to tuple elem types
-            for (int32_t i = 0; i < BUF_LEN(pattern->sub_patterns); i++) {
-                ASTPattern *sub = pattern->sub_patterns[i];
-                if (sub->kind == PATTERN_BINDING && i < variant->tuple_count) {
-                    scope_define(sema,
-                                 &(SymDef){sub->name, variant->tuple_types[i], false, SYM_VAR});
-                } else if (sub->kind == PATTERN_WILDCARD) {
-                    // nothing to bind
-                }
-            }
-        }
+        check_variant_tuple_pattern(sema, pattern, operand_type, coverage);
         break;
 
     case PATTERN_VARIANT_STRUCT:
-        if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
-            const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
-            if (variant == NULL) {
-                SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
-                break;
-            }
-            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
-            // Bind field names to their types
-            for (int32_t i = 0; i < BUF_LEN(pattern->field_names); i++) {
-                const char *fname = pattern->field_names[i];
-                for (int32_t j = 0; j < variant->field_count; j++) {
-                    if (strcmp(variant->fields[j].name, fname) == 0) {
-                        scope_define(sema,
-                                     &(SymDef){fname, variant->fields[j].type, false, SYM_VAR});
-                        break;
-                    }
-                }
-            }
-        }
+        check_variant_struct_pattern(sema, pattern, operand_type, coverage);
         break;
     }
 }

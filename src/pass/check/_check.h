@@ -52,6 +52,15 @@ typedef struct {
 void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
                    MatchCoverage *coverage);
 
+// ── Registration (check_register.c) ───────────────────────────────
+
+void register_fn_sig(Sema *sema, ASTNode *decl);
+void register_struct_def(Sema *sema, ASTNode *decl);
+void register_enum_def(Sema *sema, ASTNode *decl);
+void register_pact_def(Sema *sema, ASTNode *decl);
+void validate_struct_conformances(Sema *sema, ASTNode *decl, StructDef *def);
+void inject_builtin_enums(Sema *sema);
+
 // ── Generic instantiation (check_generic.c) ──────────────────────
 
 bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
