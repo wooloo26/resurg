@@ -35,17 +35,21 @@ const Type *check_tuple_lit(Sema *sema, ASTNode *node);
 const Type *check_struct_lit(Sema *sema, ASTNode *node);
 const Type *check_address_of(Sema *sema, ASTNode *node);
 const Type *check_deref(Sema *sema, ASTNode *node);
+void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_type);
+
+// ── Pattern / match checking (check_match.c) ──────────────────────
+
 const Type *check_match(Sema *sema, ASTNode *node);
 const Type *check_enum_init(Sema *sema, ASTNode *node);
-
-// ── Pattern checking (check_expr.c) ───────────────────────────────
 
 /** Check a pattern against an operand type, binding sub-pattern vars. */
 void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bool *variant_covered,
                    bool *has_wildcard);
 
-// ── Generic instantiation (check_expr.c) ──────────────────────────
+// ── Generic instantiation (check_generic.c) ──────────────────────
 
+bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
+const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args, int32_t count);
 const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
                                        int32_t type_arg_count, SrcLoc loc);
 const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
@@ -61,9 +65,5 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
                               const Type *struct_type);
 const Type *check_assign(Sema *sema, ASTNode *node);
 const Type *check_compound_assign(Sema *sema, ASTNode *node);
-
-// ── AST clone (check_main.c) ─────────────────────────────────────
-
-ASTNode *clone_node(Arena *arena, ASTNode *src);
 
 #endif // RSG__CHECK_H

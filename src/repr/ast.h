@@ -499,6 +499,9 @@ struct ASTNode {
 /** Allocate a zero-initialised ASTNode of the given @p kind from @p arena. */
 ASTNode *ast_new(Arena *arena, NodeKind kind, SrcLoc loc);
 
+/** Recursively deep-clone an AST node and its children. */
+ASTNode *ast_clone(Arena *arena, ASTNode *src);
+
 /**
  * Recursively pretty-print @p node to stderr (indented by @p indent
  * levels).  Used by --dump-ast.
