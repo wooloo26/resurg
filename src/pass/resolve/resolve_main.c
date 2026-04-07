@@ -39,6 +39,23 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
     sema->synthetic_decls = NULL;
 }
 
+/** Register a single type alias (concrete or generic). */
+static void register_type_alias(Sema *sema, ASTNode *decl) {
+    if (BUF_LEN(decl->type_alias.type_params) > 0) {
+        GenericTypeAlias *gta = rsg_malloc(sizeof(*gta));
+        gta->name = decl->type_alias.name;
+        gta->alias_type = decl->type_alias.alias_type;
+        gta->type_params = decl->type_alias.type_params;
+        gta->type_param_count = BUF_LEN(decl->type_alias.type_params);
+        hash_table_insert(&sema->generic_type_alias_table, gta->name, gta);
+    } else {
+        const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
+        if (underlying != NULL) {
+            hash_table_insert(&sema->type_alias_table, decl->type_alias.name, (void *)underlying);
+        }
+    }
+}
+
 /**
  * Register all declarations (pacts, builtins, structs,
  * conformances, enums, type aliases, fn sigs) into the sema tables.
@@ -94,38 +111,21 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
     // Register type aliases and fn sigs
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
-
         if (decl->kind == NODE_TYPE_ALIAS) {
-            if (BUF_LEN(decl->type_alias.type_params) > 0) {
-                GenericTypeAlias *gta = rsg_malloc(sizeof(*gta));
-                gta->name = decl->type_alias.name;
-                gta->alias_type = decl->type_alias.alias_type;
-                gta->type_params = decl->type_alias.type_params;
-                gta->type_param_count = BUF_LEN(decl->type_alias.type_params);
-                hash_table_insert(&sema->generic_type_alias_table, gta->name, gta);
-            } else {
-                const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
-                if (underlying != NULL) {
-                    hash_table_insert(&sema->type_alias_table, decl->type_alias.name,
-                                      (void *)underlying);
-                }
-            }
+            register_type_alias(sema, decl);
         }
-
         if (decl->kind == NODE_FN_DECL) {
             register_fn_sig(sema, decl);
         }
     }
 
-    // Register extension methods (after struct/enum/pact are all registered)
+    // Register extension methods and validate conformances
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_EXT_DECL) {
             register_ext_decl(sema, decl);
         }
     }
-
-    // Validate ext-impl-pact conformances
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_EXT_DECL && BUF_LEN(decl->ext_decl.impl_pacts) > 0) {

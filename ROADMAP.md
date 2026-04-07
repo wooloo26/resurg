@@ -168,9 +168,14 @@ Higher-order programming and code organization.
 - [x] `use` imports
 - [x] Private-by-default module resolution
 - [x] `pub` visibility on all declarations
-- [x] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+  
+## v0.9.2 — Higher Module
 
-## v0.9.2 — Higher Generics
+- [ ] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+- [ ] Nested module
+- [ ] 
+
+## v0.9.3 — Higher Generics
 
 - [ ] Recursive Generics
 - [ ] `comptime` Generics
@@ -178,15 +183,14 @@ Higher-order programming and code organization.
 - [ ] `where`
 - [ ] Associated Types
   
-## v0.9.3 — Before Ecosystem
+## v0.9.4 — Before Ecosystem
 
 - [ ] `Self` and `*Self` type
 - [ ] Template Literal Types
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
-- [ ] Module
   
-## v0.9.4 — Ecosystem & Runtime
+## v0.9.5 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode

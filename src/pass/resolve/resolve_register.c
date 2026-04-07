@@ -713,6 +713,41 @@ static const char *resolve_ext_target_name(const Sema *sema, const char *target_
     return target_name;
 }
 
+/** Register a single primitive ext method into the fn_table with "type.method" key. */
+static void register_primitive_method(Sema *sema, const char *type_name, ASTNode *method) {
+    method->fn_decl.owner_struct = type_name;
+
+    const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, method->fn_decl.name);
+
+    const Type *return_type = &TYPE_UNIT_INST;
+    if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
+        return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
+        if (return_type == NULL) {
+            return_type = &TYPE_UNIT_INST;
+        }
+    }
+
+    FnSig *sig = rsg_malloc(sizeof(*sig));
+    sig->name = method->fn_decl.name;
+    sig->return_type = return_type;
+    sig->param_types = NULL;
+    sig->param_names = NULL;
+    sig->param_count = BUF_LEN(method->fn_decl.params);
+    sig->is_pub = false;
+
+    for (int32_t j = 0; j < sig->param_count; j++) {
+        ASTNode *param = method->fn_decl.params[j];
+        const Type *pt = resolve_ast_type(sema, &param->param.type);
+        if (pt == NULL) {
+            pt = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(sig->param_types, pt);
+        BUF_PUSH(sig->param_names, param->param.name);
+    }
+
+    hash_table_insert(&sema->fn_table, method_key, sig);
+}
+
 void register_ext_decl(Sema *sema, ASTNode *decl) {
     const char *target_name = decl->ext_decl.target_name;
 
@@ -735,9 +770,6 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
             method->fn_decl.owner_struct = effective_name;
             register_method_sig(sema, effective_name, method, &sdef->methods);
         }
-
-        // Add conformances from ext impl
-        // (The actual enforcement happens in enforce_ext_pact_conformances)
         return;
     }
 
@@ -752,48 +784,49 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    // Primitive type — register methods directly in fn_table with "type.method" key
+    // Primitive type
     for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        ASTNode *method = decl->ext_decl.methods[i];
-        method->fn_decl.owner_struct = effective_name;
-
-        StructMethodInfo mi = {.name = method->fn_decl.name,
-                               .is_mut_recv = method->fn_decl.is_mut_recv,
-                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
-                               .recv_name = method->fn_decl.recv_name,
-                               .decl = method};
-
-        const char *method_key = arena_sprintf(sema->arena, "%s.%s", effective_name, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INST;
-        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INST;
-            }
-        }
-
-        FnSig *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->param_types = NULL;
-        sig->param_names = NULL;
-        sig->param_count = BUF_LEN(method->fn_decl.params);
-        sig->is_pub = false;
-
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = method->fn_decl.params[j];
-            const Type *pt = resolve_ast_type(sema, &param->param.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(sig->param_types, pt);
-            BUF_PUSH(sig->param_names, param->param.name);
-        }
-
-        hash_table_insert(&sema->fn_table, method_key, sig);
-        (void)mi;
+        register_primitive_method(sema, effective_name, decl->ext_decl.methods[i]);
     }
+}
+
+/** Report missing pact methods that lack default bodies. */
+static void enforce_required_methods(Sema *sema, const ASTNode *decl, const char *pact_name,
+                                     const StructMethodInfo *pact_methods,
+                                     const StructMethodInfo *impl_methods, int32_t impl_count) {
+    for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
+        bool found = false;
+        for (int32_t j = 0; j < impl_count; j++) {
+            if (strcmp(impl_methods[j].name, pact_methods[i].name) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            bool has_body =
+                pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
+            if (!has_body) {
+                SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
+                         pact_methods[i].name, pact_name);
+            }
+        }
+    }
+}
+
+/** Check whether a pact method exists for an enum/primitive target. */
+static bool ext_method_exists(const Sema *sema, const char *target_name, const char *method_name,
+                              const EnumDef *edef) {
+    if (edef != NULL) {
+        for (int32_t j = 0; j < BUF_LEN(edef->methods); j++) {
+            if (strcmp(edef->methods[j].name, method_name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+    // Primitive — check fn_table
+    const char *key = arena_sprintf(sema->arena, "%s.%s", target_name, method_name);
+    return sema_lookup_fn(sema, key) != NULL;
 }
 
 void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
@@ -814,33 +847,17 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
                 continue;
             }
 
-            // Verify all required pact methods are present in the struct's method list
             StructMethodInfo *pact_methods = NULL;
             collect_pact_methods(sema, pact, &pact_methods, decl->loc);
-
-            for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-                bool found = false;
-                for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
-                    if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    bool has_body =
-                        pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
-                    if (!has_body) {
-                        SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                                 pact_methods[i].name, pact_name);
-                    }
-                }
-            }
+            enforce_required_methods(sema, decl, pact_name, pact_methods, sdef->methods,
+                                     BUF_LEN(sdef->methods));
             BUF_FREE(pact_methods);
         }
         return;
     }
 
     // For enum/primitive targets, check methods exist in fn_table
+    EnumDef *edef = sema_lookup_enum(sema, target_name);
     for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
         const char *pact_name = decl->ext_decl.impl_pacts[pi];
         PactDef *pact = sema_lookup_pact(sema, pact_name);
@@ -852,25 +869,8 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
         StructMethodInfo *pact_methods = NULL;
         collect_pact_methods(sema, pact, &pact_methods, decl->loc);
 
-        // Check enum target
-        EnumDef *edef = sema_lookup_enum(sema, target_name);
         for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-            bool found = false;
-            if (edef != NULL) {
-                for (int32_t j = 0; j < BUF_LEN(edef->methods); j++) {
-                    if (strcmp(edef->methods[j].name, pact_methods[i].name) == 0) {
-                        found = true;
-                        break;
-                    }
-                }
-            } else {
-                // Primitive — check fn_table
-                const char *key =
-                    arena_sprintf(sema->arena, "%s.%s", target_name, pact_methods[i].name);
-                found = sema_lookup_fn(sema, key) != NULL;
-            }
-
-            if (!found) {
+            if (!ext_method_exists(sema, target_name, pact_methods[i].name, edef)) {
                 bool has_body =
                     pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
                 if (!has_body) {
