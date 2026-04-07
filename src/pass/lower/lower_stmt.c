@@ -394,6 +394,64 @@ static HirNode *lower_file(Lower *low, const ASTNode *ast) {
     return file_node;
 }
 
+// ── Inline lower helpers for simple node kinds ─────────────────────
+
+static HirNode *lower_module(Lower *low, const ASTNode *ast) {
+    low->current_module = ast->module.name;
+    HirNode *node = hir_new(low->hir_arena, HIR_MODULE, &TYPE_UNIT_INST, ast->loc);
+    node->module.name = ast->module.name;
+    return node;
+}
+
+static HirNode *lower_type_alias(Lower *low, const ASTNode *ast) {
+    HirNode *node = hir_new(low->hir_arena, HIR_TYPE_ALIAS, &TYPE_UNIT_INST, ast->loc);
+    node->type_alias.name = ast->type_alias.name;
+    node->type_alias.is_pub = false;
+    node->type_alias.underlying = ast->type;
+    return node;
+}
+
+static HirNode *lower_struct_decl_node(Lower *low, const ASTNode *ast) {
+    if (BUF_LEN(ast->struct_decl.type_params) > 0) {
+        return NULL;
+    }
+    HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_DECL, &TYPE_UNIT_INST, ast->loc);
+    node->struct_decl.name = ast->struct_decl.name;
+    node->struct_decl.struct_type = ast->type;
+    return node;
+}
+
+static HirNode *lower_enum_decl_node(Lower *low, const ASTNode *ast) {
+    if (BUF_LEN(ast->enum_decl.type_params) > 0) {
+        return NULL;
+    }
+    HirNode *node = hir_new(low->hir_arena, HIR_ENUM_DECL, &TYPE_UNIT_INST, ast->loc);
+    node->enum_decl.name = ast->enum_decl.name;
+    node->enum_decl.enum_type = ast->type;
+    return node;
+}
+
+static HirNode *lower_return(Lower *low, const ASTNode *ast) {
+    HirNode *value = NULL;
+    if (ast->return_stmt.value != NULL) {
+        value = lower_expr(low, ast->return_stmt.value);
+    }
+    HirNode *node = hir_new(low->hir_arena, HIR_RETURN,
+                            value != NULL ? value->type : &TYPE_UNIT_INST, ast->loc);
+    node->return_stmt.value = value;
+    return node;
+}
+
+static HirNode *lower_break(Lower *low, const ASTNode *ast) {
+    HirNode *node = hir_new(low->hir_arena, HIR_BREAK, &TYPE_UNIT_INST, ast->loc);
+    if (ast->break_stmt.value != NULL) {
+        node->break_stmt.value = lower_expr(low, ast->break_stmt.value);
+    }
+    return node;
+}
+
+// ── Main dispatcher ────────────────────────────────────────────────
+
 HirNode *lower_node(Lower *low, const ASTNode *ast) {
     if (ast == NULL) {
         return NULL;
@@ -403,20 +461,11 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
     case NODE_FILE:
         return lower_file(low, ast);
 
-    case NODE_MODULE: {
-        low->current_module = ast->module.name;
-        HirNode *node = hir_new(low->hir_arena, HIR_MODULE, &TYPE_UNIT_INST, ast->loc);
-        node->module.name = ast->module.name;
-        return node;
-    }
+    case NODE_MODULE:
+        return lower_module(low, ast);
 
-    case NODE_TYPE_ALIAS: {
-        HirNode *node = hir_new(low->hir_arena, HIR_TYPE_ALIAS, &TYPE_UNIT_INST, ast->loc);
-        node->type_alias.name = ast->type_alias.name;
-        node->type_alias.is_pub = false;
-        node->type_alias.underlying = ast->type;
-        return node;
-    }
+    case NODE_TYPE_ALIAS:
+        return lower_type_alias(low, ast);
 
     case NODE_FN_DECL:
         // Skip generic fn templates — only monomorphized copies are lowered
@@ -425,42 +474,17 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
         }
         return lower_fn_decl(low, ast);
 
-    case NODE_STRUCT_DECL: {
-        // Handled primarily in lower_file; fallback for other ctxs
-        if (BUF_LEN(ast->struct_decl.type_params) > 0) {
-            return NULL;
-        }
-        HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_DECL, &TYPE_UNIT_INST, ast->loc);
-        node->struct_decl.name = ast->struct_decl.name;
-        node->struct_decl.struct_type = ast->type;
-        return node;
-    }
+    case NODE_STRUCT_DECL:
+        return lower_struct_decl_node(low, ast);
 
-    case NODE_ENUM_DECL: {
-        // Handled primarily in lower_file; fallback for other ctxs
-        if (BUF_LEN(ast->enum_decl.type_params) > 0) {
-            return NULL;
-        }
-        HirNode *node = hir_new(low->hir_arena, HIR_ENUM_DECL, &TYPE_UNIT_INST, ast->loc);
-        node->enum_decl.name = ast->enum_decl.name;
-        node->enum_decl.enum_type = ast->type;
-        return node;
-    }
+    case NODE_ENUM_DECL:
+        return lower_enum_decl_node(low, ast);
 
     case NODE_PACT_DECL:
-        // Pact decls are compile-time only; nothing to lower
         return NULL;
 
-    case NODE_RETURN: {
-        HirNode *value = NULL;
-        if (ast->return_stmt.value != NULL) {
-            value = lower_expr(low, ast->return_stmt.value);
-        }
-        HirNode *node = hir_new(low->hir_arena, HIR_RETURN,
-                                value != NULL ? value->type : &TYPE_UNIT_INST, ast->loc);
-        node->return_stmt.value = value;
-        return node;
-    }
+    case NODE_RETURN:
+        return lower_return(low, ast);
 
     case NODE_VAR_DECL:
         return lower_var_decl(low, ast);
@@ -468,13 +492,8 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
     case NODE_EXPR_STMT:
         return lower_expr_stmt(low, ast);
 
-    case NODE_BREAK: {
-        HirNode *node = hir_new(low->hir_arena, HIR_BREAK, &TYPE_UNIT_INST, ast->loc);
-        if (ast->break_stmt.value != NULL) {
-            node->break_stmt.value = lower_expr(low, ast->break_stmt.value);
-        }
-        return node;
-    }
+    case NODE_BREAK:
+        return lower_break(low, ast);
 
     case NODE_CONTINUE:
         return hir_new(low->hir_arena, HIR_CONTINUE, &TYPE_UNIT_INST, ast->loc);
@@ -504,7 +523,6 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
         return lower_stmt_if(low, ast);
 
     default:
-        // Expressions at stmt level
         return lower_expr(low, ast);
     }
 }

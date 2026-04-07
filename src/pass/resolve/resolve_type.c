@@ -38,95 +38,95 @@ GenericTypeAlias *sema_lookup_generic_type_alias(const Sema *sema, const char *n
     return hash_table_lookup(&sema->generic_type_alias_table, name);
 }
 
-// ── AST type resolution ────────────────────────────────────────────────
+// ── Per-kind type resolvers ─────────────────────────────────────────────
 
-const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
-    if (ast_type == NULL || ast_type->kind == AST_TYPE_INFERRED) {
-        return NULL;
-    }
-    if (ast_type->kind == AST_TYPE_ARRAY) {
-        const Type *elem = resolve_ast_type(sema, ast_type->array_elem);
-        if (elem == NULL) {
-            SEMA_ERR(sema, ast_type->loc, "array elem type required");
-            return &TYPE_ERR_INST;
-        }
-        return type_create_array(sema->arena, elem, ast_type->array_size);
-    }
-    if (ast_type->kind == AST_TYPE_SLICE) {
-        const Type *elem = resolve_ast_type(sema, ast_type->slice_elem);
-        if (elem == NULL) {
-            SEMA_ERR(sema, ast_type->loc, "slice elem type required");
-            return &TYPE_ERR_INST;
-        }
-        return type_create_slice(sema->arena, elem);
-    }
-    if (ast_type->kind == AST_TYPE_TUPLE) {
-        const Type **elems = NULL;
-        for (int32_t i = 0; i < BUF_LEN(ast_type->tuple_elems); i++) {
-            const Type *elem = resolve_ast_type(sema, ast_type->tuple_elems[i]);
-            if (elem == NULL) {
-                elem = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(elems, elem);
-        }
-        return type_create_tuple(sema->arena, elems, BUF_LEN(elems));
-    }
-    if (ast_type->kind == AST_TYPE_PTR) {
-        const Type *pointee = resolve_ast_type(sema, ast_type->ptr_elem);
-        if (pointee == NULL) {
-            SEMA_ERR(sema, ast_type->loc, "ptr elem type required");
-            return &TYPE_ERR_INST;
-        }
-        return type_create_ptr(sema->arena, pointee, false);
-    }
-    // ?T → Option<T>
-    if (ast_type->kind == AST_TYPE_OPTION) {
-        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
-        if (gdef == NULL) {
-            SEMA_ERR(sema, ast_type->loc, "built-in Option enum not found");
-            return &TYPE_ERR_INST;
-        }
-        ASTType val_args[1] = {*ast_type->option_elem};
-        const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 1, ast_type->loc);
-        if (mangled != NULL) {
-            return sema_lookup_type_alias(sema, mangled);
-        }
+static const Type *resolve_array_type(Sema *sema, const ASTType *ast_type) {
+    const Type *elem = resolve_ast_type(sema, ast_type->array_elem);
+    if (elem == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "array elem type required");
         return &TYPE_ERR_INST;
     }
-    // T ! E → Result<T, E>
-    if (ast_type->kind == AST_TYPE_RESULT) {
-        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Result");
-        if (gdef == NULL) {
-            SEMA_ERR(sema, ast_type->loc, "built-in Result enum not found");
-            return &TYPE_ERR_INST;
-        }
-        ASTType val_args[2] = {*ast_type->result_ok, *ast_type->result_err};
-        const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 2, ast_type->loc);
-        if (mangled != NULL) {
-            return sema_lookup_type_alias(sema, mangled);
-        }
+    return type_create_array(sema->arena, elem, ast_type->array_size);
+}
+
+static const Type *resolve_slice_type(Sema *sema, const ASTType *ast_type) {
+    const Type *elem = resolve_ast_type(sema, ast_type->slice_elem);
+    if (elem == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "slice elem type required");
         return &TYPE_ERR_INST;
     }
-    // fn(T1, T2) -> R → TYPE_FN
-    if (ast_type->kind == AST_TYPE_FN) {
-        const Type **params = NULL;
-        for (int32_t i = 0; i < BUF_LEN(ast_type->fn_param_types); i++) {
-            const Type *pt = resolve_ast_type(sema, ast_type->fn_param_types[i]);
-            if (pt == NULL) {
-                pt = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(params, pt);
+    return type_create_slice(sema->arena, elem);
+}
+
+static const Type *resolve_tuple_type(Sema *sema, const ASTType *ast_type) {
+    const Type **elems = NULL;
+    for (int32_t i = 0; i < BUF_LEN(ast_type->tuple_elems); i++) {
+        const Type *elem = resolve_ast_type(sema, ast_type->tuple_elems[i]);
+        if (elem == NULL) {
+            elem = &TYPE_ERR_INST;
         }
-        const Type *ret = NULL;
-        if (ast_type->fn_return_type != NULL) {
-            ret = resolve_ast_type(sema, ast_type->fn_return_type);
-        }
-        if (ret == NULL) {
-            ret = &TYPE_UNIT_INST;
-        }
-        return type_create_fn(sema->arena, params, BUF_LEN(params), ret, ast_type->fn_kind);
+        BUF_PUSH(elems, elem);
     }
-    // AST_TYPE_NAME
+    return type_create_tuple(sema->arena, elems, BUF_LEN(elems));
+}
+
+static const Type *resolve_ptr_type(Sema *sema, const ASTType *ast_type) {
+    const Type *pointee = resolve_ast_type(sema, ast_type->ptr_elem);
+    if (pointee == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "ptr elem type required");
+        return &TYPE_ERR_INST;
+    }
+    return type_create_ptr(sema->arena, pointee, false);
+}
+
+static const Type *resolve_option_type(Sema *sema, const ASTType *ast_type) {
+    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
+    if (gdef == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "built-in Option enum not found");
+        return &TYPE_ERR_INST;
+    }
+    ASTType val_args[1] = {*ast_type->option_elem};
+    const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 1, ast_type->loc);
+    if (mangled != NULL) {
+        return sema_lookup_type_alias(sema, mangled);
+    }
+    return &TYPE_ERR_INST;
+}
+
+static const Type *resolve_result_type(Sema *sema, const ASTType *ast_type) {
+    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Result");
+    if (gdef == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "built-in Result enum not found");
+        return &TYPE_ERR_INST;
+    }
+    ASTType val_args[2] = {*ast_type->result_ok, *ast_type->result_err};
+    const char *mangled = instantiate_generic_enum(sema, gdef, val_args, 2, ast_type->loc);
+    if (mangled != NULL) {
+        return sema_lookup_type_alias(sema, mangled);
+    }
+    return &TYPE_ERR_INST;
+}
+
+static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
+    const Type **params = NULL;
+    for (int32_t i = 0; i < BUF_LEN(ast_type->fn_param_types); i++) {
+        const Type *pt = resolve_ast_type(sema, ast_type->fn_param_types[i]);
+        if (pt == NULL) {
+            pt = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(params, pt);
+    }
+    const Type *ret = NULL;
+    if (ast_type->fn_return_type != NULL) {
+        ret = resolve_ast_type(sema, ast_type->fn_return_type);
+    }
+    if (ret == NULL) {
+        ret = &TYPE_UNIT_INST;
+    }
+    return type_create_fn(sema->arena, params, BUF_LEN(params), ret, ast_type->fn_kind);
+}
+
+static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {
         return type;
@@ -204,6 +204,35 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
     }
     SEMA_ERR(sema, ast_type->loc, "unknown type '%s'", ast_type->name);
     return &TYPE_ERR_INST;
+}
+
+// ── Dispatch table ─────────────────────────────────────────────────────
+
+typedef const Type *(*TypeResolver)(Sema *, const ASTType *);
+
+static const TypeResolver TYPE_RESOLVERS[] = {
+    [AST_TYPE_NAME] = resolve_name_type,     [AST_TYPE_ARRAY] = resolve_array_type,
+    [AST_TYPE_SLICE] = resolve_slice_type,   [AST_TYPE_TUPLE] = resolve_tuple_type,
+    [AST_TYPE_PTR] = resolve_ptr_type,       [AST_TYPE_OPTION] = resolve_option_type,
+    [AST_TYPE_RESULT] = resolve_result_type, [AST_TYPE_FN] = resolve_fn_type,
+};
+
+#define TYPE_RESOLVER_COUNT ((int32_t)(sizeof(TYPE_RESOLVERS) / sizeof(TYPE_RESOLVERS[0])))
+
+// ── AST type resolution ────────────────────────────────────────────────
+
+const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
+    if (ast_type == NULL || ast_type->kind == AST_TYPE_INFERRED) {
+        return NULL;
+    }
+    int32_t kind = (int32_t)ast_type->kind;
+    if (kind >= 0 && kind < TYPE_RESOLVER_COUNT) {
+        TypeResolver resolver = TYPE_RESOLVERS[kind];
+        if (resolver != NULL) {
+            return resolver(sema, ast_type);
+        }
+    }
+    return NULL;
 }
 
 // ── Lit ↔ type mapping ─────────────────────────────────────────────
