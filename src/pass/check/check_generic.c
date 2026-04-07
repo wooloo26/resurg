@@ -97,6 +97,80 @@ const char *build_mangled_name(Sema *sema, const char *base, const Type **type_a
     return arena_sprintf(sema->arena, "%s", buf);
 }
 
+// ── Generic instantiation helpers ─────────────────────────────────
+
+/** Resolve AST type args into concrete Type pointers. Caller must BUF_FREE. */
+static const Type **resolve_type_args(Sema *sema, ASTType *type_args, int32_t count) {
+    const Type **resolved = NULL;
+    for (int32_t i = 0; i < count; i++) {
+        const Type *t = resolve_ast_type(sema, &type_args[i]);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(resolved, t);
+    }
+    return resolved;
+}
+
+/** Push type param substitutions into the sema type_param_table. */
+static void push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved,
+                             int32_t count) {
+    for (int32_t i = 0; i < count; i++) {
+        hash_table_insert(&sema->type_param_table, params[i].name, (void *)resolved[i]);
+    }
+}
+
+/** Pop type param substitutions from the sema type_param_table. */
+static void pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count) {
+    for (int32_t i = 0; i < count; i++) {
+        hash_table_remove(&sema->type_param_table, params[i].name);
+    }
+}
+
+/** Register methods from orig_methods under the mangled type name. */
+static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
+                                     StructMethodInfo **out_methods, const char *mangled) {
+    for (int32_t i = 0; i < BUF_LEN(orig_methods); i++) {
+        ASTNode *method = orig_methods[i];
+        StructMethodInfo mi = {.name = method->fn_decl.name,
+                               .is_mut_recv = method->fn_decl.is_mut_recv,
+                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
+                               .recv_name = method->fn_decl.recv_name,
+                               .decl = method};
+        BUF_PUSH(*out_methods, mi);
+
+        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
+
+        const Type *return_type = &TYPE_UNIT_INST;
+        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
+            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
+            if (return_type == NULL) {
+                return_type = &TYPE_UNIT_INST;
+            }
+        }
+
+        FnSig *sig = rsg_malloc(sizeof(*sig));
+        sig->name = mi.name;
+        sig->return_type = return_type;
+        sig->param_types = NULL;
+        sig->param_names = NULL;
+        sig->param_count = BUF_LEN(method->fn_decl.params);
+        sig->is_pub = false;
+
+        for (int32_t j = 0; j < sig->param_count; j++) {
+            ASTNode *param = method->fn_decl.params[j];
+            const Type *pt = resolve_ast_type(sema, &param->param.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(sig->param_types, pt);
+            BUF_PUSH(sig->param_names, param->param.name);
+        }
+
+        hash_table_insert(&sema->fn_table, method_key, sig);
+    }
+}
+
 // ── Generic struct instantiation ──────────────────────────────────
 
 /**
@@ -113,30 +187,15 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
         return NULL;
     }
 
-    // Resolve type args
-    const Type **resolved_args = NULL;
-    for (int32_t i = 0; i < type_arg_count; i++) {
-        const Type *t = resolve_ast_type(sema, &type_args[i]);
-        if (t == NULL) {
-            t = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(resolved_args, t);
-    }
-
-    // Build mangled name
+    const Type **resolved_args = resolve_type_args(sema, type_args, type_arg_count);
     const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
 
-    // Check if already instantiated
     if (sema_lookup_struct(sema, mangled) != NULL) {
         BUF_FREE(resolved_args);
         return mangled;
     }
 
-    // Push type param substitutions
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
-                          (void *)resolved_args[i]);
-    }
+    push_type_params(sema, gdef->type_params, resolved_args, expected);
 
     // Build concrete struct field types
     ASTNode *orig = gdef->decl;
@@ -173,46 +232,7 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
     };
     def->type = type_create_struct(sema->arena, &spec);
 
-    // Register methods with the mangled struct name
-    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.methods); i++) {
-        ASTNode *method = orig->struct_decl.methods[i];
-        StructMethodInfo mi = {.name = method->fn_decl.name,
-                               .is_mut_recv = method->fn_decl.is_mut_recv,
-                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
-                               .recv_name = method->fn_decl.recv_name,
-                               .decl = method};
-        BUF_PUSH(def->methods, mi);
-
-        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INST;
-        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INST;
-            }
-        }
-
-        FnSig *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->param_types = NULL;
-        sig->param_names = NULL;
-        sig->param_count = BUF_LEN(method->fn_decl.params);
-        sig->is_pub = false;
-
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = method->fn_decl.params[j];
-            const Type *pt = resolve_ast_type(sema, &param->param.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(sig->param_types, pt);
-            BUF_PUSH(sig->param_names, param->param.name);
-        }
-
-        hash_table_insert(&sema->fn_table, method_key, sig);
-    }
+    register_generic_methods(sema, orig->struct_decl.methods, &def->methods, mangled);
 
     hash_table_insert(&sema->struct_table, mangled, def);
     hash_table_insert(&sema->type_alias_table, mangled, (void *)def->type);
@@ -246,10 +266,7 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTTy
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    // Clear type param substitutions
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_remove(&sema->type_param_table, gdef->type_params[i].name);
-    }
+    pop_type_params(sema, gdef->type_params, expected);
 
     BUF_FREE(resolved_args);
     return mangled;
@@ -271,30 +288,15 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
         return NULL;
     }
 
-    // Resolve type args
-    const Type **resolved_args = NULL;
-    for (int32_t i = 0; i < type_arg_count; i++) {
-        const Type *t = resolve_ast_type(sema, &type_args[i]);
-        if (t == NULL) {
-            t = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(resolved_args, t);
-    }
-
-    // Build mangled name
+    const Type **resolved_args = resolve_type_args(sema, type_args, type_arg_count);
     const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
 
-    // Check if already instantiated
     if (sema_lookup_enum(sema, mangled) != NULL) {
         BUF_FREE(resolved_args);
         return mangled;
     }
 
-    // Push type param substitutions
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
-                          (void *)resolved_args[i]);
-    }
+    push_type_params(sema, gdef->type_params, resolved_args, expected);
 
     // Build concrete enum variants
     ASTNode *orig = gdef->decl;
@@ -357,46 +359,7 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
     def->methods = NULL;
     def->type = enum_type;
 
-    // Register methods with the mangled enum name
-    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
-        ASTNode *method = orig->enum_decl.methods[i];
-        StructMethodInfo mi = {.name = method->fn_decl.name,
-                               .is_mut_recv = method->fn_decl.is_mut_recv,
-                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
-                               .recv_name = method->fn_decl.recv_name,
-                               .decl = method};
-        BUF_PUSH(def->methods, mi);
-
-        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INST;
-        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INST;
-            }
-        }
-
-        FnSig *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->param_types = NULL;
-        sig->param_names = NULL;
-        sig->param_count = BUF_LEN(method->fn_decl.params);
-        sig->is_pub = false;
-
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = method->fn_decl.params[j];
-            const Type *pt = resolve_ast_type(sema, &param->param.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(sig->param_types, pt);
-            BUF_PUSH(sig->param_names, param->param.name);
-        }
-
-        hash_table_insert(&sema->fn_table, method_key, sig);
-    }
+    register_generic_methods(sema, orig->enum_decl.methods, &def->methods, mangled);
 
     hash_table_insert(&sema->enum_table, mangled, def);
     hash_table_insert(&sema->type_alias_table, mangled, (void *)enum_type);
@@ -428,10 +391,7 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    // Clear type param substitutions
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_remove(&sema->type_param_table, gdef->type_params[i].name);
-    }
+    pop_type_params(sema, gdef->type_params, expected);
 
     BUF_FREE(resolved_args);
     return mangled;

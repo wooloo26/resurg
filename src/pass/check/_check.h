@@ -42,9 +42,15 @@ void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_typ
 const Type *check_match(Sema *sema, ASTNode *node);
 const Type *check_enum_init(Sema *sema, ASTNode *node);
 
+/** Grouped output params for match pattern coverage tracking. */
+typedef struct {
+    bool *variant_covered;
+    bool *has_wildcard;
+} MatchCoverage;
+
 /** Check a pattern against an operand type, binding sub-pattern vars. */
-void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bool *variant_covered,
-                   bool *has_wildcard);
+void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
+                   MatchCoverage *coverage);
 
 // ── Generic instantiation (check_generic.c) ──────────────────────
 

@@ -29,11 +29,11 @@ static void mark_variant_covered(const Type *operand_type, const char *name,
 // ── Pattern checking ───────────────────────────────────────────────
 
 /** Check a pattern and bind vars in the current scope. */
-void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bool *variant_covered,
-                   bool *has_wildcard) {
+void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
+                   MatchCoverage *coverage) {
     switch (pattern->kind) {
     case PATTERN_WILDCARD:
-        *has_wildcard = true;
+        *coverage->has_wildcard = true;
         break;
 
     case PATTERN_BINDING:
@@ -42,8 +42,8 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bo
             int32_t idx = find_variant_idx(operand_type, pattern->name);
             if (idx >= 0) {
                 pattern->kind = PATTERN_VARIANT_UNIT;
-                if (variant_covered != NULL) {
-                    variant_covered[idx] = true;
+                if (coverage->variant_covered != NULL) {
+                    coverage->variant_covered[idx] = true;
                 }
                 break;
             }
@@ -72,7 +72,7 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bo
 
     case PATTERN_VARIANT_UNIT:
         if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
-            mark_variant_covered(operand_type, pattern->name, variant_covered);
+            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
         }
         break;
 
@@ -83,7 +83,7 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bo
                 SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
                 break;
             }
-            mark_variant_covered(operand_type, pattern->name, variant_covered);
+            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
             // Bind sub-patterns to tuple elem types
             for (int32_t i = 0; i < BUF_LEN(pattern->sub_patterns); i++) {
                 ASTPattern *sub = pattern->sub_patterns[i];
@@ -104,7 +104,7 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type, bo
                 SEMA_ERR(sema, pattern->loc, "unknown variant '%s'", pattern->name);
                 break;
             }
-            mark_variant_covered(operand_type, pattern->name, variant_covered);
+            mark_variant_covered(operand_type, pattern->name, coverage->variant_covered);
             // Bind field names to their types
             for (int32_t i = 0; i < BUF_LEN(pattern->field_names); i++) {
                 const char *fname = pattern->field_names[i];
@@ -138,7 +138,8 @@ const Type *check_match(Sema *sema, ASTNode *node) {
         ASTMatchArm *arm = &node->match_expr.arms[i];
         scope_push(sema, false);
 
-        check_pattern(sema, arm->pattern, operand_type, variant_covered, &has_wildcard);
+        check_pattern(sema, arm->pattern, operand_type,
+                      &(MatchCoverage){variant_covered, &has_wildcard});
 
         if (arm->guard != NULL) {
             const Type *guard_type = check_node(sema, arm->guard);

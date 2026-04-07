@@ -5,8 +5,8 @@
 HirNode *lower_stmt_if(Lower *low, const ASTNode *ast) {
     // if-let: desugar to HIR_MATCH with 2 arms
     if (ast->if_expr.pattern != NULL) {
-        HirNode *operand = lower_expr(low, ast->if_expr.pattern_init);
-        const Type *op_type = operand->type;
+        HirNode *match_operand = lower_expr(low, ast->if_expr.pattern_init);
+        const Type *op_type = match_operand->type;
         SrcLoc loc = ast->loc;
 
         const char *tmp = lower_make_temp_name(low);
@@ -17,16 +17,17 @@ HirNode *lower_stmt_if(Lower *low, const ASTNode *ast) {
         HirNode **arm_bodies = NULL;
         HirNode **arm_bindings = NULL;
 
+        PatternOperand operand = {lower_make_var_ref(low, tmp_sym, loc), tmp_sym, op_type};
+
         // Arm 0: pattern match
-        HirNode *cond = lower_pattern_cond(low, ast->if_expr.pattern,
-                                           lower_make_var_ref(low, tmp_sym, loc), op_type, loc);
+        HirNode *cond = lower_pattern_cond(low, ast->if_expr.pattern, &operand, loc);
         BUF_PUSH(arm_conds, cond);
         BUF_PUSH(arm_guards, NULL);
 
         lower_scope_enter(low);
         lower_pattern_bindings(low, ast->if_expr.pattern, op_type);
         HirNode *then = lower_node(low, ast->if_expr.then_body);
-        HirNode *binds = lower_arm_bindings_block(low, ast->if_expr.pattern, tmp_sym, op_type, loc);
+        HirNode *binds = lower_arm_bindings_block(low, ast->if_expr.pattern, &operand, loc);
         BUF_PUSH(arm_bodies, then);
         BUF_PUSH(arm_bindings, binds);
         lower_scope_leave(low);
@@ -41,7 +42,7 @@ HirNode *lower_stmt_if(Lower *low, const ASTNode *ast) {
         BUF_PUSH(arm_bindings, NULL);
 
         HirNode *match = hir_new(low->hir_arena, HIR_MATCH, ast->type, loc);
-        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, operand);
+        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, match_operand);
         match->match_expr.arm_conds = arm_conds;
         match->match_expr.arm_guards = arm_guards;
         match->match_expr.arm_bodies = arm_bodies;

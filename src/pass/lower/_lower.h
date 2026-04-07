@@ -115,14 +115,21 @@ HirNode *lower_match(Lower *low, const ASTNode *ast);
 
 // ── Pattern helpers (from lower_match.c) ──────────────────────────────
 
+/** Grouped params describing the match operand for pattern lowering. */
+typedef struct {
+    HirNode *ref;
+    HirSym *sym;
+    const Type *type;
+} PatternOperand;
+
 /** Lower a match arm cond from the AST pattern. */
-HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *operand_ref,
-                            const Type *operand_type, SrcLoc loc);
+HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, const PatternOperand *operand,
+                            SrcLoc loc);
 /** Register match arm bindings: extract vars from variant patterns. */
 void lower_pattern_bindings(Lower *low, const ASTPattern *pattern, const Type *operand_type);
 /** Build the bindings block for a single match arm. */
-HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym *operand_sym,
-                                  const Type *operand_type, SrcLoc loc);
+HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern,
+                                  const PatternOperand *operand, SrcLoc loc);
 /** Lower a NODE_FN_DECL. */
 HirNode *lower_fn_decl(Lower *low, const ASTNode *ast);
 /** Lower a method decl inside a struct. */

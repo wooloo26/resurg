@@ -34,7 +34,8 @@ const Type *check_if(Sema *sema, ASTNode *node) {
             int32_t vc = type_enum_variant_count(init_type);
             bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
             bool has_wildcard = false;
-            check_pattern(sema, node->if_expr.pattern, init_type, variant_covered, &has_wildcard);
+            check_pattern(sema, node->if_expr.pattern, init_type,
+                          &(MatchCoverage){variant_covered, &has_wildcard});
         }
         const Type *then_type = check_node(sema, node->if_expr.then_body);
         scope_pop(sema);
@@ -307,8 +308,8 @@ static void check_while(Sema *sema, ASTNode *node) {
             int32_t vc = type_enum_variant_count(init_type);
             bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
             bool has_wildcard = false;
-            check_pattern(sema, node->while_loop.pattern, init_type, variant_covered,
-                          &has_wildcard);
+            check_pattern(sema, node->while_loop.pattern, init_type,
+                          &(MatchCoverage){variant_covered, &has_wildcard});
         }
         check_node(sema, node->while_loop.body);
         scope_pop(sema);

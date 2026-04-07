@@ -122,8 +122,8 @@ HirNode *lower_while(Lower *low, const ASTNode *ast) {
 
     // while-let: desugar to loop { match pattern_init { P => body, _ => break } }
     if (ast->while_loop.pattern != NULL) {
-        HirNode *operand = lower_expr(low, ast->while_loop.pattern_init);
-        const Type *op_type = operand->type;
+        HirNode *match_operand = lower_expr(low, ast->while_loop.pattern_init);
+        const Type *op_type = match_operand->type;
 
         const char *tmp = lower_make_temp_name(low);
         HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, op_type, false, loc});
@@ -133,17 +133,17 @@ HirNode *lower_while(Lower *low, const ASTNode *ast) {
         HirNode **arm_bodies = NULL;
         HirNode **arm_bindings = NULL;
 
+        PatternOperand operand = {lower_make_var_ref(low, tmp_sym, loc), tmp_sym, op_type};
+
         // Arm 0: pattern match → body
-        HirNode *cond = lower_pattern_cond(low, ast->while_loop.pattern,
-                                           lower_make_var_ref(low, tmp_sym, loc), op_type, loc);
+        HirNode *cond = lower_pattern_cond(low, ast->while_loop.pattern, &operand, loc);
         BUF_PUSH(arm_conds, cond);
         BUF_PUSH(arm_guards, NULL);
 
         lower_scope_enter(low);
         lower_pattern_bindings(low, ast->while_loop.pattern, op_type);
         HirNode *body = lower_block(low, ast->while_loop.body);
-        HirNode *binds =
-            lower_arm_bindings_block(low, ast->while_loop.pattern, tmp_sym, op_type, loc);
+        HirNode *binds = lower_arm_bindings_block(low, ast->while_loop.pattern, &operand, loc);
         BUF_PUSH(arm_bodies, body);
         BUF_PUSH(arm_bindings, binds);
         lower_scope_leave(low);
@@ -161,7 +161,7 @@ HirNode *lower_while(Lower *low, const ASTNode *ast) {
         BUF_PUSH(arm_bindings, NULL);
 
         HirNode *match = hir_new(low->hir_arena, HIR_MATCH, &TYPE_UNIT_INST, loc);
-        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, operand);
+        match->match_expr.operand = lower_make_var_decl(low, tmp_sym, match_operand);
         match->match_expr.arm_conds = arm_conds;
         match->match_expr.arm_guards = arm_guards;
         match->match_expr.arm_bodies = arm_bodies;

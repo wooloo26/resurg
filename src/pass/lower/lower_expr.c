@@ -120,21 +120,29 @@ static HirNode *join_comparison(Lower *low, HirNode *result, HirNode *cmp, Token
     return join;
 }
 
-/** Build an elem access: array idx or tuple idx depending on @p kind. */
-static HirNode *build_elem_access(Lower *low, HirSym *sym, int32_t idx, const Type *elem_type,
-                                  HirNodeKind kind, SrcLoc loc) {
-    HirNode *ref = lower_make_var_ref(low, sym, loc);
-    if (kind == HIR_IDX) {
-        IntLitSpec idx_spec = {(uint64_t)idx, &TYPE_I32_INST, TYPE_I32, loc};
+/** Grouped params for building an elem access. */
+typedef struct {
+    HirSym *sym;
+    int32_t idx;
+    const Type *elem_type;
+    HirNodeKind kind;
+    SrcLoc loc;
+} ElemAccessSpec;
+
+/** Build an elem access: array idx or tuple idx depending on @p spec->kind. */
+static HirNode *build_elem_access(Lower *low, const ElemAccessSpec *spec) {
+    HirNode *ref = lower_make_var_ref(low, spec->sym, spec->loc);
+    if (spec->kind == HIR_IDX) {
+        IntLitSpec idx_spec = {(uint64_t)spec->idx, &TYPE_I32_INST, TYPE_I32, spec->loc};
         HirNode *idx = lower_make_int_lit(low, &idx_spec);
-        HirNode *elem = hir_new(low->hir_arena, HIR_IDX, elem_type, loc);
+        HirNode *elem = hir_new(low->hir_arena, HIR_IDX, spec->elem_type, spec->loc);
         elem->idx_access.object = ref;
         elem->idx_access.idx = idx;
         return elem;
     }
-    HirNode *elem = hir_new(low->hir_arena, HIR_TUPLE_IDX, elem_type, loc);
+    HirNode *elem = hir_new(low->hir_arena, HIR_TUPLE_IDX, spec->elem_type, spec->loc);
     elem->tuple_idx.object = ref;
-    elem->tuple_idx.elem_idx = idx;
+    elem->tuple_idx.elem_idx = spec->idx;
     return elem;
 }
 
@@ -163,8 +171,10 @@ static HirNode *lower_compound_equality(Lower *low, HirNode *left, HirNode *righ
     HirNodeKind access_kind = is_array ? HIR_IDX : HIR_TUPLE_IDX;
     for (int32_t i = 0; i < count; i++) {
         const Type *elem_type = is_array ? type->array.elem : type->tuple.elems[i];
-        HirNode *left_elem = build_elem_access(low, left_sym, i, elem_type, access_kind, loc);
-        HirNode *right_elem = build_elem_access(low, right_sym, i, elem_type, access_kind, loc);
+        ElemAccessSpec left_ea = {left_sym, i, elem_type, access_kind, loc};
+        ElemAccessSpec right_ea = {right_sym, i, elem_type, access_kind, loc};
+        HirNode *left_elem = build_elem_access(low, &left_ea);
+        HirNode *right_elem = build_elem_access(low, &right_ea);
         HirNode *cmp = build_elem_comparison(low, left_elem, right_elem, elem_op);
         result = join_comparison(low, result, cmp, join_op, loc);
     }

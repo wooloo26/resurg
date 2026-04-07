@@ -3,8 +3,8 @@
 // ── Match / pattern lower ──────────────────────────────────────────
 
 /** Lower a match arm cond from the AST pattern. */
-HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *operand_ref,
-                            const Type *operand_type, SrcLoc loc) {
+HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, const PatternOperand *operand,
+                            SrcLoc loc) {
     switch (pattern->kind) {
     case PATTERN_WILDCARD:
     case PATTERN_BINDING:
@@ -13,16 +13,16 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *oper
     case PATTERN_LIT: {
         HirNode *lit = lower_expr(low, pattern->lit);
         // Str comparison via rsg_str_equal
-        if (operand_type != NULL && operand_type->kind == TYPE_STR) {
+        if (operand->type != NULL && operand->type->kind == TYPE_STR) {
             HirNode **args = NULL;
-            BUF_PUSH(args, operand_ref);
+            BUF_PUSH(args, operand->ref);
             BUF_PUSH(args, lit);
             return lower_make_builtin_call(
                 low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, loc});
         }
         HirNode *cmp = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
         cmp->binary.op = TOKEN_EQUAL_EQUAL;
-        cmp->binary.left = operand_ref;
+        cmp->binary.left = operand->ref;
         cmp->binary.right = lit;
         return cmp;
     }
@@ -33,12 +33,12 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *oper
 
         HirNode *ge = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
         ge->binary.op = TOKEN_GREATER_EQUAL;
-        ge->binary.left = operand_ref;
+        ge->binary.left = operand->ref;
         ge->binary.right = start;
 
         HirNode *upper = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
         upper->binary.op = pattern->range_inclusive ? TOKEN_LESS_EQUAL : TOKEN_LESS;
-        upper->binary.left = operand_ref;
+        upper->binary.left = operand->ref;
         upper->binary.right = end;
 
         HirNode *combined = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
@@ -51,12 +51,12 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, HirNode *oper
     case PATTERN_VARIANT_UNIT:
     case PATTERN_VARIANT_TUPLE:
     case PATTERN_VARIANT_STRUCT: {
-        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        const EnumVariant *variant = type_enum_find_variant(operand->type, pattern->name);
         if (variant == NULL) {
             return NULL;
         }
         HirNode *tag_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, &TYPE_I32_INST, loc);
-        tag_access->struct_field_access.object = operand_ref;
+        tag_access->struct_field_access.object = operand->ref;
         tag_access->struct_field_access.field = "_tag";
         tag_access->struct_field_access.via_ptr = false;
 
@@ -121,21 +121,21 @@ void lower_pattern_bindings(Lower *low, const ASTPattern *pattern, const Type *o
  * Extracts vars from the pattern and initializes them from the
  * match operand.  Returns NULL when no bindings are needed.
  */
-HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym *operand_sym,
-                                  const Type *operand_type, SrcLoc loc) {
+HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern,
+                                  const PatternOperand *operand, SrcLoc loc) {
     HirNode **bind_stmts = NULL;
 
     switch (pattern->kind) {
     case PATTERN_BINDING: {
         HirSym *bsym = lower_scope_lookup(low, pattern->name);
         if (bsym != NULL) {
-            HirNode *init = lower_make_var_ref(low, operand_sym, loc);
+            HirNode *init = lower_make_var_ref(low, operand->sym, loc);
             BUF_PUSH(bind_stmts, lower_make_var_decl(low, bsym, init));
         }
         break;
     }
     case PATTERN_VARIANT_TUPLE: {
-        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        const EnumVariant *variant = type_enum_find_variant(operand->type, pattern->name);
         if (variant == NULL) {
             break;
         }
@@ -150,7 +150,7 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym 
             }
             HirNode *data_access =
                 hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, variant->tuple_types[j], loc);
-            data_access->struct_field_access.object = lower_make_var_ref(low, operand_sym, loc);
+            data_access->struct_field_access.object = lower_make_var_ref(low, operand->sym, loc);
             data_access->struct_field_access.field =
                 arena_sprintf(low->hir_arena, "_data.%s._%d", pattern->name, j);
             data_access->struct_field_access.via_ptr = false;
@@ -159,7 +159,7 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym 
         break;
     }
     case PATTERN_VARIANT_STRUCT: {
-        const EnumVariant *variant = type_enum_find_variant(operand_type, pattern->name);
+        const EnumVariant *variant = type_enum_find_variant(operand->type, pattern->name);
         if (variant == NULL) {
             break;
         }
@@ -171,7 +171,7 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern, HirSym 
             }
             const Type *ftype = hir_sym_type(bsym);
             HirNode *data_access = hir_new(low->hir_arena, HIR_STRUCT_FIELD_ACCESS, ftype, loc);
-            data_access->struct_field_access.object = lower_make_var_ref(low, operand_sym, loc);
+            data_access->struct_field_access.object = lower_make_var_ref(low, operand->sym, loc);
             data_access->struct_field_access.field =
                 arena_sprintf(low->hir_arena, "_data.%s.%s", pattern->name, fname);
             data_access->struct_field_access.via_ptr = false;
@@ -211,9 +211,9 @@ HirNode *lower_match(Lower *low, const ASTNode *ast) {
         const ASTMatchArm *arm = &ast->match_expr.arms[i];
 
         HirNode *operand_ref = lower_make_var_ref(low, match_sym, loc);
+        PatternOperand operand = {operand_ref, match_sym, operand_type};
 
-        HirNode *cond =
-            lower_pattern_cond(low, arm->pattern, operand_ref, operand_type, arm->pattern->loc);
+        HirNode *cond = lower_pattern_cond(low, arm->pattern, &operand, arm->pattern->loc);
 
         // Guard — bindings must be emitted before guard in codegen
         HirNode *guard = NULL;
@@ -233,8 +233,7 @@ HirNode *lower_match(Lower *low, const ASTNode *ast) {
         HirNode *body = lower_expr(low, arm->body);
         BUF_PUSH(arm_bodies, body);
 
-        BUF_PUSH(arm_bindings,
-                 lower_arm_bindings_block(low, arm->pattern, match_sym, operand_type, loc));
+        BUF_PUSH(arm_bindings, lower_arm_bindings_block(low, arm->pattern, &operand, loc));
         lower_scope_leave(low);
     }
 
