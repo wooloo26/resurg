@@ -1,4 +1,12 @@
-#include "_check.h"
+#include "_sema.h"
+
+/**
+ * @file resolve_register.c
+ * @brief Declaration registration — first-pass symbol table population.
+ *
+ * Registers pacts, structs, enums, type aliases, and fn sigs into
+ * the Sema tables so that subsequent passes can look them up.
+ */
 
 // ── Static helpers ─────────────────────────────────────────────────
 
@@ -252,7 +260,7 @@ static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodIn
     }
 }
 
-// ── Registration functions (called from check_main.c) ──────────────
+// ── Registration functions ─────────────────────────────────────────
 
 void register_fn_sig(Sema *sema, ASTNode *decl) {
     // If the fn has type params, store as a generic template instead

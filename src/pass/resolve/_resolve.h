@@ -1,15 +1,15 @@
-#ifndef RSG_RESOLVE_H
-#define RSG_RESOLVE_H
+#ifndef RSG__RESOLVE_H
+#define RSG__RESOLVE_H
 
 #include "repr/ast.h"
 #include "repr/types.h"
 
 /**
- * @file resolve.h
+ * @file _resolve.h
  * @brief Name resolution — scope management, symbol lookup, and type resolution.
  *
  * Provides the scope chain, symbol table helpers, and AST-to-Type
- * resolution used by the semantic analysis (check) pass.
+ * resolution used by the semantic passes (resolve, check, mono).
  */
 typedef struct Sema Sema;
 typedef struct Sym Sym;
@@ -114,4 +114,13 @@ LitKind type_to_lit_kind(TypeKind kind);
  */
 const Type *promote_lit(ASTNode *lit, const Type *target);
 
-#endif // RSG_RESOLVE_H
+// ── Registration (resolve_register.c) ──────────────────────────────────
+
+void register_fn_sig(Sema *sema, ASTNode *decl);
+void register_struct_def(Sema *sema, ASTNode *decl);
+void register_enum_def(Sema *sema, ASTNode *decl);
+void register_pact_def(Sema *sema, ASTNode *decl);
+void validate_struct_conformances(Sema *sema, ASTNode *decl, StructDef *def);
+void inject_builtin_enums(Sema *sema);
+
+#endif // RSG__RESOLVE_H

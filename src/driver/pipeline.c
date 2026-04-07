@@ -10,7 +10,9 @@
 #include "rsg/pass/cgen/cgen.h"
 #include "rsg/pass/check/check.h"
 #include "rsg/pass/lower/lower.h"
+#include "rsg/pass/mono/mono.h"
 #include "rsg/pass/parse/parse.h"
+#include "rsg/pass/resolve/resolve.h"
 
 /**
  * @file pipeline.c
@@ -108,9 +110,10 @@ static ASTNode *stage_parse(const PipelineOptions *options, Token *tokens, int32
 }
 
 /** Run semantic analysis.  Returns true on success, false on errs. */
-static bool stage_check(Arena *arena, ASTNode *file_node) {
+static bool stage_sema(Arena *arena, ASTNode *file_node) {
     Sema *sema = sema_create(arena);
-    bool ok = sema_check(sema, file_node);
+    bool ok =
+        sema_resolve(sema, file_node) && sema_check(sema, file_node) && sema_mono(sema, file_node);
     sema_destroy(sema);
     return ok;
 }
@@ -180,8 +183,8 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
         goto cleanup;
     }
 
-    // Stage 3: Semantic analysis.
-    if (!stage_check(pipeline->arena, file_node)) {
+    // Stage 3: Semantic analysis (resolve → check → mono).
+    if (!stage_sema(pipeline->arena, file_node)) {
         status = 1;
         goto cleanup;
     }

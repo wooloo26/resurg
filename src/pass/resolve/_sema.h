@@ -1,14 +1,14 @@
 #ifndef RSG__SEMA_H
 #define RSG__SEMA_H
 
-#include "pass/resolve/resolve.h"
+#include "pass/resolve/_resolve.h"
 
 /**
  * @file _sema.h
  * @brief Shared semantic context — Sema struct and registration types.
  *
- * Included by both check and resolve translation units.
- * Separates the semantic context from the check dispatch functions.
+ * Included by resolve, check, and mono translation units.
+ * Separates the semantic context from the pass-specific dispatch functions.
  */
 
 // ── Registration structs ────────────────────────────────────────

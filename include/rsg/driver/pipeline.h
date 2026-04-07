@@ -8,7 +8,7 @@
  * @file pipeline.h
  * @brief Public pipeline facade — drives the full compilation pipeline.
  *
- * Hides all internal stages (lex, parser, sema, lower, codegen) behind
+ * Hides all internal stages (lex, parse, resolve, check, mono, lower, codegen) behind
  * a single entry point so that callers depend only on this header.
  */
 typedef struct Pipeline Pipeline;
@@ -27,7 +27,7 @@ Pipeline *pipeline_create(void);
 /** Destroy the pipeline and free all resrcs. */
 void pipeline_destroy(Pipeline *pipeline);
 /**
- * Run the full compilation pipeline: lex → parse → sema → lower → codegen.
+ * Run the full compilation pipeline: lex → parse → resolve → check → mono → lower → codegen.
  * Returns 0 on success, 1 on compilation errs.
  * Debug flags in @p options may short-circuit after an earlier stage.
  */

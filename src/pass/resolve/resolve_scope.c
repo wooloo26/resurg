@@ -1,4 +1,4 @@
-#include "pass/check/_sema.h"
+#include "_sema.h"
 
 // ── Scope manipulation ─────────────────────────────────────────────────
 
