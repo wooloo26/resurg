@@ -256,6 +256,44 @@ static ASTNode *parse_array_lit(Parser *parser) {
     return node;
 }
 
+/** Parse a closure expression: |params| body  or  || body. */
+static ASTNode *parse_closure(Parser *parser, SrcLoc loc) {
+    ASTNode *node = ast_new(parser->arena, NODE_CLOSURE, loc);
+    node->closure.params = NULL;
+    node->closure.return_type.kind = AST_TYPE_INFERRED;
+
+    if (parser_match(parser, TOKEN_PIPE_PIPE)) {
+        // Zero-param closure: || body
+    } else {
+        parser_advance(parser); // consume '|'
+        if (!parser_check(parser, TOKEN_PIPE)) {
+            do {
+                SrcLoc param_loc = parser_current_loc(parser);
+                ASTNode *param = ast_new(parser->arena, NODE_PARAM, param_loc);
+                param->param.is_mut = false;
+                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
+                if (parser_match(parser, TOKEN_COLON)) {
+                    param->param.type = parser_parse_type(parser);
+                } else {
+                    param->param.type.kind = AST_TYPE_INFERRED;
+                }
+                BUF_PUSH(node->closure.params, param);
+            } while (parser_match(parser, TOKEN_COMMA));
+        }
+        parser_expect(parser, TOKEN_PIPE);
+    }
+
+    if (parser_match(parser, TOKEN_ARROW)) {
+        node->closure.return_type = parser_parse_type(parser);
+    }
+    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+        node->closure.body = parser_parse_block(parser);
+    } else {
+        node->closure.body = parse_precedence(parser, PRECEDENCE_PIPE + 1);
+    }
+    return node;
+}
+
 static ASTNode *parse_primary(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
 
@@ -363,47 +401,8 @@ static ASTNode *parse_primary(Parser *parser) {
     }
 
     // Closure: |params| body  or  || body
-    if (parser_check(parser, TOKEN_PIPE)) {
-        parser_advance(parser); // consume '|'
-        ASTNode *node = ast_new(parser->arena, NODE_CLOSURE, loc);
-        node->closure.params = NULL;
-        node->closure.return_type.kind = AST_TYPE_INFERRED;
-        if (!parser_check(parser, TOKEN_PIPE)) {
-            do {
-                SrcLoc param_loc = parser_current_loc(parser);
-                ASTNode *param = ast_new(parser->arena, NODE_PARAM, param_loc);
-                param->param.is_mut = false;
-                param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                if (parser_match(parser, TOKEN_COLON)) {
-                    param->param.type = parser_parse_type(parser);
-                } else {
-                    param->param.type.kind = AST_TYPE_INFERRED;
-                }
-                BUF_PUSH(node->closure.params, param);
-            } while (parser_match(parser, TOKEN_COMMA));
-        }
-        parser_expect(parser, TOKEN_PIPE);
-        if (parser_match(parser, TOKEN_ARROW)) {
-            node->closure.return_type = parser_parse_type(parser);
-        }
-        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
-            node->closure.body = parser_parse_block(parser);
-        } else {
-            node->closure.body = parse_precedence(parser, PRECEDENCE_PIPE + 1);
-        }
-        return node;
-    }
-    if (parser_check(parser, TOKEN_PIPE_PIPE)) {
-        parser_advance(parser); // consume '||'
-        ASTNode *node = ast_new(parser->arena, NODE_CLOSURE, loc);
-        node->closure.params = NULL;
-        node->closure.return_type.kind = AST_TYPE_INFERRED;
-        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
-            node->closure.body = parser_parse_block(parser);
-        } else {
-            node->closure.body = parse_precedence(parser, PRECEDENCE_PIPE + 1);
-        }
-        return node;
+    if (parser_check(parser, TOKEN_PIPE) || parser_check(parser, TOKEN_PIPE_PIPE)) {
+        return parse_closure(parser, loc);
     }
     const char *token_name = token_kind_str(parser_current_token(parser)->kind);
     rsg_err(loc, "expected expr, got '%s'", token_name);
@@ -445,6 +444,133 @@ static ASTNode *parse_call_args(Parser *parser, ASTNode *callee, SrcLoc loc) {
     return node;
 }
 
+/**
+ * Try to parse a generic instantiation: Name<Type, ...> followed by
+ * '(' (fn call), '{' (struct lit), or '::' (enum access).
+ * Returns the resulting node on success, or NULL if this isn't a generic
+ * (parser position is restored on failure).
+ */
+static ASTNode *parse_generic_postfix(Parser *parser, ASTNode *left, SrcLoc loc) {
+    int32_t save_pos = parser->pos;
+    parser_advance(parser); // consume '<'
+
+    ASTType *type_args = NULL;
+    bool valid = true;
+
+    do {
+        if (!(token_is_type_keyword(parser_current_token(parser)->kind) ||
+              parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET) ||
+              parser_check(parser, TOKEN_LEFT_PAREN) || parser_check(parser, TOKEN_STAR))) {
+            valid = false;
+            break;
+        }
+        ASTType arg = parser_parse_type(parser);
+        BUF_PUSH(type_args, arg);
+        if (!parser_check(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_GREATER)) {
+            valid = false;
+            break;
+        }
+    } while (parser_match(parser, TOKEN_COMMA));
+
+    if (!valid || !parser_match(parser, TOKEN_GREATER)) {
+        BUF_FREE(type_args);
+        parser->pos = save_pos;
+        return NULL;
+    }
+
+    // Generic fn call: Name<Type, ...>(args)
+    if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+        ASTNode *call = parse_call_args(parser, left, loc);
+        call->call.type_args = type_args;
+        return call;
+    }
+
+    // Generic struct lit: Name<Type, ...> { field = value, ... }
+    if (is_struct_lit_ahead(parser)) {
+        ASTNode *slit = parse_struct_lit(parser, left);
+        slit->struct_lit.type_args = type_args;
+        return slit;
+    }
+
+    // Generic enum access: Name<Type, ...>::Variant
+    if (parser_check(parser, TOKEN_COLON_COLON)) {
+        parser_advance(parser); // consume '::'
+        const char *variant_name = parser_expect(parser, TOKEN_ID)->lexeme;
+        ASTNode *member = ast_new(parser->arena, NODE_MEMBER, loc);
+        member->member.object = left;
+        member->member.member = variant_name;
+
+        if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+            ASTNode *call = parse_call_args(parser, member, loc);
+            call->call.type_args = type_args;
+            return call;
+        }
+        if (is_struct_lit_ahead(parser)) {
+            ASTNode *node = parse_enum_struct_lit(parser, member);
+            node->enum_init.type_args = type_args;
+            return node;
+        }
+        // Unit variant: Enum<T>::Variant (no args)
+        ASTNode *call = ast_new(parser->arena, NODE_CALL, loc);
+        call->call.callee = member;
+        call->call.args = NULL;
+        call->call.arg_names = NULL;
+        call->call.arg_is_mut = NULL;
+        call->call.type_args = type_args;
+        return call;
+    }
+
+    // Not followed by (, {, or :: — backtrack
+    BUF_FREE(type_args);
+    parser->pos = save_pos;
+    return NULL;
+}
+
+/** Parse an index or slice expression after '[' has been consumed. */
+static ASTNode *parse_index_or_slice(Parser *parser, ASTNode *object, SrcLoc loc) {
+    // obj[..] or obj[..end]
+    if (parser_check(parser, TOKEN_DOT_DOT)) {
+        parser_advance(parser); // consume '..'
+        ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, loc);
+        node->slice_expr.object = object;
+        node->slice_expr.start = NULL;
+        if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            node->slice_expr.end = NULL;
+            node->slice_expr.full_range = true;
+        } else {
+            node->slice_expr.end = parser_parse_expr(parser);
+            node->slice_expr.full_range = false;
+        }
+        parser_expect(parser, TOKEN_RIGHT_BRACKET);
+        return node;
+    }
+
+    ASTNode *idx_or_start = parser_parse_expr(parser);
+
+    // obj[start..end] or obj[start..]
+    if (parser_check(parser, TOKEN_DOT_DOT)) {
+        parser_advance(parser); // consume '..'
+        ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, loc);
+        node->slice_expr.object = object;
+        node->slice_expr.start = idx_or_start;
+        node->slice_expr.full_range = false;
+        if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            node->slice_expr.end = NULL;
+        } else {
+            node->slice_expr.end = parser_parse_expr(parser);
+        }
+        parser_expect(parser, TOKEN_RIGHT_BRACKET);
+        return node;
+    }
+
+    // Regular idx access: obj[idx]
+    ASTNode *node = ast_new(parser->arena, NODE_IDX, loc);
+    node->idx_access.object = object;
+    node->idx_access.idx = idx_or_start;
+    parser_expect(parser, TOKEN_RIGHT_BRACKET);
+    return node;
+}
+
 static ASTNode *parse_postfix(Parser *parser) {
     ASTNode *left = parse_primary(parser);
     for (;;) {
@@ -463,88 +589,12 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
 
-        // Generic call: fn_name<Type, ...>(args)
+        // Generic call / struct lit / enum access: Name<Type, ...>(...)
         if (left->kind == NODE_ID && parser_check(parser, TOKEN_LESS)) {
-            int32_t save_pos = parser->pos;
-            parser_advance(parser); // consume '<'
-
-            ASTType *type_args = NULL;
-            bool valid = true;
-
-            do {
-                if (!(token_is_type_keyword(parser_current_token(parser)->kind) ||
-                      parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET) ||
-                      parser_check(parser, TOKEN_LEFT_PAREN) || parser_check(parser, TOKEN_STAR))) {
-                    valid = false;
-                    break;
-                }
-                ASTType arg = parser_parse_type(parser);
-                BUF_PUSH(type_args, arg);
-                if (!parser_check(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_GREATER)) {
-                    valid = false;
-                    break;
-                }
-            } while (parser_match(parser, TOKEN_COMMA));
-
-            if (valid && parser_match(parser, TOKEN_GREATER)) {
-                if (parser_match(parser, TOKEN_LEFT_PAREN)) {
-                    // Generic fn call: fn_name<Type, ...>(args)
-                    ASTNode *call = parse_call_args(parser, left, loc);
-                    call->call.type_args = type_args;
-                    left = call;
-                    continue;
-                }
-                if (is_struct_lit_ahead(parser)) {
-                    // Generic struct lit: Name<Type, ...> { field = value, ... }
-                    ASTNode *slit = parse_struct_lit(parser, left);
-                    slit->struct_lit.type_args = type_args;
-                    left = slit;
-                    continue;
-                }
-                if (parser_check(parser, TOKEN_COLON_COLON)) {
-                    // Generic enum access: Name<Type, ...>::Variant
-                    // Mangle the name with type args for semantic analysis
-                    // Build mangled name: "Name__type1_type2"
-                    // Store type_args on a synthesized member node
-                    parser_advance(parser); // consume '::'
-                    const char *variant_name = parser_expect(parser, TOKEN_ID)->lexeme;
-                    ASTNode *member = ast_new(parser->arena, NODE_MEMBER, loc);
-                    member->member.object = left;
-                    member->member.member = variant_name;
-
-                    // Check what follows: ( for tuple variant call, { for struct variant lit
-                    if (parser_match(parser, TOKEN_LEFT_PAREN)) {
-                        // Enum::Variant(args) — tuple variant or unit variant
-                        ASTNode *call = parse_call_args(parser, member, loc);
-                        call->call.type_args = type_args;
-                        left = call;
-                        continue;
-                    }
-                    if (is_struct_lit_ahead(parser)) {
-                        // Enum::Variant { field = value, ... } — struct variant
-                        ASTNode *node = parse_enum_struct_lit(parser, member);
-                        node->enum_init.type_args = type_args;
-                        left = node;
-                        continue;
-                    }
-                    // Unit variant: Enum<T>::Variant (no args)
-                    // Create a synthetic call node with no args
-                    ASTNode *call = ast_new(parser->arena, NODE_CALL, loc);
-                    call->call.callee = member;
-                    call->call.args = NULL;
-                    call->call.arg_names = NULL;
-                    call->call.arg_is_mut = NULL;
-                    call->call.type_args = type_args;
-                    left = call;
-                    continue;
-                }
-                // Not followed by (, {, or :: — backtrack
-                BUF_FREE(type_args);
-                parser->pos = save_pos;
-            } else {
-                // Not a valid generic — backtrack
-                BUF_FREE(type_args);
-                parser->pos = save_pos;
+            ASTNode *result = parse_generic_postfix(parser, left, loc);
+            if (result != NULL) {
+                left = result;
+                continue;
             }
         }
 
@@ -553,48 +603,7 @@ static ASTNode *parse_postfix(Parser *parser) {
             continue;
         }
         if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
-            // Check for slice exprs: obj[..], obj[start..end], obj[start..], obj[..end]
-            if (parser_check(parser, TOKEN_DOT_DOT)) {
-                // obj[..] or obj[..end]
-                parser_advance(parser); // consume '..'
-                ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, loc);
-                node->slice_expr.object = left;
-                node->slice_expr.start = NULL;
-                if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
-                    node->slice_expr.end = NULL;
-                    node->slice_expr.full_range = true;
-                } else {
-                    node->slice_expr.end = parser_parse_expr(parser);
-                    node->slice_expr.full_range = false;
-                }
-                parser_expect(parser, TOKEN_RIGHT_BRACKET);
-                left = node;
-                continue;
-            }
-            // Parse idx expr; check if it becomes a slice expr
-            ASTNode *idx_or_start = parser_parse_expr(parser);
-            if (parser_check(parser, TOKEN_DOT_DOT)) {
-                // obj[start..end] or obj[start..]
-                parser_advance(parser); // consume '..'
-                ASTNode *node = ast_new(parser->arena, NODE_SLICE_EXPR, loc);
-                node->slice_expr.object = left;
-                node->slice_expr.start = idx_or_start;
-                node->slice_expr.full_range = false;
-                if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
-                    node->slice_expr.end = NULL;
-                } else {
-                    node->slice_expr.end = parser_parse_expr(parser);
-                }
-                parser_expect(parser, TOKEN_RIGHT_BRACKET);
-                left = node;
-                continue;
-            }
-            // Regular idx access: obj[idx]
-            ASTNode *node = ast_new(parser->arena, NODE_IDX, loc);
-            node->idx_access.object = left;
-            node->idx_access.idx = idx_or_start;
-            parser_expect(parser, TOKEN_RIGHT_BRACKET);
-            left = node;
+            left = parse_index_or_slice(parser, left, loc);
             continue;
         }
         if (parser_match(parser, TOKEN_DOT)) {

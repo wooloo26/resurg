@@ -436,6 +436,66 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     hash_table_insert(&sema->pact_table, pact_name, def);
 }
 
+/** Verify that all pact-required fields are present and type-correct. */
+static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef *def,
+                                const char *pact_name, PactDef *pact) {
+    StructFieldInfo *required_fields = NULL;
+    collect_pact_fields(sema, pact, &required_fields, decl->loc);
+
+    for (int32_t i = 0; i < BUF_LEN(required_fields); i++) {
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(def->fields); j++) {
+            if (strcmp(def->fields[j].name, required_fields[i].name) == 0) {
+                if (!type_equal(def->fields[j].type, required_fields[i].type)) {
+                    SEMA_ERR(sema, decl->loc,
+                             "field '%s' has type '%s' but pact '%s' requires type '%s'",
+                             required_fields[i].name, type_name(sema->arena, def->fields[j].type),
+                             pact_name, type_name(sema->arena, required_fields[i].type));
+                }
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            SEMA_ERR(sema, decl->loc, "missing required field '%s' from pact '%s'",
+                     required_fields[i].name, pact_name);
+        }
+    }
+    BUF_FREE(required_fields);
+}
+
+/** Verify pact-required methods exist; inject defaults when available. */
+static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, const char *pact_name,
+                                 PactDef *pact) {
+    StructMethodInfo *pact_methods = NULL;
+    collect_pact_methods(sema, pact, &pact_methods, decl->loc);
+
+    for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
+        bool has_body = pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
+
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(def->methods); j++) {
+            if (strcmp(def->methods[j].name, pact_methods[i].name) == 0) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            if (has_body) {
+                ASTNode *method_ast = pact_methods[i].decl;
+                method_ast->fn_decl.owner_struct = def->name;
+                BUF_PUSH(decl->struct_decl.methods, method_ast);
+                register_method_sig(sema, def->name, method_ast, &def->methods);
+            } else {
+                SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
+                         pact_methods[i].name, pact_name);
+            }
+        }
+    }
+    BUF_FREE(pact_methods);
+}
+
 void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
     for (int32_t ci = 0; ci < BUF_LEN(decl->struct_decl.conformances); ci++) {
         const char *pact_name = decl->struct_decl.conformances[ci];
@@ -444,66 +504,8 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
             continue;
         }
-
-        // Collect all required fields from this pact and its super pacts
-        StructFieldInfo *required_fields = NULL;
-        collect_pact_fields(sema, pact, &required_fields, decl->loc);
-
-        // Check required fields exist in struct
-        for (int32_t i = 0; i < BUF_LEN(required_fields); i++) {
-            bool found = false;
-            for (int32_t j = 0; j < BUF_LEN(def->fields); j++) {
-                if (strcmp(def->fields[j].name, required_fields[i].name) == 0) {
-                    if (!type_equal(def->fields[j].type, required_fields[i].type)) {
-                        SEMA_ERR(sema, decl->loc,
-                                 "field '%s' has type '%s' but pact '%s' requires type '%s'",
-                                 required_fields[i].name,
-                                 type_name(sema->arena, def->fields[j].type), pact_name,
-                                 type_name(sema->arena, required_fields[i].type));
-                    }
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                SEMA_ERR(sema, decl->loc, "missing required field '%s' from pact '%s'",
-                         required_fields[i].name, pact_name);
-            }
-        }
-        BUF_FREE(required_fields);
-
-        // Collect all required methods from this pact and its super pacts
-        StructMethodInfo *pact_methods = NULL;
-        collect_pact_methods(sema, pact, &pact_methods, decl->loc);
-
-        // Check required methods exist or inject default implementations
-        for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-            bool has_body =
-                pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
-
-            // Check if struct already has this method
-            bool found = false;
-            for (int32_t j = 0; j < BUF_LEN(def->methods); j++) {
-                if (strcmp(def->methods[j].name, pact_methods[i].name) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found) {
-                if (has_body) {
-                    // Inject default method into struct
-                    ASTNode *method_ast = pact_methods[i].decl;
-                    method_ast->fn_decl.owner_struct = def->name;
-                    BUF_PUSH(decl->struct_decl.methods, method_ast);
-                    register_method_sig(sema, def->name, method_ast, &def->methods);
-                } else {
-                    SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                             pact_methods[i].name, pact_name);
-                }
-            }
-        }
-        BUF_FREE(pact_methods);
+        enforce_pact_fields(sema, decl, def, pact_name, pact);
+        enforce_pact_methods(sema, decl, def, pact_name, pact);
     }
 }
 

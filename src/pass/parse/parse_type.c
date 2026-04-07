@@ -1,5 +1,25 @@
 #include "_parse.h"
 
+/** Parse fn/Fn/FnMut param types and optional return type after '(' has been consumed. */
+static ASTType parse_fn_type_params(Parser *parser, FnTypeKind fn_kind, SrcLoc loc) {
+    ASTType type = {.kind = AST_TYPE_FN, .fn_kind = fn_kind, .loc = loc};
+    type.fn_param_types = NULL;
+    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            ASTType *param = arena_alloc(parser->arena, sizeof(ASTType));
+            *param = parser_parse_type(parser);
+            BUF_PUSH(type.fn_param_types, param);
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    type.fn_return_type = NULL;
+    if (parser_match(parser, TOKEN_ARROW)) {
+        type.fn_return_type = arena_alloc(parser->arena, sizeof(ASTType));
+        *type.fn_return_type = parser_parse_type(parser);
+    }
+    return type;
+}
+
 ASTType parser_parse_type(Parser *parser) {
     ASTType type = {.kind = AST_TYPE_NAME, .loc = parser_current_loc(parser)};
 
@@ -77,25 +97,10 @@ ASTType parser_parse_type(Parser *parser) {
     // Function type: fn(T1, T2) -> R
     if (parser_check(parser, TOKEN_FN) && parser->pos + 1 < parser->count &&
         parser->tokens[parser->pos + 1].kind == TOKEN_LEFT_PAREN) {
-        type.kind = AST_TYPE_FN;
-        type.fn_kind = FN_PLAIN;
+        SrcLoc fn_loc = parser_current_loc(parser);
         parser_advance(parser); // consume 'fn'
         parser_expect(parser, TOKEN_LEFT_PAREN);
-        type.fn_param_types = NULL;
-        if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-            do {
-                ASTType *param = arena_alloc(parser->arena, sizeof(ASTType));
-                *param = parser_parse_type(parser);
-                BUF_PUSH(type.fn_param_types, param);
-            } while (parser_match(parser, TOKEN_COMMA));
-        }
-        parser_expect(parser, TOKEN_RIGHT_PAREN);
-        type.fn_return_type = NULL;
-        if (parser_match(parser, TOKEN_ARROW)) {
-            type.fn_return_type = arena_alloc(parser->arena, sizeof(ASTType));
-            *type.fn_return_type = parser_parse_type(parser);
-        }
-        return type;
+        return parse_fn_type_params(parser, FN_PLAIN, fn_loc);
     }
 
     // Closure types: Fn(T1, T2) -> R  or  FnMut(T1, T2) -> R
@@ -109,25 +114,10 @@ ASTType parser_parse_type(Parser *parser) {
             fk = FN_CLOSURE_MUT;
         }
         if (fk != FN_PLAIN) {
-            type.kind = AST_TYPE_FN;
-            type.fn_kind = fk;
+            SrcLoc fn_loc = parser_current_loc(parser);
             parser_advance(parser); // consume 'Fn' / 'FnMut'
             parser_expect(parser, TOKEN_LEFT_PAREN);
-            type.fn_param_types = NULL;
-            if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-                do {
-                    ASTType *param = arena_alloc(parser->arena, sizeof(ASTType));
-                    *param = parser_parse_type(parser);
-                    BUF_PUSH(type.fn_param_types, param);
-                } while (parser_match(parser, TOKEN_COMMA));
-            }
-            parser_expect(parser, TOKEN_RIGHT_PAREN);
-            type.fn_return_type = NULL;
-            if (parser_match(parser, TOKEN_ARROW)) {
-                type.fn_return_type = arena_alloc(parser->arena, sizeof(ASTType));
-                *type.fn_return_type = parser_parse_type(parser);
-            }
-            return type;
+            return parse_fn_type_params(parser, fk, fn_loc);
         }
     }
 

@@ -345,7 +345,65 @@ static bool struct_lit_has_field(const ASTNode *node, const char *name) {
     return false;
 }
 
-const Type *check_struct_lit(Sema *sema, ASTNode *node) {
+/**
+ * Infer generic type args for a struct lit from its field values.
+ * Returns the mangled struct name on success, or NULL if inference fails.
+ */
+static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericStructDef *gdef) {
+    int32_t num_params = gdef->type_param_count;
+    const Type **inferred_args =
+        (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
+
+    // Check field values first to get their types
+    for (int32_t i = 0; i < BUF_LEN(node->struct_lit.field_values); i++) {
+        check_node(sema, node->struct_lit.field_values[i]);
+    }
+
+    // Match field types against generic params
+    for (int32_t fi = 0; fi < BUF_LEN(gdef->decl->struct_decl.fields); fi++) {
+        ASTStructField *ast_field = &gdef->decl->struct_decl.fields[fi];
+        if (ast_field->type.kind != AST_TYPE_NAME) {
+            continue;
+        }
+        for (int32_t pi = 0; pi < num_params; pi++) {
+            if (strcmp(ast_field->type.name, gdef->type_params[pi].name) == 0) {
+                for (int32_t vi = 0; vi < BUF_LEN(node->struct_lit.field_names); vi++) {
+                    if (strcmp(node->struct_lit.field_names[vi], ast_field->name) == 0) {
+                        const Type *val_type = node->struct_lit.field_values[vi]->type;
+                        if (val_type != NULL && val_type->kind != TYPE_ERR) {
+                            inferred_args[pi] = val_type;
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // Verify all params inferred
+    for (int32_t i = 0; i < num_params; i++) {
+        if (inferred_args[i] == NULL) {
+            return NULL;
+        }
+    }
+
+    // Build synthetic type_args from inferred types
+    ASTType *synth_args = NULL;
+    for (int32_t i = 0; i < num_params; i++) {
+        ASTType arg = {0};
+        arg.kind = AST_TYPE_NAME;
+        arg.name = type_name(sema->arena, inferred_args[i]);
+        BUF_PUSH(synth_args, arg);
+    }
+    GenericInstArgs inst_args = {synth_args, num_params, node->loc};
+    const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
+    BUF_FREE(synth_args);
+    return mangled;
+}
+
+/** Resolve struct literal name through aliases, generics, and type inference. */
+static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     const char *struct_name = node->struct_lit.name;
     StructDef *sdef = sema_lookup_struct(sema, struct_name);
 
@@ -356,7 +414,6 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
             sdef = sema_lookup_struct(sema, alias->struct_type.name);
             if (sdef != NULL) {
                 node->struct_lit.name = sdef->name;
-                struct_name = sdef->name;
             }
         }
     }
@@ -370,7 +427,6 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
             const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
             if (mangled != NULL) {
                 node->struct_lit.name = mangled;
-                struct_name = mangled;
                 sdef = sema_lookup_struct(sema, mangled);
             }
         }
@@ -380,68 +436,22 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
         GenericStructDef *gdef = sema_lookup_generic_struct(sema, struct_name);
         if (gdef != NULL) {
-            // Infer type args from field values
-            int32_t num_params = gdef->type_param_count;
-            const Type **inferred_args =
-                (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
-
-            // Check field values first to get their types
-            for (int32_t i = 0; i < BUF_LEN(node->struct_lit.field_values); i++) {
-                check_node(sema, node->struct_lit.field_values[i]);
-            }
-
-            // Match field types against generic params
-            for (int32_t fi = 0; fi < BUF_LEN(gdef->decl->struct_decl.fields); fi++) {
-                ASTStructField *ast_field = &gdef->decl->struct_decl.fields[fi];
-                if (ast_field->type.kind != AST_TYPE_NAME) {
-                    continue;
-                }
-                // Check if this field's type is a type parameter
-                for (int32_t pi = 0; pi < num_params; pi++) {
-                    if (strcmp(ast_field->type.name, gdef->type_params[pi].name) == 0) {
-                        // Find the corresponding value
-                        for (int32_t vi = 0; vi < BUF_LEN(node->struct_lit.field_names); vi++) {
-                            if (strcmp(node->struct_lit.field_names[vi], ast_field->name) == 0) {
-                                const Type *val_type = node->struct_lit.field_values[vi]->type;
-                                if (val_type != NULL && val_type->kind != TYPE_ERR) {
-                                    inferred_args[pi] = val_type;
-                                }
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-
-            // Verify all params inferred
-            bool all_inferred = true;
-            for (int32_t i = 0; i < num_params; i++) {
-                if (inferred_args[i] == NULL) {
-                    all_inferred = false;
-                    break;
-                }
-            }
-
-            if (all_inferred) {
-                // Build type_args from inferred types
-                ASTType *synth_args = NULL;
-                for (int32_t i = 0; i < num_params; i++) {
-                    ASTType arg = {0};
-                    arg.kind = AST_TYPE_NAME;
-                    arg.name = type_name(sema->arena, inferred_args[i]);
-                    BUF_PUSH(synth_args, arg);
-                }
-                GenericInstArgs inst_args = {synth_args, num_params, node->loc};
-                const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
-                if (mangled != NULL) {
-                    node->struct_lit.name = mangled;
-                    struct_name = mangled;
-                    sdef = sema_lookup_struct(sema, mangled);
-                }
-                BUF_FREE(synth_args);
+            const char *mangled = infer_generic_struct_args(sema, node, gdef);
+            if (mangled != NULL) {
+                node->struct_lit.name = mangled;
+                sdef = sema_lookup_struct(sema, mangled);
             }
         }
+    }
+
+    return sdef;
+}
+
+const Type *check_struct_lit(Sema *sema, ASTNode *node) {
+    const char *struct_name = node->struct_lit.name;
+    StructDef *sdef = resolve_struct_lit(sema, node);
+    if (sdef != NULL) {
+        struct_name = node->struct_lit.name;
     }
 
     if (sdef == NULL) {

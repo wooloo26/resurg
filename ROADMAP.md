@@ -174,14 +174,14 @@ Higher-order programming and code organization.
 
 - [ ] Recursive Generics
 - [ ] `comptime` Generics
-- [ ] Default generics (only support `struct`, `enum`, `pact`, `type`)
+- [ ] Default generics
 - [ ] `where`
-- [ ] Template Literal Types
-- [ ] `Self` and `*Self` type (only support `struct`, `enum`, `pact`, `ext`)
 - [ ] Associated Types
   
 ## v0.9.3 — Before Ecosystem
 
+- [ ] `Self` and `*Self` type
+- [ ] Template Literal Types
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
   
@@ -205,27 +205,31 @@ Language completeness, tooling, and ecosystem.
 - [ ] Formatter (`rsg-fmt`)
 - [ ] Linter (`rsg-lint` / static analysis)
 - [ ] Test framework (`test` blocks or attribute)
-
-## v1.0.2 — Package manager
-
-- [ ] Package manager (dependency resolution, versioning)
 - [ ] Unified devtool (`rsg` CLI: build/run/test/lint/fmt integration)
-
-## v1.0.3 — Utilities
-
-- [ ] Benchmark support
-- [ ] Full specification freeze
 
 ## Future — Post-1.0
 
-- [ ] Debugger & devtool suite (`rsg-debug`, profiler, memory tracker)
-- [ ] C++20 , Go, Typescript back-end
-- [ ] Readable code
-- [ ] Cross-compilation support
-- [ ] REPL / interpreter mode
-- [ ] Concurrency
-- [ ] Macro / Comptime
+### Core Language
+
+- [ ] Macro / Comptime system
+- [ ] Concurrency model (async/await? actors? CSP?)
 - [ ] Self-hosting compiler (Resurg-in-Resurg)
-- [ ] Website
-- [ ] Playground (web-based)
-- [ ] WASM, x86-64, ARM64, LLVM IR, RISC-V, JVM back-end
+- [ ] Full specification freeze
+
+### Developer Experience
+
+- [ ] REPL / interpreter mode
+- [ ] Debugger & profiling suite (`rsg-debug`, memory tracker)
+
+### Backends
+
+- [ ] C++20 / Go / TypeScript backends (readable)
+- [ ] LLVM IR backend
+- [ ] x86-64 / ARM64 / RISC-V / WASM backends
+- [ ] JVM backend (optional)
+
+### Community
+
+- [ ] Package manager (dependency resolution, versioning)
+- [ ] Official website + documentation
+- [ ] Web Playground (WASM-powered)

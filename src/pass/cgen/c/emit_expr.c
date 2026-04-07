@@ -582,6 +582,41 @@ static const char *emit_fn_ref_expr(CGen *cgen, const HirNode *node) {
     return arena_sprintf(cgen->arena, "(RsgFn){(void(*)(void))%s, NULL}", wrapper_name);
 }
 
+/** Emit the typedef for a closure's captured-variable env struct. */
+static const char *emit_closure_env_struct(CGen *cgen, const HirNode *node) {
+    const char *env_struct = arena_sprintf(cgen->arena, "%s_env", node->closure.fn_name);
+    emit(cgen, "typedef struct {\n");
+    for (int32_t i = 0; i < BUF_LEN(node->closure.capture_syms); i++) {
+        const char *ct = c_type_for(cgen, node->closure.capture_syms[i]->type);
+        emit(cgen, "    %s %s;\n", ct, node->closure.capture_names[i]);
+    }
+    emit(cgen, "} %s;\n\n", env_struct);
+    return env_struct;
+}
+
+/** Unpack captures into the closure body: #define macros (FnMut) or local copies (Fn). */
+static void emit_closure_capture_unpack(CGen *cgen, const HirNode *node, const char *env_struct) {
+    int32_t num_captures = BUF_LEN(node->closure.capture_syms);
+    if (num_captures == 0) {
+        emit_line(cgen, "(void)_env;");
+        return;
+    }
+
+    emit_line(cgen, "%s *_cap = (%s *)_env;", env_struct, env_struct);
+    if (node->closure.is_fn_mut) {
+        for (int32_t i = 0; i < num_captures; i++) {
+            emit(cgen, "#define %s _cap->%s\n", node->closure.capture_names[i],
+                 node->closure.capture_names[i]);
+        }
+    } else {
+        for (int32_t i = 0; i < num_captures; i++) {
+            const char *ct = c_type_for(cgen, node->closure.capture_syms[i]->type);
+            emit_line(cgen, "%s %s = _cap->%s;", ct, node->closure.capture_names[i],
+                      node->closure.capture_names[i]);
+        }
+    }
+}
+
 /** Emit companion function + env struct for a closure. */
 static void emit_closure_companion(CGen *cgen, const HirNode *node) {
     const char *fn_name = node->closure.fn_name;
@@ -599,13 +634,7 @@ static void emit_closure_companion(CGen *cgen, const HirNode *node) {
     // Emit env struct typedef (if captures)
     const char *env_struct = NULL;
     if (num_captures > 0) {
-        env_struct = arena_sprintf(cgen->arena, "%s_env", fn_name);
-        emit(cgen, "typedef struct {\n");
-        for (int32_t i = 0; i < num_captures; i++) {
-            const char *ct = c_type_for(cgen, node->closure.capture_syms[i]->type);
-            emit(cgen, "    %s %s;\n", ct, node->closure.capture_names[i]);
-        }
-        emit(cgen, "} %s;\n\n", env_struct);
+        env_struct = emit_closure_env_struct(cgen, node);
     }
 
     // Emit closure function: static RetType fn_name(void *_env, P1 p1, ...) { body }
@@ -619,26 +648,7 @@ static void emit_closure_companion(CGen *cgen, const HirNode *node) {
     emit(cgen, ") {\n");
     cgen->indent = 1;
 
-    // Unpack captures
-    if (num_captures > 0) {
-        emit_line(cgen, "%s *_cap = (%s *)_env;", env_struct, env_struct);
-        if (node->closure.is_fn_mut) {
-            // FnMut: use #define macros so body reads/writes _cap->field directly
-            for (int32_t i = 0; i < num_captures; i++) {
-                emit(cgen, "#define %s _cap->%s\n", node->closure.capture_names[i],
-                     node->closure.capture_names[i]);
-            }
-        } else {
-            // Fn/fn: copy captures to read-only locals
-            for (int32_t i = 0; i < num_captures; i++) {
-                const char *ct = c_type_for(cgen, node->closure.capture_syms[i]->type);
-                emit_line(cgen, "%s %s = _cap->%s;", ct, node->closure.capture_names[i],
-                          node->closure.capture_names[i]);
-            }
-        }
-    } else {
-        emit_line(cgen, "(void)_env;");
-    }
+    emit_closure_capture_unpack(cgen, node, env_struct);
 
     // Emit body
     const HirNode *body = node->closure.body;

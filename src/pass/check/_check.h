@@ -64,6 +64,16 @@ const Type *check_var_decl(Sema *sema, ASTNode *node);
 const Type *check_assign(Sema *sema, ASTNode *node);
 const Type *check_compound_assign(Sema *sema, ASTNode *node);
 
+// ── Decl checking (check_decl.c) ─────────────────────────────────
+
+void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
+                              const Type *struct_type);
+const Type *check_enum_decl_body(Sema *sema, ASTNode *node);
+const Type *check_pact_decl(Sema *sema, ASTNode *node);
+const Type *check_struct_decl(Sema *sema, ASTNode *node);
+const Type *check_struct_destructure(Sema *sema, ASTNode *node);
+const Type *check_tuple_destructure(Sema *sema, ASTNode *node);
+
 // ── Shared helpers ─────────────────────────────────────────────────
 
 /** Build a NODE_CALL AST node that calls EnumType.None() on @p enum_type. */
