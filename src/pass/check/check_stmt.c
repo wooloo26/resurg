@@ -286,8 +286,8 @@ static void check_break_continue(Sema *sema, ASTNode *node) {
 // ── Struct & destructure checkers ───────────────────────────────────────
 
 /** Type-check a single struct method: register recv + params, check body. */
-static void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
-                                     const Type *struct_type) {
+void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
+                              const Type *struct_type) {
     scope_push(sema, false);
 
     // Register recv as a param with struct type

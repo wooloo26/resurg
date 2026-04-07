@@ -38,13 +38,26 @@ const Type *check_deref(Sema *sema, ASTNode *node);
 const Type *check_match(Sema *sema, ASTNode *node);
 const Type *check_enum_init(Sema *sema, ASTNode *node);
 
+// ── Generic instantiation (check_expr.c) ──────────────────────────
+
+const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
+                                       int32_t type_arg_count, SrcLoc loc);
+const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
+                                     int32_t type_arg_count, SrcLoc loc);
+
 // ── Statement checking (check_stmt.c) ─────────────────────────────
 
 const Type *check_if(Sema *sema, ASTNode *node);
 const Type *check_block(Sema *sema, ASTNode *node);
 const Type *check_var_decl(Sema *sema, ASTNode *node);
 void check_fn_body(Sema *sema, ASTNode *fn_node);
+void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
+                              const Type *struct_type);
 const Type *check_assign(Sema *sema, ASTNode *node);
 const Type *check_compound_assign(Sema *sema, ASTNode *node);
+
+// ── AST clone (check_main.c) ─────────────────────────────────────
+
+ASTNode *clone_node(Arena *arena, ASTNode *src);
 
 #endif // RSG__CHECK_H

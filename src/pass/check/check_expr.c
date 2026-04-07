@@ -1,5 +1,7 @@
 #include "_check.h"
 
+// ── Forward declarations ──────────────────────────────────────────
+
 // ── Named-arg helpers ─────────────────────────────────────────────
 
 // ── Generic call helpers ──────────────────────────────────────────
@@ -238,7 +240,19 @@ const Type *check_binary(Sema *sema, ASTNode *node) {
 static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
                                            const char *variant_name) {
     const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
-    if (variant == NULL || variant->kind != ENUM_VARIANT_TUPLE) {
+    if (variant == NULL) {
+        return NULL;
+    }
+    if (variant->kind == ENUM_VARIANT_UNIT) {
+        // Unit variant: no args expected
+        int32_t arg_count = BUF_LEN(node->call.args);
+        if (arg_count != 0) {
+            SEMA_ERR(sema, node->loc, "unit variant '%s' takes no arguments", variant_name);
+        }
+        node->type = enum_type;
+        return enum_type;
+    }
+    if (variant->kind != ENUM_VARIANT_TUPLE) {
         return NULL;
     }
     int32_t arg_count = BUF_LEN(node->call.args);
@@ -301,8 +315,31 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
 
 /** Try to resolve a member call (enum variant, enum method, or struct method). */
 static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_name) {
-    const Type *obj_type = check_node(sema, node->call.callee->member.object);
     const char *method_name = node->call.callee->member.member;
+    const Type *obj_type = NULL;
+
+    // Handle generic enum instantiation via type_args on the call node.
+    // Check BEFORE calling check_node to avoid spurious "undefined variable" errors.
+    if (node->call.callee->member.object->kind == NODE_ID && BUF_LEN(node->call.type_args) > 0) {
+        const char *enum_name = node->call.callee->member.object->id.name;
+        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, enum_name);
+        if (gdef != NULL) {
+            const char *mangled = instantiate_generic_enum(
+                sema, gdef, node->call.type_args, BUF_LEN(node->call.type_args), node->loc);
+            if (mangled != NULL) {
+                node->call.callee->member.object->id.name = mangled;
+                EnumDef *edef = sema_lookup_enum(sema, mangled);
+                obj_type = edef->type;
+                node->call.callee->member.object->type = obj_type;
+                // Clear type_args since they've been consumed for enum instantiation
+                node->call.type_args = NULL;
+            }
+        }
+    }
+
+    if (obj_type == NULL) {
+        obj_type = check_node(sema, node->call.callee->member.object);
+    }
 
     // Auto-deref for ptr types
     if (obj_type != NULL && obj_type->kind == TYPE_PTR) {
@@ -452,6 +489,59 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         FnSig *sig = sema_lookup_fn(sema, fn_name);
         if (sig != NULL) {
             return resolve_call(sema, node, sig);
+        }
+
+        // Try generic fn type inference: identity(42) → identity<i32>(42)
+        GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
+        if (gdef != NULL) {
+            ASTNode *orig = gdef->decl;
+            int32_t num_params = gdef->type_param_count;
+            int32_t arg_count = BUF_LEN(node->call.args);
+            int32_t param_count = BUF_LEN(orig->fn_decl.params);
+
+            if (arg_count == param_count) {
+                const Type **inferred =
+                    (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
+
+                for (int32_t pi = 0; pi < param_count; pi++) {
+                    ASTNode *param = orig->fn_decl.params[pi];
+                    if (param->param.type.kind != AST_TYPE_NAME) {
+                        continue;
+                    }
+                    for (int32_t ti = 0; ti < num_params; ti++) {
+                        if (strcmp(param->param.type.name, gdef->type_params[ti].name) == 0) {
+                            const Type *arg_type = node->call.args[pi]->type;
+                            if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
+                                inferred[ti] = arg_type;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                bool all_inferred = true;
+                for (int32_t i = 0; i < num_params; i++) {
+                    if (inferred[i] == NULL) {
+                        all_inferred = false;
+                        break;
+                    }
+                }
+
+                if (all_inferred) {
+                    // Build synthetic type_args and set on node
+                    ASTType *synth_args = NULL;
+                    for (int32_t i = 0; i < num_params; i++) {
+                        ASTType arg = {0};
+                        arg.kind = AST_TYPE_NAME;
+                        arg.name = type_name(sema->arena, inferred[i]);
+                        BUF_PUSH(synth_args, arg);
+                    }
+                    node->call.type_args = synth_args;
+
+                    // Recurse into generic call handling (type_args now present)
+                    return check_call(sema, node);
+                }
+            }
         }
 
         Sym *sym = scope_lookup(sema, fn_name);
@@ -643,9 +733,441 @@ static bool struct_lit_has_field(const ASTNode *node, const char *name) {
     return false;
 }
 
+/**
+ * Instantiate a generic struct with the given type args.
+ * Creates a concrete struct def with a mangled name and registers it.
+ * Returns the mangled name, or NULL on error.
+ */
+const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef, ASTType *type_args,
+                                       int32_t type_arg_count, SrcLoc loc) {
+    int32_t expected = gdef->type_param_count;
+    if (type_arg_count != expected) {
+        SEMA_ERR(sema, loc, "wrong number of type arguments for '%s': expected %d, got %d",
+                 gdef->name, expected, type_arg_count);
+        return NULL;
+    }
+
+    // Resolve type args
+    const Type **resolved_args = NULL;
+    for (int32_t i = 0; i < type_arg_count; i++) {
+        const Type *t = resolve_ast_type(sema, &type_args[i]);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(resolved_args, t);
+    }
+
+    // Build mangled name
+    const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
+
+    // Check if already instantiated
+    if (sema_lookup_struct(sema, mangled) != NULL) {
+        BUF_FREE(resolved_args);
+        return mangled;
+    }
+
+    // Push type param substitutions
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
+                          (void *)resolved_args[i]);
+    }
+
+    // Build concrete struct field types
+    ASTNode *orig = gdef->decl;
+    StructDef *def = rsg_malloc(sizeof(*def));
+    def->name = mangled;
+    def->fields = NULL;
+    def->methods = NULL;
+    def->embedded = NULL;
+
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
+        ASTStructField *ast_field = &orig->struct_decl.fields[i];
+        const Type *field_type = resolve_ast_type(sema, &ast_field->type);
+        if (field_type == NULL) {
+            field_type = &TYPE_ERR_INST;
+        }
+        StructFieldInfo fi = {
+            .name = ast_field->name, .type = field_type, .default_value = ast_field->default_value};
+        BUF_PUSH(def->fields, fi);
+    }
+
+    // Build the Type*
+    StructField *type_fields = NULL;
+    for (int32_t i = 0; i < BUF_LEN(def->fields); i++) {
+        StructField sf = {.name = def->fields[i].name, .type = def->fields[i].type};
+        BUF_PUSH(type_fields, sf);
+    }
+
+    StructTypeSpec spec = {
+        .name = mangled,
+        .fields = type_fields,
+        .field_count = BUF_LEN(type_fields),
+        .embedded = NULL,
+        .embed_count = 0,
+    };
+    def->type = type_create_struct(sema->arena, &spec);
+
+    // Register methods with the mangled struct name
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.methods); i++) {
+        ASTNode *method = orig->struct_decl.methods[i];
+        StructMethodInfo mi = {.name = method->fn_decl.name,
+                               .is_mut_recv = method->fn_decl.is_mut_recv,
+                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
+                               .recv_name = method->fn_decl.recv_name,
+                               .decl = method};
+        BUF_PUSH(def->methods, mi);
+
+        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
+
+        const Type *return_type = &TYPE_UNIT_INST;
+        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
+            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
+            if (return_type == NULL) {
+                return_type = &TYPE_UNIT_INST;
+            }
+        }
+
+        FnSig *sig = rsg_malloc(sizeof(*sig));
+        sig->name = mi.name;
+        sig->return_type = return_type;
+        sig->param_types = NULL;
+        sig->param_names = NULL;
+        sig->param_count = BUF_LEN(method->fn_decl.params);
+        sig->is_pub = false;
+
+        for (int32_t j = 0; j < sig->param_count; j++) {
+            ASTNode *param = method->fn_decl.params[j];
+            const Type *pt = resolve_ast_type(sema, &param->param.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(sig->param_types, pt);
+            BUF_PUSH(sig->param_names, param->param.name);
+        }
+
+        hash_table_insert(&sema->fn_table, method_key, sig);
+    }
+
+    hash_table_insert(&sema->struct_table, mangled, def);
+    hash_table_insert(&sema->type_alias_table, mangled, (void *)def->type);
+
+    // Create synthetic AST node for lowering/codegen
+    ASTNode *synth = ast_new(sema->arena, NODE_STRUCT_DECL, orig->loc);
+    synth->struct_decl.name = mangled;
+    synth->struct_decl.fields = NULL;
+    synth->struct_decl.methods = NULL;
+    synth->struct_decl.embedded = NULL;
+    synth->struct_decl.conformances = NULL;
+    synth->struct_decl.type_params = NULL; // concrete — no type params
+
+    // Copy fields with resolved types
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
+        ASTStructField sf = orig->struct_decl.fields[i];
+        BUF_PUSH(synth->struct_decl.fields, sf);
+    }
+    synth->type = def->type;
+
+    // Clone and type-check method bodies with type param substitutions
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.methods); i++) {
+        ASTNode *method = orig->struct_decl.methods[i];
+        ASTNode *clone = clone_node(sema->arena, method);
+        clone->fn_decl.owner_struct = mangled;
+        clone->fn_decl.type_params = NULL;
+        BUF_PUSH(synth->struct_decl.methods, clone);
+        check_struct_method_body(sema, clone, mangled, def->type);
+    }
+
+    // Append to file decls for lowering
+    BUF_PUSH(sema->synthetic_decls, synth);
+
+    // Clear type param substitutions
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_remove(&sema->type_param_table, gdef->type_params[i].name);
+    }
+
+    BUF_FREE(resolved_args);
+    return mangled;
+}
+
+/**
+ * Instantiate a generic enum with the given type args.
+ * Creates a concrete enum def with a mangled name and registers it.
+ * Returns the mangled name, or NULL on error.
+ */
+const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, ASTType *type_args,
+                                     int32_t type_arg_count, SrcLoc loc) {
+    int32_t expected = gdef->type_param_count;
+    if (type_arg_count != expected) {
+        SEMA_ERR(sema, loc, "wrong number of type arguments for '%s': expected %d, got %d",
+                 gdef->name, expected, type_arg_count);
+        return NULL;
+    }
+
+    // Resolve type args
+    const Type **resolved_args = NULL;
+    for (int32_t i = 0; i < type_arg_count; i++) {
+        const Type *t = resolve_ast_type(sema, &type_args[i]);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(resolved_args, t);
+    }
+
+    // Build mangled name
+    const char *mangled = build_mangled_name(sema, gdef->name, resolved_args, type_arg_count);
+
+    // Check if already instantiated
+    if (sema_lookup_enum(sema, mangled) != NULL) {
+        BUF_FREE(resolved_args);
+        return mangled;
+    }
+
+    // Push type param substitutions
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
+                          (void *)resolved_args[i]);
+    }
+
+    // Build concrete enum variants
+    ASTNode *orig = gdef->decl;
+    EnumVariant *variants = NULL;
+    int32_t auto_discriminant = 0;
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
+        ASTEnumVariant *av = &orig->enum_decl.variants[i];
+        EnumVariant variant = {0};
+        variant.name = av->name;
+
+        switch (av->kind) {
+        case VARIANT_UNIT:
+            variant.kind = ENUM_VARIANT_UNIT;
+            break;
+        case VARIANT_TUPLE: {
+            variant.kind = ENUM_VARIANT_TUPLE;
+            variant.tuple_count = BUF_LEN(av->tuple_types);
+            variant.tuple_types = (const Type **)arena_alloc_zero(
+                sema->arena, variant.tuple_count * sizeof(const Type *));
+            for (int32_t j = 0; j < variant.tuple_count; j++) {
+                variant.tuple_types[j] = resolve_ast_type(sema, &av->tuple_types[j]);
+                if (variant.tuple_types[j] == NULL) {
+                    variant.tuple_types[j] = &TYPE_ERR_INST;
+                }
+            }
+            break;
+        }
+        case VARIANT_STRUCT: {
+            variant.kind = ENUM_VARIANT_STRUCT;
+            variant.field_count = BUF_LEN(av->fields);
+            variant.fields =
+                arena_alloc_zero(sema->arena, variant.field_count * sizeof(StructField));
+            for (int32_t j = 0; j < variant.field_count; j++) {
+                variant.fields[j].name = av->fields[j].name;
+                variant.fields[j].type = resolve_ast_type(sema, &av->fields[j].type);
+                if (variant.fields[j].type == NULL) {
+                    variant.fields[j].type = &TYPE_ERR_INST;
+                }
+            }
+            break;
+        }
+        }
+
+        if (av->discriminant != NULL) {
+            if (av->discriminant->kind == NODE_LIT && av->discriminant->lit.kind == LIT_I32) {
+                variant.discriminant = (int32_t)av->discriminant->lit.integer_value;
+                auto_discriminant = variant.discriminant + 1;
+            }
+        } else {
+            variant.discriminant = auto_discriminant;
+            auto_discriminant++;
+        }
+        BUF_PUSH(variants, variant);
+    }
+
+    const Type *enum_type = type_create_enum(sema->arena, mangled, variants, BUF_LEN(variants));
+
+    EnumDef *def = rsg_malloc(sizeof(*def));
+    def->name = mangled;
+    def->methods = NULL;
+    def->type = enum_type;
+
+    // Register methods with the mangled enum name
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
+        ASTNode *method = orig->enum_decl.methods[i];
+        StructMethodInfo mi = {.name = method->fn_decl.name,
+                               .is_mut_recv = method->fn_decl.is_mut_recv,
+                               .is_ptr_recv = method->fn_decl.is_ptr_recv,
+                               .recv_name = method->fn_decl.recv_name,
+                               .decl = method};
+        BUF_PUSH(def->methods, mi);
+
+        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
+
+        const Type *return_type = &TYPE_UNIT_INST;
+        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
+            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
+            if (return_type == NULL) {
+                return_type = &TYPE_UNIT_INST;
+            }
+        }
+
+        FnSig *sig = rsg_malloc(sizeof(*sig));
+        sig->name = mi.name;
+        sig->return_type = return_type;
+        sig->param_types = NULL;
+        sig->param_names = NULL;
+        sig->param_count = BUF_LEN(method->fn_decl.params);
+        sig->is_pub = false;
+
+        for (int32_t j = 0; j < sig->param_count; j++) {
+            ASTNode *param = method->fn_decl.params[j];
+            const Type *pt = resolve_ast_type(sema, &param->param.type);
+            if (pt == NULL) {
+                pt = &TYPE_ERR_INST;
+            }
+            BUF_PUSH(sig->param_types, pt);
+            BUF_PUSH(sig->param_names, param->param.name);
+        }
+
+        hash_table_insert(&sema->fn_table, method_key, sig);
+    }
+
+    hash_table_insert(&sema->enum_table, mangled, def);
+    hash_table_insert(&sema->type_alias_table, mangled, (void *)enum_type);
+
+    // Create synthetic AST node for lowering/codegen
+    ASTNode *synth = ast_new(sema->arena, NODE_ENUM_DECL, orig->loc);
+    synth->enum_decl.name = mangled;
+    synth->enum_decl.variants = NULL;
+    synth->enum_decl.methods = NULL;
+    synth->enum_decl.type_params = NULL; // concrete — no type params
+
+    // Copy variants from original (they use AST types but lowering uses the Type*)
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
+        BUF_PUSH(synth->enum_decl.variants, orig->enum_decl.variants[i]);
+    }
+    synth->type = enum_type;
+
+    // Clone and type-check method bodies with type param substitutions
+    const Type *ptr_type = type_create_ptr(sema->arena, enum_type, false);
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
+        ASTNode *method = orig->enum_decl.methods[i];
+        ASTNode *mclone = clone_node(sema->arena, method);
+        mclone->fn_decl.owner_struct = mangled;
+        mclone->fn_decl.type_params = NULL;
+        BUF_PUSH(synth->enum_decl.methods, mclone);
+        check_struct_method_body(sema, mclone, mangled, ptr_type);
+    }
+
+    // Append to file decls for lowering
+    BUF_PUSH(sema->synthetic_decls, synth);
+
+    // Clear type param substitutions
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_remove(&sema->type_param_table, gdef->type_params[i].name);
+    }
+
+    BUF_FREE(resolved_args);
+    return mangled;
+}
+
 const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     const char *struct_name = node->struct_lit.name;
     StructDef *sdef = sema_lookup_struct(sema, struct_name);
+
+    // Follow type aliases: if no struct found, check if name is a type alias to a struct
+    if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
+        const Type *alias = sema_lookup_type_alias(sema, struct_name);
+        if (alias != NULL && alias->kind == TYPE_STRUCT) {
+            sdef = sema_lookup_struct(sema, alias->struct_type.name);
+            if (sdef != NULL) {
+                node->struct_lit.name = sdef->name;
+                struct_name = sdef->name;
+            }
+        }
+    }
+
+    // If not found and has type args, try to instantiate from generic template
+    if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) > 0) {
+        GenericStructDef *gdef = sema_lookup_generic_struct(sema, struct_name);
+        if (gdef != NULL) {
+            const char *mangled =
+                instantiate_generic_struct(sema, gdef, node->struct_lit.type_args,
+                                           BUF_LEN(node->struct_lit.type_args), node->loc);
+            if (mangled != NULL) {
+                node->struct_lit.name = mangled;
+                struct_name = mangled;
+                sdef = sema_lookup_struct(sema, mangled);
+            }
+        }
+    }
+
+    // If still not found and has NO type args, try to infer from field values
+    if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
+        GenericStructDef *gdef = sema_lookup_generic_struct(sema, struct_name);
+        if (gdef != NULL) {
+            // Infer type args from field values
+            int32_t num_params = gdef->type_param_count;
+            const Type **inferred_args =
+                (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
+
+            // Check field values first to get their types
+            for (int32_t i = 0; i < BUF_LEN(node->struct_lit.field_values); i++) {
+                check_node(sema, node->struct_lit.field_values[i]);
+            }
+
+            // Match field types against generic params
+            for (int32_t fi = 0; fi < BUF_LEN(gdef->decl->struct_decl.fields); fi++) {
+                ASTStructField *ast_field = &gdef->decl->struct_decl.fields[fi];
+                if (ast_field->type.kind != AST_TYPE_NAME) {
+                    continue;
+                }
+                // Check if this field's type is a type parameter
+                for (int32_t pi = 0; pi < num_params; pi++) {
+                    if (strcmp(ast_field->type.name, gdef->type_params[pi].name) == 0) {
+                        // Find the corresponding value
+                        for (int32_t vi = 0; vi < BUF_LEN(node->struct_lit.field_names); vi++) {
+                            if (strcmp(node->struct_lit.field_names[vi], ast_field->name) == 0) {
+                                const Type *val_type = node->struct_lit.field_values[vi]->type;
+                                if (val_type != NULL && val_type->kind != TYPE_ERR) {
+                                    inferred_args[pi] = val_type;
+                                }
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Verify all params inferred
+            bool all_inferred = true;
+            for (int32_t i = 0; i < num_params; i++) {
+                if (inferred_args[i] == NULL) {
+                    all_inferred = false;
+                    break;
+                }
+            }
+
+            if (all_inferred) {
+                // Build type_args from inferred types
+                ASTType *synth_args = NULL;
+                for (int32_t i = 0; i < num_params; i++) {
+                    ASTType arg = {0};
+                    arg.kind = AST_TYPE_NAME;
+                    arg.name = type_name(sema->arena, inferred_args[i]);
+                    BUF_PUSH(synth_args, arg);
+                }
+                const char *mangled =
+                    instantiate_generic_struct(sema, gdef, synth_args, num_params, node->loc);
+                if (mangled != NULL) {
+                    node->struct_lit.name = mangled;
+                    struct_name = mangled;
+                    sdef = sema_lookup_struct(sema, mangled);
+                }
+                BUF_FREE(synth_args);
+            }
+        }
+    }
+
     if (sdef == NULL) {
         SEMA_ERR(sema, node->loc, "unknown struct '%s'", struct_name);
         return &TYPE_ERR_INST;
@@ -892,9 +1414,26 @@ const Type *check_match(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_enum_init(Sema *sema, ASTNode *node) {
-    EnumDef *edef = sema_lookup_enum(sema, node->enum_init.enum_name);
+    const char *enum_name = node->enum_init.enum_name;
+    EnumDef *edef = sema_lookup_enum(sema, enum_name);
+
+    // If not found and has type args, try to instantiate from generic template
+    if (edef == NULL && BUF_LEN(node->enum_init.type_args) > 0) {
+        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, enum_name);
+        if (gdef != NULL) {
+            const char *mangled =
+                instantiate_generic_enum(sema, gdef, node->enum_init.type_args,
+                                         BUF_LEN(node->enum_init.type_args), node->loc);
+            if (mangled != NULL) {
+                node->enum_init.enum_name = mangled;
+                enum_name = mangled;
+                edef = sema_lookup_enum(sema, mangled);
+            }
+        }
+    }
+
     if (edef == NULL) {
-        SEMA_ERR(sema, node->loc, "unknown enum '%s'", node->enum_init.enum_name);
+        SEMA_ERR(sema, node->loc, "unknown enum '%s'", enum_name);
         return &TYPE_ERR_INST;
     }
 

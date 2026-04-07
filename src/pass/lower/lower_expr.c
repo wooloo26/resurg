@@ -365,13 +365,17 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         via_ptr = true;
     }
 
-    // Enum: tuple variant construction or method call
+    // Enum: tuple variant construction, unit variant, or method call
     if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
         const char *variant_name = member_ast->member.member;
         const EnumVariant *variant = type_enum_find_variant(obj_type, variant_name);
         if (variant != NULL && variant->kind == ENUM_VARIANT_TUPLE) {
             EnumVariantSpec spec = {obj_type, variant_name, ast->loc};
             return lower_enum_tuple_init(low, &spec, ast->call.args);
+        }
+        if (variant != NULL && variant->kind == ENUM_VARIANT_UNIT) {
+            EnumVariantSpec spec = {obj_type, variant_name, ast->loc};
+            return lower_enum_unit_init(low, &spec);
         }
         const char *method_key =
             arena_sprintf(low->hir_arena, "%s.%s", type_enum_name(obj_type), variant_name);

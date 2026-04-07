@@ -232,6 +232,7 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
         HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
         HirSym *sym = lower_make_sym(low, &sym_spec);
         sym->mangled_name = mangled;
+        sym->is_ptr_recv = method->fn_decl.is_ptr_recv;
         lower_scope_define(low, key, sym);
     }
 }
@@ -252,9 +253,15 @@ static void preregister_fns(Lower *low, const ASTNode *file_ast) {
             lower_scope_define(low, decl->fn_decl.name, sym);
         }
         if (decl->kind == NODE_STRUCT_DECL) {
+            if (BUF_LEN(decl->struct_decl.type_params) > 0) {
+                continue;
+            }
             preregister_type_methods(low, decl->struct_decl.name, decl->struct_decl.methods);
         }
         if (decl->kind == NODE_ENUM_DECL) {
+            if (BUF_LEN(decl->enum_decl.type_params) > 0) {
+                continue;
+            }
             preregister_type_methods(low, decl->enum_decl.name, decl->enum_decl.methods);
         }
     }
@@ -306,11 +313,19 @@ static HirNode *lower_file(Lower *low, const ASTNode *ast) {
         const ASTNode *decl_ast = ast->file.decls[i];
 
         if (decl_ast->kind == NODE_STRUCT_DECL) {
+            // Skip generic struct templates — only monomorphized copies are lowered
+            if (BUF_LEN(decl_ast->struct_decl.type_params) > 0) {
+                continue;
+            }
             emit_struct_with_methods(low, decl_ast, &decls);
             continue;
         }
 
         if (decl_ast->kind == NODE_ENUM_DECL) {
+            // Skip generic enum templates — only monomorphized copies are lowered
+            if (BUF_LEN(decl_ast->enum_decl.type_params) > 0) {
+                continue;
+            }
             emit_enum_with_methods(low, decl_ast, &decls);
             continue;
         }
@@ -365,6 +380,9 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
 
     case NODE_STRUCT_DECL: {
         // Handled primarily in lower_file; fallback for other ctxs
+        if (BUF_LEN(ast->struct_decl.type_params) > 0) {
+            return NULL;
+        }
         HirNode *node = hir_new(low->hir_arena, HIR_STRUCT_DECL, &TYPE_UNIT_INST, ast->loc);
         node->struct_decl.name = ast->struct_decl.name;
         node->struct_decl.struct_type = ast->type;
@@ -373,6 +391,9 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
 
     case NODE_ENUM_DECL: {
         // Handled primarily in lower_file; fallback for other ctxs
+        if (BUF_LEN(ast->enum_decl.type_params) > 0) {
+            return NULL;
+        }
         HirNode *node = hir_new(low->hir_arena, HIR_ENUM_DECL, &TYPE_UNIT_INST, ast->loc);
         node->enum_decl.name = ast->enum_decl.name;
         node->enum_decl.enum_type = ast->type;

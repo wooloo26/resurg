@@ -1,0 +1,67 @@
+// v0.8.1 — Generic structs: parametric polymorphism for struct types
+module test_generic_structs
+
+// ── generic struct with two type parameters ──
+
+struct Pair<T, U> {
+    first: T
+    second: U
+}
+
+// ── generic struct with single type parameter ──
+
+struct Wrapper<T> {
+    value: T
+}
+
+// ── generic struct with default field values ──
+
+struct Container<T> {
+    item: T
+    count: i32 = 1
+}
+
+fn test_pair_i32_str() {
+    p := Pair<i32, str> { first = 10, second = "hello" }
+    assert(p.first == 10)
+    assert(p.second == "hello")
+}
+
+fn test_pair_bool_f64() {
+    p := Pair<bool, f64> { first = true, second = 3.14 }
+    assert(p.first == true)
+    assert(p.second == 3.14)
+}
+
+fn test_wrapper_i32() {
+    w := Wrapper<i32> { value = 42 }
+    assert(w.value == 42)
+}
+
+fn test_wrapper_str() {
+    w := Wrapper<str> { value = "world" }
+    assert(w.value == "world")
+}
+
+fn test_container_default() {
+    c := Container<str> { item = "test" }
+    assert(c.item == "test")
+    assert(c.count == 1)
+}
+
+fn test_container_explicit() {
+    c := Container<i32> { item = 99, count = 5 }
+    assert(c.item == 99)
+    assert(c.count == 5)
+}
+
+// ── multiple instantiations of same generic struct ──
+
+fn test_multiple_instantiations() {
+    a := Pair<i32, i32> { first = 1, second = 2 }
+    b := Pair<str, str> { first = "a", second = "b" }
+    assert(a.first == 1)
+    assert(a.second == 2)
+    assert(b.first == "a")
+    assert(b.second == "b")
+}

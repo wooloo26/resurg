@@ -1,3 +1,4 @@
+#include "pass/check/_check.h"
 #include "pass/check/_sema.h"
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
@@ -24,6 +25,18 @@ PactDef *sema_lookup_pact(const Sema *sema, const char *name) {
 
 GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name) {
     return hash_table_lookup(&sema->generic_fn_table, name);
+}
+
+GenericStructDef *sema_lookup_generic_struct(const Sema *sema, const char *name) {
+    return hash_table_lookup(&sema->generic_struct_table, name);
+}
+
+GenericEnumDef *sema_lookup_generic_enum(const Sema *sema, const char *name) {
+    return hash_table_lookup(&sema->generic_enum_table, name);
+}
+
+GenericTypeAlias *sema_lookup_generic_type_alias(const Sema *sema, const char *name) {
+    return hash_table_lookup(&sema->generic_type_alias_table, name);
 }
 
 // ── AST type resolution ────────────────────────────────────────────────
@@ -81,6 +94,67 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
     const Type *alias = sema_lookup_type_alias(sema, ast_type->name);
     if (alias != NULL) {
         return alias;
+    }
+    // Check generic type aliases with type args
+    if (BUF_LEN(ast_type->type_args) > 0) {
+        GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, ast_type->name);
+        if (gta != NULL) {
+            int32_t expected = gta->type_param_count;
+            int32_t got = BUF_LEN(ast_type->type_args);
+            if (got != expected) {
+                SEMA_ERR(sema, ast_type->loc,
+                         "wrong number of type arguments for '%s': expected %d, got %d",
+                         ast_type->name, expected, got);
+                return &TYPE_ERR_INST;
+            }
+            // Push type param substitutions
+            for (int32_t i = 0; i < expected; i++) {
+                const Type *t = resolve_ast_type(sema, ast_type->type_args[i]);
+                if (t == NULL) {
+                    t = &TYPE_ERR_INST;
+                }
+                hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+            }
+            const Type *result = resolve_ast_type(sema, &gta->alias_type);
+            // Clear type param substitutions
+            for (int32_t i = 0; i < expected; i++) {
+                hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+            }
+            return result;
+        }
+        // Check generic structs with type args (e.g., Pair<i32, str>)
+        GenericStructDef *gsdef = sema_lookup_generic_struct(sema, ast_type->name);
+        if (gsdef != NULL) {
+            int32_t got = BUF_LEN(ast_type->type_args);
+            // Convert ASTType** (ptr buf) to ASTType* (value buf)
+            ASTType *val_args = NULL;
+            for (int32_t i = 0; i < got; i++) {
+                BUF_PUSH(val_args, *ast_type->type_args[i]);
+            }
+            const char *mangled =
+                instantiate_generic_struct(sema, gsdef, val_args, got, ast_type->loc);
+            BUF_FREE(val_args);
+            if (mangled != NULL) {
+                return sema_lookup_type_alias(sema, mangled);
+            }
+            return &TYPE_ERR_INST;
+        }
+        // Check generic enums with type args (e.g., Either<i32, str>)
+        GenericEnumDef *gedef = sema_lookup_generic_enum(sema, ast_type->name);
+        if (gedef != NULL) {
+            int32_t got = BUF_LEN(ast_type->type_args);
+            ASTType *val_args = NULL;
+            for (int32_t i = 0; i < got; i++) {
+                BUF_PUSH(val_args, *ast_type->type_args[i]);
+            }
+            const char *mangled =
+                instantiate_generic_enum(sema, gedef, val_args, got, ast_type->loc);
+            BUF_FREE(val_args);
+            if (mangled != NULL) {
+                return sema_lookup_type_alias(sema, mangled);
+            }
+            return &TYPE_ERR_INST;
+        }
     }
     SEMA_ERR(sema, ast_type->loc, "unknown type '%s'", ast_type->name);
     return &TYPE_ERR_INST;

@@ -216,6 +216,7 @@ static ASTNode *parse_enum_decl(Parser *parser) {
     node->enum_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->enum_decl.variants = NULL;
     node->enum_decl.methods = NULL;
+    node->enum_decl.type_params = parse_type_params(parser);
 
     parser_skip_newlines(parser);
     parser_expect(parser, TOKEN_LEFT_BRACE);
@@ -294,6 +295,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.methods = NULL;
     node->struct_decl.embedded = NULL;
     node->struct_decl.conformances = NULL;
+    node->struct_decl.type_params = parse_type_params(parser);
 
     // Parse optional conformance list: struct Foo: Pact1 + Pact2 + Into<str>
     if (parser_match(parser, TOKEN_COLON)) {
@@ -459,6 +461,7 @@ ASTNode *parser_parse_decl(Parser *parser) {
         parser_advance(parser); // consume 'type'
         ASTNode *node = ast_new(parser->arena, NODE_TYPE_ALIAS, loc);
         node->type_alias.name = parser_expect(parser, TOKEN_ID)->lexeme;
+        node->type_alias.type_params = parse_type_params(parser);
         parser_expect(parser, TOKEN_EQUAL);
         node->type_alias.alias_type = parser_parse_type(parser);
         return node;

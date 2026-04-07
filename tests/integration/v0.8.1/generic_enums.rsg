@@ -1,0 +1,89 @@
+// v0.8.1 — Generic enums: parametric polymorphism for enum types
+module test_generic_enums
+
+// ── generic enum with two type parameters ──
+
+enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+fn test_either_left() {
+    e := Either<i32, str>::Left(42)
+    match e {
+        Left(v) => assert(v == 42),
+        Right(_) => assert(false),
+    }
+}
+
+fn test_either_right() {
+    e := Either<i32, str>::Right("hello")
+    match e {
+        Left(_) => assert(false),
+        Right(v) => assert(v == "hello"),
+    }
+}
+
+// ── generic enum with single type parameter ──
+
+enum Maybe<T> {
+    Nothing,
+    Just(T),
+}
+
+fn test_maybe_nothing() {
+    m := Maybe<i32>::Nothing
+    match m {
+        Nothing => assert(true),
+        Just(_) => assert(false),
+    }
+}
+
+fn test_maybe_just() {
+    m := Maybe<str>::Just("world")
+    match m {
+        Nothing => assert(false),
+        Just(v) => assert(v == "world"),
+    }
+}
+
+// ── generic enum with struct variant ──
+
+enum Entry<K, V> {
+    Empty,
+    Occupied { key: K, value: V },
+}
+
+fn test_entry_empty() {
+    e := Entry<str, i32>::Empty
+    match e {
+        Empty => assert(true),
+        Occupied { key, value } => assert(false),
+    }
+}
+
+fn test_entry_occupied() {
+    e := Entry<str, i32>::Occupied { key = "age", value = 30 }
+    match e {
+        Empty => assert(false),
+        Occupied { key, value } => {
+            assert(key == "age")
+            assert(value == 30)
+        },
+    }
+}
+
+// ── multiple instantiations of same generic enum ──
+
+fn test_multiple_instantiations() {
+    a := Either<i32, i32>::Left(1)
+    b := Either<str, bool>::Right(true)
+    match a {
+        Left(v) => assert(v == 1),
+        Right(_) => assert(false),
+    }
+    match b {
+        Left(_) => assert(false),
+        Right(v) => assert(v == true),
+    }
+}

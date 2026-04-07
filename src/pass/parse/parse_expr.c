@@ -436,17 +436,66 @@ static ASTNode *parse_postfix(Parser *parser) {
                 }
             } while (parser_match(parser, TOKEN_COMMA));
 
-            if (valid && parser_match(parser, TOKEN_GREATER) &&
-                parser_match(parser, TOKEN_LEFT_PAREN)) {
-                ASTNode *call = parse_call_args(parser, left, loc);
-                call->call.type_args = type_args;
-                left = call;
-                continue;
-            }
+            if (valid && parser_match(parser, TOKEN_GREATER)) {
+                if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+                    // Generic fn call: fn_name<Type, ...>(args)
+                    ASTNode *call = parse_call_args(parser, left, loc);
+                    call->call.type_args = type_args;
+                    left = call;
+                    continue;
+                }
+                if (is_struct_lit_ahead(parser)) {
+                    // Generic struct lit: Name<Type, ...> { field = value, ... }
+                    ASTNode *slit = parse_struct_lit(parser, left);
+                    slit->struct_lit.type_args = type_args;
+                    left = slit;
+                    continue;
+                }
+                if (parser_check(parser, TOKEN_COLON_COLON)) {
+                    // Generic enum access: Name<Type, ...>::Variant
+                    // Mangle the name with type args for semantic analysis
+                    // Build mangled name: "Name__type1_type2"
+                    // Store type_args on a synthesized member node
+                    parser_advance(parser); // consume '::'
+                    const char *variant_name = parser_expect(parser, TOKEN_ID)->lexeme;
+                    ASTNode *member = ast_new(parser->arena, NODE_MEMBER, loc);
+                    member->member.object = left;
+                    member->member.member = variant_name;
 
-            // Not a generic call — backtrack
-            BUF_FREE(type_args);
-            parser->pos = save_pos;
+                    // Check what follows: ( for tuple variant call, { for struct variant lit
+                    if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+                        // Enum::Variant(args) — tuple variant or unit variant
+                        ASTNode *call = parse_call_args(parser, member, loc);
+                        call->call.type_args = type_args;
+                        left = call;
+                        continue;
+                    }
+                    if (is_struct_lit_ahead(parser)) {
+                        // Enum::Variant { field = value, ... } — struct variant
+                        ASTNode *node = parse_enum_struct_lit(parser, member);
+                        node->enum_init.type_args = type_args;
+                        left = node;
+                        continue;
+                    }
+                    // Unit variant: Enum<T>::Variant (no args)
+                    // Create a synthetic call node with no args
+                    ASTNode *call = ast_new(parser->arena, NODE_CALL, loc);
+                    call->call.callee = member;
+                    call->call.args = NULL;
+                    call->call.arg_names = NULL;
+                    call->call.arg_is_mut = NULL;
+                    call->call.type_args = type_args;
+                    left = call;
+                    continue;
+                }
+                // Not followed by (, {, or :: — backtrack
+                BUF_FREE(type_args);
+                parser->pos = save_pos;
+            } else {
+                // Not a valid generic — backtrack
+                BUF_FREE(type_args);
+                parser->pos = save_pos;
+            }
         }
 
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {

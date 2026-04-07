@@ -204,6 +204,7 @@ struct ASTNode {
         struct {
             const char *name;
             ASTType alias_type;
+            ASTTypeParam *type_params; /* buf - generic type params */
         } type_alias;
 
         // NODE_FN_DECL
@@ -379,6 +380,7 @@ struct ASTNode {
             ASTNode **methods;         /* buf - NODE_FN_DECL */
             const char **embedded;     /* buf - embedded struct names */
             const char **conformances; /* buf - pact names */
+            ASTTypeParam *type_params; /* buf - generic type params */
         } struct_decl;
 
         // NODE_STRUCT_LIT
@@ -386,6 +388,7 @@ struct ASTNode {
             const char *name;
             const char **field_names; /* buf */
             ASTNode **field_values;   /* buf */
+            ASTType *type_args;       /* buf - explicit generic type args */
         } struct_lit;
 
         // NODE_STRUCT_DESTRUCTURE
@@ -416,8 +419,9 @@ struct ASTNode {
         // NODE_ENUM_DECL
         struct {
             const char *name;
-            ASTEnumVariant *variants; /* buf */
-            ASTNode **methods;        /* buf - NODE_FN_DECL */
+            ASTEnumVariant *variants;  /* buf */
+            ASTNode **methods;         /* buf - NODE_FN_DECL */
+            ASTTypeParam *type_params; /* buf - generic type params */
         } enum_decl;
 
         // NODE_MATCH
@@ -433,6 +437,7 @@ struct ASTNode {
             ASTNode **args;           /* buf - for tuple variants */
             const char **field_names; /* buf - for struct variants */
             ASTNode **field_values;   /* buf - for struct variants */
+            ASTType *type_args;       /* buf - explicit generic type args */
         } enum_init;
 
         // NODE_PACT_DECL

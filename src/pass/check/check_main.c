@@ -3,7 +3,7 @@
 // ── AST node deep clone (for generic monomorphization) ─────────────────
 
 /** Recursively deep-clone an AST node and its children. */
-static ASTNode *clone_node(Arena *arena, ASTNode *src) {
+ASTNode *clone_node(Arena *arena, ASTNode *src) {
     if (src == NULL) {
         return NULL;
     }
@@ -170,8 +170,12 @@ Sema *sema_create(Arena *arena) {
     hash_table_init(&sema->enum_table, NULL);
     hash_table_init(&sema->pact_table, NULL);
     hash_table_init(&sema->generic_fn_table, NULL);
+    hash_table_init(&sema->generic_struct_table, NULL);
+    hash_table_init(&sema->generic_enum_table, NULL);
+    hash_table_init(&sema->generic_type_alias_table, NULL);
     hash_table_init(&sema->type_param_table, NULL);
     sema->pending_insts = NULL;
+    sema->synthetic_decls = NULL;
     return sema;
 }
 
@@ -183,8 +187,12 @@ void sema_destroy(Sema *sema) {
         hash_table_destroy(&sema->enum_table);
         hash_table_destroy(&sema->pact_table);
         hash_table_destroy(&sema->generic_fn_table);
+        hash_table_destroy(&sema->generic_struct_table);
+        hash_table_destroy(&sema->generic_enum_table);
+        hash_table_destroy(&sema->generic_type_alias_table);
         hash_table_destroy(&sema->type_param_table);
         BUF_FREE(sema->pending_insts);
+        BUF_FREE(sema->synthetic_decls);
         free(sema);
     }
 }
@@ -379,6 +387,17 @@ static void register_struct_methods(Sema *sema, const ASTNode *decl, StructDef *
 static void register_struct_def(Sema *sema, ASTNode *decl) {
     const char *struct_name = decl->struct_decl.name;
 
+    // If the struct has type params, store as a generic template instead
+    if (BUF_LEN(decl->struct_decl.type_params) > 0) {
+        GenericStructDef *gdef = rsg_malloc(sizeof(*gdef));
+        gdef->name = struct_name;
+        gdef->decl = decl;
+        gdef->type_params = decl->struct_decl.type_params;
+        gdef->type_param_count = BUF_LEN(decl->struct_decl.type_params);
+        hash_table_insert(&sema->generic_struct_table, struct_name, gdef);
+        return;
+    }
+
     // Check for duplicate struct def
     if (sema_lookup_struct(sema, struct_name) != NULL) {
         SEMA_ERR(sema, decl->loc, "duplicate struct def '%s'", struct_name);
@@ -463,6 +482,17 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
 
 static void register_enum_def(Sema *sema, ASTNode *decl) {
     const char *enum_name = decl->enum_decl.name;
+
+    // If the enum has type params, store as a generic template instead
+    if (BUF_LEN(decl->enum_decl.type_params) > 0) {
+        GenericEnumDef *gdef = rsg_malloc(sizeof(*gdef));
+        gdef->name = enum_name;
+        gdef->decl = decl;
+        gdef->type_params = decl->enum_decl.type_params;
+        gdef->type_param_count = BUF_LEN(decl->enum_decl.type_params);
+        hash_table_insert(&sema->generic_enum_table, enum_name, gdef);
+        return;
+    }
 
     if (sema_lookup_enum(sema, enum_name) != NULL) {
         SEMA_ERR(sema, decl->loc, "duplicate enum def '%s'", enum_name);
@@ -682,10 +712,18 @@ bool sema_check(Sema *sema, ASTNode *file) {
     hash_table_init(&sema->pact_table, NULL);
     hash_table_destroy(&sema->generic_fn_table);
     hash_table_init(&sema->generic_fn_table, NULL);
+    hash_table_destroy(&sema->generic_struct_table);
+    hash_table_init(&sema->generic_struct_table, NULL);
+    hash_table_destroy(&sema->generic_enum_table);
+    hash_table_init(&sema->generic_enum_table, NULL);
+    hash_table_destroy(&sema->generic_type_alias_table);
+    hash_table_init(&sema->generic_type_alias_table, NULL);
     hash_table_destroy(&sema->type_param_table);
     hash_table_init(&sema->type_param_table, NULL);
     BUF_FREE(sema->pending_insts);
     sema->pending_insts = NULL;
+    BUF_FREE(sema->synthetic_decls);
+    sema->synthetic_decls = NULL;
     sema->file_node = file;
 
     scope_push(sema, false); // global scope
@@ -731,10 +769,20 @@ bool sema_check(Sema *sema, ASTNode *file) {
         ASTNode *decl = file->file.decls[i];
 
         if (decl->kind == NODE_TYPE_ALIAS) {
-            const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
-            if (underlying != NULL) {
-                hash_table_insert(&sema->type_alias_table, decl->type_alias.name,
-                                  (void *)underlying);
+            if (BUF_LEN(decl->type_alias.type_params) > 0) {
+                // Generic type alias: store as template
+                GenericTypeAlias *gta = rsg_malloc(sizeof(*gta));
+                gta->name = decl->type_alias.name;
+                gta->alias_type = decl->type_alias.alias_type;
+                gta->type_params = decl->type_alias.type_params;
+                gta->type_param_count = BUF_LEN(decl->type_alias.type_params);
+                hash_table_insert(&sema->generic_type_alias_table, gta->name, gta);
+            } else {
+                const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
+                if (underlying != NULL) {
+                    hash_table_insert(&sema->type_alias_table, decl->type_alias.name,
+                                      (void *)underlying);
+                }
             }
         }
 
@@ -745,6 +793,11 @@ bool sema_check(Sema *sema, ASTNode *file) {
 
     // Second pass: type-check everything
     check_node(sema, file);
+
+    // Append synthetic decls from generic struct/enum instantiation
+    for (int32_t i = 0; i < BUF_LEN(sema->synthetic_decls); i++) {
+        BUF_PUSH(file->file.decls, sema->synthetic_decls[i]);
+    }
 
     // Process pending generic instantiations (deferred body checking)
     for (int32_t gi = 0; gi < BUF_LEN(sema->pending_insts); gi++) {

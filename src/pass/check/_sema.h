@@ -48,6 +48,30 @@ typedef struct GenericInst {
     ASTNode *file_node;       // file AST to append cloned fn to
 } GenericInst;
 
+/** Generic struct template — stored when a struct has type params. */
+typedef struct GenericStructDef {
+    const char *name;
+    ASTNode *decl;             // original struct_decl AST
+    ASTTypeParam *type_params; /* buf */
+    int32_t type_param_count;
+} GenericStructDef;
+
+/** Generic enum template — stored when an enum has type params. */
+typedef struct GenericEnumDef {
+    const char *name;
+    ASTNode *decl;             // original enum_decl AST
+    ASTTypeParam *type_params; /* buf */
+    int32_t type_param_count;
+} GenericEnumDef;
+
+/** Generic type alias — stored when a type alias has type params. */
+typedef struct GenericTypeAlias {
+    const char *name;
+    ASTType alias_type;        // unresolved template type
+    ASTTypeParam *type_params; /* buf */
+    int32_t type_param_count;
+} GenericTypeAlias;
+
 /** A field def with its default value expr. */
 typedef struct StructFieldInfo {
     const char *name;
@@ -100,8 +124,12 @@ struct Sema {
     HashTable enum_table;        // name → EnumDef*
     HashTable pact_table;        // name → PactDef*
     HashTable generic_fn_table;  // name → GenericFnDef*
-    HashTable type_param_table;  // name → const Type* (active during generic body check)
-    GenericInst *pending_insts;  /* buf - deferred generic instantiations */
+    HashTable generic_struct_table;     // name → GenericStructDef*
+    HashTable generic_enum_table;       // name → GenericEnumDef*
+    HashTable generic_type_alias_table; // name → GenericTypeAlias*
+    HashTable type_param_table;         // name → const Type* (active during generic body check)
+    GenericInst *pending_insts;         /* buf - deferred generic instantiations */
+    ASTNode **synthetic_decls;          /* buf - monomorphized struct/enum decls to append */
 };
 
 /** Report a semantic err and bump the sema's err counter. */
