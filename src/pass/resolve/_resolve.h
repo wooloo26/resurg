@@ -116,6 +116,12 @@ const Type *promote_lit(ASTNode *lit, const Type *target);
 
 // ── Registration (resolve_register.c) ──────────────────────────────────
 
+/**
+ * Create a FnSig from a fn decl, resolving its return type and param types.
+ * The caller is responsible for inserting the sig into the fn table.
+ */
+FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub);
+
 void register_fn_sig(Sema *sema, ASTNode *decl);
 void register_struct_def(Sema *sema, ASTNode *decl);
 void register_enum_def(Sema *sema, ASTNode *decl);

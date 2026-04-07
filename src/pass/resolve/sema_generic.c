@@ -149,33 +149,7 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
         BUF_PUSH(*out_methods, mi);
 
         const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
-
-        const Type *return_type = &TYPE_UNIT_INST;
-        if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-            return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-            if (return_type == NULL) {
-                return_type = &TYPE_UNIT_INST;
-            }
-        }
-
-        FnSig *sig = rsg_malloc(sizeof(*sig));
-        sig->name = mi.name;
-        sig->return_type = return_type;
-        sig->param_types = NULL;
-        sig->param_names = NULL;
-        sig->param_count = BUF_LEN(method->fn_decl.params);
-        sig->is_pub = false;
-
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = method->fn_decl.params[j];
-            const Type *pt = resolve_ast_type(sema, &param->param.type);
-            if (pt == NULL) {
-                pt = &TYPE_ERR_INST;
-            }
-            BUF_PUSH(sig->param_types, pt);
-            BUF_PUSH(sig->param_names, param->param.name);
-        }
-
+        FnSig *sig = build_fn_sig(sema, method, false);
         hash_table_insert(&sema->fn_table, method_key, sig);
     }
 }

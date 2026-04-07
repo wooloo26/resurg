@@ -100,6 +100,39 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
 }
 
 /**
+ * Create a FnSig from a fn decl, resolving its return type and param types.
+ * The caller is responsible for inserting the sig into the fn table.
+ */
+FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
+    const Type *return_type = &TYPE_UNIT_INST;
+    if (decl->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
+        return_type = resolve_ast_type(sema, &decl->fn_decl.return_type);
+        if (return_type == NULL) {
+            return_type = &TYPE_UNIT_INST;
+        }
+    }
+
+    FnSig *sig = rsg_malloc(sizeof(*sig));
+    sig->name = decl->fn_decl.name;
+    sig->return_type = return_type;
+    sig->param_types = NULL;
+    sig->param_names = NULL;
+    sig->param_count = BUF_LEN(decl->fn_decl.params);
+    sig->is_pub = is_pub;
+
+    for (int32_t j = 0; j < sig->param_count; j++) {
+        ASTNode *param = decl->fn_decl.params[j];
+        const Type *pt = resolve_ast_type(sema, &param->param.type);
+        if (pt == NULL) {
+            pt = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(sig->param_types, pt);
+        BUF_PUSH(sig->param_names, param->param.name);
+    }
+    return sig;
+}
+
+/**
  * Register a method's sig in the fn table (keyed as "TypeName.method_name")
  * and append a StructMethodInfo entry to the methods buf.
  */
@@ -113,33 +146,7 @@ static void register_method_sig(Sema *sema, const char *type_name, ASTNode *meth
     BUF_PUSH(*methods, mi);
 
     const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, mi.name);
-
-    const Type *return_type = &TYPE_UNIT_INST;
-    if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-        return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-        if (return_type == NULL) {
-            return_type = &TYPE_UNIT_INST;
-        }
-    }
-
-    FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = mi.name;
-    sig->return_type = return_type;
-    sig->param_types = NULL;
-    sig->param_names = NULL;
-    sig->param_count = BUF_LEN(method->fn_decl.params);
-    sig->is_pub = false;
-
-    for (int32_t j = 0; j < sig->param_count; j++) {
-        ASTNode *param = method->fn_decl.params[j];
-        const Type *pt = resolve_ast_type(sema, &param->param.type);
-        if (pt == NULL) {
-            pt = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(sig->param_types, pt);
-        BUF_PUSH(sig->param_names, param->param.name);
-    }
-
+    FnSig *sig = build_fn_sig(sema, method, false);
     hash_table_insert(&sema->fn_table, method_key, sig);
 }
 
@@ -206,19 +213,15 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
 
 /**
  * Collect all required fields from a pact and its super pacts (recursively).
- * Appends to @p fields buf.
+ * Appends to @p fields buf, deduplicating by name.
  */
-static void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo **fields,
-                                SrcLoc loc) {
-    (void)loc;
-    // Recurse into super pacts
+static void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo **fields) {
     for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
         PactDef *super = sema_lookup_pact(sema, pact->super_pacts[i]);
         if (super != NULL) {
-            collect_pact_fields(sema, super, fields, loc);
+            collect_pact_fields(sema, super, fields);
         }
     }
-    // Add this pact's own fields (avoid duplicates)
     for (int32_t i = 0; i < BUF_LEN(pact->fields); i++) {
         bool exists = false;
         for (int32_t j = 0; j < BUF_LEN(*fields); j++) {
@@ -235,15 +238,13 @@ static void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo
 
 /**
  * Collect all required methods from a pact and its super pacts (recursively).
- * Appends to @p methods buf.
+ * Appends to @p methods buf, deduplicating by name.
  */
-static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **methods,
-                                 SrcLoc loc) {
-    (void)loc;
+static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **methods) {
     for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
         PactDef *super = sema_lookup_pact(sema, pact->super_pacts[i]);
         if (super != NULL) {
-            collect_pact_methods(sema, super, methods, loc);
+            collect_pact_methods(sema, super, methods);
         }
     }
     for (int32_t i = 0; i < BUF_LEN(pact->methods); i++) {
@@ -274,34 +275,11 @@ void register_fn_sig(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    const Type *resolved_return = &TYPE_UNIT_INST;
-    if (decl->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-        resolved_return = resolve_ast_type(sema, &decl->fn_decl.return_type);
-        if (resolved_return == NULL) {
-            resolved_return = &TYPE_UNIT_INST;
-        }
-    }
-
-    FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = decl->fn_decl.name;
-    sig->return_type = resolved_return;
-    sig->param_types = NULL;
-    sig->param_names = NULL;
-    sig->param_count = BUF_LEN(decl->fn_decl.params);
-    sig->is_pub = decl->fn_decl.is_pub;
-    for (int32_t j = 0; j < sig->param_count; j++) {
-        ASTNode *param = decl->fn_decl.params[j];
-        const Type *param_type = resolve_ast_type(sema, &param->param.type);
-        if (param_type == NULL) {
-            param_type = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(sig->param_types, param_type);
-        BUF_PUSH(sig->param_names, param->param.name);
-    }
+    FnSig *sig = build_fn_sig(sema, decl, decl->fn_decl.is_pub);
     hash_table_insert(&sema->fn_table, decl->fn_decl.name, sig);
 
     scope_define(sema,
-                 &(SymDef){decl->fn_decl.name, resolved_return, decl->fn_decl.is_pub, SYM_FN});
+                 &(SymDef){decl->fn_decl.name, sig->return_type, decl->fn_decl.is_pub, SYM_FN});
 }
 
 void register_struct_def(Sema *sema, ASTNode *decl) {
@@ -438,9 +416,9 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
 
 /** Verify that all pact-required fields are present and type-correct. */
 static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef *def,
-                                const char *pact_name, PactDef *pact) {
+                                PactDef *pact) {
     StructFieldInfo *required_fields = NULL;
-    collect_pact_fields(sema, pact, &required_fields, decl->loc);
+    collect_pact_fields(sema, pact, &required_fields);
 
     for (int32_t i = 0; i < BUF_LEN(required_fields); i++) {
         bool found = false;
@@ -450,7 +428,7 @@ static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef
                     SEMA_ERR(sema, decl->loc,
                              "field '%s' has type '%s' but pact '%s' requires type '%s'",
                              required_fields[i].name, type_name(sema->arena, def->fields[j].type),
-                             pact_name, type_name(sema->arena, required_fields[i].type));
+                             pact->name, type_name(sema->arena, required_fields[i].type));
                 }
                 found = true;
                 break;
@@ -458,17 +436,16 @@ static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef
         }
         if (!found) {
             SEMA_ERR(sema, decl->loc, "missing required field '%s' from pact '%s'",
-                     required_fields[i].name, pact_name);
+                     required_fields[i].name, pact->name);
         }
     }
     BUF_FREE(required_fields);
 }
 
 /** Verify pact-required methods exist; inject defaults when available. */
-static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, const char *pact_name,
-                                 PactDef *pact) {
+static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, PactDef *pact) {
     StructMethodInfo *pact_methods = NULL;
-    collect_pact_methods(sema, pact, &pact_methods, decl->loc);
+    collect_pact_methods(sema, pact, &pact_methods);
 
     for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
         bool has_body = pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
@@ -489,7 +466,7 @@ static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, cons
                 register_method_sig(sema, def->name, method_ast, &def->methods);
             } else {
                 SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                         pact_methods[i].name, pact_name);
+                         pact_methods[i].name, pact->name);
             }
         }
     }
@@ -504,8 +481,8 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
             continue;
         }
-        enforce_pact_fields(sema, decl, def, pact_name, pact);
-        enforce_pact_methods(sema, decl, def, pact_name, pact);
+        enforce_pact_fields(sema, decl, def, pact);
+        enforce_pact_methods(sema, decl, def, pact);
     }
 }
 
@@ -696,55 +673,12 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
 
 // ── Extension method registration ──────────────────────────────────
 
-/**
- * Resolve the target type name for an ext block, returning the effective
- * type name used for method registration (struct/enum/primitive).
- */
-static const char *resolve_ext_target_name(const Sema *sema, const char *target_name) {
-    // Check for struct
-    if (sema_lookup_struct(sema, target_name) != NULL) {
-        return target_name;
-    }
-    // Check for enum
-    if (sema_lookup_enum(sema, target_name) != NULL) {
-        return target_name;
-    }
-    // Primitive types are stored by their keyword name
-    return target_name;
-}
-
 /** Register a single primitive ext method into the fn_table with "type.method" key. */
 static void register_primitive_method(Sema *sema, const char *type_name, ASTNode *method) {
     method->fn_decl.owner_struct = type_name;
 
     const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, method->fn_decl.name);
-
-    const Type *return_type = &TYPE_UNIT_INST;
-    if (method->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-        return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
-        if (return_type == NULL) {
-            return_type = &TYPE_UNIT_INST;
-        }
-    }
-
-    FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = method->fn_decl.name;
-    sig->return_type = return_type;
-    sig->param_types = NULL;
-    sig->param_names = NULL;
-    sig->param_count = BUF_LEN(method->fn_decl.params);
-    sig->is_pub = false;
-
-    for (int32_t j = 0; j < sig->param_count; j++) {
-        ASTNode *param = method->fn_decl.params[j];
-        const Type *pt = resolve_ast_type(sema, &param->param.type);
-        if (pt == NULL) {
-            pt = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(sig->param_types, pt);
-        BUF_PUSH(sig->param_names, param->param.name);
-    }
-
+    FnSig *sig = build_fn_sig(sema, method, false);
     hash_table_insert(&sema->fn_table, method_key, sig);
 }
 
@@ -759,44 +693,41 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    // Resolve the effective target name (may be mangled for specialized generics)
-    const char *effective_name = resolve_ext_target_name(sema, target_name);
-
     // Try to find the target as a struct
-    StructDef *sdef = sema_lookup_struct(sema, effective_name);
+    StructDef *sdef = sema_lookup_struct(sema, target_name);
     if (sdef != NULL) {
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
-            method->fn_decl.owner_struct = effective_name;
-            register_method_sig(sema, effective_name, method, &sdef->methods);
+            method->fn_decl.owner_struct = target_name;
+            register_method_sig(sema, target_name, method, &sdef->methods);
         }
         return;
     }
 
     // Try to find the target as an enum
-    EnumDef *edef = sema_lookup_enum(sema, effective_name);
+    EnumDef *edef = sema_lookup_enum(sema, target_name);
     if (edef != NULL) {
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
-            method->fn_decl.owner_struct = effective_name;
-            register_method_sig(sema, effective_name, method, &edef->methods);
+            method->fn_decl.owner_struct = target_name;
+            register_method_sig(sema, target_name, method, &edef->methods);
         }
         return;
     }
 
     // Primitive type
     for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        register_primitive_method(sema, effective_name, decl->ext_decl.methods[i]);
+        register_primitive_method(sema, target_name, decl->ext_decl.methods[i]);
     }
 }
 
 /** Report missing pact methods that lack default bodies. */
 static void enforce_required_methods(Sema *sema, const ASTNode *decl, const char *pact_name,
                                      const StructMethodInfo *pact_methods,
-                                     const StructMethodInfo *impl_methods, int32_t impl_count) {
+                                     const StructMethodInfo *impl_methods) {
     for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
         bool found = false;
-        for (int32_t j = 0; j < impl_count; j++) {
+        for (int32_t j = 0; j < BUF_LEN(impl_methods); j++) {
             if (strcmp(impl_methods[j].name, pact_methods[i].name) == 0) {
                 found = true;
                 break;
@@ -848,9 +779,8 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
             }
 
             StructMethodInfo *pact_methods = NULL;
-            collect_pact_methods(sema, pact, &pact_methods, decl->loc);
-            enforce_required_methods(sema, decl, pact_name, pact_methods, sdef->methods,
-                                     BUF_LEN(sdef->methods));
+            collect_pact_methods(sema, pact, &pact_methods);
+            enforce_required_methods(sema, decl, pact_name, pact_methods, sdef->methods);
             BUF_FREE(pact_methods);
         }
         return;
@@ -867,7 +797,7 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
         }
 
         StructMethodInfo *pact_methods = NULL;
-        collect_pact_methods(sema, pact, &pact_methods, decl->loc);
+        collect_pact_methods(sema, pact, &pact_methods);
 
         for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
             if (!ext_method_exists(sema, target_name, pact_methods[i].name, edef)) {
