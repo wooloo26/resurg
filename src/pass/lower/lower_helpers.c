@@ -94,21 +94,6 @@ HirNode *lower_resolve_promoted_field(Lower *low, const FieldLookup *lookup) {
     return NULL;
 }
 
-TokenKind lower_compound_to_base_op(TokenKind op) {
-    switch (op) {
-    case TOKEN_PLUS_EQUAL:
-        return TOKEN_PLUS;
-    case TOKEN_MINUS_EQUAL:
-        return TOKEN_MINUS;
-    case TOKEN_STAR_EQUAL:
-        return TOKEN_STAR;
-    case TOKEN_SLASH_EQUAL:
-        return TOKEN_SLASH;
-    default:
-        return op;
-    }
-}
-
 HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec) {
     HirSym *sym = lower_scope_lookup(low, spec->name);
     if (sym == NULL) {

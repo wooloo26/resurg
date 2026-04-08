@@ -275,29 +275,13 @@ static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
     return false;
 }
 
-/** Resolve the rsg_print[ln]_* fn name for @p type from the dispatch table. */
-static const char *resolve_print_fn(const Type *type, bool newline) {
-    if (type == NULL) {
+/** Resolve the rsg_print[ln]_* fn name for @p type, derived from type_name(). */
+static const char *resolve_print_fn(Arena *arena, const Type *type, bool newline) {
+    if (!type_is_printable(type)) {
         return NULL;
     }
-    static const struct {
-        TypeKind kind;
-        const char *print_name;
-        const char *println_name;
-    } dispatch[] = {
-        {TYPE_STR, "rsg_print_str", "rsg_println_str"},
-        {TYPE_I32, "rsg_print_i32", "rsg_println_i32"},
-        {TYPE_U32, "rsg_print_u32", "rsg_println_u32"},
-        {TYPE_F64, "rsg_print_f64", "rsg_println_f64"},
-        {TYPE_BOOL, "rsg_print_bool", "rsg_println_bool"},
-        {TYPE_CHAR, "rsg_print_char", "rsg_println_char"},
-    };
-    for (size_t i = 0; i < sizeof(dispatch) / sizeof(dispatch[0]); i++) {
-        if (type->kind == dispatch[i].kind) {
-            return newline ? dispatch[i].println_name : dispatch[i].print_name;
-        }
-    }
-    return NULL;
+    const char *name = type_name(arena, type);
+    return arena_sprintf(arena, "rsg_print%s_%s", newline ? "ln" : "", name);
 }
 
 /**
@@ -313,7 +297,7 @@ static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
     }
 
     HirNode *arg = lower_expr(low, ast->call.args[0]);
-    const char *fn_name = resolve_print_fn(arg->type, newline);
+    const char *fn_name = resolve_print_fn(low->hir_arena, arg->type, newline);
     if (fn_name == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
     }

@@ -32,13 +32,6 @@ const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *f
     return NULL;
 }
 
-// ── Operator classification ────────────────────────────────────────────
-
-static bool binary_op_yields_bool(TokenKind op) {
-    return (op >= TOKEN_EQUAL_EQUAL && op <= TOKEN_GREATER_EQUAL) ||
-           op == TOKEN_AMPERSAND_AMPERSAND || op == TOKEN_PIPE_PIPE;
-}
-
 // ── Expression checkers ────────────────────────────────────────────────
 
 const Type *check_lit(Sema *sema, ASTNode *node) {
@@ -154,7 +147,7 @@ const Type *check_binary(Sema *sema, ASTNode *node) {
     const Type *right = check_node(sema, node->binary.right);
 
     if (left == NULL || right == NULL || left->kind == TYPE_ERR || right->kind == TYPE_ERR) {
-        return binary_op_yields_bool(node->binary.op) ? &TYPE_BOOL_INST : &TYPE_ERR_INST;
+        return token_op_yields_bool(node->binary.op) ? &TYPE_BOOL_INST : &TYPE_ERR_INST;
     }
 
     // Promote integer/float lits to match the other side's type
@@ -178,25 +171,10 @@ const Type *check_binary(Sema *sema, ASTNode *node) {
         }
     }
 
-    // Boolean operations require bool operands
-    if (node->binary.op == TOKEN_AMPERSAND_AMPERSAND || node->binary.op == TOKEN_PIPE_PIPE) {
+    // Comparison and logical operators return bool; arithmetic returns operand type
+    if (token_op_yields_bool(node->binary.op)) {
         return &TYPE_BOOL_INST;
     }
-
-    // Comparison operators return bool
-    switch (node->binary.op) {
-    case TOKEN_EQUAL_EQUAL:
-    case TOKEN_BANG_EQUAL:
-    case TOKEN_LESS:
-    case TOKEN_LESS_EQUAL:
-    case TOKEN_GREATER:
-    case TOKEN_GREATER_EQUAL:
-        return &TYPE_BOOL_INST;
-    default:
-        break;
-    }
-
-    // Arithmetic returns the operand type
     return left;
 }
 

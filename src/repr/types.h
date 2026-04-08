@@ -168,6 +168,8 @@ bool type_is_signed_integer(const Type *type);
 bool type_is_unsigned_integer(const Type *type);
 /** Return true if @p type is any floating-point type. */
 bool type_is_float(const Type *type);
+/** Return true if @p type has a runtime rsg_print[ln] fn. */
+bool type_is_printable(const Type *type);
 
 /** Return the singleton inst for a primitive @p kind, or TYPE_ERR for compounds. */
 const Type *type_singleton(TypeKind kind);

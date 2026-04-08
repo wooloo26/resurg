@@ -94,7 +94,7 @@ static HirNode *lower_compound_assign(Lower *low, const ASTNode *ast) {
     HirNode *value = lower_expr(low, ast->compound_assign.value);
 
     // Build binary: target op value
-    TokenKind base_op = lower_compound_to_base_op(ast->compound_assign.op);
+    TokenKind base_op = token_compound_base_op(ast->compound_assign.op);
     HirNode *target_read = lower_expr(low, ast->compound_assign.target);
     HirNode *binary = hir_new(low->hir_arena, HIR_BINARY, target->type, ast->loc);
     binary->binary.op = base_op;

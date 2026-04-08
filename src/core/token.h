@@ -146,10 +146,38 @@ typedef struct {
     } lit_value;
 } Token;
 
+/** Precedence levels for Pratt-style precedence climbing. */
+typedef enum {
+    PRECEDENCE_NONE,       //
+    PRECEDENCE_ASSIGN,     // = += -= *= /=
+    PRECEDENCE_PIPE,       // |>
+    PRECEDENCE_OR,         // ||
+    PRECEDENCE_AND,        // &&
+    PRECEDENCE_EQUALITY,   // == !=
+    PRECEDENCE_COMPARISON, // < <= > >=
+    PRECEDENCE_TERM,       // + -
+    PRECEDENCE_FACTOR,     // * / %
+    PRECEDENCE_UNARY,      // ! -
+    PRECEDENCE_CALL,       // () .
+    PRECEDENCE_PRIMARY,    //
+} Precedence;
+
 /** Return a human-readable name for @p kind (e.g. "ID", "+"). */
 const char *token_kind_str(TokenKind kind);
 
 /** Return true if @p kind is a type keyword (bool, i8, ..., str, unit). */
 bool token_is_type_keyword(TokenKind kind);
+
+/** Return the infix precedence of @p kind, or PRECEDENCE_NONE. */
+Precedence token_precedence(TokenKind kind);
+
+/** Return true if @p op is a comparison or logical operator that yields bool. */
+bool token_op_yields_bool(TokenKind op);
+
+/** Return true if @p op is a compound assignment (+=, -=, *=, /=). */
+bool token_is_compound_assign(TokenKind op);
+
+/** Map a compound-assignment token to its base arithmetic operator. */
+TokenKind token_compound_base_op(TokenKind op);
 
 #endif // RSG_TOKEN_H

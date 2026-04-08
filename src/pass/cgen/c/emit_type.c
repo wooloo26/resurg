@@ -63,7 +63,19 @@ static bool type_already_emitted(const Type **types, int32_t limit, const Type *
 
 // ── Compound type emission ────────────────────────────────────────────
 
-// ── Compound type emission ────────────────────────────────────────────
+/** Emitter function for a single compound type. */
+typedef void (*CompoundTypeEmitter)(CGen *, const Type *, const char *);
+
+/** Dispatch table indexed by TypeKind.  NULL entries are silently skipped. */
+static const CompoundTypeEmitter COMPOUND_EMITTERS[] = {
+    [TYPE_ARRAY] = emit_array_typedef,
+    [TYPE_TUPLE] = emit_tuple_typedef,
+    [TYPE_STRUCT] = emit_struct_typedef,
+    [TYPE_ENUM] = emit_enum_typedef,
+};
+
+static const int32_t COMPOUND_EMITTERS_COUNT =
+    (int32_t)(sizeof(COMPOUND_EMITTERS) / sizeof(COMPOUND_EMITTERS[0]));
 
 void emit_compound_typedefs(CGen *cgen) {
     int32_t count = BUF_LEN(cgen->compound_types);
@@ -78,21 +90,15 @@ void emit_compound_typedefs(CGen *cgen) {
         emit_line(cgen, "typedef struct %s %s;", name, name);
     }
 
-    // Pass 2: emit full struct definitions
+    // Pass 2: emit full struct definitions via dispatch table
     for (int32_t i = 0; i < count; i++) {
         const Type *type = cgen->compound_types[i];
         if (type_already_emitted(cgen->compound_types, i, type)) {
             continue;
         }
         const char *name = c_type_for(cgen, type);
-        if (type->kind == TYPE_ARRAY) {
-            emit_array_typedef(cgen, type, name);
-        } else if (type->kind == TYPE_TUPLE) {
-            emit_tuple_typedef(cgen, type, name);
-        } else if (type->kind == TYPE_STRUCT) {
-            emit_struct_typedef(cgen, type, name);
-        } else if (type->kind == TYPE_ENUM) {
-            emit_enum_typedef(cgen, type, name);
+        if (type->kind < COMPOUND_EMITTERS_COUNT && COMPOUND_EMITTERS[type->kind] != NULL) {
+            COMPOUND_EMITTERS[type->kind](cgen, type, name);
         }
     }
 

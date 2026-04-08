@@ -83,8 +83,7 @@ HirNode *lower_make_var_ref(Lower *low, HirSym *sym, SrcLoc loc);
 HirNode *lower_make_int_lit(Lower *low, const IntLitSpec *spec);
 /** Create a HIR_VAR_DECL node — derives name/type/mut from @p sym. */
 HirNode *lower_make_var_decl(Lower *low, HirSym *sym, HirNode *init);
-/** Map a compound-assignment TokenKind to its base arithmetic operator. */
-TokenKind lower_compound_to_base_op(TokenKind op);
+
 /**
  * Look up a field in the embedded structs of a struct type.
  * Returns a two-level HIR_STRUCT_FIELD_ACCESS chain (embed → field) on hit, or NULL.

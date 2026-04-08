@@ -27,6 +27,7 @@ enum {
     TF_INTEGER = 1 << 0,
     TF_SIGNED = 1 << 1,
     TF_FLOAT = 1 << 2,
+    TF_PRINTABLE = 1 << 3,
 };
 
 /**
@@ -43,23 +44,23 @@ typedef struct {
 } TypeInfoEntry;
 
 static const TypeInfoEntry TYPE_INFO[] = {
-    [TYPE_BOOL] = {"bool", "bool", &TYPE_BOOL_INST, 0},
+    [TYPE_BOOL] = {"bool", "bool", &TYPE_BOOL_INST, TF_PRINTABLE},
     [TYPE_I8] = {"i8", "int8_t", &TYPE_I8_INST, TF_INTEGER | TF_SIGNED},
     [TYPE_I16] = {"i16", "int16_t", &TYPE_I16_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_I32] = {"i32", "int32_t", &TYPE_I32_INST, TF_INTEGER | TF_SIGNED},
+    [TYPE_I32] = {"i32", "int32_t", &TYPE_I32_INST, TF_INTEGER | TF_SIGNED | TF_PRINTABLE},
     [TYPE_I64] = {"i64", "int64_t", &TYPE_I64_INST, TF_INTEGER | TF_SIGNED},
     [TYPE_I128] = {"i128", "__int128", &TYPE_I128_INST, TF_INTEGER | TF_SIGNED},
     [TYPE_U8] = {"u8", "uint8_t", &TYPE_U8_INST, TF_INTEGER},
     [TYPE_U16] = {"u16", "uint16_t", &TYPE_U16_INST, TF_INTEGER},
-    [TYPE_U32] = {"u32", "uint32_t", &TYPE_U32_INST, TF_INTEGER},
+    [TYPE_U32] = {"u32", "uint32_t", &TYPE_U32_INST, TF_INTEGER | TF_PRINTABLE},
     [TYPE_U64] = {"u64", "uint64_t", &TYPE_U64_INST, TF_INTEGER},
     [TYPE_U128] = {"u128", "unsigned __int128", &TYPE_U128_INST, TF_INTEGER},
     [TYPE_ISIZE] = {"isize", "intptr_t", &TYPE_ISIZE_INST, TF_INTEGER | TF_SIGNED},
     [TYPE_USIZE] = {"usize", "size_t", &TYPE_USIZE_INST, TF_INTEGER},
     [TYPE_F32] = {"f32", "float", &TYPE_F32_INST, TF_FLOAT},
-    [TYPE_F64] = {"f64", "double", &TYPE_F64_INST, TF_FLOAT},
-    [TYPE_CHAR] = {"char", "uint32_t", &TYPE_CHAR_INST, 0},
-    [TYPE_STR] = {"str", "RsgStr", &TYPE_STR_INST, 0},
+    [TYPE_F64] = {"f64", "double", &TYPE_F64_INST, TF_FLOAT | TF_PRINTABLE},
+    [TYPE_CHAR] = {"char", "uint32_t", &TYPE_CHAR_INST, TF_PRINTABLE},
+    [TYPE_STR] = {"str", "RsgStr", &TYPE_STR_INST, TF_PRINTABLE},
     [TYPE_UNIT] = {"unit", "void", &TYPE_UNIT_INST, 0},
     [TYPE_NEVER] = {"never", "void", &TYPE_NEVER_INST, 0},
     [TYPE_ERR] = {"<err>", "/* err */", &TYPE_ERR_INST, 0},
@@ -246,6 +247,10 @@ bool type_is_unsigned_integer(const Type *type) {
 
 bool type_is_float(const Type *type) {
     return type != NULL && (type_flags(type->kind) & TF_FLOAT);
+}
+
+bool type_is_printable(const Type *type) {
+    return type != NULL && (type_flags(type->kind) & TF_PRINTABLE);
 }
 
 const Type *type_singleton(TypeKind kind) {

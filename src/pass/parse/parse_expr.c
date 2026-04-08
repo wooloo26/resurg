@@ -2,63 +2,7 @@
 
 // ── Forward declarations ────────────────────────────────────────────
 
-typedef enum {
-    PRECEDENCE_NONE,       //
-    PRECEDENCE_ASSIGN,     // = += -= *= /=
-    PRECEDENCE_PIPE,       // |>
-    PRECEDENCE_OR,         // ||
-    PRECEDENCE_AND,        // &&
-    PRECEDENCE_EQUALITY,   // == !=
-    PRECEDENCE_COMPARISON, // < <= > >=
-    PRECEDENCE_TERM,       // + -
-    PRECEDENCE_FACTOR,     // * / %
-    PRECEDENCE_UNARY,      // ! -
-    PRECEDENCE_CALL,       // () .
-    PRECEDENCE_PRIMARY,    //
-} Precedence;
-
 static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence);
-
-// ── Operator classification ─────────────────────────────────────────────
-
-static bool is_compound_assignment_op(TokenKind op) {
-    return op == TOKEN_PLUS_EQUAL || op == TOKEN_MINUS_EQUAL || op == TOKEN_STAR_EQUAL ||
-           op == TOKEN_SLASH_EQUAL;
-}
-
-static Precedence token_precedence(TokenKind kind) {
-    switch (kind) {
-    case TOKEN_EQUAL:
-    case TOKEN_PLUS_EQUAL:
-    case TOKEN_MINUS_EQUAL:
-    case TOKEN_STAR_EQUAL:
-    case TOKEN_SLASH_EQUAL:
-        return PRECEDENCE_ASSIGN;
-    case TOKEN_PIPE_PIPE:
-        return PRECEDENCE_OR;
-    case TOKEN_AMPERSAND_AMPERSAND:
-        return PRECEDENCE_AND;
-    case TOKEN_EQUAL_EQUAL:
-    case TOKEN_BANG_EQUAL:
-        return PRECEDENCE_EQUALITY;
-    case TOKEN_LESS:
-    case TOKEN_LESS_EQUAL:
-    case TOKEN_GREATER:
-    case TOKEN_GREATER_EQUAL:
-        return PRECEDENCE_COMPARISON;
-    case TOKEN_PLUS:
-    case TOKEN_MINUS:
-        return PRECEDENCE_TERM;
-    case TOKEN_STAR:
-    case TOKEN_SLASH:
-    case TOKEN_PERCENT:
-        return PRECEDENCE_FACTOR;
-    case TOKEN_PIPE_GREATER:
-        return PRECEDENCE_PIPE;
-    default:
-        return PRECEDENCE_NONE;
-    }
-}
 
 // ── Leaf / primary parsers ────────────────────────────────────────────
 
@@ -720,7 +664,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
         }
 
         // Compound assignment
-        if (is_compound_assignment_op(op)) {
+        if (token_is_compound_assign(op)) {
             ASTNode *node = ast_new(parser->arena, NODE_COMPOUND_ASSIGN, loc);
             node->compound_assign.op = op;
             node->compound_assign.target = left;
