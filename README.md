@@ -2,32 +2,6 @@
 
 Statically typed, compiled. ADTs, pattern matching, value-based errors. **Extension:** `.rsg`
 
-## Compiler
-
-Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Typescript.
-
-```plain
-Source (.rsg)
-  ↓
-[ pass/lex ]        → Lexer ────────── Tokens (via core/token.h)
-  ↓
-[ pass/parse ]      → Parser ───────── Untyped AST (repr/ast.h)
-  ↓
-[ pass/resolve ]    → Resolver ─────── AST + Symbol Bindings & Scopes
-  ↓
-[ pass/infer ]      → Inferencer ───── AST + Type Equations & Unification
-  ↓
-[ pass/check ]      → Checker ──────── Fully Typed AST + Validated Constraints
-  ↓
-[ pass/mono ]       → Monomorphizer ── Specialized Typed AST (Generics resolved)
-  ↓
-[ pass/lower ]      → Lowering ─────── HIR (repr/hir.h) (Desugared, flat control flow)
-  ↓
-[ optional passes ] → HIR Passes ───── HIR → HIR (Constant folding, CFA, simplifications)
-  ↓
-[ pass/cgen ]       → CodeGen ──────── Target Code (C17, C++, Go, TypeScript)
-```
-
 ---
 
 ## 1. Design Principles
@@ -69,6 +43,34 @@ Source (.rsg)
 type ID = u64
 type Handler = fn(Request) -> Response
 ```
+
+### `unit` & `never`
+
+`unit`: The singleton type with exactly one value, **equivalent to the `()`**. It is the implicit return type when `->` is omitted.
+
+`never`: type of computations that never produce a value.
+
+```rsg
+fn short() {}                        // returns unit (implicit)
+fn explicit_unit() -> unit {}        // same as above
+fn returns_zero_tuple() -> () {}    // also equivalent — () and unit are the same type
+
+x: unit = ()                         // OK: zero tuple has type unit
+y: () = unit                         // OK: unit has type ()
+unit == ()                           // true
+() == unit                           // true
+
+match x {
+    () => println("got unit/zero tuple"),
+    _  => println!("B"), // ERROR: unreachable pattern
+}
+
+x := { return 123 }                  // x: never
+```
+
+---
+
+## 3. Declarations, Bindings & Scope
 
 ### Declarations & Inference
 
@@ -119,118 +121,9 @@ fn main() {
 }
 ```
 
-### Variadic Arguments
-
-```rsg
-fn sum(values: ..i32) -> i32 {
-    total := 0
-    for values |v| total += v
-    total
-}
-
-sum(1, 2, 3)           // 6
-nums := []i32{1, 2, 3}
-sum(..nums)             // 6 (spread)
-sum(0, ..nums, 99)     // 105
-
-fn bad(values: ..i32, default: i32) -> i32 {
-    // ERROR: variadic must be last parameter
-}
-```
-
 ---
 
-## 3. Safety Model
-
-### Option (`?T`)
-
-Sugar for `enum Option<T> { None, Some(T) }`.
-
-```rsg
-fn find_user(id: u64) -> ?str {
-    if id == 1 { Some("Alice") } else { None }
-}
-
-user?.address?.city           // optional chaining
-```
-
-### Error Handling (`T ! E`)
-
-Sugar for `enum Result<T, E> { Ok(T), Err(E) }`. Postfix `!` propagates.
-
-```rsg
-fn divide(a: f32, b: f32) -> f32 ! str {
-    if b == 0.0 { Err("division by zero") }
-    else { Ok(a / b) }
-}
-
-fn calc() -> f32 ! str {
-    x := divide(10.0, 2.0)!  // propagates Err
-    y := divide(x, 5.0)!
-    y
-}
-```
-
-### Defer & Return
-
-Both are strictly **function-scoped** — unaffected by inner blocks. Defers execute LIFO on function exit.
-
-```rsg
-f := open(path)!
-defer f.close()
-```
-
-### Assert
-
-```rsg
-assert(x > 0)
-assert(x > 0, "x must be positive")
-```
-
-### `unit` & `never`
-
-`unit`: The singleton type with exactly one value, **equivalent to the `()`**. It is the implicit return type when `->` is omitted.
-
-`never`: type of computations that never produce a value.
-
-```rsg
-fn short() {}                        // returns unit (implicit)
-fn explicit_unit() -> unit {}        // same as above
-fn returns_zero_tuple() -> () {}    // also equivalent — () and unit are the same type
-
-x: unit = ()                         // OK: zero tuple has type unit
-y: () = unit                         // OK: unit has type ()
-unit == ()                           // true
-() == unit                           // true
-
-match x {
-    () => println("got unit/zero tuple"),
-    _  => println!("B"), // ERROR: unreachable pattern
-}
-
-x := { return 123 }                  // x: never
-```
-
-### Panic & Recover
-
-`panic` aborts the current execution path. `recover` — only callable inside `defer` — returns `Some(message)` if a panic is active and catches it, `None` otherwise.
-
-When `panic` fires: execution stops, defers run LIFO. If a defer calls `recover()`, the panic is caught and the function returns from the defer (not the panic site).
-
-```rsg
-fn safe_call() -> ?str {
-    var result: ?str = None
-    defer {
-        if Some(msg) := recover() {
-            result = Some(msg)
-        }
-    }
-    panic("went wrong")  // stops here → defer runs → returns result
-    result                // unreachable
-}
-
-msg := safe_call()  // Some("went wrong")
-```
+## 4. Memory Model & Safety
 
 ### Memory Model
 
@@ -277,10 +170,19 @@ fn shift_mut(mut p: *Point, dx: f64) { p.x += dx }
 shift_mut(&origin, 5.0)
 ```
 
+**Arrays:** `[N]T` — fixed-size value type, copied on assignment.
+
+```rsg
+arr := [5]i32{1, 2, 3, 4, 5}
+b := arr; b[0] = 99          // arr[0] still 1
+[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
+var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
+```
+
 **Slices:** `[]T` — GC-backed fat pointer. `arr[..]` **copies** array data into GC storage. Sub-slicing **shares** backing storage.
 
 ```rsg
-// essence
+// Essentially a slice, but with private fields to enforce abstraction as an opaque type.
 struct CustomSlice {
     data: *T
     len: usize
@@ -307,15 +209,6 @@ px := &x                    // OK: *i32
 root := &Node { value = 0 } // heap allocation → *Node
 process(&Point { x = 1.0, y = 2.0 })
 slice_header := &[]i32{1, 2, 3}
-```
-
-**Arrays:** `[N]T` — fixed-size value type, copied on assignment.
-
-```rsg
-arr := [5]i32{1, 2, 3, 4, 5}
-b := arr; b[0] = 99          // arr[0] still 1
-[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
-var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
 ```
 
 **Pointer types:**
@@ -363,9 +256,75 @@ struct Service { immut db: *Database; name: str }
 fn create_logger() -> immut *Logger { &Logger { level = "info" } }
 ```
 
+### Option (`?T`)
+
+Sugar for `enum Option<T> { None, Some(T) }`.
+
+```rsg
+fn find_user(id: u64) -> ?str {
+    if id == 1 { Some("Alice") } else { None }
+}
+
+user?.address?.city           // optional chaining
+```
+
+### Error Handling (`T ! E`)
+
+Sugar for `enum Result<T, E> { Ok(T), Err(E) }`. Postfix `!` propagates.
+
+```rsg
+fn divide(a: f32, b: f32) -> f32 ! str {
+    if b == 0.0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn calc() -> f32 ! str {
+    x := divide(10.0, 2.0)!  // propagates Err
+    y := divide(x, 5.0)!
+    y
+}
+```
+
+### Defer & Return
+
+Both are strictly **function-scoped** — unaffected by inner blocks. Defers execute LIFO on function exit.
+
+```rsg
+f := open(path)!
+defer f.close()
+```
+
+### Panic & Recover
+
+`panic` aborts the current execution path. `recover` — only callable inside `defer` — returns `Some(message)` if a panic is active and catches it, `None` otherwise.
+
+When `panic` fires: execution stops, defers run LIFO. If a defer calls `recover()`, the panic is caught and the function returns from the defer (not the panic site).
+
+```rsg
+fn safe_call() -> ?str {
+    var result: ?str = None
+    defer {
+        if Some(msg) := recover() {
+            result = Some(msg)
+        }
+    }
+    panic("went wrong")  // stops here → defer runs → returns result
+    result                // unreachable
+}
+
+msg := safe_call()  // Some("went wrong")
+```
+
+### Assert
+
+```rsg
+assert(x > 0)
+assert(x > 0, "x must be positive")
+```
+
 ---
 
-## 4. Data Modeling
+## 5. Data Modeling
 
 ### Structs & Embedding
 
@@ -448,7 +407,7 @@ match msg {
 
 ---
 
-## 5. Abstraction & Extensibility
+## 6. Abstraction & Extensibility
 
 ### Pacts
 
@@ -671,11 +630,110 @@ pact Graph {
 
 ---
 
-## 6. Modules
+## 7. Functions & Closures
+
+Expression or block bodies. Named args at call site. No nested functions; closures are lambda-only.
+
+```rsg
+fn add(a: i32, b: i32) = a + b
+
+var add_fn: fn(i32, i32) -> i32 = add
+var add_lambda: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b
+
+set_name(mut user = &myUser, name = "Bob")
+```
+
+### Variadic Arguments
+
+```rsg
+fn sum(values: ..i32) -> i32 {
+    total := 0
+    for values |v| total += v
+    total
+}
+
+sum(1, 2, 3)           // 6
+nums := []i32{1, 2, 3}
+sum(..nums)             // 6 (spread)
+sum(0, ..nums, 99)     // 105
+
+fn bad(values: ..i32, default: i32) -> i32 {
+    // ERROR: variadic must be last parameter
+}
+```
+
+### Closures
+
+`Fn` (read-only captures), `FnMut` (mutable captures), `fn` is subtype of `Fn`:
+
+```rsg
+offset := 10
+cb := |x| x + offset    // Fn(i32) -> i32
+
+count := 0
+var cb2: FnMut(i32) -> i32 = |x| { count += 1; x + count }
+```
+
+### Pipe Operator
+
+`|>` pipes left-hand value as first argument to right-hand function.
+
+```rsg
+// equivalent: println(to_upper(trim(input)))
+input |> trim |> to_upper |> println
+values |> filter(|x| x > 0) |> map(|x| x * 2) |> sum
+```
+
+---
+
+## 8. Control Flow
+
+`if`, `match`, `while`, blocks are expressions. Statement-form `if` may omit `else`.
+
+```rsg
+result := if x > 10 { x } else { x + 1 }
+if condition { do_something() }
+
+loop { if done() { break } }
+result := loop {
+    counter += 1
+    if counter == 10 { break counter * 2 }
+}
+
+while condition { do_work() }
+
+for values |v| println(v)
+for values |v, i| ...
+for 0..10 |i| ...
+for start..end |i| ...            // variable bounds
+for 0..n * 2 |i| ...              // computed bounds
+```
+
+Empty range (`N..N`) → zero iterations. `continue` supported in `loop`, `while`, `for`.
+
+### Pattern Binding (`if` / `while`)
+
+Refutable patterns via `:=`. Binds on match; skips on mismatch.
+
+```rsg
+if Some(user) := find_user(id) {
+    println("found: {user.name}")
+} else {
+    println("not found")
+}
+
+while Some(line) := reader.next_line()! {
+    process(line)
+}
+```
+
+---
+
+## 9. Modules
 
 Each `.rsg` file = module. Private by default. Parent must declare child via `mod`.
 
-```text
+```plain
 my_project/
 └── src/
     ├── main.rsg          # implicit root module, entry point
@@ -756,50 +814,15 @@ fn main() {
 
 ---
 
-## 7. Functions & Closures
-
-Expression or block bodies. Named args at call site. No nested functions; closures are lambda-only.
-
-```rsg
-fn add(a: i32, b: i32) = a + b
-
-var add_fn: fn(i32, i32) -> i32 = add
-var add_lambda: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b
-
-set_name(mut user = &myUser, name = "Bob")
-```
-
-Closures — `Fn` (read-only captures), `FnMut` (mutable captures), `fn` is subtype of `Fn`:
-
-```rsg
-offset := 10
-cb := |x| x + offset    // Fn(i32) -> i32
-
-count := 0
-var cb2: FnMut(i32) -> i32 = |x| { count += 1; x + count }
-```
-
-### Pipe Operator
-
-`|>` pipes left-hand value as first argument to right-hand function.
-
-```rsg
-// equivalent: println(to_upper(trim(input)))
-input |> trim |> to_upper |> println
-values |> filter(|x| x > 0) |> map(|x| x * 2) |> sum
-```
-
----
-
-## 8. Syntax Reference
+## 10. Syntax Reference
 
 ### Keywords
 
 ```plain
-break  continue  defer  else   enum   false  fn     impl
-for    if        loop   match  mod    mut    pact   pub
-immut  return    struct true   type   use    var    while
-where  comptime  as
+as       break  comptime  continue  defer  else   enum
+false    fn     for       if        immut  impl   loop
+match    mod    mut       pact      pub    return struct
+true     type   use       var       while  where
 ```
 
 **Reserved:** `async`, `await`, `macro`, `spawn`.
@@ -828,6 +851,19 @@ struct Point {
     y: f64 = 0.0
 }
 ```
+
+### Literals
+
+| Kind    | Examples                     | Default |
+| ------- | ---------------------------- | ------- |
+| Integer | `42`, `1_000_000`            | `i32`   |
+| Float   | `3.14`, `2.5e10`             | `f64`   |
+| Char    | `'a'`, `'\n'`, `'\u{1F600}'` |         |
+| String  | `"hello"`, `"val: {x}"`      |         |
+| Array   | `[1, 2, 3]`                  |         |
+| Tuple   | `(1, "two", 3.0)`            | ≥ 2     |
+
+String interpolation: `"Hello, {name}!"`, `"result: {a + b}"`
 
 ### Operators
 
@@ -860,56 +896,30 @@ struct Point {
 **Integer division** truncates toward zero: `7 / 2 == 3`, `-7 / 2 == -3`.
 **Modulo** sign matches the dividend.
 
-### Control Flow
+---
 
-`if`, `match`, `while`, blocks are expressions. Statement-form `if` may omit `else`.
+## Appendix: Compiler Pipeline
 
-```rsg
-result := if x > 10 { x } else { x + 1 }
-if condition { do_something() }
+Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Typescript.
 
-loop { if done() { break } }
-result := loop {
-    counter += 1
-    if counter == 10 { break counter * 2 }
-}
-
-while condition { do_work() }
-
-for values |v| println(v)
-for values |v, i| ...
-for 0..10 |i| ...
-for start..end |i| ...            // variable bounds
-for 0..n * 2 |i| ...              // computed bounds
+```plain
+Source (.rsg)
+  ↓
+[ pass/lex ]        → Lexer ────────── Tokens (via core/token.h)
+  ↓
+[ pass/parse ]      → Parser ───────── Untyped AST (repr/ast.h)
+  ↓
+[ pass/resolve ]    → Resolver ─────── AST + Symbol Bindings & Scopes
+  ↓
+[ pass/infer ]      → Inferencer ───── AST + Type Equations & Unification
+  ↓
+[ pass/check ]      → Checker ──────── Fully Typed AST + Validated Constraints
+  ↓
+[ pass/mono ]       → Monomorphizer ── Specialized Typed AST (Generics resolved)
+  ↓
+[ pass/lower ]      → Lowering ─────── HIR (repr/hir.h) (Desugared, flat control flow)
+  ↓
+[ optional passes ] → HIR Passes ───── HIR → HIR (Constant folding, CFA, simplifications)
+  ↓
+[ pass/cgen ]       → CodeGen ──────── Target Code (C17, C++, Go, TypeScript)
 ```
-
-Empty range (`N..N`) → zero iterations. `continue` supported in `loop`, `while`, `for`.
-
-### Pattern Binding (`if` / `while`)
-
-Refutable patterns via `:=`. Binds on match; skips on mismatch.
-
-```rsg
-if Some(user) := find_user(id) {
-    println("found: {user.name}")
-} else {
-    println("not found")
-}
-
-while Some(line) := reader.next_line()! {
-    process(line)
-}
-```
-
-### Literals
-
-| Kind    | Examples                     | Default |
-| ------- | ---------------------------- | ------- |
-| Integer | `42`, `1_000_000`            | `i32`   |
-| Float   | `3.14`, `2.5e10`             | `f64`   |
-| Char    | `'a'`, `'\n'`, `'\u{1F600}'` |         |
-| String  | `"hello"`, `"val: {x}"`      |         |
-| Array   | `[1, 2, 3]`                  |         |
-| Tuple   | `(1, "two", 3.0)`            | ≥ 2     |
-
-String interpolation: `"Hello, {name}!"`, `"result: {a + b}"`
