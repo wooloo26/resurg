@@ -1,0 +1,11 @@
+// TEST: compile_error
+// EXPECT-ERROR: cannot call pointer receiver on rvalue
+// v0.9.3 — pointer receiver on integer literal is an error
+
+ext i32 {
+    fn increment(mut *n) { *n += 1 }
+}
+
+fn main() {
+    10.increment()
+}

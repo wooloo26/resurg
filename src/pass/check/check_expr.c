@@ -584,9 +584,10 @@ const Type *check_address_of(Sema *sema, ASTNode *node) {
     if (inner_type == NULL || inner_type->kind == TYPE_ERR) {
         return &TYPE_ERR_INST;
     }
-    // Addressability: only vars and struct lits are addressable
+    // Addressability: vars, struct/slice/array lits are addressable
     ASTNode *operand = node->address_of.operand;
     if (operand->kind != NODE_ID && operand->kind != NODE_STRUCT_LIT &&
+        operand->kind != NODE_SLICE_LIT && operand->kind != NODE_ARRAY_LIT &&
         operand->kind != NODE_MEMBER && operand->kind != NODE_IDX) {
         SEMA_ERR(sema, node->loc, "cannot take address of rvalue");
         return &TYPE_ERR_INST;

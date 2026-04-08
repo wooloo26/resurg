@@ -1,6 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: empty tuple '()' is not a valid type; use 'unit'
-
-fn main() {
-    var x: () = unit
-}

@@ -147,6 +147,7 @@ static void register_method_sig(Sema *sema, const char *type_name, ASTNode *meth
 
     const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, mi.name);
     FnSig *sig = build_fn_sig(sema, method, false);
+    sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
     hash_table_insert(&sema->fn_table, method_key, sig);
 }
 
@@ -742,6 +743,7 @@ static void register_primitive_method(Sema *sema, const char *type_name, ASTNode
 
     const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, method->fn_decl.name);
     FnSig *sig = build_fn_sig(sema, method, false);
+    sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
     hash_table_insert(&sema->fn_table, method_key, sig);
 }
 

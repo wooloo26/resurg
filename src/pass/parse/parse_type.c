@@ -77,8 +77,6 @@ static ASTType parse_tuple_type(Parser *parser, SrcLoc loc) {
     ASTType type = {.kind = AST_TYPE_TUPLE, .loc = loc, .tuple_elems = NULL};
     parser_advance(parser); // consume '('
     if (parser_match(parser, TOKEN_RIGHT_PAREN)) {
-        parser->err_count++;
-        rsg_err(loc, "empty tuple '()' is not a valid type; use 'unit'");
         type.kind = AST_TYPE_NAME;
         type.name = "unit";
         return type;

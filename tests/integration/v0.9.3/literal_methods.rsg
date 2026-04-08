@@ -1,0 +1,70 @@
+// v0.9.3 — Literal methods: value receiver on rvalues, pointer receiver requires lvalue
+
+// ── ext i32: value + pointer receivers ──
+
+ext i32 {
+    fn is_even(n) -> bool { n % 2 == 0 }
+    fn doubled(n) -> i32 { n * 2 }
+    fn increment(mut *n) { *n += 1 }
+}
+
+// ── value receiver on integer literal ──
+
+fn test_int_literal_value_receiver() {
+    assert(10.is_even())
+    assert(3.is_even() == false)
+    assert(5.doubled() == 10)
+}
+
+// ── value receiver still works on variables ──
+
+fn test_int_variable_value_receiver() {
+    x := 4
+    assert(x.is_even())
+    assert(x.doubled() == 8)
+}
+
+// ── pointer receiver on variable (auto-takes-address) ──
+
+fn test_int_pointer_receiver_on_variable() {
+    x := 10
+    x.increment()
+    assert(x == 11)
+}
+
+// ── struct with value + pointer receiver methods ──
+
+struct Counter {
+    value: i32 = 0
+    fn get_value(c) -> i32 { c.value }
+    fn inc(mut *c) { c.value = c.value + 1 }
+}
+
+// ── value receiver on struct literal ──
+
+fn test_struct_literal_value_receiver() {
+    assert(Counter { value = 42 }.get_value() == 42)
+}
+
+// ── pointer receiver on struct variable (auto-takes-address) ──
+
+fn test_struct_variable_pointer_receiver() {
+    c := Counter { value = 0 }
+    c.inc()
+    assert(c.value == 1)
+}
+
+// ── pointer receiver on heap-allocated struct ──
+
+fn test_heap_struct_pointer_receiver() {
+    c := &Counter { value = 0 }
+    c.inc()
+    assert(c.value == 1)
+}
+
+// ── pointer receiver on heap-allocated struct (parens syntax) ──
+
+fn test_struct_literal_pointer_receiver_with_parens() {
+    (&Counter { value = 0 }).inc()
+    assert(true)
+}

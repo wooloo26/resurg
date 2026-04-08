@@ -30,6 +30,7 @@ struct FnSig {
     const char **param_names; /* buf */
     int32_t param_count;
     bool is_pub;
+    bool is_ptr_recv;
 };
 
 /** Generic fn template — stored when a fn has type params. */

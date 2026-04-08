@@ -1,0 +1,15 @@
+// TEST: compile_error
+// EXPECT-ERROR: cannot call pointer receiver on rvalue
+// v0.9.3 — pointer receiver on struct literal is an error
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn inc(mut *c) { c.value = c.value + 1 }
+}
+
+fn main() {
+    Counter { value = 0 }.inc()
+}

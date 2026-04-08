@@ -93,8 +93,10 @@ static void emit_var_decl_stmt(CGen *cgen, const HirNode *node) {
 
     // unit/never-typed vars have no C representation; emit init
     // (if any) as a bare expr for its side effects.
+    // Skip var refs — they carry no side effects and the referenced
+    // var may itself have been elided (also unit-typed).
     if (type->kind == TYPE_UNIT || type->kind == TYPE_NEVER) {
-        if (node->var_decl.init != NULL) {
+        if (node->var_decl.init != NULL && node->var_decl.init->kind != HIR_VAR_REF) {
             emit_stmt(cgen, node->var_decl.init);
         }
         return;

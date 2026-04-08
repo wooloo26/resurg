@@ -75,7 +75,7 @@ static Token scan_number(Lex *lex, SrcLoc loc) {
         advance(lex);
     }
 
-    if (peek(lex) == '.' && peek_next(lex) != '.' && lex->last_kind != TOKEN_DOT) {
+    if (peek(lex) == '.' && is_digit(peek_next(lex)) && lex->last_kind != TOKEN_DOT) {
         is_float = true;
         advance(lex); // consume '.'
         while (is_digit(peek(lex)) || peek(lex) == '_') {

@@ -16,6 +16,30 @@ static ASTPattern *parse_pattern(Parser *parser) {
         return pattern;
     }
 
+    // unit keyword → unit literal pattern
+    if (parser_match(parser, TOKEN_UNIT)) {
+        pattern->kind = PATTERN_LIT;
+        pattern->lit = ast_new(parser->arena, NODE_LIT, pattern->loc);
+        pattern->lit->lit.kind = LIT_UNIT;
+        return pattern;
+    }
+
+    // Empty tuple () → unit literal pattern
+    if (parser_check(parser, TOKEN_LEFT_PAREN)) {
+        SrcLoc paren_loc = parser_current_loc(parser);
+        parser_advance(parser); // consume '('
+        if (parser_match(parser, TOKEN_RIGHT_PAREN)) {
+            pattern->kind = PATTERN_LIT;
+            pattern->lit = ast_new(parser->arena, NODE_LIT, paren_loc);
+            pattern->lit->lit.kind = LIT_UNIT;
+            return pattern;
+        }
+        // Not an empty tuple — rewind is not possible, so error
+        rsg_err(paren_loc, "expected ')' for unit pattern or use a different pattern form");
+        pattern->kind = PATTERN_WILDCARD;
+        return pattern;
+    }
+
     // Boolean lits
     if (parser_match(parser, TOKEN_TRUE)) {
         pattern->kind = PATTERN_LIT;

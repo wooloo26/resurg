@@ -178,14 +178,15 @@ Higher-order programming and code organization.
   
 ## v0.9.3 — Fix Problems
 
-- [ ] To clarify value types and pointer types
-- [ ] Literal methods
-- [ ] Semicolon `;` as a statement separator
-- [ ] `unit` equivalent to `()`
+- [x] To clarify value types and pointer types
+- [x] Literal methods
+- [x] Semicolon `;` as a statement separator
+- [x] `unit` equivalent to `()`
 
 ## v0.9.4 — Higher Generics
 
 - [ ] Recursive Generics
+- [ ] `Self` and `*Self` type
 - [ ] `comptime` Generics
 - [ ] Default generics
 - [ ] `where`
@@ -193,8 +194,8 @@ Higher-order programming and code organization.
 
 ## v0.9.5 — Before Ecosystem
 
-- [ ] `Self` and `*Self` type
-- [ ] Template Literal Types
+- [ ] `pub` applies to `struct` fields, `enum` functions, `pact` fields, `ext` functions.
+- [ ] Refactor slice
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
 - [ ] Module resolution (file system)
@@ -247,3 +248,8 @@ Language completeness, tooling, and ecosystem.
 - [ ] Package manager (dependency resolution, versioning)
 - [ ] Official website + documentation
 - [ ] Web Playground (WASM-powered)
+
+### Types
+
+- [ ] Literal Types
+- [ ] Template Literal Types

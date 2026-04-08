@@ -8,6 +8,24 @@
  * type inference, enum variant constructors, closure calls, and named args.
  */
 
+// ── Addressability helpers ────────────────────────────────────────
+
+/** Return true if @p node is an addressable lvalue (variable, member, index). */
+static bool is_lvalue(const ASTNode *node) {
+    if (node == NULL) {
+        return false;
+    }
+    switch (node->kind) {
+    case NODE_ID:
+    case NODE_MEMBER:
+    case NODE_IDX:
+    case NODE_ADDRESS_OF:
+        return true;
+    default:
+        return false;
+    }
+}
+
 // ── Named-arg helpers ─────────────────────────────────────────────
 
 /** Find the index of a named parameter in @p sig. Returns -1 if not found. */
@@ -176,6 +194,11 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
     if (sig == NULL) {
         return NULL;
     }
+    // Reject pointer receiver on rvalue (literal, call result, etc.)
+    if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
+        SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
+        return &TYPE_ERR_INST;
+    }
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
         check_node(sema, node->call.args[i]);
     }
@@ -283,6 +306,11 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
             arena_sprintf(sema->arena, "%s.%s", type_enum_name(obj_type), method_name);
         FnSig *sig = sema_lookup_fn(sema, method_key);
         if (sig != NULL) {
+            // Reject pointer receiver on rvalue
+            if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
+                SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
+                return &TYPE_ERR_INST;
+            }
             return resolve_call(sema, node, sig);
         }
     }
@@ -310,6 +338,11 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
             const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
             FnSig *sig = sema_lookup_fn(sema, method_key);
             if (sig != NULL) {
+                // Reject pointer receiver on rvalue (literal, call result, etc.)
+                if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
+                    SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
+                    return &TYPE_ERR_INST;
+                }
                 for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
                     check_node(sema, node->call.args[i]);
                 }

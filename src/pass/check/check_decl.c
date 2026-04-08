@@ -15,7 +15,11 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
 
     // Register recv as a param with struct type
     if (method->fn_decl.recv_name != NULL) {
-        scope_define(sema, &(SymDef){method->fn_decl.recv_name, struct_type, false, SYM_PARAM});
+        const Type *recv_reg_type = struct_type;
+        if (method->fn_decl.is_ptr_recv && struct_type->kind != TYPE_PTR) {
+            recv_reg_type = type_create_ptr(sema->arena, struct_type, method->fn_decl.is_mut_recv);
+        }
+        scope_define(sema, &(SymDef){method->fn_decl.recv_name, recv_reg_type, false, SYM_PARAM});
     }
 
     // Register method params

@@ -203,7 +203,7 @@ y: () = unit                         // OK: unit has type ()
 unit == ()                           // true
 () == unit                           // true
 
-match () {
+match x {
     () => println("got unit/zero tuple"),
     _  => println!("B"), // ERROR: unreachable pattern
 }
@@ -277,26 +277,6 @@ fn shift_mut(mut p: *Point, dx: f64) { p.x += dx }
 shift_mut(&origin, 5.0)
 ```
 
-**Addressability:** Variables are addressable (`&var` → `*T`). Rvalues (literals, temporaries) are not — bind to a variable first. Exception: `&Struct { … }` is heap-allocation syntax, not address-of.
-
-```rsg
-x := 42
-px := &x                    // OK: *i32
-// px := &42                // ERROR: rvalue
-
-root := &Node { value = 0 } // heap allocation → *Node
-process(&Point { x = 1.0, y = 2.0 })
-```
-
-**Arrays:** `[N]T` — fixed-size value type, copied on assignment.
-
-```rsg
-arr := [5]i32{1, 2, 3, 4, 5}
-b := arr; b[0] = 99          // arr[0] still 1
-[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
-var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
-```
-
 **Slices:** `[]T` — GC-backed fat pointer. `arr[..]` **copies** array data into GC storage. Sub-slicing **shares** backing storage.
 
 ```rsg
@@ -315,6 +295,27 @@ s[0] = 99                     // arr[0] still 1
 t := s[1..4]                  // [2, 3, 4] — shares storage with s
 t[0] = 99                     // s[1] now 99 too
 u := s[2..]; v := s[..3]      // sub-slicing
+```
+
+**Addressability:** Variables are addressable (`&var` → `*T`). Rvalues (literals, temporaries) are not — bind to a variable first. Exception: `&Struct` and `&[]slice` are heap-allocation syntax, not address-of.
+
+```rsg
+x := 42
+px := &x                    // OK: *i32
+// px := &42                // ERROR: rvalue
+
+root := &Node { value = 0 } // heap allocation → *Node
+process(&Point { x = 1.0, y = 2.0 })
+slice_header := &[]i32{1, 2, 3}
+```
+
+**Arrays:** `[N]T` — fixed-size value type, copied on assignment.
+
+```rsg
+arr := [5]i32{1, 2, 3, 4, 5}
+b := arr; b[0] = 99          // arr[0] still 1
+[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
+var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
 ```
 
 **Pointer types:**
@@ -494,17 +495,18 @@ x := 10
 x.increment()        // OK: variable is addressable
 
 // Struct: same rules
-Counter { value = 0 }.get_value()   // OK: value receiver
-// Counter { value = 0 }.increment()  // ERROR: rvalue
+(Counter { value = 0 }).get_value()   // OK: value receiver
+// (Counter { value = 0 }).increment()  // ERROR: rvalue
 c := Counter { value = 0 }
 c.increment()        // OK: implicitly &c
-&Counter { value = 0 }.increment() // OK: struct support only
+(&Counter { value = 0 }).increment() // OK
 
 ext<T> []T {
-    fn len(s) -> usize { s.len }
+    fn len(s) -> usize { ... }
     fn push(mut *s, item: T) { ... }
 }
-[]i32{1, 2, 3}.len()           // OK: temporary slice copy
+([]i32{1, 2, 3}).len()           // OK: temporary slice copy
+(&[]i32{1, 2, 3}).push(4)        // OK
 nums := []i32{1, 2, 3}
 nums.push(4)         // OK: explicit mutable reference
 ```
@@ -619,16 +621,6 @@ where In: Parseable, Out: Serializable + Display,
 { fn transform(*self, input: In) -> Out }
 ```
 
-### Template Literal Types
-
-Construct string types from enum/type parts.
-
-```rsg
-enum Verb { Get = "get", Set = "set" }
-type Method = "{Verb}_{str}"           // "get_name" | "set_name" | ...
-type Prefixed<P, S> = "{P}_{S}"
-```
-
 ### Associated Types
 
 Type members in pacts that implementors define concretely.
@@ -712,7 +704,7 @@ mod models
 mod queries
 ```
 
-`pub` applies to `fn`, `struct`, `enum`, `type`, `var`, `pact`.
+`pub` applies to `fn`, `struct`, `struct` fields, `enum`, `enum` functions, `type`, `var`, `pact`, `pact` fields, `ext` functions.
 
 ```rsg
 use std
@@ -728,6 +720,16 @@ use std::io::{read as rd}
 rd(..)
 
 pub fn add(a: i32, b: i32) = a + b
+
+pub struct User {
+    pub name: str
+    age: u32          // module-internal only
+}
+
+pact User {
+    fn internal_helper(*u) // module-internal only
+    pub fn public_api(*u)
+}
 ```
 
 Nested modules:

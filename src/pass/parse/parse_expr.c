@@ -314,8 +314,6 @@ static ASTNode *parse_primary(Parser *parser) {
     // Parenthesized expr or tuple lit
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
         if (parser_match(parser, TOKEN_RIGHT_PAREN)) {
-            parser->err_count++;
-            rsg_err(loc, "empty tuple '()' is not allowed; use 'unit'");
             ASTNode *node = ast_new(parser->arena, NODE_LIT, loc);
             node->lit.kind = LIT_UNIT;
             return node;

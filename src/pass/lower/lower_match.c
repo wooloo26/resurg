@@ -11,6 +11,10 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, const Pattern
         return NULL; // always matches
 
     case PATTERN_LIT: {
+        // Unit literal always matches — only one value of type unit
+        if (pattern->lit->lit.kind == LIT_UNIT) {
+            return NULL;
+        }
         HirNode *lit = lower_expr(low, pattern->lit);
         // Str comparison via rsg_str_equal
         if (operand->type != NULL && operand->type->kind == TYPE_STR) {

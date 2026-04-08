@@ -1150,8 +1150,10 @@ HirNode *lower_expr(Lower *low, const ASTNode *ast) {
         return lower_struct_lit(low, ast);
     case NODE_ADDRESS_OF: {
         HirNode *operand = lower_expr(low, ast->address_of.operand);
-        // &StructLit{} → heap alloc
-        if (ast->address_of.operand->kind == NODE_STRUCT_LIT) {
+        // &StructLit{} / &SliceLit{} / &ArrayLit{} → heap alloc
+        if (ast->address_of.operand->kind == NODE_STRUCT_LIT ||
+            ast->address_of.operand->kind == NODE_SLICE_LIT ||
+            ast->address_of.operand->kind == NODE_ARRAY_LIT) {
             HirNode *node = hir_new(low->hir_arena, HIR_HEAP_ALLOC, ast->type, ast->loc);
             node->heap_alloc.operand = operand;
             return node;
