@@ -69,6 +69,13 @@ typedef struct {
     SrcLoc loc;
 } BuiltinCallSpec;
 
+/** Grouped params identifying an enum variant for lowering. */
+typedef struct {
+    const Type *enum_type;
+    const char *variant_name;
+    SrcLoc loc;
+} EnumVariantSpec;
+
 // ── Shared helpers ────────────────────────────────────────────────────
 
 /** Create a HirSym from the given spec. */
@@ -125,6 +132,18 @@ HirNode *lower_for(Lower *low, const ASTNode *ast);
 HirNode *lower_str_interpolation(Lower *low, const ASTNode *ast);
 /** Lower a NODE_MATCH. */
 HirNode *lower_match(Lower *low, const ASTNode *ast);
+/** Lower a NODE_CLOSURE (capture analysis + HIR construction). */
+HirNode *lower_closure(Lower *low, const ASTNode *ast);
+
+// ── Enum variant lowering (lower_enum.c) ──────────────────────────────
+
+/** Lower an enum unit variant access: Enum.Variant → struct lit with _tag. */
+HirNode *lower_enum_unit_init(Lower *low, const EnumVariantSpec *spec);
+/** Lower an enum tuple variant call: Enum.Variant(args) → struct lit with _tag + data. */
+HirNode *lower_enum_tuple_init(Lower *low, const EnumVariantSpec *spec, ASTNode **args);
+/** Lower an enum struct variant init: Enum.Variant { field = val } → struct lit. */
+HirNode *lower_enum_struct_init(Lower *low, const EnumVariantSpec *spec,
+                                const char **ast_field_names, ASTNode **ast_field_values);
 
 // ── Pattern helpers (from lower_match.c) ──────────────────────────────
 

@@ -73,6 +73,13 @@ void clear_compound_types(CGen *cgen);
 /** Expression dispatch — returns a C expr str for @p node. */
 const char *emit_expr(CGen *cgen, const HirNode *node);
 
+// ── Closure emission (emit_closure.c) ──────────────────────────
+
+/** Emit a fn reference as an RsgFn wrapper. */
+const char *emit_fn_ref_expr(CGen *cgen, const HirNode *node);
+/** Emit a closure expression (companion fn + RsgFn construction). */
+const char *emit_closure_expr(CGen *cgen, const HirNode *node);
+
 // ── Statement emission (emit_stmt.c) ───────────────────────────
 
 /** Statement dispatch — emits a C stmt for @p node. */
