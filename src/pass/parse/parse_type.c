@@ -198,7 +198,7 @@ ASTType parser_parse_type(Parser *parser) {
     if (parser_match(parser, TOKEN_COLON_COLON)) {
         type.kind = AST_TYPE_ASSOC;
         type.assoc_member = parser_expect(parser, TOKEN_ID)->lexeme;
-        return type;
+        return parse_result_postfix(parser, type);
     }
 
     parse_generic_args(parser, &type);

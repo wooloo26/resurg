@@ -365,6 +365,19 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
     const char *prev_self = sema->self_type_name;
     sema->self_type_name = enum_name;
 
+    // Register associated type aliases before variant resolution
+    // so that variant types can reference them (e.g., Data(Payload))
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.assoc_types); i++) {
+        if (decl->enum_decl.assoc_types[i].concrete_type != NULL) {
+            const Type *at_type =
+                resolve_ast_type(sema, decl->enum_decl.assoc_types[i].concrete_type);
+            if (at_type != NULL && at_type->kind != TYPE_ERR) {
+                hash_table_insert(&sema->type_alias_table, decl->enum_decl.assoc_types[i].name,
+                                  (void *)at_type);
+            }
+        }
+    }
+
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
     for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.variants); i++) {
@@ -379,7 +392,13 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
     EnumDef *def = rsg_malloc(sizeof(*def));
     def->name = enum_name;
     def->methods = NULL;
+    def->assoc_types = NULL;
     def->type = enum_type;
+
+    // Copy associated types from AST
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->enum_decl.assoc_types[i]);
+    }
 
     // Register type alias early so Self-referencing method sigs can resolve
     hash_table_insert(&sema->enum_table, enum_name, def);
@@ -613,6 +632,7 @@ void inject_builtin_enums(Sema *sema) {
     opt->enum_decl.variants = NULL;
     opt->enum_decl.methods = NULL;
     opt->enum_decl.type_params = NULL;
+    opt->enum_decl.assoc_types = NULL;
 
     ASTTypeParam tp_t = {.name = "T", .bounds = NULL};
     BUF_PUSH(opt->enum_decl.type_params, tp_t);
@@ -642,6 +662,7 @@ void inject_builtin_enums(Sema *sema) {
     res->enum_decl.variants = NULL;
     res->enum_decl.methods = NULL;
     res->enum_decl.type_params = NULL;
+    res->enum_decl.assoc_types = NULL;
 
     ASTTypeParam tp_t2 = {.name = "T", .bounds = NULL};
     ASTTypeParam tp_e = {.name = "E", .bounds = NULL};
@@ -884,6 +905,18 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     if (sdef != NULL) {
         const char *prev_self = sema->self_type_name;
         sema->self_type_name = target_name;
+        // Push ext associated types to struct def and register as type aliases
+        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
+            BUF_PUSH(sdef->assoc_types, decl->ext_decl.assoc_types[i]);
+            if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
+                const Type *at_type =
+                    resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
+                if (at_type != NULL && at_type->kind != TYPE_ERR) {
+                    hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
+                                      (void *)at_type);
+                }
+            }
+        }
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
             method->fn_decl.owner_struct = target_name;
@@ -898,6 +931,18 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     if (edef != NULL) {
         const char *prev_self = sema->self_type_name;
         sema->self_type_name = target_name;
+        // Push ext associated types to enum def and register as type aliases
+        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
+            BUF_PUSH(edef->assoc_types, decl->ext_decl.assoc_types[i]);
+            if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
+                const Type *at_type =
+                    resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
+                if (at_type != NULL && at_type->kind != TYPE_ERR) {
+                    hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
+                                      (void *)at_type);
+                }
+            }
+        }
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
             method->fn_decl.owner_struct = target_name;
@@ -974,6 +1019,90 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
             if (pact == NULL) {
                 SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
                 continue;
+            }
+
+            // Check required associated types — apply defaults when available
+            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+                const char *at_name = pact->assoc_types[i].name;
+                bool found = false;
+                for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
+                    if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
+                        continue;
+                    }
+                    if (sdef->assoc_types[j].pact_qualifier != NULL &&
+                        strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                        continue;
+                    }
+                    found = true;
+                    break;
+                }
+                if (!found) {
+                    if (pact->assoc_types[i].concrete_type != NULL) {
+                        ASTAssocType defaulted = {
+                            .name = at_name,
+                            .pact_qualifier = NULL,
+                            .bounds = NULL,
+                            .concrete_type = pact->assoc_types[i].concrete_type,
+                        };
+                        BUF_PUSH(sdef->assoc_types, defaulted);
+                    } else {
+                        SEMA_ERR(sema, decl->loc,
+                                 "missing associated type '%s' required by pact '%s'", at_name,
+                                 pact_name);
+                    }
+                }
+            }
+            // Check ext doesn't define associated types not in the pact
+            for (int32_t j = 0; j < BUF_LEN(decl->ext_decl.assoc_types); j++) {
+                const char *at_name = decl->ext_decl.assoc_types[j].name;
+                if (decl->ext_decl.assoc_types[j].pact_qualifier != NULL &&
+                    strcmp(decl->ext_decl.assoc_types[j].pact_qualifier, pact_name) != 0) {
+                    continue;
+                }
+                bool in_pact = false;
+                for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+                    if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
+                        in_pact = true;
+                        break;
+                    }
+                }
+                if (!in_pact) {
+                    SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'",
+                             at_name, pact_name);
+                }
+            }
+            // Enforce bounds on associated types
+            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+                if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
+                    continue;
+                }
+                const char *at_name = pact->assoc_types[i].name;
+                for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
+                    if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
+                        continue;
+                    }
+                    if (sdef->assoc_types[j].pact_qualifier != NULL &&
+                        strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                        continue;
+                    }
+                    if (sdef->assoc_types[j].concrete_type == NULL) {
+                        break;
+                    }
+                    const Type *concrete =
+                        resolve_ast_type(sema, sdef->assoc_types[j].concrete_type);
+                    if (concrete == NULL || concrete->kind == TYPE_ERR) {
+                        break;
+                    }
+                    for (int32_t b = 0; b < BUF_LEN(pact->assoc_types[i].bounds); b++) {
+                        const char *bound = pact->assoc_types[i].bounds[b];
+                        if (!type_satisfies_bound(sema, concrete, bound)) {
+                            SEMA_ERR(sema, decl->loc,
+                                     "associated type '%s' = '%s' does not satisfy bound '%s'",
+                                     at_name, type_name(sema->arena, concrete), bound);
+                        }
+                    }
+                    break;
+                }
             }
 
             StructMethodInfo *pact_methods = NULL;

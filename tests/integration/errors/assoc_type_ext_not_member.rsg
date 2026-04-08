@@ -1,0 +1,23 @@
+// TEST: compile_error
+// EXPECT-ERROR: associated type
+// v0.9.4 — Error: ext...impl defines associated type not in pact
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct BadIter {}
+
+ext BadIter impl Iterator {
+    type Item = i32
+    type Alias = str
+
+    fn next(mut *self) -> ?i32 {
+        None
+    }
+}
+
+fn main() {
+    iter := BadIter {}
+}

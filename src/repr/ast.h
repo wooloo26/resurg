@@ -494,6 +494,7 @@ struct ASTNode {
             ASTNode **methods;             /* buf - NODE_FN_DECL */
             ASTTypeParam *type_params;     /* buf - generic type params */
             ASTWhereClause *where_clauses; /* buf - where clause predicates */
+            ASTAssocType *assoc_types;     /* buf - associated type defs */
         } enum_decl;
 
         // NODE_MATCH
@@ -531,6 +532,7 @@ struct ASTNode {
             ASTTypeParam *type_params; /* buf - for ext<T, U> */
             const char **impl_pacts;   /* buf - pact names (ext T impl P) */
             ASTNode **methods;         /* buf - NODE_FN_DECL */
+            ASTAssocType *assoc_types; /* buf - associated type defs */
         } ext_decl;
 
         // NODE_USE_DECL

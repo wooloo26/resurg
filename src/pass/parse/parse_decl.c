@@ -242,6 +242,7 @@ static ASTNode *parse_enum_decl(Parser *parser) {
     node->enum_decl.variants = NULL;
     node->enum_decl.methods = NULL;
     node->enum_decl.where_clauses = NULL;
+    node->enum_decl.assoc_types = NULL;
     node->enum_decl.type_params = parse_type_params(parser);
 
     // Optional where clauses
@@ -257,6 +258,25 @@ static ASTNode *parse_enum_decl(Parser *parser) {
             // Method decl inside enum
             ASTNode *method = parse_method_decl(parser, node->enum_decl.name);
             BUF_PUSH(node->enum_decl.methods, method);
+        } else if (parser_check(parser, TOKEN_TYPE)) {
+            // Associated type: type Name = ConcreteType
+            parser_advance(parser); // consume 'type'
+            ASTAssocType at = {0};
+            at.pact_qualifier = NULL;
+            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            at.bounds = NULL;
+            at.concrete_type = NULL;
+            if (parser_match(parser, TOKEN_COLON)) {
+                do {
+                    const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
+                    BUF_PUSH(at.bounds, bound);
+                } while (parser_match(parser, TOKEN_PLUS));
+            }
+            if (parser_match(parser, TOKEN_EQUAL)) {
+                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                *at.concrete_type = parser_parse_type(parser);
+            }
+            BUF_PUSH(node->enum_decl.assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             ASTEnumVariant variant = {0};
             variant.name = parser_advance(parser)->lexeme;
@@ -565,6 +585,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     node->ext_decl.target_type_args = NULL;
     node->ext_decl.impl_pacts = NULL;
     node->ext_decl.methods = NULL;
+    node->ext_decl.assoc_types = NULL;
 
     // Optional type params: ext<T, U>
     node->ext_decl.type_params = parse_type_params(parser);
@@ -604,6 +625,23 @@ static ASTNode *parse_ext_decl(Parser *parser) {
         if (parser_check(parser, TOKEN_FN)) {
             ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name);
             BUF_PUSH(node->ext_decl.methods, method);
+        } else if (parser_check(parser, TOKEN_TYPE)) {
+            // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType
+            parser_advance(parser); // consume 'type'
+            ASTAssocType at = {0};
+            at.pact_qualifier = NULL;
+            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            if (parser_match(parser, TOKEN_COLON_COLON)) {
+                at.pact_qualifier = at.name;
+                at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            }
+            at.bounds = NULL;
+            at.concrete_type = NULL;
+            if (parser_match(parser, TOKEN_EQUAL)) {
+                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                *at.concrete_type = parser_parse_type(parser);
+            }
+            BUF_PUSH(node->ext_decl.assoc_types, at);
         } else {
             rsg_err(parser_current_loc(parser), "expected method in ext block");
             parser_advance(parser);

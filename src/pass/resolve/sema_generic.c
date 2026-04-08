@@ -403,6 +403,7 @@ static Type *enum_create_stub(Sema *sema, const char *mangled) {
     EnumDef *def = rsg_malloc(sizeof(*def));
     def->name = mangled;
     def->methods = NULL;
+    def->assoc_types = NULL;
     def->type = fwd_enum;
     hash_table_insert(&sema->enum_table, mangled, def);
     hash_table_insert(&sema->type_alias_table, mangled, (void *)fwd_enum);
@@ -412,6 +413,19 @@ static Type *enum_create_stub(Sema *sema, const char *mangled) {
 static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *stub,
                                                const char *mangled) {
     EnumDef *def = sema_lookup_enum(sema, mangled);
+
+    // Copy associated types from AST and register as type aliases
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, orig->enum_decl.assoc_types[i]);
+        if (orig->enum_decl.assoc_types[i].concrete_type != NULL) {
+            const Type *at_type =
+                resolve_ast_type(sema, orig->enum_decl.assoc_types[i].concrete_type);
+            if (at_type != NULL && at_type->kind != TYPE_ERR) {
+                hash_table_insert(&sema->type_alias_table, orig->enum_decl.assoc_types[i].name,
+                                  (void *)at_type);
+            }
+        }
+    }
 
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
@@ -478,6 +492,7 @@ static ASTNode *enum_build_synth(Sema *sema, ASTNode *orig, const char *mangled,
     synth->enum_decl.variants = NULL;
     synth->enum_decl.methods = NULL;
     synth->enum_decl.type_params = NULL;
+    synth->enum_decl.assoc_types = NULL;
 
     for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
         BUF_PUSH(synth->enum_decl.variants, orig->enum_decl.variants[i]);

@@ -1,0 +1,28 @@
+// v0.9.4 — Local associated types in ext blocks (not from any pact)
+
+pact Clone {
+    fn clone(*self) -> Self
+}
+
+struct MyInt: Clone {
+    value: i32 = 0
+
+    fn clone(*self) -> Self {
+        Self { value = self.value }
+    }
+}
+
+// ── ext block with local associated type ──
+
+ext MyInt {
+    type Doubled = i32
+
+    fn double(*self) -> Doubled {
+        self.value * 2
+    }
+}
+
+fn test_ext_local_assoc_type() {
+    n := MyInt { value = 5 }
+    assert(n.double() == 10)
+}

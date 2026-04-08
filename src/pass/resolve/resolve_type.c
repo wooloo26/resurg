@@ -266,7 +266,7 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
     const char *base_name = ast_type->name;
     const char *assoc_member = ast_type->assoc_member;
 
-    // Resolve the base type name to a concrete struct name
+    // Resolve the base type name to a concrete struct/enum name
     const char *resolved_name = NULL;
     if (strcmp(base_name, "Self") == 0) {
         resolved_name = sema->self_type_name;
@@ -274,6 +274,8 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
         const Type *param_type = hash_table_lookup(&sema->generics.type_params, base_name);
         if (param_type != NULL && param_type->kind == TYPE_STRUCT) {
             resolved_name = param_type->struct_type.name;
+        } else if (param_type != NULL && param_type->kind == TYPE_ENUM) {
+            resolved_name = param_type->enum_type.name;
         }
     }
 
@@ -290,6 +292,21 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
             if (strcmp(sdef->assoc_types[i].name, assoc_member) == 0) {
                 if (sdef->assoc_types[i].concrete_type != NULL) {
                     return resolve_ast_type(sema, sdef->assoc_types[i].concrete_type);
+                }
+                SEMA_ERR(sema, ast_type->loc, "associated type '%s::%s' has no concrete definition",
+                         resolved_name, assoc_member);
+                return &TYPE_ERR_INST;
+            }
+        }
+    }
+
+    // Look up the enum def and find the associated type
+    EnumDef *edef = sema_lookup_enum(sema, resolved_name);
+    if (edef != NULL) {
+        for (int32_t i = 0; i < BUF_LEN(edef->assoc_types); i++) {
+            if (strcmp(edef->assoc_types[i].name, assoc_member) == 0) {
+                if (edef->assoc_types[i].concrete_type != NULL) {
+                    return resolve_ast_type(sema, edef->assoc_types[i].concrete_type);
                 }
                 SEMA_ERR(sema, ast_type->loc, "associated type '%s::%s' has no concrete definition",
                          resolved_name, assoc_member);

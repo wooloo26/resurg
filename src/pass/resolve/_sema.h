@@ -96,6 +96,7 @@ struct StructDef {
 struct EnumDef {
     const char *name;
     StructMethodInfo *methods; /* buf */
+    ASTAssocType *assoc_types; /* buf */
     const Type *type;          // resolved TYPE_ENUM
 };
 

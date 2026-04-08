@@ -1,0 +1,74 @@
+// v0.9.4 — Associated types in enums: type aliases binding to generic parameters
+
+// ── enum with associated type alias for generic param ──
+
+enum Message<T> {
+    type Payload = T
+
+    Text(str),
+    Data(Payload),
+    Signal,
+
+    fn extract_data(*self) -> ?Payload {
+        match *self {
+            Data(d) => Some(d),
+            _ => None,
+        }
+    }
+}
+
+fn test_enum_assoc_type_alias_data() {
+    msg := Message<i32>::Data(42)
+    match msg.extract_data() {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+}
+
+fn test_enum_assoc_type_alias_signal() {
+    sig := Message<i32>::Signal
+    match sig.extract_data() {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+fn test_enum_assoc_type_alias_text() {
+    txt := Message<str>::Text("hello")
+    match txt.extract_data() {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── enum with multiple assoc type aliases and default generics ──
+
+enum Response<Body = str, Err = str> {
+    type BodyType = Body
+    type ErrorType = Err
+
+    Success(BodyType),
+    Failure(ErrorType),
+
+    fn is_success(*self) -> bool {
+        match *self {
+            Success(_) => true,
+            Failure(_) => false,
+        }
+    }
+}
+
+fn test_enum_response_success() {
+    ok := Response<str, str>::Success("hello")
+    assert(ok.is_success() == true)
+}
+
+fn test_enum_response_failure() {
+    err := Response<str, str>::Failure("error")
+    assert(err.is_success() == false)
+}
+
+fn test_enum_response_i32_body() {
+    ok := Response<i32, str>::Success(42)
+    assert(ok.is_success() == true)
+}
