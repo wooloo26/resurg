@@ -99,9 +99,9 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         return &TYPE_ERR_INST;
     }
     // Track captured variable references for Fn/FnMut auto-inference
-    if (sema->closure_scope != NULL && sym->kind != SYM_FN && sym->kind != SYM_TYPE) {
+    if (sema->closure.scope != NULL && sym->kind != SYM_FN && sym->kind != SYM_TYPE) {
         bool found_local = false;
-        for (Scope *s = sema->current_scope; s != NULL && s != sema->closure_scope->parent;
+        for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
              s = s->parent) {
             if (hash_table_lookup(&s->table, node->id.name) != NULL) {
                 found_local = true;
@@ -109,7 +109,7 @@ const Type *check_id(Sema *sema, ASTNode *node) {
             }
         }
         if (!found_local) {
-            sema->closure_has_capture = true;
+            sema->closure.has_capture = true;
         }
     }
     // Function symbols used as values → construct fn type
@@ -732,34 +732,28 @@ const Type *check_closure(Sema *sema, ASTNode *node) {
     }
 
     // Save and set closure context for capture mutation checking
-    Scope *saved_closure_scope = sema->closure_scope;
-    FnTypeKind saved_closure_fn_kind = sema->closure_fn_kind;
-    bool saved_has_capture = sema->closure_has_capture;
-    bool saved_captures_mutated = sema->closure_captures_mutated;
+    ClosureCtx saved_closure = sema->closure;
 
     // Always set up closure scope so capture tracking works
-    sema->closure_scope = sema->current_scope;
-    sema->closure_fn_kind = infer_fn_kind ? FN_CLOSURE_MUT : fn_kind;
+    sema->closure.scope = sema->current_scope;
+    sema->closure.fn_kind = infer_fn_kind ? FN_CLOSURE_MUT : fn_kind;
     if (infer_fn_kind) {
-        sema->closure_has_capture = false;
-        sema->closure_captures_mutated = false;
+        sema->closure.has_capture = false;
+        sema->closure.captures_mutated = false;
     }
 
     const Type *body_type = check_node(sema, node->closure.body);
 
     // Auto-infer fn_kind from capture analysis
     if (infer_fn_kind) {
-        if (sema->closure_captures_mutated) {
+        if (sema->closure.captures_mutated) {
             fn_kind = FN_CLOSURE_MUT;
-        } else if (sema->closure_has_capture) {
+        } else if (sema->closure.has_capture) {
             fn_kind = FN_CLOSURE;
         }
     }
 
-    sema->closure_scope = saved_closure_scope;
-    sema->closure_fn_kind = saved_closure_fn_kind;
-    sema->closure_has_capture = saved_has_capture;
-    sema->closure_captures_mutated = saved_captures_mutated;
+    sema->closure = saved_closure;
     scope_pop(sema);
 
     const Type *return_type = resolve_ast_type(sema, &node->closure.return_type);

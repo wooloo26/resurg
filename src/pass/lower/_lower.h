@@ -20,6 +20,13 @@ struct LoweringScope {
     LoweringScope *parent;
 };
 
+/** Receiver context — saved/restored as a unit when lowering nested methods. */
+typedef struct {
+    HirSym *sym;      // non-NULL inside method body
+    const char *name; // receiver parameter name
+    bool is_ptr;      // true if current method has ptr recv
+} RecvCtx;
+
 struct Lower {
     Arena *hir_arena;
     LoweringScope *scope;
@@ -29,10 +36,8 @@ struct Lower {
     int32_t shadow_counter;
     int32_t closure_counter;
     const Type **compound_types; /* buf */
-    HirSym *current_recv;        // non-NULL inside method body
-    const char *current_recv_name;
-    bool current_is_ptr_recv;   // true if current method has ptr recv
-    const Type *fn_return_type; // return type of current fn (for try)
+    RecvCtx recv;                // current method receiver context
+    const Type *fn_return_type;  // return type of current fn (for try)
 };
 
 // ── Scope manipulation ────────────────────────────────────────────────

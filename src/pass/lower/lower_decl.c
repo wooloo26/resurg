@@ -100,10 +100,8 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     bool is_mut_recv = ast->fn_decl.is_mut_recv;
     bool is_ptr_recv = ast->fn_decl.is_ptr_recv;
 
-    // Set current recv for via_ptr detection
-    HirSym *saved_recv = low->current_recv;
-    const char *saved_name = low->current_recv_name;
-    bool saved_is_ptr = low->current_is_ptr_recv;
+    // Save recv + fn context
+    RecvCtx saved_recv = low->recv;
     const Type *saved_return_type = low->fn_return_type;
     low->fn_return_type = return_type;
 
@@ -125,9 +123,7 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
         recv_param->param.is_ptr_recv = is_ptr_recv;
         BUF_PUSH(params, recv_param);
 
-        low->current_recv = recv_sym;
-        low->current_recv_name = recv_name;
-        low->current_is_ptr_recv = is_ptr_recv;
+        low->recv = (RecvCtx){.sym = recv_sym, .name = recv_name, .is_ptr = is_ptr_recv};
     } else {
         func_sym->is_static = true;
     }
@@ -137,10 +133,8 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
 
     HirNode *body = lower_fn_body(low, ast->fn_decl.body);
 
-    // Restore recv ctx
-    low->current_recv = saved_recv;
-    low->current_recv_name = saved_name;
-    low->current_is_ptr_recv = saved_is_ptr;
+    // Restore recv + fn context
+    low->recv = saved_recv;
     low->fn_return_type = saved_return_type;
 
     lower_scope_leave(low);

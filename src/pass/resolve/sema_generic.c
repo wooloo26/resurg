@@ -163,40 +163,39 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
     }
 }
 
+/** Grouped params for instantiating generic ext methods. */
+typedef struct {
+    const char *orig_name;          // Original generic type name (e.g. "Pair").
+    const char *mangled;            // Mangled concrete name (e.g. "Pair__i32_str").
+    const Type **resolved_args;     // Resolved concrete type args.
+    int32_t arg_count;              // Number of type args.
+    const Type *owner_type;         // Concrete Type* for the instantiation.
+    StructMethodInfo **out_methods; // Buf of StructMethodInfo entries to append to.
+    ASTNode *synth;                 // Synthetic AST node for cloned method decls.
+    bool is_enum;                   // True if target is an enum.
+} GenericExtInstSpec;
+
 /**
  * Instantiate generic ext methods for a just-instantiated struct or enum.
  *
- * Scans all generic ext templates for ones targeting @p orig_name (the unmangled
- * generic type name) with matching type param count, then clones and registers
- * their methods under @p mangled.  Method bodies are type-checked via the
- * method_checker callback.
- *
- * @param sema          Semantic context.
- * @param orig_name     Original generic type name (e.g. "Pair").
- * @param mangled       Mangled name for the concrete instantiation (e.g. "Pair__i32_str").
- * @param resolved_args Resolved concrete type args for the instantiation.
- * @param arg_count     Number of type args.
- * @param owner_type    The concrete Type* for the instantiation (struct or ptr to enum).
- * @param out_methods   Buf of StructMethodInfo entries to append to.
- * @param synth         Synthetic AST node for appending cloned method decls.
- * @param is_enum       True if the target is an enum (methods appended to enum_decl.methods).
+ * Scans all generic ext templates for ones targeting @p spec->orig_name (the
+ * unmangled generic type name) with matching type param count, then clones and
+ * registers their methods under @p spec->mangled.  Method bodies are
+ * type-checked via the method_checker callback.
  */
-static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, const char *mangled,
-                                            const Type **resolved_args, int32_t arg_count,
-                                            const Type *owner_type, StructMethodInfo **out_methods,
-                                            ASTNode *synth, bool is_enum) {
+static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec *spec) {
     for (int32_t ei = 0; ei < BUF_LEN(sema->generic_ext_defs); ei++) {
         GenericExtDef *gext = sema->generic_ext_defs[ei];
-        if (strcmp(gext->target_name, orig_name) != 0) {
+        if (strcmp(gext->target_name, spec->orig_name) != 0) {
             continue;
         }
-        if (gext->type_param_count != arg_count) {
+        if (gext->type_param_count != spec->arg_count) {
             continue;
         }
 
         // Push ext type params mapped to the concrete args
         const Type **ext_saved = NULL;
-        push_type_params(sema, gext->type_params, resolved_args, arg_count, &ext_saved);
+        push_type_params(sema, gext->type_params, spec->resolved_args, spec->arg_count, &ext_saved);
 
         // Phase 1: Register all ext method sigs
         ASTNode *ext_decl = gext->decl;
@@ -207,8 +206,9 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
                                             .is_ptr_recv = method->fn_decl.is_ptr_recv,
                                             .recv_name = method->fn_decl.recv_name,
                                             .decl = method};
-            BUF_PUSH(*out_methods, method_info);
-            const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, method_info.name);
+            BUF_PUSH(*spec->out_methods, method_info);
+            const char *method_key =
+                arena_sprintf(sema->arena, "%s.%s", spec->mangled, method_info.name);
             FnSig *sig = build_fn_sig(sema, method, false);
             hash_table_insert(&sema->fn_table, method_key, sig);
         }
@@ -217,19 +217,19 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
         for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl.methods); mi++) {
             ASTNode *method = ext_decl->ext_decl.methods[mi];
             ASTNode *mclone = ast_clone(sema->arena, method);
-            mclone->fn_decl.owner_struct = mangled;
+            mclone->fn_decl.owner_struct = spec->mangled;
             mclone->fn_decl.type_params = NULL;
-            if (is_enum) {
-                BUF_PUSH(synth->enum_decl.methods, mclone);
+            if (spec->is_enum) {
+                BUF_PUSH(spec->synth->enum_decl.methods, mclone);
             } else {
-                BUF_PUSH(synth->struct_decl.methods, mclone);
+                BUF_PUSH(spec->synth->struct_decl.methods, mclone);
             }
             if (sema->method_checker != NULL) {
-                sema->method_checker(sema, mclone, mangled, owner_type);
+                sema->method_checker(sema, mclone, spec->mangled, spec->owner_type);
             }
         }
 
-        pop_type_params(sema, gext->type_params, arg_count, ext_saved);
+        pop_type_params(sema, gext->type_params, spec->arg_count, ext_saved);
     }
 }
 
@@ -373,8 +373,15 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
     }
 
     // Instantiate generic ext methods (ext<T> Wrapper<T> { ... })
-    instantiate_generic_ext_methods(sema, gdef->name, mangled, resolved_args,
-                                    gdef->type_param_count, def->type, &def->methods, synth, false);
+    GenericExtInstSpec ext_spec = {.orig_name = gdef->name,
+                                   .mangled = mangled,
+                                   .resolved_args = resolved_args,
+                                   .arg_count = gdef->type_param_count,
+                                   .owner_type = def->type,
+                                   .out_methods = &def->methods,
+                                   .synth = synth,
+                                   .is_enum = false};
+    instantiate_generic_ext_methods(sema, &ext_spec);
 
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
@@ -501,8 +508,15 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
     }
 
     // Instantiate generic ext methods (ext<L, R> Either<L, R> { ... })
-    instantiate_generic_ext_methods(sema, gdef->name, mangled, resolved_args,
-                                    gdef->type_param_count, ptr_type, &def->methods, synth, true);
+    GenericExtInstSpec enum_ext_spec = {.orig_name = gdef->name,
+                                        .mangled = mangled,
+                                        .resolved_args = resolved_args,
+                                        .arg_count = gdef->type_param_count,
+                                        .owner_type = ptr_type,
+                                        .out_methods = &def->methods,
+                                        .synth = synth,
+                                        .is_enum = true};
+    instantiate_generic_ext_methods(sema, &enum_ext_spec);
 
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);

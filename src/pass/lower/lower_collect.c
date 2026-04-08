@@ -74,9 +74,7 @@ Lower *lower_create(Arena *hir_arena) {
     low->temp_counter = 0;
     low->shadow_counter = 0;
     low->compound_types = NULL;
-    low->current_recv = NULL;
-    low->current_recv_name = NULL;
-    low->current_is_ptr_recv = false;
+    low->recv = (RecvCtx){0};
     low->fn_return_type = NULL;
     low->closure_counter = 0;
     return low;

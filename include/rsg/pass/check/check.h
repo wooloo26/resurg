@@ -18,4 +18,11 @@ typedef struct Sema Sema;
  */
 bool sema_check(Sema *sema, ASTNode *file);
 
+/**
+ * Type-check a single fn body (params + body block).
+ * Used by the mono pass to check cloned generic fn instances
+ * without depending on check-pass internals.
+ */
+void sema_check_fn_body(Sema *sema, ASTNode *fn_node);
+
 #endif // RSG_CHECK_H

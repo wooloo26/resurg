@@ -438,8 +438,8 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         const char *method_name = member_ast->member.member;
         HirNode *recv = lower_expr(low, member_ast->member.object);
 
-        if (!via_ptr && low->current_recv != NULL && low->current_is_ptr_recv &&
-            recv->kind == HIR_VAR_REF && recv->var_ref.sym == low->current_recv) {
+        if (!via_ptr && low->recv.sym != NULL && low->recv.is_ptr && recv->kind == HIR_VAR_REF &&
+            recv->var_ref.sym == low->recv.sym) {
             via_ptr = true;
         }
 
@@ -532,8 +532,8 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
     if (lookup_type != NULL && lookup_type->kind == TYPE_STRUCT) {
         const char *field_name = ast->member.member;
 
-        if (!via_ptr && low->current_recv != NULL && low->current_is_ptr_recv &&
-            object->kind == HIR_VAR_REF && object->var_ref.sym == low->current_recv) {
+        if (!via_ptr && low->recv.sym != NULL && low->recv.is_ptr && object->kind == HIR_VAR_REF &&
+            object->var_ref.sym == low->recv.sym) {
             via_ptr = true;
         }
 

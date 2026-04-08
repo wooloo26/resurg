@@ -270,12 +270,12 @@ static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode 
             SEMA_ERR(sema, target->loc, "cannot assign to immutable var '%s'", target->id.name);
         }
         // Check Fn closure: cannot mutate captured variables
-        if (sema->closure_scope != NULL &&
-            (sema->closure_fn_kind == FN_CLOSURE || sema->closure_fn_kind == FN_CLOSURE_MUT)) {
+        if (sema->closure.scope != NULL &&
+            (sema->closure.fn_kind == FN_CLOSURE || sema->closure.fn_kind == FN_CLOSURE_MUT)) {
             const char *name = target->id.name;
             // Search only within the closure scope (closure params + body locals)
             bool found_local = false;
-            for (Scope *s = sema->current_scope; s != NULL && s != sema->closure_scope->parent;
+            for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
                  s = s->parent) {
                 if (hash_table_lookup(&s->table, name) != NULL) {
                     found_local = true;
@@ -283,13 +283,13 @@ static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode 
                 }
             }
             if (!found_local) {
-                if (sema->closure_fn_kind == FN_CLOSURE) {
+                if (sema->closure.fn_kind == FN_CLOSURE) {
                     SEMA_ERR(sema, target->loc,
                              "cannot assign mutable closure to Fn: "
                              "captured variable '%s' is mutated",
                              name);
                 } else {
-                    sema->closure_captures_mutated = true;
+                    sema->closure.captures_mutated = true;
                 }
             }
         }

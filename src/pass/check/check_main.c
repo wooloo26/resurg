@@ -12,3 +12,7 @@ bool sema_check(Sema *sema, ASTNode *file) {
     check_node(sema, file);
     return sema->err_count == 0;
 }
+
+void sema_check_fn_body(Sema *sema, ASTNode *fn_node) {
+    check_fn_body(sema, fn_node);
+}

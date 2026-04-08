@@ -1,7 +1,7 @@
 #include "rsg/pass/mono/mono.h"
 
-#include "pass/check/_check.h"
 #include "pass/resolve/_sema.h"
+#include "rsg/pass/check/check.h"
 
 /**
  * @file mono.c
@@ -58,7 +58,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         clone->fn_decl.body = ast_clone(sema->arena, orig->fn_decl.body);
 
         // Type-check the cloned fn body using the substitution context
-        check_fn_body(sema, clone);
+        sema_check_fn_body(sema, clone);
 
         // Append to file decls so lowering/codegen can see it
         BUF_PUSH(inst->file_node->file.decls, clone);

@@ -127,6 +127,14 @@ struct PactDef {
 typedef void (*MethodChecker)(struct Sema *sema, ASTNode *method, const char *owner_name,
                               const Type *owner_type);
 
+/** Closure context — saved/restored as a unit when entering nested closures. */
+typedef struct {
+    Scope *scope;          // scope of the enclosing Fn/FnMut closure (NULL if none)
+    FnTypeKind fn_kind;    // fn kind of the enclosing closure (FN_PLAIN when not in closure)
+    bool has_capture;      // true when any variable outside closure scope is referenced
+    bool captures_mutated; // true when a captured variable is mutated (FnMut inference)
+} ClosureCtx;
+
 struct Sema {
     Arena *arena;
     Scope *current_scope;
@@ -136,19 +144,16 @@ struct Sema {
     const Type *expected_type;    // expected type for current expr (bidirectional inference)
     const Type *fn_return_type;   // return type of the enclosing function (for Ok/Err/None)
     const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
-    Scope *closure_scope;         // scope of the enclosing Fn/FnMut closure (NULL if none)
-    FnTypeKind closure_fn_kind;   // fn kind of the enclosing closure (FN_PLAIN when not in closure)
-    bool closure_has_capture;     // true when any variable outside closure_scope is referenced
-    bool closure_captures_mutated;  // true when a captured variable is mutated (FnMut inference)
-    ASTNode *file_node;             // root file node (for appending monomorphized fns)
-    HashTable type_alias_table;     // name → const Type*
-    HashTable fn_table;             // name → FnSig*
-    HashTable struct_table;         // name → StructDef*
-    HashTable enum_table;           // name → EnumDef*
-    HashTable pact_table;           // name → PactDef*
-    HashTable generic_fn_table;     // name → GenericFnDef*
-    HashTable generic_struct_table; // name → GenericStructDef*
-    HashTable generic_enum_table;   // name → GenericEnumDef*
+    ClosureCtx closure;           // closure capture tracking (check pass)
+    ASTNode *file_node;           // root file node (for appending monomorphized fns)
+    HashTable type_alias_table;   // name → const Type*
+    HashTable fn_table;           // name → FnSig*
+    HashTable struct_table;       // name → StructDef*
+    HashTable enum_table;         // name → EnumDef*
+    HashTable pact_table;         // name → PactDef*
+    HashTable generic_fn_table;   // name → GenericFnDef*
+    HashTable generic_struct_table;     // name → GenericStructDef*
+    HashTable generic_enum_table;       // name → GenericEnumDef*
     HashTable generic_type_alias_table; // name → GenericTypeAlias*
     HashTable type_param_table;         // name → const Type* (active during generic body check)
     GenericInst *pending_insts;         /* buf - deferred generic instantiations */
