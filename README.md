@@ -46,27 +46,22 @@ Source (.rsg)
 
 `bool`, `char`, `i8`–`i128`, `isize`, `u8`–`u128`, `usize`, `f32`, `f64`, `str` (UTF-8), `unit`, `never`.
 
-**Char semantics:** `char` is a Unicode scalar value. Supports equality (`==`, `!=`) and ordering (`<`, `>`, `<=`, `>=`). Escape sequences: `\n`, `\t`, `\\`, `\'`, `\0`, `\u{XXXX}`.
-
-**Float semantics:** Negative zero equals positive zero (`-0.0 == 0.0`). Scientific notation supported: `1.5e2`, `2.0e-1`.
-
-**Numeric literals:** Underscore separators allowed for readability: `1_000_000`, `1_000.5`.
-
-**String comparison:** `str` supports `==` and `!=` for equality testing.
+- `char`: Unicode scalar value. Supports `==`, `!=`, `<`, `>`, `<=`, `>=`. Escapes: `\n`, `\t`, `\\`, `\'`, `\0`, `\u{XXXX}`.
+- `f32`/`f64`: `-0.0 == 0.0`. Scientific: `1.5e2`, `2.0e-1`.
+- Numeric literals allow `_` separators: `1_000_000`, `1_000.5`.
+- `str`: supports `==` and `!=`.
 
 ### Compound Types
 
-| Kind     | Syntax       | Example                    | Notes                            |
-| -------- | ------------ | -------------------------- | -------------------------------- |
-| Array    | `[N]T`       | `[5]i32`                   | Fixed-size                       |
-| Slice    | `[]T`        | `[]i32`                    | Fat pointer (data + length)      |
-| Pointer  | `*T`         | `*i32`                     | No arithmetic                    |
-| Tuple    | `(A, B, …)`  | `(i32, str)`               | Heterogeneous, ≥ 2 elements      |
-| Option   | `?T`         | `Some(value)` / `None`     | Compiler-enforced null safety    |
-| Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling |
-| Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures   |
-
-**Tuples** support `==` and `!=` for equality comparison. Nested tuple fields are accessed by chaining indices: `t.0.1`.
+| Kind     | Syntax       | Example                    | Notes                                         |
+| -------- | ------------ | -------------------------- | --------------------------------------------- |
+| Array    | `[N]T`       | `[5]i32`                   | Fixed-size value type                         |
+| Slice    | `[]T`        | `[]i32`                    | Fat pointer (data + length)                   |
+| Pointer  | `*T`         | `*i32`                     | No arithmetic                                 |
+| Tuple    | `(A, B, …)`  | `(i32, str)`               | ≥ 2 elements, `==`/`!=`, chain access `t.0.1` |
+| Option   | `?T`         | `Some(value)` / `None`     | Compiler-enforced null safety                 |
+| Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling              |
+| Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures                |
 
 ### Type Aliases
 
@@ -94,46 +89,31 @@ var num: ?i32            // defaults to None
 (first, .., last) := quad     // ignore middle elements with ..
 ```
 
-No return annotation implies `unit`.
+### Declare First
 
-### Declare first
-
-Variables declared in advance can only be assigned values of the same type. If you need to handle multiple types, please use an Enum.
+Variables declared without initialization must be assigned before use. Type is fixed at declaration.
 
 ```rsg
 var a_binding: str
-
-if cond {
-    a_binding = "yes"
-} else {
-    a_binding = "no"
-}
+if cond { a_binding = "yes" } else { a_binding = "no" }
 
 var another_binding: i32
-
 another_binding // Error! Use of uninitialized binding
 ```
 
-### Scope & Shadowing & Expression
+### Scope & Shadowing
 
-> If you don't like it, you can use lint to restrict it.
+Blocks are expressions. Shadowing allowed (lint-restrictable).
 
 ```rsg
 fn main() {
     shadowed_binding := 1
-    {
-        shadowed_binding := "abc" // This binding *shadows* the outer one
-    }
-    shadowed_binding := true // This binding *shadows* the previous binding
+    { shadowed_binding := "abc" } // shadows outer
+    shadowed_binding := true      // shadows previous
 
-    x := 5
     y := {
-        x_squared := x * x
-        x_cube := x_squared * x
-        x_cube + x_squared + x // This expression will be assigned to `y`
-    }
-    z := {
-        2 * x
+        x_squared := 5 * 5
+        x_squared + 5 // assigned to y
     }
     empty := {}
 }
@@ -149,13 +129,11 @@ fn sum(values: ..i32) -> i32 {
 }
 
 sum(1, 2, 3)           // 6
-
 nums := []i32{1, 2, 3}
-sum(..nums)             // 6
-// Mix spread and individual args
+sum(..nums)             // 6 (spread)
 sum(0, ..nums, 99)     // 105
 
-fn first_or_default(values: ..i32, default: i32) -> i32 {
+fn bad(values: ..i32, default: i32) -> i32 {
     // ERROR: variadic must be last parameter
 }
 ```
@@ -171,7 +149,7 @@ Sugar for `enum Option<T> { None, Some(T) }`.
 ```rsg
 fn find_user(id: u64) -> ?str {
     if id == 1 { Some("Alice") } else { None }
-} 
+}
 
 user?.address?.city           // optional chaining
 ```
@@ -187,7 +165,7 @@ fn divide(a: f32, b: f32) -> f32 ! str {
 }
 
 fn calc() -> f32 ! str {
-    x := divide(10.0, 2.0)!         // propagates Err to caller
+    x := divide(10.0, 2.0)!  // propagates Err
     y := divide(x, 5.0)!
     y
 }
@@ -195,18 +173,14 @@ fn calc() -> f32 ! str {
 
 ### Defer & Return
 
-Both `defer` and `return` are strictly **function-scoped**. They are unaffected by inner block boundaries (e.g., loops, conditionals, or nested `{}` blocks).
-
-Deferred calls execute in LIFO order exclusively when the enclosing function exits.
+Both are strictly **function-scoped** — unaffected by inner blocks. Defers execute LIFO on function exit.
 
 ```rsg
 f := open(path)!
-defer f.close() // Executes only on function return, ignoring block structure
+defer f.close()
 ```
 
 ### Assert
-
-Built-in function. Panics immediately if the condition is false.
 
 ```rsg
 assert(x > 0)
@@ -215,57 +189,54 @@ assert(x > 0, "x must be positive")
 
 ### `unit` & `never`
 
-`unit` is most commonly seen implicitly: functions without a -> ... implicitly have return type `unit`. `unit` equals `unit`.
+`unit`: The singleton type with exactly one value, **equivalent to the `()`**. It is the implicit return type when `->` is omitted.
+
+`never`: type of computations that never produce a value.
 
 ```rsg
-fn long() -> unit {}
-fn short() {}
-```
+fn short() {}                        // returns unit (implicit)
+fn explicit_unit() -> unit {}        // same as above
+fn returns_zero_tuple() -> () {}    // also equivalent — () and unit are the same type
 
-`never` represents the type of computations which never resolve to any value at all.
+x: unit = ()                         // OK: zero tuple has type unit
+y: () = unit                         // OK: unit has type ()
+unit == ()                           // true
+() == unit                           // true
 
-```rsg
-x := {  // equals x: never =
-    return 123
+match () {
+    () => println("got unit/zero tuple"),
+    _  => println!("B"), // ERROR: unreachable pattern
 }
+
+x := { return 123 }                  // x: never
 ```
 
 ### Panic & Recover
 
-`panic` immediately aborts the current execution path with a message. `recover` may only be called inside a `defer` block — it returns `Some(message)` if a panic is active and catches it, or `None` otherwise.
+`panic` aborts the current execution path. `recover` — only callable inside `defer` — returns `Some(message)` if a panic is active and catches it, `None` otherwise.
 
-Code after a `panic` call is unreachable. If no `recover` catches the panic, the program terminates with a diagnostic.
-
-**Semantics:** When a function calls `panic`, execution of that function **stops immediately** — no code after the `panic` site runs. Any deferred blocks execute in LIFO order. If a `defer` block calls `recover()`, the panic is caught and the function **returns from the defer block** (not from the panic site). The function's return value is whatever was set before or inside the `defer`.
+When `panic` fires: execution stops, defers run LIFO. If a defer calls `recover()`, the panic is caught and the function returns from the defer (not the panic site).
 
 ```rsg
-fn explode() {
-    panic("something went terribly wrong")
-}
-
 fn safe_call() -> ?str {
     var result: ?str = None
     defer {
-        // This runs after panic stops execution.
-        // recover() catches the panic and returns Some(message).
-        // The function returns 'result' as set here — not from the panic site.
         if Some(msg) := recover() {
             result = Some(msg)
         }
     }
-    explode()    // panic here — execution stops, defer runs, function returns
-    // unreachable: this line never executes after panic
-    result
+    panic("went wrong")  // stops here → defer runs → returns result
+    result                // unreachable
 }
 
-msg := safe_call()   // Some("something went terribly wrong")
+msg := safe_call()  // Some("went wrong")
 ```
 
 ### Memory Model
 
-**Tracing GC.** Structs are value types (copied on assignment). `&` heap-allocates and returns `*T`. No pointer arithmetic. Auto-deref on field access (`p.field` works on `*T`).
+No pointer arithmetic. Auto-deref on field access (`p.field` works on `*T`).
 
-**Parameter passing:** `*T` parameter receives a pointer; caller must pass `&` explicitly for value types.
+**Struct:** Structs are value types (copied on assignment). `&` heap-allocates and returns `*T`.
 
 ```rsg
 struct Node {
@@ -282,102 +253,71 @@ fn build_tree() -> *Node {
 }
 ```
 
-**Arrays:** `[N]T` is a fixed-size value type. Copied on assignment.
+**Parameter passing:** `*T` parameter receives a pointer; caller must pass `&` explicitly for value types.
+
+| Category          | Types                                                          | Semantics |
+| ----------------- | -------------------------------------------------------------- | --------- |
+| **Value types**   | Primitives, `str`, `[N]T`, tuples, structs, enums, `?T`, `T!E` | Copied    |
+| **Pointer types** | `*T` (pointer via `&`), `fn`                                   | Shared    |
+
+Value types are **automatically copied** on assignment/passing — callee gets an independent copy.
 
 ```rsg
-// declaration forms
-arr: [5]i32 = [1, 2, 3, 4, 5]
-arr2 := [5]i32{1, 2, 3, 4, 5}
+struct Point { x: f64, y: f64 }
 
-// arrays are values — assignment copies
-a := [3]i32{10, 20, 30}
-b := a                   // b is an independent copy
-b[0] = 99               // a[0] is still 10
+fn shift(p: Point, dx: f64) -> Point {  // p is a copy
+    p.x += dx
+    p
+}
+origin := Point { x = 0.0, y = 0.0 }
+moved := shift(origin, 5.0)  // origin unchanged
 
-// equality comparison
-[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
-
-// when the left-hand side has a type annotation, the literal can omit the type prefix
-var arr: [3]i32 = [1, 2, 3]
+// To mutate the original, pass a pointer:
+fn shift_mut(mut p: *Point, dx: f64) { p.x += dx }
+shift_mut(&origin, 5.0)
 ```
 
-**Addressability.** Outside struct type definitions, all variables (named storage locations) are addressable: `&var` yields a `*T` pointing to the variable's storage. By contrast, rvalues—literals and transient expressions—are not addressable; attempting `&42`, `&[1, 2, 3]`, or `&"hello"` is a compile-time error. To obtain a pointer to such a value, first bind it to a variable, then take the variable's address.
+**Addressability:** Variables are addressable (`&var` → `*T`). Rvalues (literals, temporaries) are not — bind to a variable first. Exception: `&Struct { … }` is heap-allocation syntax, not address-of.
 
 ```rsg
-// Variables are addressable
 x := 42
-px := &x                    // *i32
+px := &x                    // OK: *i32
+// px := &42                // ERROR: rvalue
 
-arr := [3]i32{1, 2, 3}
-pa := &arr                  // *[3]i32
-
-// Literals are not addressable
-px := &42                   // ERROR: cannot take address of rvalue
-pa := &[1, 2, 3]            // ERROR: array literal has no storage location
-ps := &"hello"              // ERROR: string literal is not addressable
-
-// Bind first, then take address
-tmp := 42
-px := &tmp                  // OK: *i32
-
-// Struct literals: & means heap-allocate (special syntax)
-root := &Node { value = 0 } // OK: allocates on heap, returns *Node
-// This is NOT taking the address of a literal; it's allocation syntax.
-
-// Optional types: address of variable works
-opt: ?i32 = Some(42)
-po := &opt                  // *?i32
+root := &Node { value = 0 } // heap allocation → *Node
+process(&Point { x = 1.0, y = 2.0 })
 ```
 
-**Slices:** `[]T` is a GC-backed fat pointer (data + length). Array-to-slice (`arr[..]`) **copies** array data into GC storage — the slice and the original array are independent. Sub-slicing shares backing storage with its parent slice (no copy).
+**Arrays:** `[N]T` — fixed-size value type, copied on assignment.
 
 ```rsg
 arr := [5]i32{1, 2, 3, 4, 5}
-
-// array → slice: copies data into GC storage (arr and s are independent)
-s: []i32 = arr[..]       // equals s := []i32{1, 2, 3, 4, 5}
-s[0] = 99                // arr[0] is still 1 — independent memory
-
-// sub-slicing: shares backing storage with the parent slice (no copy)
-t := s[1..4]             // [2, 3, 4]
-u := s[2..]              // [3, 4, 5]
-v := s[..3]              // [1, 2, 3]
-
-// slices are reference types — sub-slices see mutations
-x := s[1..4]
-x[0] = 99                // s[1] is now 99 too (shared storage)
-
-// slice of slices
-matrix: [][]*i32 = []
+b := arr; b[0] = 99          // arr[0] still 1
+[3]i32{1, 2, 3} == [3]i32{1, 2, 3}  // true
+var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
 ```
 
-**Slice pointer `*[]T`:** Points to the *slice header* (fat pointer: data ptr + len). Allows functions to reassign the slice itself (not just mutate elements).
+**Slices:** `[]T` — GC-backed fat pointer. `arr[..]` **copies** array data into GC storage. Sub-slicing **shares** backing storage.
 
 ```rsg
-fn extend(mut s: *[]i32) {
-    *s = (*s)[..] + [99]  // reassigns the slice header
+// essence
+struct CustomSlice {
+    data: *T
+    len: usize
 }
-arr := [1, 2, 3]
-slice := arr[..]          // []i32
-extend(mut &slice)        // pass *[]i32
-// slice now includes 99
 ```
-
-`*[]T` ≠ `[]*T`: the former is a pointer to a slice; the latter is a slice of pointers.
-
-**Pointer-to-pointer `**T`:** Points to a pointer variable. Enables reassigning the inner pointer from a function.
 
 ```rsg
-fn allocate(p: **Node) {
-    *p = &Node{ value = 42 }  // modifies caller's *Node
-}
+arr := [5]i32{1, 2, 3, 4, 5}
+s: []i32 = arr[..]            // independent copy
+s[0] = 99                     // arr[0] still 1
 
-mut ptr: ?*Node = None
-allocate(&ptr)                // pass **Node
-// ptr now points to the new Node
+t := s[1..4]                  // [2, 3, 4] — shares storage with s
+t[0] = 99                     // s[1] now 99 too
+u := s[2..]; v := s[..3]      // sub-slicing
 ```
 
-**Key distinction:**
+**Pointer types:**
 
 | Type   | Meaning                 | Typical Use                          |
 | ------ | ----------------------- | ------------------------------------ |
@@ -386,55 +326,40 @@ allocate(&ptr)                // pass **Node
 | `**T`  | Pointer to pointer      | Reassign pointer target in-place     |
 | `[]*T` | Slice of pointers       | Collection of heap-allocated items   |
 
-No pointer arithmetic; all indirection is explicit and GC-safe.
+```rsg
+fn extend(mut s: *[]i32) {
+    *s = (*s)[..] + [99]   // reassign slice header
+}
+
+fn allocate(p: **Node) {
+    *p = &Node{ value = 42 }
+}
+```
 
 ### Mutability (`mut`)
 
-`mut` only applies to pointers. Value types are copied — callee owns the copy. Pointer params are read-only by default; `mut` required on both declaration and call site.
+`mut` applies only to pointers. Value types are copied — callee owns the copy. Pointer params are read-only by default; `mut` required on both declaration and call site.
 
 ```rsg
-fn set_name(mut user: *User, name: str) {
-    user.name = name
-}
+fn set_name(mut user: *User, name: str) { user.name = name }
 set_name(mut &user, "Bob")
-
-// value param — callee gets a copy, can mutate freely
-fn shift(p: Point, dx: f64) -> Point {
-    p.x += dx
-    p
-}
 ```
 
 ### Immutable (`immut`)
 
-Marks a binding, field as permanently immutable. On pointer bindings: prevents mutation, variable-to-variable assignment, and passing as `mut`. Function calls are still allowed.
+Permanently immutable binding/field. On pointers: prevents mutation, pointer reassignment, and passing as `mut`. Calls allowed.
 
 ```rsg
 immut p := &Point { x = 1.0, y = 2.0 }
-// p.x = 3.0        // ERROR: mutation
-// q := p            // ERROR: pointer assignment
-do_something(p)      // OK: function call
+// p.x = 3.0     // ERROR: mutation
+// q := p         // ERROR: pointer assignment
+do_something(p)   // OK
 
-// value types: copy is independent
 immut v := Point { x = 1.0, y = 2.0 }
-w := v               // OK: value copy
-```
+w := v            // OK: value copy
 
-**Immut fields and structs:**
-
-```rsg
-struct Service {
-    immut db: *Database     // cannot assign to another variable
-    name: str
-}
-```
-
-**Immut return values:**
-
-```rsg
-fn create_logger() -> immut *Logger {
-    &Logger { level = "info" }
-}
+struct Service { immut db: *Database; name: str }
+fn create_logger() -> immut *Logger { &Logger { level = "info" } }
 ```
 
 ---
@@ -443,30 +368,7 @@ fn create_logger() -> immut *Logger {
 
 ### Structs & Embedding
 
-Value types. Methods use **value receivers** or **pointer receivers** `*`, matching function parameter semantics. Value receivers auto-copy regardless of whether the struct is a value or pointer. Pointer receivers take a reference (`mut` for mutation). Embedding promotes fields/methods; override by redefining.
-
-```rsg
-struct Point {
-    x: f64 = 0.0
-    y: f64 = 0.0
-    fn sum(p) -> f64 {             // value receiver — p is a copy
-        p.x + p.y
-    }
-    fn set_position(mut *point, target: Point) {   // pointer receiver — mutates
-        point.x = target.x
-        point.y = target.y
-    }
-}
-
-struct Point3D {
-    Point                  // embedding
-    z: f64 = 0.0
-    fn set_position(mut *p, target: Point3D) {
-        p.Point.set_position(x = target.x, y = target.y)
-        p.z = target.z
-    }
-}
-```
+Value types. Embedding promotes fields/methods; override by redefining.
 
 | Receiver    | Syntax         | Semantics                       |
 | ----------- | -------------- | ------------------------------- |
@@ -474,11 +376,27 @@ struct Point3D {
 | Pointer     | `fn f(*p)`     | Read-only pointer (`const T *`) |
 | Mut pointer | `fn f(mut *p)` | Mutable pointer (`T *`)         |
 
-Pointer semantics with `&`:
-
 ```rsg
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+    fn sum(p) = p.x + p.y                                    // value receiver
+    fn set_position(mut *point, target: Point) {             // mut pointer
+        point.x = target.x; point.y = target.y
+    }
+}
+
+struct Point3D {
+    Point              // embedding
+    z: f64 = 0.0
+    fn set_position(mut *p, target: Point3D) {               // override
+        p.Point.set_position(x = target.x, y = target.y)
+        p.z = target.z
+    }
+}
+
 a := &Connection { host = "localhost", port = 8080 }
-b := a          // pointer copy — same instance
+b := a  // pointer copy — same instance
 ```
 
 ### Enums (ADTs)
@@ -494,12 +412,12 @@ any := Msg::Write("any")
 
 enum Color { Red, Green, Blue }
 enum Status { Active = 1, Inactive = 0, Pending = 2 }
-enum Direction { north = "north", south = "south", west = "west", east = "east"}
+enum Direction { north = "north", south = "south", west = "west", east = "east" }
 ```
 
 ### Pattern Matching
 
-`match` is exhaustive — the compiler rejects non-total matches, preventing unhandled cases at compile time.
+`match` is exhaustive.
 
 ```rsg
 match msg {
@@ -508,21 +426,11 @@ match msg {
     Write(text) => println(text),
 }
 
-// wildcard for catch-all
 match msg {
-    Move { x, y } => println("{x}, {y}"),
-    _ => println("not move"),
-}
-
-// match guard: `if` condition after pattern
-match msg {
-    Move { x, y } if x > 0 && y > 0 => println("positive move"),
-    Move { x, y } => println("other move: {x}, {y}"),
-    _ => println("not move"),
+    Move { x, y } if x > 0 && y > 0 => println("positive"),
+    _ => println("other"),
 }
 ```
-
-Supported pattern kinds:
 
 | Pattern          | Syntax                   |
 | ---------------- | ------------------------ |
@@ -543,7 +451,7 @@ Supported pattern kinds:
 
 ### Pacts
 
-Can require fields and methods, provide defaults. Explicit conformance via `struct Foo: Pact1 + Pact2`.
+Require fields/methods, provide defaults. Explicit conformance: `struct Foo: Pact1 + Pact2`.
 
 ```rsg
 pact A { Ord; Display }       // or: pact A = Ord + Display
@@ -551,13 +459,7 @@ pact A { Ord; Display }       // or: pact A = Ord + Display
 pact Animal {
     name: str
     fn get_name(animal) = animal.name
-    fn set_name(mut *animal, name: str) -> unit {
-        animal.name = name
-    }
-}
-
-pact Printable {
-    fn to_string() -> str
+    fn set_name(mut *animal, name: str) { animal.name = name }
 }
 
 struct Dog: Animal + Printable {
@@ -567,13 +469,9 @@ struct Dog: Animal + Printable {
 
 ### Extension Methods
 
-support Primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`.
+Extend primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`.
 
 ```rsg
-pact Display {
-    fn join(*s, sep: str) -> str
-}
-
 ext str impl Display {
     fn last_char(*s) -> char { s[s.len() - 1] }
     fn join(*s, sep: str) -> str { ... }
@@ -582,24 +480,38 @@ ext str impl Display {
 
 ### Literal Methods
 
-Methods can be called directly on literals, temporaries, and expressions. The receiver type (value vs. pointer) determines what forms are addressable and therefore callable.
+Receiver type determines callability on literals. Value receivers work on rvalues; pointer receivers require an addressable lvalue.
 
 ```rsg
 ext i32 {
-    fn is_even(n) -> bool { n % 2 == 0 }           // value receiver
-    fn increment(mut *n) { *n += 1 }               // pointer receiver
+    fn is_even(n) -> bool { n % 2 == 0 }
+    fn increment(mut *n) { *n += 1 }
 }
 
-10.is_even()              // OK: value receiver on literal
-// 10.increment()          // ERROR: pointer receiver on rvalue
-
+10.is_even()         // OK: value receiver on literal
+// 10.increment()    // ERROR: pointer receiver on rvalue
 x := 10
-x.increment()             // OK: variable is addressable
+x.increment()        // OK: variable is addressable
+
+// Struct: same rules
+Counter { value = 0 }.get_value()   // OK: value receiver
+// Counter { value = 0 }.increment()  // ERROR: rvalue
+c := Counter { value = 0 }
+c.increment()        // OK: implicitly &c
+&Counter { value = 0 }.increment() // OK: struct support only
+
+ext<T> []T {
+    fn len(s) -> usize { s.len }
+    fn push(mut *s, item: T) { ... }
+}
+[]i32{1, 2, 3}.len()           // OK: temporary slice copy
+nums := []i32{1, 2, 3}
+nums.push(4)         // OK: explicit mutable reference
 ```
 
 ### Generics
 
-Pact-bounded type parameters. Monomorphized at compile time. Constraint aliases supported.
+Pact-bounded, monomorphized at compile time.
 
 ```rsg
 fn max<T: Ord>(a: T, b: T) -> T {
@@ -635,7 +547,7 @@ ext Pair<i32, i64>  { ... }
 
 ### Default Generics
 
-Type parameters can have defaults. Only supported on `struct`, `enum`, `pact`, and `type` — not on `fn`.
+Supported on `struct`, `enum`, `pact`, `type` — not `fn`.
 
 ```rsg
 struct Map<K, V = str> {
@@ -653,227 +565,113 @@ config.insert("host", "localhost")
 scores := Map<str, i32> { entries = [] }
 scores.insert("alice", 100)
 
-enum Result<T, E = str> {
-    Ok(T),
-    Err(E),
-}
-
-// E defaults to str
-var x: Result<i32> = Ok(42)          // same as Result<i32, str>
-var y: Result<i32, u32> = Err(404)   // override default
-
-pact Collection<T, Idx = usize> {
-    fn at(*self, index: Idx) -> ?T
-}
-
+enum Result<T, E = str> { Ok(T), Err(E) }
 type StringMap<V = str> = Map<str, V>
-
-// NOT allowed on functions:
-// fn bad<T = i32>(x: T) -> T { x }  // ERROR: default generics not supported on fn
 ```
 
-### `Self` & `*Self` Type
+### `Self` & `*Self`
 
-`Self` refers to the concrete implementing type inside `struct`, `enum`, `pact`, and `ext` blocks. `*Self` is the pointer form.
+`Self` refers to the concrete type inside `struct`, `enum`, `pact`, `ext` blocks.
 
 ```rsg
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
-
-    /// Creates a new Point at the origin.
-    fn origin() -> Self {
-        Self { x = 0.0, y = 0.0 }
-    }
-
-    /// Returns a copy translated by (dx, dy).
-    fn translate(p, dx: f64, dy: f64) -> Self {
-        Self { x = p.x + dx, y = p.y + dy }
-    }
-
-    /// Mutates in place.
-    fn reset(mut *self) {
-        self.x = 0.0
-        self.y = 0.0
-    }
+    fn origin() -> Self { Self { x = 0.0, y = 0.0 } }
+    fn translate(p, dx: f64, dy: f64) -> Self { Self { x = p.x + dx, y = p.y + dy } }
+    fn reset(mut *self) { self.x = 0.0; self.y = 0.0 }
 }
 
-p := Point::origin()          // Self resolves to Point
-q := p.translate(1.0, 2.0)   // returns Point
-
-pact Clonable {
-    /// Returns an independent copy of the receiver.
-    fn clone(*self) -> Self
-}
-
-struct Config: Clonable {
-    name: str
-    fn clone(*self) -> Self {
-        Self { name = self.name }
-    }
-}
+pact Clonable { fn clone(*self) -> Self }
 
 enum Token {
-    Number(f64),
-    Ident(str),
-
-    fn dummy() -> Self {
-        Self::Number(0.0)   // Self resolves to Token
-    }
-}
-
-ext str {
-    fn empty() -> Self { "" }  // Self resolves to str
+    Number(f64), Ident(str),
+    fn dummy() -> Self { Self::Number(0.0) }
 }
 ```
 
-### Recursive Generics
+### Recursive & `comptime` Generics
 
 ```rsg
-struct Node<T> {
-    value: T
-    next: ?Node<T>
-}
-```
+struct Node<T> { value: T; next: ?Node<T> }
 
-### `comptime` Generics
-
-```rsg
-struct ArrayWrapper<T, comptime N: usize> {
-    data: [N]T
-}
-
+struct ArrayWrapper<T, comptime N: usize> { data: [N]T }
 wrapper := ArrayWrapper<i32, 5> { data: [1, 2, 3, 4, 5] }
 ```
 
 ### `where` Clauses
 
-Complex generic bounds can be moved to a `where` clause for readability. Equivalent to inline bounds but scales better with many constraints.
+Move complex bounds out of the signature for readability.
 
 ```rsg
-// Inline bounds — works but gets noisy
-fn merge<T: Ord + Display + Clone, U: Into<T> + Clone>(a: []T, b: []U) -> []T { ... }
-
-// Same thing with a where clause
 fn merge<T, U>(a: []T, b: []U) -> []T
 where
     T: Ord + Display + Clone,
     U: Into<T> + Clone,
-{
-    ...
-}
+{ ... }
 
 struct Registry<K, V>
-where
-    K: Hash + Eq + Display,
-    V: Clone,
-{
-    entries: [](K, V)
-}
+where K: Hash + Eq + Display, V: Clone,
+{ entries: [](K, V) }
 
 pact Transformer<In, Out>
-where
-    In: Parseable,
-    Out: Serializable + Display,
-{
-    fn transform(*self, input: In) -> Out
-}
-
-// where can also express relationships between parameters
-fn zip_with<A, B, C>(xs: []A, ys: []B, f: fn(A, B) -> C) -> []C
-where
-    A: Clone,
-    B: Clone,
-{
-    ...
-}
+where In: Parseable, Out: Serializable + Display,
+{ fn transform(*self, input: In) -> Out }
 ```
 
 ### Template Literal Types
 
-String literal types can be constructed and combined at the type level, enabling type-safe string patterns.
+Construct string types from enum/type parts.
 
 ```rsg
-// Template literal types — construct string types from parts
 enum Verb { Get = "get", Set = "set" }
-type Method = "{Verb}_{str}"
-// Expands to: "get_name" | "get_age" | "set_name" | "set_age"
-
-// With generic parameters
+type Method = "{Verb}_{str}"           // "get_name" | "set_name" | ...
 type Prefixed<P, S> = "{P}_{S}"
 ```
 
 ### Associated Types
 
-Pacts can declare associated types — type members that conforming structs must define concretely. Useful when the related type depends on the implementor.
+Type members in pacts that implementors define concretely.
 
 ```rsg
 pact Iterator {
-    type Item                    // associated type — no default
-
+    type Item
     fn next(mut *self) -> ?Self::Item
     fn has_next(*self) -> bool
 }
 
 struct RangeIter: Iterator {
-    type Item = i32              // concrete associated type
-
+    type Item = i32
     current: i32
     end: i32
-
     fn next(mut *self) -> ?i32 {
         if self.current < self.end {
             val := self.current
             self.current += 1
             Some(val)
-        } else {
-            None
-        }
+        } else { None }
     }
-
-    fn has_next(*self) -> bool {
-        self.current < self.end
-    }
+    fn has_next(*self) -> bool { self.current < self.end }
 }
 
-// Use the associated type in generic constraints
 fn collect_all<I: Iterator>(mut iter: *I) -> []I::Item {
     var result: []I::Item = []
-    while Some(item) := iter.next() {
-        result = result + [item]
-    }
+    while Some(item) := iter.next() { result = result + [item] }
     result
 }
 
-// Associated types with bounds
+// With bounds and defaults
 pact Collection {
     type Element: Display
-    type Index = usize           // associated type with default
-
+    type Index = usize
     fn at(*self, index: Self::Index) -> ?Self::Element
     fn len(*self) -> usize
 }
 
-struct TextLine: Collection {
-    type Element = char          // char conforms to Display
-    // Index uses the default: usize
-
-    chars: []char
-
-    fn at(*self, index: usize) -> ?char {
-        if index < self.chars.len() { Some(self.chars[index]) } else { None }
-    }
-
-    fn len(*self) -> usize { self.chars.len() }
-}
-
-// Associated types avoid extra generic parameters
-// Instead of: pact Graph<N: Display, E> { ... }
-// Prefer:
+// Prefer associated types over extra generic params:
 pact Graph {
     type Node: Display
     type Edge
-
     fn neighbors(*self, node: *Self::Node) -> []Self::Node
     fn weight(*self, edge: *Self::Edge) -> f64
 }
@@ -883,9 +681,7 @@ pact Graph {
 
 ## 6. Modules
 
-Each `.rsg` file = module. Private by default.
-
-The parent module must declare the child module, while child module only needs to be placed at the corresponding path.
+Each `.rsg` file = module. Private by default. Parent must declare child via `mod`.
 
 ```text
 my_project/
@@ -897,8 +693,6 @@ my_project/
     │   └── queries.rsg   # use src/db/queries
     └── utils.rsg         # use src/utils
 ```
-
-**Declaration Example:**
 
 ```rsg
 // src/main.rsg
@@ -918,7 +712,7 @@ mod models
 mod queries
 ```
 
-`pub` support `fn`, `struct`, `enum`, `type`, `var`, `pact`.
+`pub` applies to `fn`, `struct`, `enum`, `type`, `var`, `pact`.
 
 ```rsg
 use std
@@ -936,7 +730,7 @@ rd(..)
 pub fn add(a: i32, b: i32) = a + b
 ```
 
-Nested module.
+Nested modules:
 
 ```rsg
 mod a {
@@ -945,10 +739,7 @@ mod a {
 
     pub mod b {
         use super::public_function
-
-        pub fn call() {
-            public_function() // or super::public_function
-        }
+        pub fn call() { public_function() }
 
         pub mod c {
             use super::super::public_function
@@ -961,8 +752,6 @@ fn main() {
 }
 ```
 
-**Visibility:** `pub` applies to `fn`, `struct`, `enum`, `type`, `var`, and `pact` declarations.
-
 ---
 
 ## 7. Functions & Closures
@@ -973,49 +762,29 @@ Expression or block bodies. Named args at call site. No nested functions; closur
 fn add(a: i32, b: i32) = a + b
 
 var add_fn: fn(i32, i32) -> i32 = add
-var add_fn_lambda: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b
-
-fn sum(values: []i32) -> i32 {
-    total := 0
-    for values |v| total += v
-    total
-}
+var add_lambda: fn(i32, i32) -> i32 = |a: i32, b: i32| a + b
 
 set_name(mut user = &myUser, name = "Bob")
 ```
 
-Closures:
+Closures — `Fn` (read-only captures), `FnMut` (mutable captures), `fn` is subtype of `Fn`:
 
 ```rsg
 offset := 10
-var cb: Fn(i32) -> i32 = |x| x + offset    // captures offset, readonly
-// or cb := |x| x + offset
-
-fn map(values: []i32, predicate: Fn(i32) -> i32) -> []i32 { ... } // fn is subtyping of Fn
-
-map(list, cb)
+cb := |x| x + offset    // Fn(i32) -> i32
 
 count := 0
-var cb: FnMut(i32) -> i32 = |x| { 
-    count += 1          
-    x + count 
-}
-// or cb := ...
+var cb2: FnMut(i32) -> i32 = |x| { count += 1; x + count }
 ```
 
 ### Pipe Operator
 
-`|>` pipes the left-hand value as the first argument to the right-hand function.
+`|>` pipes left-hand value as first argument to right-hand function.
 
 ```rsg
 // equivalent: println(to_upper(trim(input)))
 input |> trim |> to_upper |> println
-
-// with additional arguments
 values |> filter(|x| x > 0) |> map(|x| x * 2) |> sum
-
-// works with closures
-data |> |x| x + 1 |> println
 ```
 
 ---
@@ -1031,28 +800,16 @@ immut  return    struct true   type   use    var    while
 where  comptime  as
 ```
 
-**Reserved (future):**
+**Reserved:** `async`, `await`, `macro`, `spawn`.
 
-```plain
-async  await  macro  spawn
-```
-
-Conventions: `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` constants. Comments: `//`, `///`.
+**Conventions:** `snake_case` identifiers, `PascalCase` types, `SCREAMING_CASE` constants. Comments: `//`, `///`.
 
 ### Documentation Comments
 
-```rsg
-/// Single-line doc comment — attaches to the immediately following declaration.
+`///` attaches to the next declaration. Supports `@param`, `@return`, code blocks.
 
-/// Computes the greatest common divisor of two integers.
-///
-/// Uses the Euclidean algorithm. Both arguments must be non-negative.
-///
-/// ## Examples
-/// ```rsg
-/// gcd(12, 8)   // 4
-/// gcd(7, 0)    // 7
-/// ```
+```rsg
+/// Computes the GCD using the Euclidean algorithm.
 ///
 /// @param a  First non-negative integer.
 /// @param b  Second non-negative integer.
@@ -1067,42 +824,17 @@ struct Point {
     x: f64 = 0.0
     /// Vertical coordinate.
     y: f64 = 0.0
-
-    /// Returns the Euclidean distance from the origin.
-    fn magnitude(*p) -> f64 { ... }
-}
-
-/// Represents a network message.
-enum Msg {
-    /// Signals a clean shutdown.
-    Quit,
-    /// Carries a position update.
-    Move { x: i32, y: i32 },
-    /// Carries a text payload.
-    Write(str),
-}
-
-/// Any type that can be converted to a human-readable string.
-pact Display {
-    /// Returns the display representation.
-    fn to_string() -> str
-}
-
-/// Extends `str` with utility methods.
-ext str {
-    /// Returns `true` if the string is empty.
-    fn is_empty(*s) -> bool { s.len() == 0 }
 }
 ```
 
-### Operators (Resurg-specific)
+### Operators
 
 | Op            | Meaning                     |
 | ------------- | --------------------------- |
 | `:=`          | Variable declaration        |
-| `::`          | Namespace calling           |
+| `::`          | Namespace access            |
 | `!` (postfix) | Error propagation           |
-| `&`           | Address-of / create pointer |
+| `&`           | Address-of / heap-allocate  |
 | `*T` / `?T`   | Pointer / option type       |
 | `?.`          | Optional chaining           |
 | `..` `..=`    | Range (excl / incl)         |
@@ -1124,25 +856,21 @@ ext str {
 | 12    | `=` `:=` `+=` `-=` `*=` `/=`     |
 
 **Integer division** truncates toward zero: `7 / 2 == 3`, `-7 / 2 == -3`.
-**Modulo** follows truncation semantics (sign matches the dividend).
+**Modulo** sign matches the dividend.
 
 ### Control Flow
 
-`if`, `match`, `while`, and blocks are expressions. When used as a statement (not assigned), `if` may omit the `else` branch.
+`if`, `match`, `while`, blocks are expressions. Statement-form `if` may omit `else`.
 
 ```rsg
 result := if x > 10 { x } else { x + 1 }
-
-// statement form — no else needed
 if condition { do_something() }
 
 loop { if done() { break } }
-loop { if skip() { continue } }   // continue supported in loop
 result := loop {
     counter += 1
-    if counter == 10 { break counter * 2 } // 
+    if counter == 10 { break counter * 2 }
 }
-loop {} // never
 
 while condition { do_work() }
 
@@ -1153,32 +881,21 @@ for start..end |i| ...            // variable bounds
 for 0..n * 2 |i| ...              // computed bounds
 ```
 
-An empty range (`N..N`) produces zero iterations.
+Empty range (`N..N`) → zero iterations. `continue` supported in `loop`, `while`, `for`.
 
 ### Pattern Binding (`if` / `while`)
 
-Refutable patterns in `if` and `while` via `:=`. Binds on match; skips (or exits loop) on mismatch.
+Refutable patterns via `:=`. Binds on match; skips on mismatch.
 
 ```rsg
-// if-let: execute block when pattern matches
-if Some(user) := find_user(id) {
-    println("found: {user.name}")
-}
-
 if Some(user) := find_user(id) {
     println("found: {user.name}")
 } else {
     println("not found")
 }
 
-// while-let: loop while pattern matches
 while Some(line) := reader.next_line()! {
     process(line)
-}
-
-// works with any refutable pattern
-if Ok(value) := parse_integer(input) {
-    println("parsed: {value}")
 }
 ```
 

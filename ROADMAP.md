@@ -178,7 +178,10 @@ Higher-order programming and code organization.
   
 ## v0.9.3 — Fix Problems
 
+- [ ] To clarify value types and pointer types
 - [ ] Literal methods
+- [ ] Semicolon `;` as a statement separator
+- [ ] `unit` equivalent to `()`
 
 ## v0.9.4 — Higher Generics
 
