@@ -567,7 +567,7 @@ struct Dog: Animal + Printable {
 
 ### Extension Methods
 
-support Primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`
+support Primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`.
 
 ```rsg
 pact Display {
@@ -578,6 +578,23 @@ ext str impl Display {
     fn last_char(*s) -> char { s[s.len() - 1] }
     fn join(*s, sep: str) -> str { ... }
 }
+```
+
+### Literal Methods
+
+Methods can be called directly on literals, temporaries, and expressions. The receiver type (value vs. pointer) determines what forms are addressable and therefore callable.
+
+```rsg
+ext i32 {
+    fn is_even(n) -> bool { n % 2 == 0 }           // value receiver
+    fn increment(mut *n) { *n += 1 }               // pointer receiver
+}
+
+10.is_even()              // OK: value receiver on literal
+// 10.increment()          // ERROR: pointer receiver on rvalue
+
+x := 10
+x.increment()             // OK: variable is addressable
 ```
 
 ### Generics

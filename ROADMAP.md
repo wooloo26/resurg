@@ -175,8 +175,12 @@ Higher-order programming and code organization.
 - [x] Refactor module
 - [x] Nested module
 - [x] Module paths
+  
+## v0.9.3 — Fix Problems
 
-## v0.9.3 — Higher Generics
+- [ ] Literal methods
+
+## v0.9.4 — Higher Generics
 
 - [ ] Recursive Generics
 - [ ] `comptime` Generics
@@ -184,7 +188,7 @@ Higher-order programming and code organization.
 - [ ] `where`
 - [ ] Associated Types
 
-## v0.9.4 — Before Ecosystem
+## v0.9.5 — Before Ecosystem
 
 - [ ] `Self` and `*Self` type
 - [ ] Template Literal Types
@@ -192,7 +196,7 @@ Higher-order programming and code organization.
 - [ ] Documentation Comments
 - [ ] Module resolution (file system)
 
-## v0.9.5 — Ecosystem & Runtime
+## v0.9.6 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
