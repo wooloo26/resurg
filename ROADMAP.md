@@ -172,8 +172,9 @@ Higher-order programming and code organization.
 ## v0.9.2 — Higher Module
 
 - [ ] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+- [ ] Refactor module
 - [ ] Nested module
-- [ ] 
+- [ ] Module paths
 
 ## v0.9.3 — Higher Generics
 

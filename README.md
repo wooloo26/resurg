@@ -868,18 +868,52 @@ pact Graph {
 
 Each `.rsg` file = module. Private by default.
 
+The parent module must declare the child module, while child module only needs to be placed at the corresponding path.
+
+```text
+my_project/
+└── src/
+    ├── main.rsg          # implicit root module, entry point
+    ├── db.rsg            # use src/db
+    ├── db/
+    │   ├── models.rsg    # use src/db/models
+    │   └── queries.rsg   # use src/db/queries
+    └── utils.rsg         # use src/utils
+```
+
+**Declaration Example:**
+
+```rsg
+// src/main.rsg
+mod db
+mod utils
+
+fn main() {
+    // Absolute path
+    _ := src::db::models::User // or db::models:User
+}
+
+use src::db::models::User // or db::models:User
+User
+
+// src/db.rsg
+mod models
+mod queries
+```
+
 `pub` support `fn`, `struct`, `enum`, `type`, `var`, `pact`.
 
 ```rsg
-module math
-
 use std
 std::io::read(..)
-use std/io
+
+use std::io
 io::read(..)
-use std/io { read, write }
+
+use std::io::{read, write}
 read(..)
-use std/io { read as rd }
+
+use std::io::{read as rd}
 rd(..)
 
 pub fn add(a: i32, b: i32) = a + b
@@ -888,15 +922,25 @@ pub fn add(a: i32, b: i32) = a + b
 Nested module.
 
 ```rsg
-module my_module {
+mod a {
     fn private_function() { ... }
     pub fn public_function() { ... }
 
-    pub module nested_module { ... }
+    pub mod b {
+        use super::public_function
+
+        pub fn call() {
+            public_function() // or super::public_function
+        }
+
+        pub mod c {
+            use super::super::public_function
+        }
+    }
 }
 
 fn main() {
-    my_module::nested_module::public_function()
+    a::b::call() // or self::a::b::call()
 }
 ```
 
@@ -965,9 +1009,9 @@ data |> |x| x + 1 |> println
 
 ```plain
 break  continue  defer  else   enum   false  fn     impl
-for    if        loop   match  module mut    pact   pub
+for    if        loop   match  mod    mut    pact   pub
 immut  return    struct true   type   use    var    while
-where  comptime
+where  comptime  as
 ```
 
 **Reserved (future):**
