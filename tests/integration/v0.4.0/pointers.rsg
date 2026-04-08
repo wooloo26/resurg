@@ -1,5 +1,4 @@
 // v0.4.0 — Pointer types, heap allocation, auto-deref
-module test_pointers
 
 struct Point {
     x: f64 = 0.0

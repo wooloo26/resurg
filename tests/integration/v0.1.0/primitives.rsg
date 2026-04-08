@@ -1,5 +1,4 @@
 // v0.1.0 — Primitive types: bool, i32, u32, f64, str, unit
-module test_primitives
 
 // ── bool ──
 fn test_bool() {

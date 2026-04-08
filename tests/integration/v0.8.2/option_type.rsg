@@ -1,5 +1,4 @@
 // v0.8.2 — Option type: ?T sugar for Option<T> { None, Some(T) }
-module test_option_type
 
 // ── Some wraps a value ──
 

@@ -1,0 +1,13 @@
+// TEST: compile_error
+// EXPECT-ERROR: private
+
+mod a {
+    pub mod b {
+        fn private_fn() -> i32 = 42
+        pub fn public_fn() -> i32 = private_fn()
+    }
+}
+
+fn main() {
+    a::b::private_fn()
+}

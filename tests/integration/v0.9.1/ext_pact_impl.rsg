@@ -1,5 +1,4 @@
 // v0.9.1 — Extension methods with pact implementation (retroactive conformance)
-module test_ext_pact_impl
 
 // ── pact definition ──
 

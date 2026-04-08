@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: unknown type 'Foo'
-module test_err
 
 fn main() {
     var x: Foo = 1

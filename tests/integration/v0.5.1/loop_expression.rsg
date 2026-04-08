@@ -1,5 +1,4 @@
 // v0.5.1 — Loop expression: loop with break value
-module test_loop_expression
 
 // ── basic loop expression with break value ──
 

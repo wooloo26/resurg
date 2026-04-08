@@ -1,5 +1,4 @@
 // v0.5.1 — Scope, shadowing, and block expressions
-module test_scope_shadowing
 
 // ── inner scope shadowing ──
 

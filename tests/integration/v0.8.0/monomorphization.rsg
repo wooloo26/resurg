@@ -1,5 +1,4 @@
 // v0.8.0 — Compile-time monomorphization: each instantiation produces distinct code
-module test_monomorphization
 
 // ── generic identity function: monomorphized per call-site type ──
 

@@ -1,7 +1,6 @@
 // v0.9.0 — Pipe operator: |> first-arg forwarding
 // EXPECT-STDOUT: 30
 // EXPECT-STDOUT: -6
-module test_pipe_operator
 
 // ── basic pipe: value |> function ──
 

@@ -1,5 +1,4 @@
 // v0.6.0 — Shared backing storage: sub-slices alias the original data
-module test_shared_storage
 
 // ── mutation through sub-slice visible in original ──
 

@@ -1,5 +1,4 @@
 // v0.8.1 — Methods on generic enums with self-references
-module test_generic_enum_methods
 
 // ── generic enum with methods using type parameters ──
 

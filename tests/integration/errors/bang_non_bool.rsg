@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: '!' requires 'bool' operand
-module test_err
 
 fn main() {
     var x: i32 = !42

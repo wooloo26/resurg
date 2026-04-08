@@ -29,7 +29,7 @@ typedef struct {
 } Keyword;
 
 static const Keyword KEYWORDS[] = {
-    {"module", TOKEN_MODULE},     {"pub", TOKEN_PUB},       {"fn", TOKEN_FN},
+    {"mod", TOKEN_MODULE},        {"pub", TOKEN_PUB},       {"fn", TOKEN_FN},
     {"var", TOKEN_VAR},           {"if", TOKEN_IF},         {"else", TOKEN_ELSE},
     {"loop", TOKEN_LOOP},         {"for", TOKEN_FOR},       {"break", TOKEN_BREAK},
     {"continue", TOKEN_CONTINUE}, {"true", TOKEN_TRUE},     {"false", TOKEN_FALSE},

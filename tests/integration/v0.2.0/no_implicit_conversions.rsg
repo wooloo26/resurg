@@ -1,5 +1,4 @@
 // v0.2.0 — No implicit conversions (enforce)
-module test_no_implicit_conversions
 
 // ── same-type operations work correctly ──
 fn test_same_type_i32() {

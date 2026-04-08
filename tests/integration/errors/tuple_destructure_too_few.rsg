@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: tuple destructure requires 3 names but got 2
-module test_err
 
 fn main() {
     t := (10, true, "hello")

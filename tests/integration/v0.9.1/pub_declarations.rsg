@@ -1,5 +1,4 @@
 // v0.9.1 — pub visibility on all declaration types
-module test_pub_declarations
 
 // ── pub struct ──
 

@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: 'continue' outside of loop
-module test_err
 
 fn main() {
     continue

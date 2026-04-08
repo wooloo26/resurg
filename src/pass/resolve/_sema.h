@@ -72,6 +72,14 @@ typedef struct GenericTypeAlias {
     int32_t type_param_count;
 } GenericTypeAlias;
 
+/** Generic ext template — stored when an ext block has type params. */
+typedef struct GenericExtDef {
+    const char *target_name;   // target type name (e.g. "Pair")
+    ASTNode *decl;             // original ext_decl AST
+    ASTTypeParam *type_params; /* buf */
+    int32_t type_param_count;
+} GenericExtDef;
+
 /** A field def with its default value expr. */
 typedef struct StructFieldInfo {
     const char *name;
@@ -140,6 +148,7 @@ struct Sema {
     HashTable generic_type_alias_table; // name → GenericTypeAlias*
     HashTable type_param_table;         // name → const Type* (active during generic body check)
     GenericInst *pending_insts;         /* buf - deferred generic instantiations */
+    GenericExtDef **generic_ext_defs;   /* buf - generic ext templates */
     ASTNode **synthetic_decls;          /* buf - monomorphized struct/enum decls to append */
 };
 

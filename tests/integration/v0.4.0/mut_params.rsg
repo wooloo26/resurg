@@ -1,5 +1,4 @@
 // v0.4.0 — Mutable pointer parameters
-module test_mut_params
 
 struct Point {
     x: f64 = 0.0

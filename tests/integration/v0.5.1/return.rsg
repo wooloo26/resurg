@@ -1,5 +1,4 @@
 // v0.5.1 — Return: early return from functions
-module test_return
 
 // ── early return with value ──
 

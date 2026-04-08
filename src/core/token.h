@@ -22,7 +22,7 @@ typedef enum {
     TOKEN_ID, // foo, bar
 
     // Keywords
-    TOKEN_MODULE,   // module
+    TOKEN_MODULE,   // mod
     TOKEN_PUB,      // pub
     TOKEN_FN,       // fn
     TOKEN_VAR,      // var

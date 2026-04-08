@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: cannot take address of rvalue
-module test_err
 
 fn main() {
     px := &42

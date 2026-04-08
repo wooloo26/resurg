@@ -1,5 +1,4 @@
 // v0.6.0 — For loop over slices with value and index binding
-module test_for_slices
 
 // ── for over slice with value ──
 

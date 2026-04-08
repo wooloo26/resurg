@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: type mismatch
-module test_err
 
 struct Point {
     x: f64 = 0.0

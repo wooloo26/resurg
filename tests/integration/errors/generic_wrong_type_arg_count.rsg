@@ -1,7 +1,6 @@
 // TEST: compile_error
 // EXPECT-ERROR: wrong number of type arguments
 // v0.8.0 — Error: wrong number of type arguments
-module test_err
 
 fn id<T>(x: T) -> T {
     x

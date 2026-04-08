@@ -1,5 +1,4 @@
 // v0.5.0 — Enum methods and complex enum usage
-module test_enum_methods
 
 enum Msg {
     Quit,

@@ -3,7 +3,6 @@
 // This is a single-line comment
 // Another comment with special chars: !@#$%^&*()
 
-module test_assert_and_comments
 
 // ── assert without message ──
 fn test_assert_true() {

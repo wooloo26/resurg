@@ -1,5 +1,4 @@
 // v0.6.0 — Slice pointer *[]T: reassign slice header in-place
-module test_slice_pointer
 
 // ── pass slice pointer to function ──
 

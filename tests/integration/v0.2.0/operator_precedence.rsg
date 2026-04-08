@@ -1,5 +1,4 @@
 // v0.2.0 — Operator precedence (full table)
-module test_operator_precedence
 
 // ═══════════════════════════════════════
 // Multiplicative binds tighter than additive

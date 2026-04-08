@@ -1,5 +1,4 @@
 // v0.8.2 — Postfix ! error propagation
-module test_error_propagation
 
 fn divide(a: f64, b: f64) -> f64 ! str {
     if b == 0.0 { Err("division by zero") }

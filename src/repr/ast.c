@@ -112,12 +112,16 @@ ASTNode *ast_clone(Arena *arena, ASTNode *src) {
         dst->struct_lit.name = src->struct_lit.name;
         dst->struct_lit.field_names = NULL;
         dst->struct_lit.field_values = NULL;
+        dst->struct_lit.type_args = NULL;
         for (int32_t i = 0; i < BUF_LEN(src->struct_lit.field_names); i++) {
             BUF_PUSH(dst->struct_lit.field_names, src->struct_lit.field_names[i]);
         }
         for (int32_t i = 0; i < BUF_LEN(src->struct_lit.field_values); i++) {
             BUF_PUSH(dst->struct_lit.field_values,
                      ast_clone(arena, src->struct_lit.field_values[i]));
+        }
+        for (int32_t i = 0; i < BUF_LEN(src->struct_lit.type_args); i++) {
+            BUF_PUSH(dst->struct_lit.type_args, src->struct_lit.type_args[i]);
         }
         break;
     case NODE_ADDRESS_OF:
@@ -162,6 +166,14 @@ ASTNode *ast_clone(Arena *arena, ASTNode *src) {
             BUF_PUSH(dst->closure.params, ast_clone(arena, src->closure.params[i]));
         }
         dst->closure.body = ast_clone(arena, src->closure.body);
+        break;
+    case NODE_FN_DECL:
+        dst->fn_decl = src->fn_decl;
+        dst->fn_decl.params = NULL;
+        for (int32_t i = 0; i < BUF_LEN(src->fn_decl.params); i++) {
+            BUF_PUSH(dst->fn_decl.params, ast_clone(arena, src->fn_decl.params[i]));
+        }
+        dst->fn_decl.body = ast_clone(arena, src->fn_decl.body);
         break;
     default:
         // Shallow copy for any unhandled kinds

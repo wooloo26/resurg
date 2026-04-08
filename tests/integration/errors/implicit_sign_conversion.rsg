@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: type mismatch
-module test_err
 
 fn main() {
     var x: i32 = 42

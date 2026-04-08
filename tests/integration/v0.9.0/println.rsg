@@ -8,7 +8,6 @@
 // EXPECT-STDOUT: line one
 // EXPECT-STDOUT: line two
 // EXPECT-STDOUT: value is 10
-module test_println
 
 // ── println with string literal ──
 

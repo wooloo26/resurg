@@ -1,5 +1,4 @@
 // v0.7.0 — Explicit conformance to multiple pacts
-module test_pact_multi
 
 // ── two field-only pacts ──
 

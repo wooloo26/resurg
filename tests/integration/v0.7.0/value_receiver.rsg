@@ -1,5 +1,4 @@
 // v0.7.0 — Value receivers: copy semantics vs pointer receivers
-module test_value_receiver
 
 // ── value receiver reads fields (copy) ──
 

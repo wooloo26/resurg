@@ -1,5 +1,4 @@
 // v0.2.0 — Explicit type annotations on declarations
-module test_explicit_annotations
 
 // ── var with all integer types ──
 fn test_annotated_integers() {

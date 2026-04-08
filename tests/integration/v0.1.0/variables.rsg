@@ -1,5 +1,4 @@
 // v0.1.0 — Variable declarations (:=, var) and type inference
-module test_variables
 
 // ── := declaration with inferred types ──
 fn test_inferred_declarations() {

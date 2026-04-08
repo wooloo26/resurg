@@ -1,5 +1,4 @@
 // v0.8.2 — Result type: T ! E sugar for Result<T, E> { Ok(T), Err(E) }
-module test_result_type
 
 // ── Ok wraps a success value ──
 

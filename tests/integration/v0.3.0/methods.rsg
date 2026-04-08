@@ -1,5 +1,4 @@
 // v0.3.0 — Methods with * receiver
-module test_methods
 
 // ── read-only and mutating methods ──
 struct Point {

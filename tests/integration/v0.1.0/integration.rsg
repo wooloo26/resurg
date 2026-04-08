@@ -1,5 +1,4 @@
 // v0.1.0 — Integration tests combining multiple features
-module test_integration
 
 // ── FizzBuzz ──
 fn fizzbuzz(n: i32) -> str {

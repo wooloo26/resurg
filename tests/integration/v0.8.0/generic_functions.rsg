@@ -1,5 +1,4 @@
 // v0.8.0 — Generic function syntax: basic type parameterization
-module test_generic_functions
 
 // ── generic function with no bounds ──
 

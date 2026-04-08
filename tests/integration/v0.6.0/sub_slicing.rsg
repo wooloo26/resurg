@@ -1,5 +1,4 @@
 // v0.6.0 — Sub-slicing: s[1..4], s[2..], s[..3]
-module test_sub_slicing
 
 // ── sub-slice with both bounds ──
 

@@ -1,5 +1,4 @@
 // v0.8.1 — Generic type aliases: type aliases with type parameters
-module test_generic_type_aliases
 
 // ── generic type alias for a struct ──
 

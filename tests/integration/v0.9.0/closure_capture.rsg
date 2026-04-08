@@ -1,5 +1,4 @@
 // v0.9.0 — Closure variable capture: closures bind outer scope values
-module test_closure_capture
 
 // ── capture local variable ──
 

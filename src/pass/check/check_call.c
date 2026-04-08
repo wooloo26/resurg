@@ -216,7 +216,12 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
     // Module-qualified call: mod::fn(args) or mod::Enum::Variant(args)
     if (obj_type != NULL && obj_type->kind == TYPE_MODULE) {
         const char *mod_name = obj_type->module_type.name;
-        const char *qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
+        const char *qualified;
+        if (strlen(mod_name) == 0) {
+            qualified = method_name;
+        } else {
+            qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
+        }
 
         // Try as fn call: mod::fn(args)
         FnSig *sig = sema_lookup_fn(sema, qualified);
@@ -608,6 +613,17 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     // Named fn lookup
     if (fn_name != NULL) {
         FnSig *sig = sema_lookup_fn(sema, fn_name);
+
+        // Module-qualified fallback: try current module prefix
+        if (sig == NULL && sema->current_scope->module_name != NULL) {
+            const char *qualified =
+                arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, fn_name);
+            sig = sema_lookup_fn(sema, qualified);
+            if (sig != NULL) {
+                node->call.callee->id.name = qualified;
+            }
+        }
+
         if (sig != NULL) {
             return resolve_call(sema, node, sig);
         }

@@ -1,5 +1,4 @@
 // v0.8.1 — Generic enums: parametric polymorphism for enum types
-module test_generic_enums
 
 // ── generic enum with two type parameters ──
 

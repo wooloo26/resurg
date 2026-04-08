@@ -1,5 +1,4 @@
 // v0.2.0 — Tuples ((A, B, …))
-module test_tuples
 
 // ── basic tuple creation and access ──
 fn test_tuple_pair() {

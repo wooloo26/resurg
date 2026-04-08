@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: missing required method 'to_string' from pact 'Printable'
-module test_err
 
 pact Printable {
     fn to_string() -> str

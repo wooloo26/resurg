@@ -1,5 +1,4 @@
 // v0.8.1 — Type argument inference at call/instantiation site
-module test_type_inference
 
 // ── inference on generic function calls ──
 

@@ -1,5 +1,4 @@
 // v0.9.0 — Fn and FnMut closure types
-module test_fn_closure_types
 
 // ── Fn: closure capturing readonly variable ──
 

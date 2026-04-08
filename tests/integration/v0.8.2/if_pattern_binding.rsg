@@ -1,5 +1,4 @@
 // v0.8.2 — if pattern binding: if Some(x) := expr { ... }
-module test_if_pattern_binding
 
 // ── if-let with Some ──
 

@@ -1,5 +1,4 @@
 // v0.8.1 — Generic structs: parametric polymorphism for struct types
-module test_generic_structs
 
 // ── generic struct with two type parameters ──
 

@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: cannot assign mutable closure to Fn
-module test_err
 
 fn main() {
     count := 0

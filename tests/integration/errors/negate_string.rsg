@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: '-' requires numeric operand
-module test_err
 
 fn main() {
     var x: str = -"hello"

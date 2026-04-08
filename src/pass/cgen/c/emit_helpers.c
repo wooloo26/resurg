@@ -2,6 +2,17 @@
 
 // ── Output helpers ─────────────────────────────────────────────────────
 
+/** Replace '.' with '_' for valid C identifiers. */
+static const char *mangle_dots(Arena *arena, const char *name) {
+    size_t len = strlen(name);
+    char *buf = arena_alloc(arena, len + 1);
+    for (size_t i = 0; i < len; i++) {
+        buf[i] = (name[i] == '.') ? '_' : name[i];
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
 void emit_indent(CGen *cgen) {
     for (int32_t i = 0; i < cgen->indent; i++) {
         fprintf(cgen->output, "    ");
@@ -163,9 +174,9 @@ static const char *type_tag(CGen *gen, const Type *type) {
     case TYPE_ERR:
         return "err";
     case TYPE_STRUCT:
-        return arena_sprintf(gen->arena, "_%s", type->struct_type.name);
+        return arena_sprintf(gen->arena, "_%s", mangle_dots(gen->arena, type->struct_type.name));
     case TYPE_ENUM:
-        return arena_sprintf(gen->arena, "Enum_%s", type->enum_type.name);
+        return arena_sprintf(gen->arena, "Enum_%s", mangle_dots(gen->arena, type->enum_type.name));
     case TYPE_FN:
         return "RsgFn";
     default:
@@ -184,10 +195,12 @@ const char *c_type_for(CGen *gen, const Type *type) {
         return "RsgSlice";
     }
     if (type->kind == TYPE_STRUCT) {
-        return arena_sprintf(gen->arena, "_Rsg_%s", type->struct_type.name);
+        return arena_sprintf(gen->arena, "_Rsg_%s",
+                             mangle_dots(gen->arena, type->struct_type.name));
     }
     if (type->kind == TYPE_ENUM) {
-        return arena_sprintf(gen->arena, "_RsgEnum_%s", type->enum_type.name);
+        return arena_sprintf(gen->arena, "_RsgEnum_%s",
+                             mangle_dots(gen->arena, type->enum_type.name));
     }
     if (type->kind == TYPE_PTR) {
         return arena_sprintf(gen->arena, "%s *", c_type_for(gen, type->ptr.pointee));

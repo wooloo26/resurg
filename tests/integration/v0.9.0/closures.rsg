@@ -1,5 +1,4 @@
 // v0.9.0 — Closures / lambdas: |params| body syntax
-module test_closures
 
 // ── basic closure with single param ──
 

@@ -1,5 +1,4 @@
 // v0.5.2 — Precise GC: stack-map roots survive collection
-module test_precise_gc
 
 struct Point {
     x: f64 = 0.0

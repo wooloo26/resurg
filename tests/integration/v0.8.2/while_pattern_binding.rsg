@@ -1,5 +1,4 @@
 // v0.8.2 — while pattern binding: while Some(x) := expr { ... }
-module test_while_pattern_binding
 
 struct Iterator {
     items: []i32

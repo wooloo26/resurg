@@ -35,6 +35,8 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
     hash_table_init(&sema->type_param_table, NULL);
     BUF_FREE(sema->pending_insts);
     sema->pending_insts = NULL;
+    BUF_FREE(sema->generic_ext_defs);
+    sema->generic_ext_defs = NULL;
     BUF_FREE(sema->synthetic_decls);
     sema->synthetic_decls = NULL;
 }
@@ -64,9 +66,17 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
     // Register nested modules first (their decls need to be available for other registrations)
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
-        if (decl->kind == NODE_MODULE && decl->module.decls != NULL) {
-            register_module_decl(sema, decl);
+        if (decl->kind != NODE_MODULE) {
+            continue;
         }
+        if (decl->module.decls == NULL) {
+            rsg_warn(decl->loc,
+                     "'mod %s' declares a sub-module and requires file resolution "
+                     "(not yet supported); declaration ignored",
+                     decl->module.name);
+            continue;
+        }
+        register_module_decl(sema, decl);
     }
 
     // Register pacts first (they must be available when validating struct conformances)
@@ -169,6 +179,7 @@ Sema *sema_create(Arena *arena) {
     hash_table_init(&sema->generic_type_alias_table, NULL);
     hash_table_init(&sema->type_param_table, NULL);
     sema->pending_insts = NULL;
+    sema->generic_ext_defs = NULL;
     sema->synthetic_decls = NULL;
     return sema;
 }
@@ -186,6 +197,7 @@ void sema_destroy(Sema *sema) {
         hash_table_destroy(&sema->generic_type_alias_table);
         hash_table_destroy(&sema->type_param_table);
         BUF_FREE(sema->pending_insts);
+        BUF_FREE(sema->generic_ext_defs);
         BUF_FREE(sema->synthetic_decls);
         free(sema);
     }

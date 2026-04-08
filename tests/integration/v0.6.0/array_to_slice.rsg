@@ -1,5 +1,4 @@
 // v0.6.0 — Array-to-slice conversion with arr[..] syntax
-module test_array_to_slice
 
 // ── basic array to slice ──
 

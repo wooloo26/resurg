@@ -1,5 +1,4 @@
 // v0.8.0 — Generic pacts: pact with type parameters
-module test_generic_pacts
 
 // ── generic pact: single type parameter ──
 

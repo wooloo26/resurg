@@ -1,5 +1,4 @@
 // v0.1.0 — Functions (expression and block bodies)
-module test_functions
 
 // ── expression body ──
 fn add(a: i32, b: i32) = a + b

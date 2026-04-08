@@ -1,5 +1,4 @@
 // v0.4.0 — Immutable bindings
-module test_immut
 
 struct Point {
     x: f64 = 0.0

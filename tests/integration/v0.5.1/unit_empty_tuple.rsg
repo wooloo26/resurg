@@ -1,5 +1,4 @@
 // v0.5.1 — Unit is a primitive type, not an empty tuple
-module test_unit
 
 // ── unit keyword is a valid unit literal ──
 

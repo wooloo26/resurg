@@ -1,5 +1,4 @@
 // v0.4.0 — Pointer-to-pointer, address-of variable, dereference
-module test_ptr_to_ptr
 
 struct Node {
     value: i32 = 0

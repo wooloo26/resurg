@@ -1,5 +1,4 @@
 // v0.1.0 — String literals and interpolation
-module test_strings
 
 fn test_string_literal() {
     s := "hello world"

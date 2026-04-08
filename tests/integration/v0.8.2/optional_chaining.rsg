@@ -1,5 +1,4 @@
 // v0.8.2 — Optional chaining: ?. operator
-module test_optional_chaining
 
 struct Address {
     city: str = ""

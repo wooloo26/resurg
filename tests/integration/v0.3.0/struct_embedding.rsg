@@ -1,5 +1,4 @@
 // v0.3.0 — Struct embedding and field/method promotion
-module test_embedding
 
 struct Base {
     x: i32 = 0

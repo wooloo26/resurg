@@ -1,5 +1,4 @@
 // v0.4.0 — Value-type copy vs pointer copy semantics
-module test_value_copy
 
 struct Point {
     x: f64 = 0.0

@@ -1,5 +1,4 @@
 // v0.8.0 — Constraint alias expansion in type inference for generic bounds
-module test_constraint_aliases
 
 // ── base pacts ──
 

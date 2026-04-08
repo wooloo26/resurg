@@ -1,5 +1,4 @@
 // v0.9.0 — First-class functions: pass, return, store function values
-module test_first_class_functions
 
 // ── pass function as argument ──
 

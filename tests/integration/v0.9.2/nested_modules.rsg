@@ -1,0 +1,74 @@
+// v0.9.2 - Nested modules
+
+// -- basic two-level nesting --
+
+mod outer {
+    pub fn value() -> i32 = 42
+
+    pub mod inner {
+        pub fn greet() -> str = "hello from inner"
+    }
+}
+
+fn test_basic_nested_access() {
+    assert(outer::value() == 42)
+    assert(outer::inner::greet() == "hello from inner")
+}
+
+// -- three levels deep --
+
+mod a {
+    pub fn a_val() -> i32 = 1
+
+    pub mod b {
+        pub fn b_val() -> i32 = 2
+
+        pub mod c {
+            pub fn c_val() -> i32 = 3
+        }
+    }
+}
+
+fn test_deep_nesting() {
+    assert(a::a_val() == 1)
+    assert(a::b::b_val() == 2)
+    assert(a::b::c::c_val() == 3)
+}
+
+// -- private by default in nested modules --
+
+mod secret {
+    fn hidden() -> i32 = 99
+    pub fn visible() -> i32 = hidden()
+
+    pub mod nested {
+        fn also_hidden() -> i32 = 88
+        pub fn also_visible() -> i32 = also_hidden()
+    }
+}
+
+fn test_visibility_in_nested() {
+    assert(secret::visible() == 99)
+    assert(secret::nested::also_visible() == 88)
+}
+
+// -- pub enum in nested mod --
+
+mod enums {
+    pub mod status {
+        pub enum State {
+            Active,
+            Inactive,
+        }
+
+        pub fn make_active() -> State = State::Active
+    }
+}
+
+fn test_enum_in_nested_module() {
+    s := enums::status::make_active()
+    match s {
+        Active => assert(true),
+        Inactive => assert(false),
+    }
+}

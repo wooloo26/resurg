@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: non-exhaustive
-module test_err
 
 enum Color {
     Red,

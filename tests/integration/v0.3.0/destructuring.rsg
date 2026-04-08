@@ -1,5 +1,4 @@
 // v0.3.0 — Struct and tuple destructuring
-module test_destructuring
 
 struct Point {
     x: f64 = 0.0

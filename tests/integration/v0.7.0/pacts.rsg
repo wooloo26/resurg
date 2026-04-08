@@ -1,5 +1,4 @@
 // v0.7.0 — Pact definition: required fields, required methods, conformance
-module test_pacts
 
 // ── pact with required field and required method ──
 

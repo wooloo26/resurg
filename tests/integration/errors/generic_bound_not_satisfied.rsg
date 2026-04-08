@@ -1,7 +1,6 @@
 // TEST: compile_error
 // EXPECT-ERROR: does not satisfy pact bound
 // v0.8.0 — Error: type argument does not satisfy pact bound
-module test_err
 
 pact Display {
     fn to_display() -> str

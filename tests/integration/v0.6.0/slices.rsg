@@ -1,5 +1,4 @@
 // v0.6.0 — Slice type []T: declaration, literals, indexing, length
-module test_slices
 
 // ── slice literal ──
 

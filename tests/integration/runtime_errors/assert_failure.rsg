@@ -1,5 +1,4 @@
 // TEST: runtime_error
-module test_err
 
 fn main() {
     assert(false, "intentional failure")

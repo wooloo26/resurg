@@ -1,5 +1,4 @@
 // v0.3.0 — Struct definition, instantiation, and field access
-module test_structs
 
 // ── struct with all default values ──
 struct Point {

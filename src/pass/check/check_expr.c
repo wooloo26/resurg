@@ -48,7 +48,37 @@ const Type *check_lit(Sema *sema, ASTNode *node) {
 
 const Type *check_id(Sema *sema, ASTNode *node) {
     Sym *sym = scope_lookup(sema, node->id.name);
+
+    // Module-qualified fallback: try current module prefix
+    if (sym == NULL && sema->current_scope->module_name != NULL) {
+        const char *qualified =
+            arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, node->id.name);
+        sym = scope_lookup(sema, qualified);
+        if (sym != NULL) {
+            node->id.name = qualified;
+        }
+    }
+
     if (sym == NULL) {
+        // Handle 'super' — resolve to parent module
+        if (strcmp(node->id.name, "super") == 0 && sema->current_scope->module_name != NULL) {
+            const char *cur = sema->current_scope->module_name;
+            const char *last_dot = strrchr(cur, '.');
+            if (last_dot != NULL) {
+                // "a.b" → "a"
+                size_t parent_len = (size_t)(last_dot - cur);
+                char *parent = arena_alloc(sema->arena, parent_len + 1);
+                memcpy(parent, cur, parent_len);
+                parent[parent_len] = '\0';
+                return type_create_module(sema->arena, parent);
+            }
+            // Top-level module: super goes to file scope (empty module name)
+            return type_create_module(sema->arena, "");
+        }
+        // Handle 'self' — resolve to file scope
+        if (strcmp(node->id.name, "self") == 0) {
+            return type_create_module(sema->arena, "");
+        }
         // Handle bare `None` — resolve from expected type or fn return type
         if (strcmp(node->id.name, "None") == 0) {
             const Type *ctx = sema->expected_type;
@@ -184,7 +214,12 @@ const Type *check_member(Sema *sema, ASTNode *node) {
     if (object_type != NULL && object_type->kind == TYPE_MODULE) {
         const char *mod_name = object_type->module_type.name;
         const char *member = node->member.member;
-        const char *qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, member);
+        const char *qualified;
+        if (strlen(mod_name) == 0) {
+            qualified = member;
+        } else {
+            qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, member);
+        }
 
         // Try struct: mod::StructName
         StructDef *sdef = sema_lookup_struct(sema, qualified);

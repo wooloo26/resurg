@@ -141,6 +141,11 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     }
     // Check type aliases
     const Type *alias = sema_lookup_type_alias(sema, ast_type->name);
+    if (alias == NULL && sema->current_scope != NULL && sema->current_scope->module_name != NULL) {
+        const char *qualified =
+            arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, ast_type->name);
+        alias = sema_lookup_type_alias(sema, qualified);
+    }
     if (alias != NULL) {
         return alias;
     }

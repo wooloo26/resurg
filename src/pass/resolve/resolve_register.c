@@ -566,6 +566,10 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
         return;
     }
 
+    // Set module context so resolve_ast_type can find sibling types
+    const char *prev_module_name = sema->current_scope->module_name;
+    sema->current_scope->module_name = mod_name;
+
     // Register all inner declarations with qualified names
     for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
         ASTNode *inner = decl->module.decls[i];
@@ -621,16 +625,75 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
             }
             continue;
         }
+
+        // Defer use decls — processed after all module contents are registered
     }
+
+    // Process use decls inside the module (after all sibling decls are registered)
+    for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
+        ASTNode *inner = decl->module.decls[i];
+        if (inner->kind == NODE_USE_DECL) {
+            register_use_decl(sema, inner);
+        }
+    }
+
+    sema->current_scope->module_name = prev_module_name;
+}
+
+/** Resolve a 'super' or 'super::super' path to the parent module's qualified name. */
+static const char *resolve_super_path(Sema *sema, const char *path, SrcLoc loc) {
+    const char *current = sema->current_scope->module_name;
+    if (current == NULL) {
+        // At file scope, super:: has no parent
+        SEMA_ERR(sema, loc, "'super' used outside of a module");
+        return NULL;
+    }
+    // Walk up one level for each 'super' segment (separated by '::')
+    // The path is "super" or "super::super" etc.
+    const char *remaining = path;
+    char *cur = arena_sprintf(sema->arena, "%s", current);
+    while (remaining != NULL) {
+        const char *sep = strstr(remaining, "::");
+        size_t seg_len = (sep != NULL) ? (size_t)(sep - remaining) : strlen(remaining);
+        if (seg_len == 5 && strncmp(remaining, "super", 5) == 0) {
+            // Strip last component from cur (e.g., "a.b" -> "a")
+            char *last_dot = strrchr(cur, '.');
+            if (last_dot != NULL) {
+                *last_dot = '\0';
+            } else {
+                // Already at top level — super goes to file scope
+                return "";
+            }
+        } else {
+            break;
+        }
+        remaining = (sep != NULL) ? sep + 2 : NULL;
+    }
+    return cur;
 }
 
 void register_use_decl(Sema *sema, ASTNode *decl) {
     const char *mod_name = decl->use_decl.module_path;
 
+    // Resolve super:: paths
+    if (strncmp(mod_name, "super", 5) == 0) {
+        const char *resolved = resolve_super_path(sema, mod_name, decl->loc);
+        if (resolved == NULL) {
+            return;
+        }
+        mod_name = resolved;
+        decl->use_decl.module_path = resolved;
+    }
+
     for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {
         const char *name = decl->use_decl.imported_names[i];
         const char *alias = decl->use_decl.aliases[i];
-        const char *qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, name);
+        const char *qualified;
+        if (strlen(mod_name) == 0) {
+            qualified = name;
+        } else {
+            qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, name);
+        }
 
         // Try fn
         FnSig *sig = sema_lookup_fn(sema, qualified);
@@ -685,11 +748,14 @@ static void register_primitive_method(Sema *sema, const char *type_name, ASTNode
 void register_ext_decl(Sema *sema, ASTNode *decl) {
     const char *target_name = decl->ext_decl.target_name;
 
-    // For generic ext blocks (ext<T,U> Pair<T,U>), skip — monomorphized later
-    // For specialized ext blocks (ext Pair<i32, i32>), we need the mangled name
+    // For generic ext blocks (ext<T,U> Pair<T,U>), store template for later
     if (BUF_LEN(decl->ext_decl.type_params) > 0) {
-        // Store the generic ext template for later monomorphization
-        // For now, skip registration — will be done during generic instantiation
+        GenericExtDef *gext = rsg_malloc(sizeof(*gext));
+        gext->target_name = target_name;
+        gext->decl = decl;
+        gext->type_params = decl->ext_decl.type_params;
+        gext->type_param_count = BUF_LEN(decl->ext_decl.type_params);
+        BUF_PUSH(sema->generic_ext_defs, gext);
         return;
     }
 

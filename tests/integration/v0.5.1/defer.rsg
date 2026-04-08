@@ -1,5 +1,4 @@
 // v0.5.1 — Defer: LIFO cleanup on function exit
-module test_defer
 
 // ── basic defer modifies state before return ──
 

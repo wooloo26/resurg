@@ -171,10 +171,10 @@ Higher-order programming and code organization.
   
 ## v0.9.2 — Higher Module
 
-- [ ] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
-- [ ] Refactor module
-- [ ] Nested module
-- [ ] Module paths
+- [x] Generic extension methods: `ext<T, U> Pair<T, U> { ... }`
+- [x] Refactor module
+- [x] Nested module
+- [x] Module paths
 
 ## v0.9.3 — Higher Generics
 
@@ -183,14 +183,15 @@ Higher-order programming and code organization.
 - [ ] Default generics
 - [ ] `where`
 - [ ] Associated Types
-  
+
 ## v0.9.4 — Before Ecosystem
 
 - [ ] `Self` and `*Self` type
 - [ ] Template Literal Types
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
-  
+- [ ] Module resolution (file system)
+
 ## v0.9.5 — Ecosystem & Runtime
 
 - [ ] Comprehensive standard library (`std/io`, …)

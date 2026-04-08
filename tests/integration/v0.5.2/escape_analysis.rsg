@@ -1,5 +1,4 @@
 // v0.5.2 — Escape Analysis: if not proven non-escaping, it escapes
-module test_escape_analysis
 
 struct Point {
     x: f64 = 0.0

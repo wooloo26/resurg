@@ -1,5 +1,4 @@
 // v0.9.1 — Extension methods on struct types
-module test_ext_struct
 
 // ── basic struct for testing ──
 

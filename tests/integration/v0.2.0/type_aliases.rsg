@@ -1,5 +1,4 @@
 // v0.2.0 — Type aliases (type ID = u64)
-module test_type_aliases
 
 // ── basic type alias ──
 type ID = u64

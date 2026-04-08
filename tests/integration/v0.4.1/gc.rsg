@@ -1,5 +1,4 @@
 // v0.4.1 — Tracing garbage collector
-module test_gc
 
 struct Point {
     x: f64 = 0.0

@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: undefined variable 'x'
-module test_err
 
 fn main() {
     y := x + 1

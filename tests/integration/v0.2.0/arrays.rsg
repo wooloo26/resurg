@@ -1,5 +1,4 @@
 // v0.2.0 — Arrays ([N]T) — fixed-size value types
-module test_arrays
 
 // ── array declaration and access ──
 fn test_array_basic() {

@@ -298,6 +298,9 @@ const char *lower_mangle_name(Arena *arena, const char *name) {
 /** Forward declaration for recursive module preregistration. */
 static void preregister_decl_list(Lower *low, ASTNode *const *decls, int32_t count);
 
+/** Forward declaration for lower_module (used by flatten_module_decls). */
+static HirNode *lower_module(Lower *low, const ASTNode *ast);
+
 /** Pre-register a single decl (fn/struct/enum/ext/module). */
 static void preregister_single_decl(Lower *low, const ASTNode *decl) {
     if (decl->kind == NODE_FN_DECL) {
@@ -341,7 +344,12 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
                  decl->use_decl.aliases[i] != NULL)
                     ? decl->use_decl.aliases[i]
                     : name;
-            const char *qualified = arena_sprintf(low->hir_arena, "%s.%s", mod_path, name);
+            const char *qualified;
+            if (mod_path[0] == '\0') {
+                qualified = name;
+            } else {
+                qualified = arena_sprintf(low->hir_arena, "%s.%s", mod_path, name);
+            }
             HirSym *target_sym = lower_scope_lookup(low, qualified);
             if (target_sym != NULL) {
                 lower_scope_define(low, alias, target_sym);
@@ -397,6 +405,56 @@ static void emit_enum_with_methods(Lower *low, const ASTNode *decl_ast, HirNode 
                        decls);
 }
 
+/** Recursively flatten module inner declarations into the flat list. */
+static void flatten_module_decls(Lower *low, const ASTNode *mod, HirNode ***decls) {
+    for (int32_t j = 0; j < BUF_LEN(mod->module.decls); j++) {
+        const ASTNode *inner = mod->module.decls[j];
+        if (inner->kind == NODE_STRUCT_DECL) {
+            if (BUF_LEN(inner->struct_decl.type_params) > 0) {
+                continue;
+            }
+            emit_struct_with_methods(low, inner, decls);
+            continue;
+        }
+        if (inner->kind == NODE_ENUM_DECL) {
+            if (BUF_LEN(inner->enum_decl.type_params) > 0) {
+                continue;
+            }
+            emit_enum_with_methods(low, inner, decls);
+            continue;
+        }
+        if (inner->kind == NODE_PACT_DECL) {
+            continue;
+        }
+        if (inner->kind == NODE_EXT_DECL) {
+            if (BUF_LEN(inner->ext_decl.type_params) > 0) {
+                continue;
+            }
+            const Type *recv_type = inner->type;
+            if (recv_type != NULL) {
+                lower_methods_into(low, inner->ext_decl.methods, inner->ext_decl.target_name,
+                                   recv_type, decls);
+            }
+            continue;
+        }
+        if (inner->kind == NODE_USE_DECL) {
+            continue;
+        }
+        if (inner->kind == NODE_MODULE && inner->module.decls != NULL) {
+            HirNode *mod_node = lower_module(low, inner);
+            if (mod_node != NULL) {
+                BUF_PUSH(*decls, mod_node);
+            }
+            flatten_module_decls(low, inner, decls);
+            continue;
+        }
+        HirNode *inner_hir = lower_node(low, inner);
+        if (inner_hir != NULL) {
+            BUF_PUSH(*decls, inner_hir);
+        }
+    }
+}
+
 /** Lower a NODE_FILE into a HIR_FILE with pre-registered fn syms. */
 static HirNode *lower_file(Lower *low, const ASTNode *ast) {
     lower_scope_enter(low);
@@ -447,43 +505,13 @@ static HirNode *lower_file(Lower *low, const ASTNode *ast) {
             continue;
         }
 
-        // Nested module: emit inner declarations into the flat list
+        // Nested module: recursively flatten inner declarations
         if (decl_ast->kind == NODE_MODULE && decl_ast->module.decls != NULL) {
-            for (int32_t j = 0; j < BUF_LEN(decl_ast->module.decls); j++) {
-                const ASTNode *inner = decl_ast->module.decls[j];
-                if (inner->kind == NODE_STRUCT_DECL) {
-                    if (BUF_LEN(inner->struct_decl.type_params) > 0) {
-                        continue;
-                    }
-                    emit_struct_with_methods(low, inner, &decls);
-                    continue;
-                }
-                if (inner->kind == NODE_ENUM_DECL) {
-                    if (BUF_LEN(inner->enum_decl.type_params) > 0) {
-                        continue;
-                    }
-                    emit_enum_with_methods(low, inner, &decls);
-                    continue;
-                }
-                if (inner->kind == NODE_PACT_DECL) {
-                    continue;
-                }
-                if (inner->kind == NODE_EXT_DECL) {
-                    if (BUF_LEN(inner->ext_decl.type_params) > 0) {
-                        continue;
-                    }
-                    const Type *recv_type = inner->type;
-                    if (recv_type != NULL) {
-                        lower_methods_into(low, inner->ext_decl.methods,
-                                           inner->ext_decl.target_name, recv_type, &decls);
-                    }
-                    continue;
-                }
-                HirNode *inner_hir = lower_node(low, inner);
-                if (inner_hir != NULL) {
-                    BUF_PUSH(decls, inner_hir);
-                }
+            HirNode *mod_node = lower_module(low, decl_ast);
+            if (mod_node != NULL) {
+                BUF_PUSH(decls, mod_node);
             }
+            flatten_module_decls(low, decl_ast, &decls);
             continue;
         }
 

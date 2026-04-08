@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: unexpected character '$'
-module test_err
 
 fn main() {
     x := $invalid

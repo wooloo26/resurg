@@ -1,9 +1,8 @@
 // v0.9.1 — use imports with nested modules
-module test_use_imports
 
 // ── nested module definition ──
 
-module math {
+mod math {
     pub fn add(a: i32, b: i32) -> i32 = a + b
     pub fn multiply(a: i32, b: i32) -> i32 = a * b
     fn private_helper() -> i32 = 42

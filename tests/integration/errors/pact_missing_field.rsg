@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: missing required field 'name' from pact 'Named'
-module test_err
 
 pact Named {
     name: str

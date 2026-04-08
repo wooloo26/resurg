@@ -1,5 +1,4 @@
 // v0.2.0 — Full integer types (i8–i128, u8–u128, isize, usize)
-module test_integer_types
 
 // ═══════════════════════════════════════
 // Signed integers

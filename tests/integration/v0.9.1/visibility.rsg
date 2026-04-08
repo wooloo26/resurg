@@ -1,9 +1,8 @@
 // v0.9.1 — Private-by-default module resolution
-module test_visibility
 
 // ── module with mixed visibility ──
 
-module config {
+mod config {
     pub fn get_max() -> i32 = 100
     pub fn get_computed() -> i32 = 42
 }

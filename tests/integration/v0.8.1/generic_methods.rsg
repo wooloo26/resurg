@@ -1,5 +1,4 @@
 // v0.8.1 — Generic methods on types: methods with own type parameters
-module test_generic_methods
 
 // ── generic struct with a generic method ──
 

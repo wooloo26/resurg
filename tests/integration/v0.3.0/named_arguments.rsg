@@ -1,5 +1,4 @@
 // v0.3.0 — Named arguments at call site
-module test_named_args
 
 fn add(a: i32, b: i32) -> i32 {
     a + b

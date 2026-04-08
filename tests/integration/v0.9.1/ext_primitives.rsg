@@ -1,5 +1,4 @@
 // v0.9.1 — Extension methods on primitive types
-module test_ext_primitives
 
 // ── ext on i32 ──
 

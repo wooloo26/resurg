@@ -1,5 +1,4 @@
 // v0.6.0 — Slice of slices [][]T
-module test_slice_of_slices
 
 // ── basic slice of slices ──
 

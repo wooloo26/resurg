@@ -1,6 +1,5 @@
 // TEST: compile_error
 // EXPECT-ERROR: missing required method 'describe' from pact 'Describable'
-module test_err
 
 pact Describable {
     fn describe() -> str

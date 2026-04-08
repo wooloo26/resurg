@@ -1,5 +1,4 @@
 // v0.8.2 — Option/Result pattern matching: Some(v), Ok(v), Err(e)
-module test_option_result_patterns
 
 // ── match on option with wildcard ──
 

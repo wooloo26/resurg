@@ -1,5 +1,4 @@
 // v0.8.2 — Default None for var x: ?T
-module test_default_none
 
 // ── var with ?T defaults to None ──
 

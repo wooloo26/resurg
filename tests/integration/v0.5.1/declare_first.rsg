@@ -1,5 +1,4 @@
 // v0.5.1 — Declare first: variable declaration without initializer
-module test_declare_first
 
 // ── simple declare then assign ──
 

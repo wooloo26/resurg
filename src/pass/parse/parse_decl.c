@@ -499,6 +499,9 @@ static ASTNode *parse_ext_decl(Parser *parser) {
  * Parse use import:
  *   use module_name { name1, name2 as alias, ... }
  *   use module_name
+ *   use super::name
+ *   use super::super::name
+ *   use self::name
  */
 static ASTNode *parse_use_decl(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
@@ -508,6 +511,31 @@ static ASTNode *parse_use_decl(Parser *parser) {
     node->use_decl.module_path = parser_expect(parser, TOKEN_ID)->lexeme;
     node->use_decl.imported_names = NULL;
     node->use_decl.aliases = NULL;
+
+    // Handle path-style use: use super::name or use super::super::name
+    // Consume :: chain, building the module path; the last segment is the imported name
+    if (parser_check(parser, TOKEN_COLON_COLON)) {
+        // Collect segments: module_path :: seg1 :: seg2 :: ... :: name
+        const char **segments = NULL;
+        BUF_PUSH(segments, node->use_decl.module_path);
+        while (parser_match(parser, TOKEN_COLON_COLON)) {
+            const char *seg = parser_expect(parser, TOKEN_ID)->lexeme;
+            BUF_PUSH(segments, seg);
+        }
+        // Last segment is the imported name, rest is the module path
+        int32_t seg_count = BUF_LEN(segments);
+        const char *imported = segments[seg_count - 1];
+        BUF_PUSH(node->use_decl.imported_names, imported);
+        BUF_PUSH(node->use_decl.aliases, imported);
+        // Rebuild module path from segments[0..seg_count-2]
+        const char *path = segments[0];
+        for (int32_t i = 1; i < seg_count - 1; i++) {
+            path = arena_sprintf(parser->arena, "%s::%s", path, segments[i]);
+        }
+        node->use_decl.module_path = path;
+        BUF_FREE(segments);
+        return node;
+    }
 
     parser_skip_newlines(parser);
 
@@ -545,7 +573,7 @@ static ASTNode *parse_use_decl(Parser *parser) {
  */
 static ASTNode *parse_module_decl(Parser *parser, bool is_pub) {
     SrcLoc loc = parser_current_loc(parser);
-    parser_advance(parser); // consume 'module'
+    parser_advance(parser); // consume 'mod'
     ASTNode *node = ast_new(parser->arena, NODE_MODULE, loc);
     node->module.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->module.is_pub = is_pub;
@@ -654,7 +682,7 @@ ASTNode *parser_parse_decl(Parser *parser) {
             return parse_module_decl(parser, true);
         }
         rsg_err(parser_current_loc(parser),
-                "expected 'fn', 'struct', 'enum', 'pact', 'type', or 'module' after 'pub'");
+                "expected 'fn', 'struct', 'enum', 'pact', 'type', or 'mod' after 'pub'");
         return NULL;
     }
 

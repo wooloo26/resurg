@@ -1,5 +1,4 @@
 // v0.5.1 — Never type: bottom type for non-terminating expressions
-module test_never_type
 
 // ── never coerces to i32 in if-else ──
 
