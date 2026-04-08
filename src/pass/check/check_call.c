@@ -33,6 +33,9 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     for (int32_t i = 0; i < sig->param_count; i++) {
         BUF_PUSH(reordered, (ASTNode *)NULL);
     }
+    if (reordered == NULL) {
+        return;
+    }
     for (int32_t i = 0; i < arg_count; i++) {
         const char *aname = node->call.arg_names[i];
         if (aname != NULL) {

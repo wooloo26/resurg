@@ -1047,7 +1047,7 @@ static void scan_captures(const ASTNode *ast, const char **param_names, int32_t 
         scan_captures(ast->assign.target, param_names, param_count, low, out_names, out_syms);
         scan_captures(ast->assign.value, param_names, param_count, low, out_names, out_syms);
         break;
-    case NODE_LIT:
+    case NODE_LIT: // NOLINT(bugprone-branch-clone)
     case NODE_STR_INTERPOLATION:
         break;
     default:

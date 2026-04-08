@@ -289,7 +289,7 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
 const char *lower_mangle_name(Arena *arena, const char *name) {
     char *buf = arena_alloc(arena, strlen(name) + 1);
     for (size_t i = 0; name[i] != '\0'; i++) {
-        buf[i] = (name[i] == '.') ? '_' : name[i];
+        buf[i] = (char)((name[i] == '.') ? '_' : name[i]);
     }
     buf[strlen(name)] = '\0';
     return buf;
@@ -613,7 +613,7 @@ HirNode *lower_node(Lower *low, const ASTNode *ast) {
     case NODE_ENUM_DECL:
         return lower_enum_decl_node(low, ast);
 
-    case NODE_PACT_DECL:
+    case NODE_PACT_DECL: // NOLINT(bugprone-branch-clone)
         return NULL;
 
     case NODE_EXT_DECL:

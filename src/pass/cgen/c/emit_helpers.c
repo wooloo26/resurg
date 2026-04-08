@@ -7,7 +7,7 @@ static const char *mangle_dots(Arena *arena, const char *name) {
     size_t len = strlen(name);
     char *buf = arena_alloc(arena, len + 1);
     for (size_t i = 0; i < len; i++) {
-        buf[i] = (name[i] == '.') ? '_' : name[i];
+        buf[i] = (char)((name[i] == '.') ? '_' : name[i]);
     }
     buf[len] = '\0';
     return buf;

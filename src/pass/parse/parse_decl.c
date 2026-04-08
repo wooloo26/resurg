@@ -447,9 +447,8 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     node->ext_decl.type_params = parse_type_params(parser);
 
     // Target type name (struct, enum, or primitive type keyword)
-    if (parser_check(parser, TOKEN_ID)) {
-        node->ext_decl.target_name = parser_advance(parser)->lexeme;
-    } else if (token_is_type_keyword(parser_current_token(parser)->kind)) {
+    if (parser_check(parser, TOKEN_ID) ||
+        token_is_type_keyword(parser_current_token(parser)->kind)) {
         node->ext_decl.target_name = parser_advance(parser)->lexeme;
     } else {
         rsg_err(parser_current_loc(parser), "expected type name after 'ext'");

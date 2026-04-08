@@ -262,7 +262,7 @@ static void emit_fns(CGen *cgen, const HirNode *file) {
     cgen->output = real_out;
     cgen->real_output = NULL;
 
-    rewind(saved_body);
+    fseek(saved_body, 0, SEEK_SET);
     char buf[4096];
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), saved_body)) > 0) {
