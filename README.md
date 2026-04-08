@@ -582,69 +582,136 @@ where In: Parseable, Out: Serializable + Display,
 
 ---
 
-## 7. `pact` Associated Types
+## 7. Associated Types
+
+Associated types bind type members to `pact`, `struct`, `enum`, and `ext` blocks — eliminating redundant generic parameters while preserving full type-level expressiveness.
+
+### Declaration
+
+Declare with optional pact bounds and defaults. Implementors concretize; omitted types fall back to defaults.
 
 ```rsg
 pact Iterator {
-    type Item: Clone = i32  // bounded
-    type Index = usize        // with default
+    type Item: Clone = i32    // bounded + default
+    type Index = usize        // default only
     fn next(mut *self) -> ?Self::Item
 }
+```
 
+### Concretization
+
+Provide concrete types via `ext … impl` or struct conformance. Non-member types are rejected. Omitted types use defaults.
+
+```rsg
 struct RangeIter { current: i32; end: i32 }
 
 ext RangeIter impl Iterator {
     type Item = i32           // concretize
-    type Alias = str;      // Error：`associated type `Alias` is not a member of Iterator`
+    type Alias = str          // Error: `associated type `Alias` is not a member of Iterator`
     // Index defaults to usize
     fn next(mut *self) -> ?i32 { ... }
 }
-
-// Usage: no repeated type params
-fn collect<I: Iterator>(iter: *I) -> []I::Item { ... }
 ```
 
-### Constraints & Equality
+Struct conformance with inline concretization:
 
 ```rsg
-fn only_i32<I: Iterator<Item = i32>>(iter: *I) {
-    // I::Item is guaranteed i32
+struct UnitIter: Iterator {
+    type Item = ()
+    count: usize
+    fn next(mut *self) -> ?() {
+        if self.count > 0 { self.count -= 1; Some(()) }
+        else { None }
+    }
 }
 
-fn same_item<I: Iterator, J: Iterator<Item = I::Item>>(
-    i: *I, j: *J
-) {
-    // I::Item == J::Item enforced at compile-time
-}
+for UnitIter { count = 3 } |_| { println("tick") }
+```
 
-fn collect<T = i32, I: Iterator<Item = T>>(iter: *I) -> []T {
-    // T defaults to i32 if not specified
+### Constraints & Projection
+
+Associated types are usable anywhere a type is expected: signatures, `where` clauses, type aliases, struct fields.
+
+```rsg
+// Signatures
+fn collect<I: Iterator>(iter: *I) -> []I::Item { ... }
+fn process<I: Iterator>(iter: *I) -> []I::Item
+
+// Inline constraint — pin to a concrete type
+fn only_i32<I: Iterator<Item = i32>>(iter: *I) { ... }
+
+// Cross-type equality
+fn same_item<I: Iterator, J: Iterator<Item = I::Item>>(i: *I, j: *J) { ... }
+
+// Default generic param bound to associated type
+fn collect<T = i32, I: Iterator<Item = T>>(iter: *I) -> []T { ... }
+
+// Where clauses
+fn clone_all<I>(iter: *I) -> []I::Item
+where I: Iterator, I::Item: Clone
+
+// Type aliases
+type ItemsOf<I: Iterator> = []I::Item
+type First<I: Iterator> = ?I::Item
+
+// Struct fields
+struct Cache<I: Iterator> {
+    buffer: []I::Item
+    index: usize
 }
 ```
 
-### Type Inference
+### Conflict Resolution
 
-Compiler infers associated types from context — no turbofish needed in most cases:
+Qualified paths disambiguate when multiple pacts define the same associated type name:
+
+```rsg
+pact A { type Value }
+pact B { type Value }
+
+struct Dual: A + B {
+    type A::Value = i32    // qualified assignment
+    type B::Value = str
+}
+```
+
+### Inference
+
+The compiler infers associated types from context — no turbofish needed in most cases:
 
 ```rsg
 iter := RangeIter { current = 0, end = 2 }
 
-// OK: Compiler infers I = RangeIter, I::Item = i32
-val := get_next(mut &iter)
-
-// OK: Works in expressions
-first := collect(&iter)[0]  // type: i32
-
+val := get_next(mut &iter)           // infers I = RangeIter, I::Item = i32
+first := collect(&iter)[0]          // type: i32
 var val: ?str = get_next(mut &iter)  // ERROR: conflicts with I::Item = i32
 ```
 
-### Option/Result Interaction
+Inference extends to enums with associated type aliases over generic parameters:
+
+```rsg
+enum ApiResult<T, E = str> {
+    type Value = T
+    type Error = E
+    Ok(T), Err(E)
+}
+
+fn handle(r: ApiResult) -> str {  // T, E inferred from call site
+    match r {
+        ApiResult::Ok(v) => "got: {v}",
+        ApiResult::Err(e) => "error: {e}"
+    }
+}
+```
+
+### Integration with `?T` / `T ! E`
+
+Associated types compose naturally with option and result types for error propagation:
 
 ```rsg
 pact FallibleIterator {
     type Item
     type Error: Display
-    
     fn next(mut *self) -> Self::Item ! Self::Error
 }
 
@@ -658,13 +725,12 @@ fn first_valid<I: FallibleIterator>(
 }
 ```
 
-### Nested Result Handling
+Cross-pact equality constraints unify error types across composed abstractions:
 
 ```rsg
 pact Parser {
     type Output
     type Err
-    
     fn parse(*self, input: str) -> Self::Output ! Self::Err
 }
 
@@ -674,7 +740,7 @@ fn chain<P, Q>(
 where
     P: Parser,
     Q: Parser<Output = P::Output>,
-    P::Err: CustomError,   // unified error type
+    P::Err: CustomError,
     Q::Err: CustomError,
 {
     val := p.parse(src)!   // P::Err propagated
@@ -682,54 +748,98 @@ where
 }
 ```
 
-### Boundary Types
+### In `enum`
+
+Enums support associated type aliases (binding to generic params), bounded abstract types (concretized via `ext`), and direct variant usage:
 
 ```rsg
-struct UnitIter: Iterator {
-    type Item = ()    // unit type
-    count: usize
-    fn next(mut *self) -> ?() {
-        if self.count > 0 { self.count -= 1; Some(()) }
-        else { None }
+enum Message<T> {
+    type Payload = T          // alias for generic param
+    Text(str),
+    Data(Payload),            // variant uses associated type
+    Signal,
+    fn extract_data(*self) -> ?Payload {
+        match self {
+            Message::Data(d) => Some(d),
+            _ => None
+        }
     }
 }
 
-// Usage: iterate for side-effects
-for UnitIter { count = 3 } |_| { println("tick") }
-```
-
-### Projection & Composition
-
-```rsg
-// In signatures
-fn process<I: Iterator>(iter: *I) -> []I::Item
-
-// In where clauses
-fn clone_all<I>(iter: *I) -> []I::Item
-where I: Iterator, I::Item: Clone
-
-// In type aliases
-type ItemsOf<I: Iterator> = []I::Item
-type First<I: Iterator> = ?I::Item
-
-// In structs
-struct Cache<I: Iterator> {
-    buffer: []I::Item
-    index: usize
+enum Response<Body = str, Err = str> {
+    type BodyType = Body
+    type ErrorType = Err
+    Success(BodyType),
+    Failure(ErrorType),
+    fn is_success(*self) -> bool {
+        match self {
+            Response::Success(_) => true,
+            Response::Failure(_) => false
+        }
+    }
 }
 ```
 
-### Conflict Resolution
-
-When two pacts define the same associated type name:
+Abstract associated types in enums — bounds without concrete types — are concretized via `ext`:
 
 ```rsg
-pact A { type Value }
-pact B { type Value }
+enum StateMachine {
+    type StateData: Clone
+    type TransitionError: Display
+    Idle,
+    Running(StateData),
+    Error(TransitionError),
+    fn step(mut *self) -> Self ! TransitionError {
+        match self {
+            StateMachine::Idle => {
+                *self = StateMachine::Running(default())
+                Ok(*)
+            }
+            // ...
+        }
+    }
+}
 
-struct Dual: A + B {
-    type A::Value = i32    // qualified assignment
-    type B::Value = str
+ext StateMachine impl StateMachine {
+    type StateData = Config
+    type TransitionError = StateError
+    fn step(mut *self) -> Self ! StateError { ... }
+}
+```
+
+### In `ext`
+
+Extensions concretize pact associated types and can declare local associated types scoped to the extension block:
+
+```rsg
+pact DataSource {
+    type Row: Clone
+    type QueryError: Display
+    fn query(*self, sql: str) -> []Self::Row ! Self::QueryError
+}
+
+struct Postgres { conn: *Connection }
+
+ext Postgres impl DataSource {
+    type Row = DbRow
+    type QueryError = PgError
+    fn query(*self, sql: str) -> []DbRow ! PgError { ... }
+}
+```
+
+Local associated types (not from any pact):
+
+```rsg
+ext<T> []T {
+    type Accumulator = T  // local to this extension
+
+    fn sum(*self) -> Accumulator
+    where T: Add<Output = T> + Copy + Default
+    {
+        mut result := default()
+        for self |item| result = result + item
+        result
+    }
 }
 ```
 
