@@ -279,7 +279,7 @@ void register_fn_sig(Sema *sema, ASTNode *decl) {
         gdef->decl = decl;
         gdef->type_params = decl->fn_decl.type_params;
         gdef->type_param_count = BUF_LEN(decl->fn_decl.type_params);
-        hash_table_insert(&sema->generic_fn_table, decl->fn_decl.name, gdef);
+        hash_table_insert(&sema->generics.fn, decl->fn_decl.name, gdef);
         return;
     }
 
@@ -300,7 +300,7 @@ void register_struct_def(Sema *sema, ASTNode *decl) {
         gdef->decl = decl;
         gdef->type_params = decl->struct_decl.type_params;
         gdef->type_param_count = BUF_LEN(decl->struct_decl.type_params);
-        hash_table_insert(&sema->generic_struct_table, struct_name, gdef);
+        hash_table_insert(&sema->generics.structs, struct_name, gdef);
         return;
     }
 
@@ -353,7 +353,7 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
         gdef->decl = decl;
         gdef->type_params = decl->enum_decl.type_params;
         gdef->type_param_count = BUF_LEN(decl->enum_decl.type_params);
-        hash_table_insert(&sema->generic_enum_table, enum_name, gdef);
+        hash_table_insert(&sema->generics.enums, enum_name, gdef);
         return;
     }
 
@@ -870,10 +870,11 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     // For generic ext blocks (ext<T,U> Pair<T,U>), store template for later
     if (BUF_LEN(decl->ext_decl.type_params) > 0) {
         GenericExtDef *gext = rsg_malloc(sizeof(*gext));
+        gext->base.name = target_name;
+        gext->base.decl = decl;
+        gext->base.type_params = decl->ext_decl.type_params;
+        gext->base.type_param_count = BUF_LEN(decl->ext_decl.type_params);
         gext->target_name = target_name;
-        gext->decl = decl;
-        gext->type_params = decl->ext_decl.type_params;
-        gext->type_param_count = BUF_LEN(decl->ext_decl.type_params);
         BUF_PUSH(sema->generic_ext_defs, gext);
         return;
     }

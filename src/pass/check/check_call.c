@@ -387,21 +387,9 @@ static const Type *check_inline_closure_call(Sema *sema, ASTNode *node) {
 // ── Generic fn instantiation ──────────────────────────────────────
 
 /** Instantiate a generic fn call with explicit type args: fn_name<T>(args). */
-static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *fn_name) {
-    GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
-    if (gdef == NULL) {
-        SEMA_ERR(sema, node->loc, "undefined generic function '%s'", fn_name);
-        return &TYPE_ERR_INST;
-    }
-    int32_t expected = gdef->type_param_count;
+/** Resolve type args for a generic fn call. Returns resolved args buf (caller must BUF_FREE). */
+static const Type **resolve_generic_type_args(Sema *sema, ASTNode *node, GenericFnDef *gdef) {
     int32_t got = BUF_LEN(node->call.type_args);
-    if (got != expected) {
-        SEMA_ERR(sema, node->loc, "wrong number of type arguments for '%s': expected %d, got %d",
-                 fn_name, expected, got);
-        return &TYPE_ERR_INST;
-    }
-
-    // Resolve type args
     const Type **resolved_args = NULL;
     for (int32_t i = 0; i < got; i++) {
         const Type *t = resolve_ast_type(sema, &node->call.type_args[i]);
@@ -412,12 +400,17 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
     }
 
     // Push type param substitutions early for constraint resolution (e.g., I::Item)
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
+    for (int32_t i = 0; i < gdef->type_param_count; i++) {
+        hash_table_insert(&sema->generics.type_params, gdef->type_params[i].name,
                           (void *)resolved_args[i]);
     }
+    return resolved_args;
+}
 
-    const Type *check_err = NULL;
+/** Validate pact bounds, associated type constraints, and where clauses. Returns false on error. */
+static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                    const Type **resolved_args) {
+    int32_t expected = gdef->type_param_count;
 
     // Check bounds
     for (int32_t i = 0; i < expected; i++) {
@@ -426,8 +419,7 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
             if (!type_satisfies_bound(sema, resolved_args[i], bound)) {
                 SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
                          type_name(sema->arena, resolved_args[i]), bound);
-                check_err = &TYPE_ERR_INST;
-                goto cleanup;
+                return false;
             }
         }
         // Check associated type constraints: T: Pact<Item = i32>
@@ -451,8 +443,7 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
             if (assoc_resolved == NULL || assoc_resolved->kind == TYPE_ERR) {
                 SEMA_ERR(sema, node->loc, "'%s' has no associated type '%s' for pact '%s'",
                          type_name(sema->arena, resolved_args[i]), ac->assoc_name, ac->pact_name);
-                check_err = &TYPE_ERR_INST;
-                goto cleanup;
+                return false;
             }
             // Resolve expected type (may reference other type params)
             const Type *expected_type = resolve_ast_type(sema, ac->expected_type);
@@ -461,8 +452,7 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
                 SEMA_ERR(sema, node->loc, "associated type '%s' is '%s', expected '%s'",
                          ac->assoc_name, type_name(sema->arena, assoc_resolved),
                          type_name(sema->arena, expected_type));
-                check_err = &TYPE_ERR_INST;
-                goto cleanup;
+                return false;
             }
         }
     }
@@ -501,8 +491,7 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
                                          "'%s::%s' = '%s' does not satisfy pact bound '%s'",
                                          wcs[w].type_name, wcs[w].assoc_member,
                                          type_name(sema->arena, assoc_resolved), wcs[w].bounds[b]);
-                                check_err = &TYPE_ERR_INST;
-                                goto cleanup;
+                                return false;
                             }
                         }
                     }
@@ -514,22 +503,16 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
             if (!type_satisfies_bound(sema, wc_type, wcs[w].bounds[b])) {
                 SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
                          type_name(sema->arena, wc_type), wcs[w].bounds[b]);
-                check_err = &TYPE_ERR_INST;
-                goto cleanup;
+                return false;
             }
         }
     }
+    return true;
+}
 
-    // Check if already instantiated
-    const char *mangled = build_mangled_name(sema, fn_name, resolved_args, got);
-    FnSig *existing = sema_lookup_fn(sema, mangled);
-    if (existing != NULL) {
-        hash_table_destroy(&sema->type_param_table);
-        hash_table_init(&sema->type_param_table, NULL);
-        node->call.callee->id.name = mangled;
-        return resolve_call(sema, node, existing);
-    }
-
+/** Build a concrete FnSig from a generic template and queue a deferred instantiation. */
+static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                        const Type **resolved_args, const char *mangled) {
     ASTNode *orig = gdef->decl;
     FnSig *sig = rsg_malloc(sizeof(*sig));
     sig->name = mangled;
@@ -549,11 +532,8 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
     const Type *ret = resolve_ast_type(sema, &orig->fn_decl.return_type);
     sig->return_type = (ret != NULL) ? ret : &TYPE_UNIT_INST;
 
-    // Clear type param substitutions
-    hash_table_destroy(&sema->type_param_table);
-    hash_table_init(&sema->type_param_table, NULL);
+    sema_reset_type_params(sema);
 
-    // Register concrete FnSig and queue deferred body check
     hash_table_insert(&sema->fn_table, mangled, sig);
     GenericInst inst = {.generic = gdef,
                         .mangled_name = mangled,
@@ -563,11 +543,39 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
 
     node->call.callee->id.name = mangled;
     return resolve_call(sema, node, sig);
+}
 
-cleanup:
-    hash_table_destroy(&sema->type_param_table);
-    hash_table_init(&sema->type_param_table, NULL);
-    return check_err;
+/** Instantiate a generic fn call with explicit type args: fn_name<T>(args). */
+static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *fn_name) {
+    GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
+    if (gdef == NULL) {
+        SEMA_ERR(sema, node->loc, "undefined generic function '%s'", fn_name);
+        return &TYPE_ERR_INST;
+    }
+    int32_t expected = gdef->type_param_count;
+    int32_t got = BUF_LEN(node->call.type_args);
+    if (got != expected) {
+        SEMA_ERR(sema, node->loc, "wrong number of type arguments for '%s': expected %d, got %d",
+                 fn_name, expected, got);
+        return &TYPE_ERR_INST;
+    }
+
+    const Type **resolved_args = resolve_generic_type_args(sema, node, gdef);
+
+    if (!validate_generic_bounds(sema, node, gdef, resolved_args)) {
+        sema_reset_type_params(sema);
+        return &TYPE_ERR_INST;
+    }
+
+    const char *mangled = build_mangled_name(sema, fn_name, resolved_args, got);
+    FnSig *existing = sema_lookup_fn(sema, mangled);
+    if (existing != NULL) {
+        sema_reset_type_params(sema);
+        node->call.callee->id.name = mangled;
+        return resolve_call(sema, node, existing);
+    }
+
+    return emit_generic_fn_inst(sema, node, gdef, resolved_args, mangled);
 }
 
 // ── Generic type inference ────────────────────────────────────────
@@ -656,10 +664,10 @@ static const Type *check_bare_variant_call(Sema *sema, ASTNode *node, const char
                            .name = type_name(sema->arena, arg_type),
                            .type_args = NULL,
                            .loc = node->loc};
-        hash_table_insert(&sema->type_param_table, val_arg.name, (void *)arg_type);
+        hash_table_insert(&sema->generics.type_params, val_arg.name, (void *)arg_type);
         GenericInstArgs inst_args = {&val_arg, 1, node->loc};
         const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-        hash_table_remove(&sema->type_param_table, val_arg.name);
+        hash_table_remove(&sema->generics.type_params, val_arg.name);
         if (mangled != NULL) {
             const Type *opt_type = sema_lookup_type_alias(sema, mangled);
             if (opt_type != NULL) {

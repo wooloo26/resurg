@@ -18,9 +18,10 @@ typedef struct FnSig FnSig;
 typedef struct StructDef StructDef;
 typedef struct EnumDef EnumDef;
 typedef struct PactDef PactDef;
-typedef struct GenericFnDef GenericFnDef;
-typedef struct GenericStructDef GenericStructDef;
-typedef struct GenericEnumDef GenericEnumDef;
+typedef struct GenericDef GenericDef;
+typedef GenericDef GenericFnDef;
+typedef GenericDef GenericStructDef;
+typedef GenericDef GenericEnumDef;
 typedef struct GenericTypeAlias GenericTypeAlias;
 
 // ── Struct defs ─────────────────────────────────────────────────

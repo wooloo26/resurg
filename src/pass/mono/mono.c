@@ -27,7 +27,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
 
         // Push type param substitutions
         for (int32_t ti = 0; ti < gdef->type_param_count; ti++) {
-            hash_table_insert(&sema->type_param_table, gdef->type_params[ti].name,
+            hash_table_insert(&sema->generics.type_params, gdef->type_params[ti].name,
                               (void *)inst->type_args[ti]);
         }
 
@@ -64,8 +64,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         BUF_PUSH(inst->file_node->file.decls, clone);
 
         // Clear type param substitutions
-        hash_table_destroy(&sema->type_param_table);
-        hash_table_init(&sema->type_param_table, NULL);
+        sema_reset_type_params(sema);
     }
 }
 

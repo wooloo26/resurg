@@ -33,52 +33,37 @@ struct FnSig {
     bool is_ptr_recv;
 };
 
-/** Generic fn template — stored when a fn has type params. */
-typedef struct GenericFnDef {
+/** Base for all generic templates (fn, struct, enum). */
+typedef struct GenericDef {
     const char *name;
-    ASTNode *decl;             // original fn_decl AST
+    ASTNode *decl;             // original AST node
     ASTTypeParam *type_params; /* buf */
     int32_t type_param_count;
-} GenericFnDef;
+} GenericDef;
+
+/** Generic fn/struct/enum share the same layout — use GenericDef directly. */
+typedef GenericDef GenericFnDef;
+typedef GenericDef GenericStructDef;
+typedef GenericDef GenericEnumDef;
 
 /** Tracks a pending generic instantiation for deferred body checking. */
 typedef struct GenericInst {
-    GenericFnDef *generic;    // source template
+    GenericDef *generic;      // source template
     const char *mangled_name; // monomorphized fn name
     const Type **type_args;   /* buf - resolved concrete types */
     ASTNode *file_node;       // file AST to append cloned fn to
 } GenericInst;
 
-/** Generic struct template — stored when a struct has type params. */
-typedef struct GenericStructDef {
-    const char *name;
-    ASTNode *decl;             // original struct_decl AST
-    ASTTypeParam *type_params; /* buf */
-    int32_t type_param_count;
-} GenericStructDef;
-
-/** Generic enum template — stored when an enum has type params. */
-typedef struct GenericEnumDef {
-    const char *name;
-    ASTNode *decl;             // original enum_decl AST
-    ASTTypeParam *type_params; /* buf */
-    int32_t type_param_count;
-} GenericEnumDef;
-
-/** Generic type alias — stored when a type alias has type params. */
+/** Generic type alias — adds unresolved alias type to the base. */
 typedef struct GenericTypeAlias {
-    const char *name;
-    ASTType alias_type;        // unresolved template type
-    ASTTypeParam *type_params; /* buf */
-    int32_t type_param_count;
+    GenericDef base;
+    ASTType alias_type; // unresolved template type
 } GenericTypeAlias;
 
-/** Generic ext template — stored when an ext block has type params. */
+/** Generic ext template — adds target type name to the base. */
 typedef struct GenericExtDef {
-    const char *target_name;   // target type name (e.g. "Pair")
-    ASTNode *decl;             // original ext_decl AST
-    ASTTypeParam *type_params; /* buf */
-    int32_t type_param_count;
+    GenericDef base;
+    const char *target_name; // target type name (e.g. "Pair")
 } GenericExtDef;
 
 /** A field def with its default value expr. */
@@ -135,6 +120,15 @@ typedef struct {
     bool captures_mutated; // true when a captured variable is mutated (FnMut inference)
 } ClosureCtx;
 
+/** Grouped hash tables for generic definitions and active type params. */
+typedef struct GenericTables {
+    HashTable fn;          // name → GenericFnDef*
+    HashTable structs;     // name → GenericStructDef*
+    HashTable enums;       // name → GenericEnumDef*
+    HashTable type_alias;  // name → GenericTypeAlias*
+    HashTable type_params; // name → const Type* (active during generic body check)
+} GenericTables;
+
 struct Sema {
     Arena *arena;
     Scope *current_scope;
@@ -151,15 +145,17 @@ struct Sema {
     HashTable struct_table;       // name → StructDef*
     HashTable enum_table;         // name → EnumDef*
     HashTable pact_table;         // name → PactDef*
-    HashTable generic_fn_table;   // name → GenericFnDef*
-    HashTable generic_struct_table;     // name → GenericStructDef*
-    HashTable generic_enum_table;       // name → GenericEnumDef*
-    HashTable generic_type_alias_table; // name → GenericTypeAlias*
-    HashTable type_param_table;         // name → const Type* (active during generic body check)
-    GenericInst *pending_insts;         /* buf - deferred generic instantiations */
-    GenericExtDef **generic_ext_defs;   /* buf - generic ext templates */
-    ASTNode **synthetic_decls;          /* buf - monomorphized struct/enum decls to append */
+    GenericTables generics;       // generic template tables + active type params
+    GenericInst *pending_insts;   /* buf - deferred generic instantiations */
+    GenericExtDef **generic_ext_defs; /* buf - generic ext templates */
+    ASTNode **synthetic_decls;        /* buf - monomorphized struct/enum decls to append */
 };
+
+/** Reset the type_param table — destroy and reinitialize. */
+static inline void sema_reset_type_params(Sema *sema) {
+    hash_table_destroy(&sema->generics.type_params);
+    hash_table_init(&sema->generics.type_params, NULL);
+}
 
 /** Report a semantic err and bump the sema's err counter. */
 #define SEMA_ERR(sema, loc, ...)                                                                   \

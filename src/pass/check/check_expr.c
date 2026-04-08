@@ -514,12 +514,12 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) > 0) {
         GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, struct_name);
         if (gta != NULL) {
-            int32_t expected = gta->type_param_count;
+            int32_t expected = gta->base.type_param_count;
             int32_t got = BUF_LEN(node->struct_lit.type_args);
             // Count min required (params without defaults)
             int32_t min_required = 0;
             for (int32_t i = 0; i < expected; i++) {
-                if (gta->type_params[i].default_type == NULL) {
+                if (gta->base.type_params[i].default_type == NULL) {
                     min_required = i + 1;
                 }
             }
@@ -530,19 +530,21 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
                     if (t == NULL) {
                         t = &TYPE_ERR_INST;
                     }
-                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
+                                      (void *)t);
                 }
                 // Fill defaults for remaining
                 for (int32_t i = got; i < expected; i++) {
-                    const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
+                    const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
                     if (t == NULL) {
                         t = &TYPE_ERR_INST;
                     }
-                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
+                                      (void *)t);
                 }
                 const Type *result = resolve_ast_type(sema, &gta->alias_type);
                 for (int32_t i = 0; i < expected; i++) {
-                    hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+                    hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
                 }
                 if (result != NULL && result->kind == TYPE_STRUCT) {
                     sdef = sema_lookup_struct(sema, result->struct_type.name);
@@ -572,24 +574,25 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
         if (gta != NULL) {
             // Check if all params have defaults
             bool all_defaults = true;
-            for (int32_t i = 0; i < gta->type_param_count; i++) {
-                if (gta->type_params[i].default_type == NULL) {
+            for (int32_t i = 0; i < gta->base.type_param_count; i++) {
+                if (gta->base.type_params[i].default_type == NULL) {
                     all_defaults = false;
                     break;
                 }
             }
             if (all_defaults) {
                 // Push default type params
-                for (int32_t i = 0; i < gta->type_param_count; i++) {
-                    const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
+                for (int32_t i = 0; i < gta->base.type_param_count; i++) {
+                    const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
                     if (t == NULL) {
                         t = &TYPE_ERR_INST;
                     }
-                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
+                                      (void *)t);
                 }
                 const Type *result = resolve_ast_type(sema, &gta->alias_type);
-                for (int32_t i = 0; i < gta->type_param_count; i++) {
-                    hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+                for (int32_t i = 0; i < gta->base.type_param_count; i++) {
+                    hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
                 }
                 if (result != NULL && result->kind == TYPE_STRUCT) {
                     sdef = sema_lookup_struct(sema, result->struct_type.name);

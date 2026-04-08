@@ -23,16 +23,16 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
     hash_table_init(&sema->enum_table, NULL);
     hash_table_destroy(&sema->pact_table);
     hash_table_init(&sema->pact_table, NULL);
-    hash_table_destroy(&sema->generic_fn_table);
-    hash_table_init(&sema->generic_fn_table, NULL);
-    hash_table_destroy(&sema->generic_struct_table);
-    hash_table_init(&sema->generic_struct_table, NULL);
-    hash_table_destroy(&sema->generic_enum_table);
-    hash_table_init(&sema->generic_enum_table, NULL);
-    hash_table_destroy(&sema->generic_type_alias_table);
-    hash_table_init(&sema->generic_type_alias_table, NULL);
-    hash_table_destroy(&sema->type_param_table);
-    hash_table_init(&sema->type_param_table, NULL);
+    hash_table_destroy(&sema->generics.fn);
+    hash_table_init(&sema->generics.fn, NULL);
+    hash_table_destroy(&sema->generics.structs);
+    hash_table_init(&sema->generics.structs, NULL);
+    hash_table_destroy(&sema->generics.enums);
+    hash_table_init(&sema->generics.enums, NULL);
+    hash_table_destroy(&sema->generics.type_alias);
+    hash_table_init(&sema->generics.type_alias, NULL);
+    hash_table_destroy(&sema->generics.type_params);
+    hash_table_init(&sema->generics.type_params, NULL);
     BUF_FREE(sema->pending_insts);
     sema->pending_insts = NULL;
     BUF_FREE(sema->generic_ext_defs);
@@ -45,11 +45,12 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
 static void register_type_alias(Sema *sema, ASTNode *decl) {
     if (BUF_LEN(decl->type_alias.type_params) > 0) {
         GenericTypeAlias *gta = rsg_malloc(sizeof(*gta));
-        gta->name = decl->type_alias.name;
+        gta->base.name = decl->type_alias.name;
+        gta->base.decl = decl;
         gta->alias_type = decl->type_alias.alias_type;
-        gta->type_params = decl->type_alias.type_params;
-        gta->type_param_count = BUF_LEN(decl->type_alias.type_params);
-        hash_table_insert(&sema->generic_type_alias_table, gta->name, gta);
+        gta->base.type_params = decl->type_alias.type_params;
+        gta->base.type_param_count = BUF_LEN(decl->type_alias.type_params);
+        hash_table_insert(&sema->generics.type_alias, gta->base.name, gta);
     } else {
         const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
         if (underlying != NULL) {
@@ -171,11 +172,11 @@ Sema *sema_create(Arena *arena) {
     hash_table_init(&sema->struct_table, NULL);
     hash_table_init(&sema->enum_table, NULL);
     hash_table_init(&sema->pact_table, NULL);
-    hash_table_init(&sema->generic_fn_table, NULL);
-    hash_table_init(&sema->generic_struct_table, NULL);
-    hash_table_init(&sema->generic_enum_table, NULL);
-    hash_table_init(&sema->generic_type_alias_table, NULL);
-    hash_table_init(&sema->type_param_table, NULL);
+    hash_table_init(&sema->generics.fn, NULL);
+    hash_table_init(&sema->generics.structs, NULL);
+    hash_table_init(&sema->generics.enums, NULL);
+    hash_table_init(&sema->generics.type_alias, NULL);
+    hash_table_init(&sema->generics.type_params, NULL);
     sema->pending_insts = NULL;
     sema->generic_ext_defs = NULL;
     sema->synthetic_decls = NULL;
@@ -189,11 +190,11 @@ void sema_destroy(Sema *sema) {
         hash_table_destroy(&sema->struct_table);
         hash_table_destroy(&sema->enum_table);
         hash_table_destroy(&sema->pact_table);
-        hash_table_destroy(&sema->generic_fn_table);
-        hash_table_destroy(&sema->generic_struct_table);
-        hash_table_destroy(&sema->generic_enum_table);
-        hash_table_destroy(&sema->generic_type_alias_table);
-        hash_table_destroy(&sema->type_param_table);
+        hash_table_destroy(&sema->generics.fn);
+        hash_table_destroy(&sema->generics.structs);
+        hash_table_destroy(&sema->generics.enums);
+        hash_table_destroy(&sema->generics.type_alias);
+        hash_table_destroy(&sema->generics.type_params);
         BUF_FREE(sema->pending_insts);
         BUF_FREE(sema->generic_ext_defs);
         BUF_FREE(sema->synthetic_decls);

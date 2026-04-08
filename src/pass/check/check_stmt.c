@@ -433,10 +433,10 @@ static const Type *check_optional_chain(Sema *sema, ASTNode *node) {
                        .name = type_name(sema->arena, field_type),
                        .type_args = NULL,
                        .loc = node->loc};
-    hash_table_insert(&sema->type_param_table, val_arg.name, (void *)field_type);
+    hash_table_insert(&sema->generics.type_params, val_arg.name, (void *)field_type);
     GenericInstArgs inst_args = {&val_arg, 1, node->loc};
     const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-    hash_table_remove(&sema->type_param_table, val_arg.name);
+    hash_table_remove(&sema->generics.type_params, val_arg.name);
     if (mangled != NULL) {
         return sema_lookup_type_alias(sema, mangled);
     }

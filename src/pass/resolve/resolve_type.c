@@ -23,19 +23,19 @@ PactDef *sema_lookup_pact(const Sema *sema, const char *name) {
 }
 
 GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generic_fn_table, name);
+    return hash_table_lookup(&sema->generics.fn, name);
 }
 
 GenericStructDef *sema_lookup_generic_struct(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generic_struct_table, name);
+    return hash_table_lookup(&sema->generics.structs, name);
 }
 
 GenericEnumDef *sema_lookup_generic_enum(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generic_enum_table, name);
+    return hash_table_lookup(&sema->generics.enums, name);
 }
 
 GenericTypeAlias *sema_lookup_generic_type_alias(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generic_type_alias_table, name);
+    return hash_table_lookup(&sema->generics.type_alias, name);
 }
 
 // ── Per-kind type resolvers ─────────────────────────────────────────────
@@ -49,7 +49,7 @@ static const Type *resolve_array_type(Sema *sema, const ASTType *ast_type) {
     int32_t size = ast_type->array_size;
     if (ast_type->array_size_name != NULL) {
         // Comptime param: look up the integer value from type_param_table
-        const Type *ct = hash_table_lookup(&sema->type_param_table, ast_type->array_size_name);
+        const Type *ct = hash_table_lookup(&sema->generics.type_params, ast_type->array_size_name);
         if (ct != NULL && ct->kind == TYPE_COMPTIME_INT) {
             size = (int32_t)ct->comptime_int.value;
         } else {
@@ -159,7 +159,7 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
         return type;
     }
     // Check active type param substitutions (for generic body checking)
-    const Type *tp = hash_table_lookup(&sema->type_param_table, ast_type->name);
+    const Type *tp = hash_table_lookup(&sema->generics.type_params, ast_type->name);
     if (tp != NULL) {
         return tp;
     }
@@ -177,12 +177,12 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     if (BUF_LEN(ast_type->type_args) > 0) {
         GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, ast_type->name);
         if (gta != NULL) {
-            int32_t expected = gta->type_param_count;
+            int32_t expected = gta->base.type_param_count;
             int32_t got = BUF_LEN(ast_type->type_args);
             // Count minimum required (params without defaults)
             int32_t min_required = 0;
             for (int32_t i = 0; i < expected; i++) {
-                if (gta->type_params[i].default_type == NULL) {
+                if (gta->base.type_params[i].default_type == NULL) {
                     min_required = i + 1;
                 }
             }
@@ -204,20 +204,22 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
                 if (t == NULL) {
                     t = &TYPE_ERR_INST;
                 }
-                hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
+                                  (void *)t);
             }
             // Fill defaults for remaining
             for (int32_t i = got; i < expected; i++) {
-                const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
+                const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
                 if (t == NULL) {
                     t = &TYPE_ERR_INST;
                 }
-                hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
+                                  (void *)t);
             }
             const Type *result = resolve_ast_type(sema, &gta->alias_type);
             // Clear type param substitutions
             for (int32_t i = 0; i < expected; i++) {
-                hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+                hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
             }
             return result;
         }
@@ -269,7 +271,7 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
     if (strcmp(base_name, "Self") == 0) {
         resolved_name = sema->self_type_name;
     } else {
-        const Type *param_type = hash_table_lookup(&sema->type_param_table, base_name);
+        const Type *param_type = hash_table_lookup(&sema->generics.type_params, base_name);
         if (param_type != NULL && param_type->kind == TYPE_STRUCT) {
             resolved_name = param_type->struct_type.name;
         }
