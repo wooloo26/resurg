@@ -1185,7 +1185,6 @@ HirNode *lower_expr(Lower *low, const ASTNode *ast) {
     case NODE_CLOSURE:
         return lower_closure(low, ast);
     default:
-        break;
+        rsg_fatal("lower_expr: unhandled AST node kind %d", (int)ast->kind);
     }
-    return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, ast->loc);
 }

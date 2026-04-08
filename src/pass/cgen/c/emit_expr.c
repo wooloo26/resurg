@@ -776,6 +776,6 @@ const char *emit_expr(CGen *cgen, const HirNode *node) {
     case HIR_CLOSURE:
         return emit_closure_expr(cgen, node);
     default:
-        return "0";
+        rsg_fatal("emit_expr: unhandled HIR node kind %d", (int)node->kind);
     }
 }

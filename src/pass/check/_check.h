@@ -58,6 +58,9 @@ void check_pattern(Sema *sema, ASTPattern *pattern, const Type *operand_type,
 
 // ── Statement checking (check_stmt.c) ─────────────────────────────
 
+/** Type-check a fn body (used internally and by the mono pass). */
+void check_fn_body(Sema *sema, ASTNode *fn_node);
+
 const Type *check_if(Sema *sema, ASTNode *node);
 const Type *check_block(Sema *sema, ASTNode *node);
 const Type *check_var_decl(Sema *sema, ASTNode *node);
