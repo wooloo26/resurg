@@ -156,7 +156,7 @@ fn build_tree() -> *Node {
 Value types are **automatically copied** on assignment/passing — callee gets an independent copy.
 
 ```rsg
-struct Point { x: f64, y: f64 }
+struct Point { x: f64; y: f64 }
 
 fn shift(p: Point, dx: f64) -> Point {  // p is a copy
     p.x += dx
@@ -580,57 +580,162 @@ where In: Parseable, Out: Serializable + Display,
 { fn transform(*self, input: In) -> Out }
 ```
 
-### Associated Types
+---
 
-Type members in pacts that implementors define concretely.
+## 7. `pact` Associated Types
 
 ```rsg
 pact Iterator {
-    type Item
+    type Item: Clone = i32  // bounded
+    type Index = usize        // with default
     fn next(mut *self) -> ?Self::Item
-    fn has_next(*self) -> bool
 }
 
-struct RangeIter: Iterator {
-    type Item = i32
-    current: i32
-    end: i32
-    fn next(mut *self) -> ?i32 {
-        if self.current < self.end {
-            val := self.current
-            self.current += 1
-            Some(val)
-        } else { None }
+struct RangeIter { current: i32; end: i32 }
+
+ext RangeIter impl Iterator {
+    type Item = i32           // concretize
+    type Alias = str;      // Error：`associated type `Alias` is not a member of Iterator`
+    // Index defaults to usize
+    fn next(mut *self) -> ?i32 { ... }
+}
+
+// Usage: no repeated type params
+fn collect<I: Iterator>(iter: *I) -> []I::Item { ... }
+```
+
+### Constraints & Equality
+
+```rsg
+fn only_i32<I: Iterator<Item = i32>>(iter: *I) {
+    // I::Item is guaranteed i32
+}
+
+fn same_item<I: Iterator, J: Iterator<Item = I::Item>>(
+    i: *I, j: *J
+) {
+    // I::Item == J::Item enforced at compile-time
+}
+
+fn collect<T = i32, I: Iterator<Item = T>>(iter: *I) -> []T {
+    // T defaults to i32 if not specified
+}
+```
+
+### Type Inference
+
+Compiler infers associated types from context — no turbofish needed in most cases:
+
+```rsg
+iter := RangeIter { current = 0, end = 2 }
+
+// OK: Compiler infers I = RangeIter, I::Item = i32
+val := get_next(mut &iter)
+
+// OK: Works in expressions
+first := collect(&iter)[0]  // type: i32
+
+var val: ?str = get_next(mut &iter)  // ERROR: conflicts with I::Item = i32
+```
+
+### Option/Result Interaction
+
+```rsg
+pact FallibleIterator {
+    type Item
+    type Error: Display
+    
+    fn next(mut *self) -> Self::Item ! Self::Error
+}
+
+fn first_valid<I: FallibleIterator>(
+    mut iter: *I
+) -> ?I::Item ! I::Error {
+    while Some(val) := iter.next()! {  // ! propagates Err(I::Error)
+        if val != default() { return Some(val) }
     }
-    fn has_next(*self) -> bool { self.current < self.end }
+    None
+}
+```
+
+### Nested Result Handling
+
+```rsg
+pact Parser {
+    type Output
+    type Err
+    
+    fn parse(*self, input: str) -> Self::Output ! Self::Err
 }
 
-fn collect_all<I: Iterator>(mut iter: *I) -> []I::Item {
-    var result: []I::Item = []
-    while Some(item) := iter.next() { result = result + [item] }
-    result
+fn chain<P, Q>(
+    p: *P, q: *Q, src: str
+) -> Q::Output ! Error
+where
+    P: Parser,
+    Q: Parser<Output = P::Output>,
+    P::Err: CustomError,   // unified error type
+    Q::Err: CustomError,
+{
+    val := p.parse(src)!   // P::Err propagated
+    q.parse(val)!          // Q::Err propagated
+}
+```
+
+### Boundary Types
+
+```rsg
+struct UnitIter: Iterator {
+    type Item = ()    // unit type
+    count: usize
+    fn next(mut *self) -> ?() {
+        if self.count > 0 { self.count -= 1; Some(()) }
+        else { None }
+    }
 }
 
-// With bounds and defaults
-pact Collection {
-    type Element: Display
-    type Index = usize
-    fn at(*self, index: Self::Index) -> ?Self::Element
-    fn len(*self) -> usize
-}
+// Usage: iterate for side-effects
+for UnitIter { count = 3 } |_| { println("tick") }
+```
 
-// Prefer associated types over extra generic params:
-pact Graph {
-    type Node: Display
-    type Edge
-    fn neighbors(*self, node: *Self::Node) -> []Self::Node
-    fn weight(*self, edge: *Self::Edge) -> f64
+### Projection & Composition
+
+```rsg
+// In signatures
+fn process<I: Iterator>(iter: *I) -> []I::Item
+
+// In where clauses
+fn clone_all<I>(iter: *I) -> []I::Item
+where I: Iterator, I::Item: Clone
+
+// In type aliases
+type ItemsOf<I: Iterator> = []I::Item
+type First<I: Iterator> = ?I::Item
+
+// In structs
+struct Cache<I: Iterator> {
+    buffer: []I::Item
+    index: usize
+}
+```
+
+### Conflict Resolution
+
+When two pacts define the same associated type name:
+
+```rsg
+pact A { type Value }
+pact B { type Value }
+
+struct Dual: A + B {
+    type A::Value = i32    // qualified assignment
+    type B::Value = str
 }
 ```
 
 ---
 
-## 7. Functions & Closures
+## 8. Functions & Closures
 
 Expression or block bodies. Named args at call site. No nested functions; closures are lambda-only.
 
@@ -686,7 +791,7 @@ values |> filter(|x| x > 0) |> map(|x| x * 2) |> sum
 
 ---
 
-## 8. Control Flow
+## 9. Control Flow
 
 `if`, `match`, `while`, blocks are expressions. Statement-form `if` may omit `else`.
 
@@ -729,7 +834,7 @@ while Some(line) := reader.next_line()! {
 
 ---
 
-## 9. Modules
+## 10. Modules
 
 Each `.rsg` file = module. Private by default. Parent must declare child via `mod`.
 
@@ -814,7 +919,7 @@ fn main() {
 
 ---
 
-## 10. Syntax Reference
+## 11. Syntax Reference
 
 ### Keywords
 

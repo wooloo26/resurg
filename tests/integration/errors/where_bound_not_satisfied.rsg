@@ -1,0 +1,23 @@
+// TEST: compile_error
+// EXPECT-ERROR: does not satisfy pact bound
+// v0.9.4 — Error: where clause bound not satisfied
+
+pact Ord {
+    fn compare(*self, other: *Self) -> i32
+}
+
+struct Plain {
+    value: i32 = 0
+}
+
+fn max_val<T>(a: T, b: T) -> T
+where T: Ord,
+{
+    a
+}
+
+fn main() {
+    a := Plain { value = 1 }
+    b := Plain { value = 2 }
+    max_val<Plain>(a, b)
+}

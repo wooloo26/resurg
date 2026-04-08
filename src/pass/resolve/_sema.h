@@ -103,6 +103,7 @@ struct StructDef {
     StructFieldInfo *fields;   /* buf */
     StructMethodInfo *methods; /* buf */
     const char **embedded;     /* buf */
+    ASTAssocType *assoc_types; /* buf */
     const Type *type;          // resolved TYPE_STRUCT
 };
 
@@ -119,6 +120,7 @@ struct PactDef {
     StructFieldInfo *fields;   /* buf - required fields */
     StructMethodInfo *methods; /* buf - all methods (required + default) */
     const char **super_pacts;  /* buf - constraint alias refs */
+    ASTAssocType *assoc_types; /* buf */
 };
 
 /** Callback for type-checking a method body during generic instantiation. */
@@ -133,6 +135,7 @@ struct Sema {
     const Type *loop_break_type;  // break value type in current loop (NULL if no break-with-value)
     const Type *expected_type;    // expected type for current expr (bidirectional inference)
     const Type *fn_return_type;   // return type of the enclosing function (for Ok/Err/None)
+    const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
     Scope *closure_scope;         // scope of the enclosing Fn/FnMut closure (NULL if none)
     FnTypeKind closure_fn_kind;   // fn kind of the enclosing closure (FN_PLAIN when not in closure)
     bool closure_has_capture;     // true when any variable outside closure_scope is referenced

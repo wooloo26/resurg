@@ -33,12 +33,24 @@ static void emit_enum_typedef(CGen *cgen, const Type *type, const char *name) {
     for (int32_t j = 0; j < type->enum_type.variant_count; j++) {
         const EnumVariant *v = &type->enum_type.variants[j];
         if (v->kind == ENUM_VARIANT_TUPLE) {
-            fprintf(cgen->output, " struct {");
+            // Count non-unit fields to avoid empty or void-typed struct members
+            int32_t real_count = 0;
             for (int32_t k = 0; k < v->tuple_count; k++) {
-                const char *ft = c_type_for(cgen, v->tuple_types[k]);
-                fprintf(cgen->output, " %s _%d;", ft, k);
+                if (v->tuple_types[k]->kind != TYPE_UNIT) {
+                    real_count++;
+                }
             }
-            fprintf(cgen->output, " } %s;", v->name);
+            if (real_count > 0) {
+                fprintf(cgen->output, " struct {");
+                for (int32_t k = 0; k < v->tuple_count; k++) {
+                    if (v->tuple_types[k]->kind == TYPE_UNIT) {
+                        continue;
+                    }
+                    const char *ft = c_type_for(cgen, v->tuple_types[k]);
+                    fprintf(cgen->output, " %s _%d;", ft, k);
+                }
+                fprintf(cgen->output, " } %s;", v->name);
+            }
         } else if (v->kind == ENUM_VARIANT_STRUCT) {
             fprintf(cgen->output, " struct {");
             for (int32_t k = 0; k < v->field_count; k++) {
@@ -61,6 +73,69 @@ static bool type_already_emitted(const Type **types, int32_t limit, const Type *
     return false;
 }
 
+/** Check if a value-type dependency is satisfied (emitted or not compound). */
+static bool dep_ready(const Type **compounds, const bool *done, int32_t count, const Type *dep) {
+    if (dep == NULL) {
+        return true;
+    }
+    if (dep->kind == TYPE_PTR || dep->kind == TYPE_SLICE) {
+        return true; // pointers/slices only need forward decl
+    }
+    if (dep->kind != TYPE_STRUCT && dep->kind != TYPE_ENUM && dep->kind != TYPE_ARRAY &&
+        dep->kind != TYPE_TUPLE) {
+        return true; // primitives always ready
+    }
+    for (int32_t i = 0; i < count; i++) {
+        if (compounds[i] == dep) {
+            return done[i];
+        }
+    }
+    return true; // not in compound_types, assume available
+}
+
+/** Check if all by-value deps of a compound type are emitted. */
+static bool compound_deps_ready(const Type **compounds, const bool *done, int32_t count,
+                                const Type *type) {
+    switch (type->kind) {
+    case TYPE_STRUCT:
+        for (int32_t f = 0; f < type->struct_type.field_count; f++) {
+            if (!dep_ready(compounds, done, count, type->struct_type.fields[f].type)) {
+                return false;
+            }
+        }
+        return true;
+    case TYPE_ENUM:
+        for (int32_t v = 0; v < type->enum_type.variant_count; v++) {
+            const EnumVariant *var = &type->enum_type.variants[v];
+            if (var->kind == ENUM_VARIANT_TUPLE) {
+                for (int32_t k = 0; k < var->tuple_count; k++) {
+                    if (!dep_ready(compounds, done, count, var->tuple_types[k])) {
+                        return false;
+                    }
+                }
+            } else if (var->kind == ENUM_VARIANT_STRUCT) {
+                for (int32_t k = 0; k < var->field_count; k++) {
+                    if (!dep_ready(compounds, done, count, var->fields[k].type)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    case TYPE_ARRAY:
+        return dep_ready(compounds, done, count, type->array.elem);
+    case TYPE_TUPLE:
+        for (int32_t i = 0; i < type->tuple.count; i++) {
+            if (!dep_ready(compounds, done, count, type->tuple.elems[i])) {
+                return false;
+            }
+        }
+        return true;
+    default:
+        return true;
+    }
+}
+
 // ── Compound type emission ────────────────────────────────────────────
 
 /** Emitter function for a single compound type. */
@@ -79,6 +154,9 @@ static const int32_t COMPOUND_EMITTERS_COUNT =
 
 void emit_compound_typedefs(CGen *cgen) {
     int32_t count = BUF_LEN(cgen->compound_types);
+    if (count == 0) {
+        return;
+    }
 
     // Pass 1: emit forward typedef declarations for all compound types
     for (int32_t i = 0; i < count; i++) {
@@ -90,17 +168,56 @@ void emit_compound_typedefs(CGen *cgen) {
         emit_line(cgen, "typedef struct %s %s;", name, name);
     }
 
-    // Pass 2: emit full struct definitions via dispatch table
+    // Pass 2: emit full struct definitions in dependency order
+    bool *done = calloc(count, sizeof(bool));
     for (int32_t i = 0; i < count; i++) {
-        const Type *type = cgen->compound_types[i];
-        if (type_already_emitted(cgen->compound_types, i, type)) {
-            continue;
-        }
-        const char *name = c_type_for(cgen, type);
-        if (type->kind < COMPOUND_EMITTERS_COUNT && COMPOUND_EMITTERS[type->kind] != NULL) {
-            COMPOUND_EMITTERS[type->kind](cgen, type, name);
+        if (type_already_emitted(cgen->compound_types, i, cgen->compound_types[i])) {
+            done[i] = true;
         }
     }
+
+    int32_t remaining = 0;
+    for (int32_t i = 0; i < count; i++) {
+        if (!done[i]) {
+            remaining++;
+        }
+    }
+
+    while (remaining > 0) {
+        bool progress = false;
+        for (int32_t i = 0; i < count; i++) {
+            if (done[i]) {
+                continue;
+            }
+            const Type *type = cgen->compound_types[i];
+            if (!compound_deps_ready(cgen->compound_types, done, count, type)) {
+                continue;
+            }
+            const char *name = c_type_for(cgen, type);
+            if (type->kind < COMPOUND_EMITTERS_COUNT && COMPOUND_EMITTERS[type->kind] != NULL) {
+                COMPOUND_EMITTERS[type->kind](cgen, type, name);
+            }
+            done[i] = true;
+            remaining--;
+            progress = true;
+        }
+        if (!progress) {
+            // Circular or unresolvable — emit remaining in order
+            for (int32_t i = 0; i < count; i++) {
+                if (done[i]) {
+                    continue;
+                }
+                const Type *type = cgen->compound_types[i];
+                const char *name = c_type_for(cgen, type);
+                if (type->kind < COMPOUND_EMITTERS_COUNT && COMPOUND_EMITTERS[type->kind] != NULL) {
+                    COMPOUND_EMITTERS[type->kind](cgen, type, name);
+                }
+                done[i] = true;
+            }
+            remaining = 0;
+        }
+    }
+    free(done);
 
     if (count > 0) {
         emit(cgen, "\n");

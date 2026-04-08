@@ -1,0 +1,183 @@
+// v0.9.4 — Associated types: type members in pacts that implementors define concretely
+
+// ── basic associated type ──
+
+pact Iterator {
+    type Item
+
+    fn next(mut *self) -> ?Self::Item
+    fn has_next(*self) -> bool
+}
+
+// ── struct implementing pact with associated type ──
+
+struct RangeIter: Iterator {
+    type Item = i32
+
+    current: i32
+    end: i32
+
+    fn next(mut *self) -> ?i32 {
+        if self.current < self.end {
+            val := self.current
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    fn has_next(*self) -> bool {
+        self.current < self.end
+    }
+}
+
+fn test_range_iter_basic() {
+    iter := RangeIter { current = 0, end = 3 }
+    assert(iter.has_next())
+
+    match iter.next() {
+        Some(v) => assert(v == 0),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(v) => assert(v == 1),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(v) => assert(v == 2),
+        None => assert(false),
+    }
+    assert(iter.has_next() == false)
+    match iter.next() {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── generic function using associated type ──
+
+fn get_next<I: Iterator>(mut iter: *I) -> ?I::Item {
+    iter.next()
+}
+
+fn test_get_next() {
+    iter := RangeIter { current = 0, end = 2 }
+    match get_next<RangeIter>(mut &iter) {
+        Some(v) => assert(v == 0),
+        None => assert(false),
+    }
+    match get_next<RangeIter>(mut &iter) {
+        Some(v) => assert(v == 1),
+        None => assert(false),
+    }
+    match get_next<RangeIter>(mut &iter) {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── Self::Item in struct method body ──
+
+struct Counter: Iterator {
+    type Item = i32
+
+    current: i32 = 0
+
+    fn next(mut *self) -> ?Self::Item {
+        if self.current < 3 {
+            val := self.current
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    fn has_next(*self) -> bool {
+        self.current < 3
+    }
+}
+
+fn test_self_assoc_type() {
+    c := Counter {}
+    match c.next() {
+        Some(v) => assert(v == 0),
+        None => assert(false),
+    }
+    match c.next() {
+        Some(v) => assert(v == 1),
+        None => assert(false),
+    }
+}
+
+// ── associated type with bounds ──
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Collection {
+    type Element: Display
+
+    fn first(*self) -> ?Self::Element
+    fn count(*self) -> i32
+}
+
+struct MyItem: Display {
+    value: i32 = 0
+
+    fn to_display(*self) -> str {
+        "item"
+    }
+}
+
+struct MyList: Collection {
+    type Element = MyItem
+
+    a: MyItem
+    b: MyItem
+    size: i32 = 2
+
+    fn first(*self) -> ?MyItem {
+        Some(self.a)
+    }
+
+    fn count(*self) -> i32 {
+        self.size
+    }
+}
+
+fn test_collection_associated_types() {
+    list := MyList { a = MyItem { value = 10 }, b = MyItem { value = 20 } }
+    assert(list.count() == 2)
+    match list.first() {
+        Some(item) => assert(item.value == 10),
+        None => assert(false),
+    }
+}
+
+// ── multiple associated types ──
+
+pact Graph {
+    type Node
+    type Edge
+
+    fn node_count(*self) -> i32
+}
+
+struct SimpleGraph: Graph {
+    type Node = i32
+    type Edge = str
+
+    count: i32
+
+    fn node_count(*self) -> i32 {
+        self.count
+    }
+}
+
+fn test_graph_associated_types() {
+    g := SimpleGraph { count = 5 }
+    assert(g.node_count() == 5)
+}

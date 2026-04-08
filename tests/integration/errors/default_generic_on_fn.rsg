@@ -1,0 +1,11 @@
+// TEST: compile_error
+// EXPECT-ERROR: default generics
+// v0.9.4 — Error: default generics not allowed on fn declarations
+
+fn identity<T = i32>(x: T) -> T {
+    x
+}
+
+fn main() {
+    identity(42)
+}

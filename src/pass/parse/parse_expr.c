@@ -300,7 +300,7 @@ static ASTNode *parse_primary(Parser *parser) {
         return node;
     }
 
-    if (parser_match(parser, TOKEN_ID)) {
+    if (parser_match(parser, TOKEN_ID) || parser_match(parser, TOKEN_SELF)) {
         ASTNode *node = ast_new(parser->arena, NODE_ID, loc);
         node->id.name = parser_previous_token(parser)->lexeme;
         return node;
@@ -402,11 +402,22 @@ static ASTNode *parse_generic_postfix(Parser *parser, ASTNode *left, SrcLoc loc)
     do {
         if (!(token_is_type_keyword(parser_current_token(parser)->kind) ||
               parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_LEFT_BRACKET) ||
-              parser_check(parser, TOKEN_LEFT_PAREN) || parser_check(parser, TOKEN_STAR))) {
+              parser_check(parser, TOKEN_LEFT_PAREN) || parser_check(parser, TOKEN_STAR) ||
+              parser_check(parser, TOKEN_INTEGER_LIT))) {
             valid = false;
             break;
         }
-        ASTType arg = parser_parse_type(parser);
+        ASTType arg;
+        if (parser_check(parser, TOKEN_INTEGER_LIT)) {
+            // Comptime integer arg
+            arg = (ASTType){.kind = AST_TYPE_COMPTIME_INT,
+                            .loc = parser_current_loc(parser),
+                            .comptime_int_value =
+                                (int64_t)parser_current_token(parser)->lit_value.integer_value};
+            parser_advance(parser); // consume integer
+        } else {
+            arg = parser_parse_type(parser);
+        }
         BUF_PUSH(type_args, arg);
         if (!parser_check(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_GREATER)) {
             valid = false;

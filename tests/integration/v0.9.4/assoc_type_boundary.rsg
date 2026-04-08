@@ -1,0 +1,60 @@
+// v0.9.4 — Associated type boundary: unit type as associated type
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+// ── unit as associated type ──
+
+struct UnitIter: Iterator {
+    type Item = ()
+
+    count: i32 = 0
+    limit: i32
+
+    fn next(mut *self) -> ?() {
+        if self.count < self.limit {
+            self.count = self.count + 1
+            Some(())
+        } else {
+            None
+        }
+    }
+}
+
+fn test_unit_associated_type() {
+    iter := UnitIter { limit = 3 }
+
+    match iter.next() {
+        Some(_) => assert(true),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(_) => assert(true),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(_) => assert(true),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+    assert(iter.count == 3)
+}
+
+// ── generic function with unit associated type ──
+
+fn has_items<I: Iterator>(mut iter: *I) -> bool {
+    match iter.next() {
+        Some(_) => true,
+        None => false,
+    }
+}
+
+fn test_count_unit_iter() {
+    iter := UnitIter { limit = 5 }
+    assert(has_items<UnitIter>(mut &iter) == true)
+}

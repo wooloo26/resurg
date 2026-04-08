@@ -37,7 +37,8 @@ static const Keyword KEYWORDS[] = {
     {"immut", TOKEN_IMMUT},       {"enum", TOKEN_ENUM},     {"pact", TOKEN_PACT},
     {"match", TOKEN_MATCH},       {"return", TOKEN_RETURN}, {"while", TOKEN_WHILE},
     {"defer", TOKEN_DEFER},       {"ext", TOKEN_EXT},       {"use", TOKEN_USE},
-    {"impl", TOKEN_IMPL},         {"bool", TOKEN_BOOL},     {"i8", TOKEN_I8},
+    {"impl", TOKEN_IMPL},         {"where", TOKEN_WHERE},   {"comptime", TOKEN_COMPTIME},
+    {"Self", TOKEN_SELF},         {"bool", TOKEN_BOOL},     {"i8", TOKEN_I8},
     {"i16", TOKEN_I16},           {"i32", TOKEN_I32},       {"i64", TOKEN_I64},
     {"i128", TOKEN_I128},         {"u8", TOKEN_U8},         {"u16", TOKEN_U16},
     {"u32", TOKEN_U32},           {"u64", TOKEN_U64},       {"u128", TOKEN_U128},
@@ -121,7 +122,10 @@ static Token scan_number(Lex *lex, SrcLoc loc) {
 
 /** Reserved keywords that cannot be used as ids. */
 static const char *const RESERVED_KEYWORDS[] = {
-    "async", "await", "comptime", "macro", "spawn", "where",
+    "async",
+    "await",
+    "macro",
+    "spawn",
 };
 
 static const int32_t RESERVED_KEYWORD_COUNT =

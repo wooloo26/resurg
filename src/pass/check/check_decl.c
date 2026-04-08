@@ -11,6 +11,8 @@
 /** Type-check a single struct method: register recv + params, check body. */
 void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
                               const Type *struct_type) {
+    const char *prev_self = sema->self_type_name;
+    sema->self_type_name = struct_name;
     scope_push(sema, false);
 
     // Register recv as a param with struct type
@@ -35,8 +37,21 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
 
     // Check body and infer return type
     if (method->fn_decl.body != NULL) {
+        // Pre-resolve return type for bidirectional inference (Ok/Err/None)
+        const Type *pre_return = resolve_ast_type(sema, &method->fn_decl.return_type);
+        const Type *save_fn_return = sema->fn_return_type;
+        const Type *save_expected = sema->expected_type;
+        if (pre_return != NULL) {
+            sema->fn_return_type = pre_return;
+            sema->expected_type = pre_return;
+        }
+
         const Type *body_type = check_node(sema, method->fn_decl.body);
-        const Type *return_type = resolve_ast_type(sema, &method->fn_decl.return_type);
+
+        sema->fn_return_type = save_fn_return;
+        sema->expected_type = save_expected;
+
+        const Type *return_type = pre_return;
         if (return_type == NULL) {
             return_type = body_type != NULL ? body_type : &TYPE_UNIT_INST;
         }
@@ -51,6 +66,7 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
         }
     }
     scope_pop(sema);
+    sema->self_type_name = prev_self;
 }
 
 // ── Decl-level checkers ─────────────────────────────────────────────────

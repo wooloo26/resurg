@@ -411,6 +411,14 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
         BUF_PUSH(resolved_args, t);
     }
 
+    // Push type param substitutions early for constraint resolution (e.g., I::Item)
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
+                          (void *)resolved_args[i]);
+    }
+
+    const Type *check_err = NULL;
+
     // Check bounds
     for (int32_t i = 0; i < expected; i++) {
         for (int32_t b = 0; b < BUF_LEN(gdef->type_params[i].bounds); b++) {
@@ -418,7 +426,96 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
             if (!type_satisfies_bound(sema, resolved_args[i], bound)) {
                 SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
                          type_name(sema->arena, resolved_args[i]), bound);
-                return &TYPE_ERR_INST;
+                check_err = &TYPE_ERR_INST;
+                goto cleanup;
+            }
+        }
+        // Check associated type constraints: T: Pact<Item = i32>
+        for (int32_t c = 0; c < BUF_LEN(gdef->type_params[i].assoc_constraints); c++) {
+            ASTAssocConstraint *ac = &gdef->type_params[i].assoc_constraints[c];
+            if (resolved_args[i]->kind != TYPE_STRUCT) {
+                continue;
+            }
+            StructDef *sdef = sema_lookup_struct(sema, resolved_args[i]->struct_type.name);
+            if (sdef == NULL) {
+                continue;
+            }
+            const Type *assoc_resolved = NULL;
+            for (int32_t a = 0; a < BUF_LEN(sdef->assoc_types); a++) {
+                if (strcmp(sdef->assoc_types[a].name, ac->assoc_name) == 0 &&
+                    sdef->assoc_types[a].concrete_type != NULL) {
+                    assoc_resolved = resolve_ast_type(sema, sdef->assoc_types[a].concrete_type);
+                    break;
+                }
+            }
+            if (assoc_resolved == NULL || assoc_resolved->kind == TYPE_ERR) {
+                SEMA_ERR(sema, node->loc, "'%s' has no associated type '%s' for pact '%s'",
+                         type_name(sema->arena, resolved_args[i]), ac->assoc_name, ac->pact_name);
+                check_err = &TYPE_ERR_INST;
+                goto cleanup;
+            }
+            // Resolve expected type (may reference other type params)
+            const Type *expected_type = resolve_ast_type(sema, ac->expected_type);
+            if (expected_type != NULL && expected_type->kind != TYPE_ERR &&
+                !type_equal(assoc_resolved, expected_type)) {
+                SEMA_ERR(sema, node->loc, "associated type '%s' is '%s', expected '%s'",
+                         ac->assoc_name, type_name(sema->arena, assoc_resolved),
+                         type_name(sema->arena, expected_type));
+                check_err = &TYPE_ERR_INST;
+                goto cleanup;
+            }
+        }
+    }
+
+    // Check where clause bounds
+    ASTWhereClause *wcs = gdef->decl->fn_decl.where_clauses;
+    for (int32_t w = 0; w < BUF_LEN(wcs); w++) {
+        const Type *wc_type = NULL;
+        for (int32_t i = 0; i < expected; i++) {
+            if (strcmp(gdef->type_params[i].name, wcs[w].type_name) == 0) {
+                wc_type = resolved_args[i];
+                break;
+            }
+        }
+        if (wc_type == NULL) {
+            continue;
+        }
+        // Handle associated type projection: I::Item: Clone
+        if (wcs[w].assoc_member != NULL) {
+            if (wc_type->kind == TYPE_STRUCT) {
+                StructDef *sdef = sema_lookup_struct(sema, wc_type->struct_type.name);
+                if (sdef != NULL) {
+                    const Type *assoc_resolved = NULL;
+                    for (int32_t a = 0; a < BUF_LEN(sdef->assoc_types); a++) {
+                        if (strcmp(sdef->assoc_types[a].name, wcs[w].assoc_member) == 0 &&
+                            sdef->assoc_types[a].concrete_type != NULL) {
+                            assoc_resolved =
+                                resolve_ast_type(sema, sdef->assoc_types[a].concrete_type);
+                            break;
+                        }
+                    }
+                    if (assoc_resolved != NULL && assoc_resolved->kind != TYPE_ERR) {
+                        for (int32_t b = 0; b < BUF_LEN(wcs[w].bounds); b++) {
+                            if (!type_satisfies_bound(sema, assoc_resolved, wcs[w].bounds[b])) {
+                                SEMA_ERR(sema, node->loc,
+                                         "'%s::%s' = '%s' does not satisfy pact bound '%s'",
+                                         wcs[w].type_name, wcs[w].assoc_member,
+                                         type_name(sema->arena, assoc_resolved), wcs[w].bounds[b]);
+                                check_err = &TYPE_ERR_INST;
+                                goto cleanup;
+                            }
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        for (int32_t b = 0; b < BUF_LEN(wcs[w].bounds); b++) {
+            if (!type_satisfies_bound(sema, wc_type, wcs[w].bounds[b])) {
+                SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
+                         type_name(sema->arena, wc_type), wcs[w].bounds[b]);
+                check_err = &TYPE_ERR_INST;
+                goto cleanup;
             }
         }
     }
@@ -427,14 +524,10 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
     const char *mangled = build_mangled_name(sema, fn_name, resolved_args, got);
     FnSig *existing = sema_lookup_fn(sema, mangled);
     if (existing != NULL) {
+        hash_table_destroy(&sema->type_param_table);
+        hash_table_init(&sema->type_param_table, NULL);
         node->call.callee->id.name = mangled;
         return resolve_call(sema, node, existing);
-    }
-
-    // Push type param substitutions to resolve param/return types
-    for (int32_t i = 0; i < expected; i++) {
-        hash_table_insert(&sema->type_param_table, gdef->type_params[i].name,
-                          (void *)resolved_args[i]);
     }
 
     ASTNode *orig = gdef->decl;
@@ -470,6 +563,11 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
 
     node->call.callee->id.name = mangled;
     return resolve_call(sema, node, sig);
+
+cleanup:
+    hash_table_destroy(&sema->type_param_table);
+    hash_table_init(&sema->type_param_table, NULL);
+    return check_err;
 }
 
 // ── Generic type inference ────────────────────────────────────────

@@ -19,15 +19,17 @@ typedef struct ASTType ASTType;
  * a tuple type, or "inferred".
  */
 typedef enum {
-    AST_TYPE_NAME,     // bool, i32, u32, f64, str, unit, user-defined
-    AST_TYPE_INFERRED, // type omitted, to be inferred by semantic analysis
-    AST_TYPE_ARRAY,    // [N]T
-    AST_TYPE_SLICE,    // []T
-    AST_TYPE_TUPLE,    // (A, B, ...)
-    AST_TYPE_PTR,      // *T
-    AST_TYPE_OPTION,   // ?T
-    AST_TYPE_RESULT,   // T ! E
-    AST_TYPE_FN,       // fn(Params) -> Return
+    AST_TYPE_NAME,         // bool, i32, u32, f64, str, unit, user-defined
+    AST_TYPE_INFERRED,     // type omitted, to be inferred by semantic analysis
+    AST_TYPE_ARRAY,        // [N]T
+    AST_TYPE_SLICE,        // []T
+    AST_TYPE_TUPLE,        // (A, B, ...)
+    AST_TYPE_PTR,          // *T
+    AST_TYPE_OPTION,       // ?T
+    AST_TYPE_RESULT,       // T ! E
+    AST_TYPE_FN,           // fn(Params) -> Return
+    AST_TYPE_ASSOC,        // T::Item  (associated type access)
+    AST_TYPE_COMPTIME_INT, // compile-time integer (e.g., 5 in Container<i32, 5>)
 } ASTTypeKind;
 
 struct ASTType {
@@ -35,8 +37,9 @@ struct ASTType {
     const char *name; // may be NULL (for NAME kind)
     SrcLoc loc;
     // AST_TYPE_ARRAY fields
-    ASTType *array_elem; // heap-allocated elem type
-    int32_t array_size;  // elem count N
+    ASTType *array_elem;         // heap-allocated elem type
+    int32_t array_size;          // elem count N (0 if comptime param)
+    const char *array_size_name; // comptime param name (e.g., "N") — NULL if literal
     // AST_TYPE_SLICE fields
     ASTType *slice_elem; // heap-allocated elem type
     // AST_TYPE_TUPLE fields
@@ -54,13 +57,43 @@ struct ASTType {
     FnTypeKind fn_kind;       // FN_PLAIN / FN_CLOSURE / FN_CLOSURE_MUT
     // Generic type args for Name<T, U> syntax
     ASTType **type_args; /* buf - NULL for non-generic types */
+    // AST_TYPE_ASSOC fields
+    const char *assoc_member; // member name (e.g., "Item" for T::Item)
+    // AST_TYPE_COMPTIME_INT field
+    int64_t comptime_int_value; // compile-time integer value
 };
+
+/** Associated type constraint on a pact bound (e.g., Item = i32 in Iterator<Item = i32>). */
+typedef struct {
+    const char *pact_name;  // the pact this constraint belongs to (e.g., "Iterator")
+    const char *assoc_name; // associated type name (e.g., "Item")
+    ASTType *expected_type; // expected concrete type (e.g., i32)
+} ASTAssocConstraint;
 
 /** A type param in a generic decl (e.g., T: Ord + Display). */
 typedef struct {
-    const char *name;    // type param name (e.g., "T")
-    const char **bounds; /* buf - pact bound names (e.g., ["Ord", "Display"]) */
+    const char *name;                      // type param name (e.g., "T")
+    const char **bounds;                   /* buf - pact bound names (e.g., ["Ord", "Display"]) */
+    bool is_comptime;                      // true for `comptime N: usize`
+    ASTType *comptime_type;                // type for comptime params (e.g., usize) — may be NULL
+    ASTType *default_type;                 // default type (e.g., = str) — may be NULL
+    ASTAssocConstraint *assoc_constraints; /* buf - e.g., Iterator<Item = i32> */
 } ASTTypeParam;
+
+/** A where-clause predicate: TypeName: Bound1 + Bound2 or T::Item: Bound. */
+typedef struct {
+    const char *type_name;    // the type param name (e.g., "T" or "I")
+    const char *assoc_member; // associated member (e.g., "Item") or NULL
+    const char **bounds;      /* buf - pact bound names */
+} ASTWhereClause;
+
+/** An associated type def in a pact or struct (e.g., type Item = i32). */
+typedef struct {
+    const char *name;           // associated type name (e.g., "Item")
+    const char *pact_qualifier; // pact name for conflict resolution (e.g., "A" in type A::Value)
+    const char **bounds;        /* buf - pact bound names on pact-side */
+    ASTType *concrete_type;     // concrete type (on impl-side); NULL on pact-side declaration
+} ASTAssocType;
 
 /** A field def in a struct decl. */
 typedef struct {
@@ -240,7 +273,8 @@ struct ASTNode {
             bool is_ptr_recv;
             const char *owner_struct;
             // Generic type params (NULL for non-generic fns)
-            ASTTypeParam *type_params; /* buf */
+            ASTTypeParam *type_params;     /* buf */
+            ASTWhereClause *where_clauses; /* buf - where clause predicates */
         } fn_decl;
 
         // NODE_PARAM
@@ -399,11 +433,13 @@ struct ASTNode {
         struct {
             const char *name;
             bool is_pub;
-            ASTStructField *fields;    /* buf */
-            ASTNode **methods;         /* buf - NODE_FN_DECL */
-            const char **embedded;     /* buf - embedded struct names */
-            const char **conformances; /* buf - pact names */
-            ASTTypeParam *type_params; /* buf - generic type params */
+            ASTStructField *fields;        /* buf */
+            ASTNode **methods;             /* buf - NODE_FN_DECL */
+            const char **embedded;         /* buf - embedded struct names */
+            const char **conformances;     /* buf - pact names */
+            ASTTypeParam *type_params;     /* buf - generic type params */
+            ASTWhereClause *where_clauses; /* buf - where clause predicates */
+            ASTAssocType *assoc_types;     /* buf - associated type defs */
         } struct_decl;
 
         // NODE_STRUCT_LIT
@@ -454,9 +490,10 @@ struct ASTNode {
         struct {
             const char *name;
             bool is_pub;
-            ASTEnumVariant *variants;  /* buf */
-            ASTNode **methods;         /* buf - NODE_FN_DECL */
-            ASTTypeParam *type_params; /* buf - generic type params */
+            ASTEnumVariant *variants;      /* buf */
+            ASTNode **methods;             /* buf - NODE_FN_DECL */
+            ASTTypeParam *type_params;     /* buf - generic type params */
+            ASTWhereClause *where_clauses; /* buf - where clause predicates */
         } enum_decl;
 
         // NODE_MATCH
@@ -479,10 +516,12 @@ struct ASTNode {
         struct {
             const char *name;
             bool is_pub;
-            ASTStructField *fields;    /* buf - required fields */
-            ASTNode **methods;         /* buf - required + default methods */
-            const char **super_pacts;  /* buf - constraint alias pact names */
-            ASTTypeParam *type_params; /* buf - generic type params */
+            ASTStructField *fields;        /* buf - required fields */
+            ASTNode **methods;             /* buf - required + default methods */
+            const char **super_pacts;      /* buf - constraint alias pact names */
+            ASTTypeParam *type_params;     /* buf - generic type params */
+            ASTWhereClause *where_clauses; /* buf - where clause predicates */
+            ASTAssocType *assoc_types;     /* buf - associated type decls */
         } pact_decl;
 
         // NODE_EXT_DECL

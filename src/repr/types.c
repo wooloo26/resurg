@@ -161,6 +161,9 @@ const char *type_name(Arena *arena, const Type *type) {
     if (type->kind == TYPE_MODULE) {
         return type->module_type.name;
     }
+    if (type->kind == TYPE_COMPTIME_INT) {
+        return arena_sprintf(arena, "%ld", (long)type->comptime_int.value);
+    }
     return "<unknown>";
 }
 
@@ -453,5 +456,11 @@ bool type_assignable(const Type *from, const Type *to) {
 Type *type_create_module(Arena *arena, const char *name) {
     Type *type = type_create(arena, TYPE_MODULE);
     type->module_type.name = name;
+    return type;
+}
+
+Type *type_create_comptime_int(Arena *arena, int64_t value) {
+    Type *type = type_create(arena, TYPE_COMPTIME_INT);
+    type->comptime_int.value = value;
     return type;
 }

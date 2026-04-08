@@ -40,6 +40,11 @@ const Type *check_lit(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_id(Sema *sema, ASTNode *node) {
+    // Resolve Self to the enclosing type name in expression context
+    if (strcmp(node->id.name, "Self") == 0 && sema->self_type_name != NULL) {
+        node->id.name = sema->self_type_name;
+    }
+
     Sym *sym = scope_lookup(sema, node->id.name);
 
     // Module-qualified fallback: try current module prefix
@@ -471,6 +476,13 @@ static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericS
 /** Resolve struct literal name through aliases, generics, and type inference. */
 static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     const char *struct_name = node->struct_lit.name;
+
+    // Resolve Self to the enclosing type name
+    if (strcmp(struct_name, "Self") == 0 && sema->self_type_name != NULL) {
+        struct_name = sema->self_type_name;
+        node->struct_lit.name = struct_name;
+    }
+
     StructDef *sdef = sema_lookup_struct(sema, struct_name);
 
     // Follow type aliases: if no struct found, check if name is a type alias to a struct
@@ -498,6 +510,50 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
         }
     }
 
+    // If not found and has type args, try generic type alias
+    if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) > 0) {
+        GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, struct_name);
+        if (gta != NULL) {
+            int32_t expected = gta->type_param_count;
+            int32_t got = BUF_LEN(node->struct_lit.type_args);
+            // Count min required (params without defaults)
+            int32_t min_required = 0;
+            for (int32_t i = 0; i < expected; i++) {
+                if (gta->type_params[i].default_type == NULL) {
+                    min_required = i + 1;
+                }
+            }
+            if (got >= min_required && got <= expected) {
+                // Push explicit type params
+                for (int32_t i = 0; i < got; i++) {
+                    const Type *t = resolve_ast_type(sema, &node->struct_lit.type_args[i]);
+                    if (t == NULL) {
+                        t = &TYPE_ERR_INST;
+                    }
+                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                }
+                // Fill defaults for remaining
+                for (int32_t i = got; i < expected; i++) {
+                    const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
+                    if (t == NULL) {
+                        t = &TYPE_ERR_INST;
+                    }
+                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                }
+                const Type *result = resolve_ast_type(sema, &gta->alias_type);
+                for (int32_t i = 0; i < expected; i++) {
+                    hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+                }
+                if (result != NULL && result->kind == TYPE_STRUCT) {
+                    sdef = sema_lookup_struct(sema, result->struct_type.name);
+                    if (sdef != NULL) {
+                        node->struct_lit.name = sdef->name;
+                    }
+                }
+            }
+        }
+    }
+
     // If still not found and has NO type args, try to infer from field values
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
         GenericStructDef *gdef = sema_lookup_generic_struct(sema, struct_name);
@@ -506,6 +562,41 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
             if (mangled != NULL) {
                 node->struct_lit.name = mangled;
                 sdef = sema_lookup_struct(sema, mangled);
+            }
+        }
+    }
+
+    // If still not found, check generic type aliases where all params have defaults
+    if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
+        GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, struct_name);
+        if (gta != NULL) {
+            // Check if all params have defaults
+            bool all_defaults = true;
+            for (int32_t i = 0; i < gta->type_param_count; i++) {
+                if (gta->type_params[i].default_type == NULL) {
+                    all_defaults = false;
+                    break;
+                }
+            }
+            if (all_defaults) {
+                // Push default type params
+                for (int32_t i = 0; i < gta->type_param_count; i++) {
+                    const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
+                    if (t == NULL) {
+                        t = &TYPE_ERR_INST;
+                    }
+                    hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+                }
+                const Type *result = resolve_ast_type(sema, &gta->alias_type);
+                for (int32_t i = 0; i < gta->type_param_count; i++) {
+                    hash_table_remove(&sema->type_param_table, gta->type_params[i].name);
+                }
+                if (result != NULL && result->kind == TYPE_STRUCT) {
+                    sdef = sema_lookup_struct(sema, result->struct_type.name);
+                    if (sdef != NULL) {
+                        node->struct_lit.name = sdef->name;
+                    }
+                }
             }
         }
     }

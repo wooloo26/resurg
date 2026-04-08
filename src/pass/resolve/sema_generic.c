@@ -122,18 +122,27 @@ static const Type **resolve_type_args(Sema *sema, ASTType *type_args, int32_t co
 }
 
 /** Push type param substitutions into the sema type_param_table. */
-static void push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved,
-                             int32_t count) {
+static void push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved, int32_t count,
+                             const Type ***out_saved) {
+    const Type **saved = NULL;
     for (int32_t i = 0; i < count; i++) {
+        const Type *old = hash_table_lookup(&sema->type_param_table, params[i].name);
+        BUF_PUSH(saved, old);
         hash_table_insert(&sema->type_param_table, params[i].name, (void *)resolved[i]);
     }
+    *out_saved = saved;
 }
 
-/** Pop type param substitutions from the sema type_param_table. */
-static void pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count) {
+/** Pop type param substitutions, restoring any previous values. */
+static void pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count, const Type **saved) {
     for (int32_t i = 0; i < count; i++) {
-        hash_table_remove(&sema->type_param_table, params[i].name);
+        if (saved[i] != NULL) {
+            hash_table_insert(&sema->type_param_table, params[i].name, (void *)saved[i]);
+        } else {
+            hash_table_remove(&sema->type_param_table, params[i].name);
+        }
     }
+    BUF_FREE(saved);
 }
 
 /** Register methods from orig_methods under the mangled type name. */
@@ -186,7 +195,8 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
         }
 
         // Push ext type params mapped to the concrete args
-        push_type_params(sema, gext->type_params, resolved_args, arg_count);
+        const Type **ext_saved = NULL;
+        push_type_params(sema, gext->type_params, resolved_args, arg_count, &ext_saved);
 
         // Phase 1: Register all ext method sigs
         ASTNode *ext_decl = gext->decl;
@@ -201,8 +211,6 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
             const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, method_info.name);
             FnSig *sig = build_fn_sig(sema, method, false);
             hash_table_insert(&sema->fn_table, method_key, sig);
-            // Restore type params (nested instantiation may have popped them)
-            push_type_params(sema, gext->type_params, resolved_args, arg_count);
         }
 
         // Phase 2: Clone and type-check ext method bodies
@@ -219,11 +227,9 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
             if (sema->method_checker != NULL) {
                 sema->method_checker(sema, mclone, mangled, owner_type);
             }
-            // Restore type params (body checking may have popped them)
-            push_type_params(sema, gext->type_params, resolved_args, arg_count);
         }
 
-        pop_type_params(sema, gext->type_params, arg_count);
+        pop_type_params(sema, gext->type_params, arg_count, ext_saved);
     }
 }
 
@@ -239,16 +245,43 @@ static void instantiate_generic_ext_methods(Sema *sema, const char *orig_name, c
  * and sets @p *out_resolved to NULL — caller should skip body instantiation.
  */
 static const char *generic_inst_preamble(Sema *sema, const char *name, int32_t type_param_count,
-                                         const GenericInstArgs *args, const Type ***out_resolved) {
-    if (args->type_arg_count != type_param_count) {
-        SEMA_ERR(sema, args->loc, "wrong number of type arguments for '%s': expected %d, got %d",
-                 name, type_param_count, args->type_arg_count);
+                                         ASTTypeParam *type_params, const GenericInstArgs *args,
+                                         const Type ***out_resolved) {
+    // Count minimum required args (params without defaults)
+    int32_t min_required = 0;
+    for (int32_t i = 0; i < type_param_count; i++) {
+        if (type_params[i].default_type == NULL) {
+            min_required = i + 1;
+        }
+    }
+
+    if (args->type_arg_count < min_required || args->type_arg_count > type_param_count) {
+        if (min_required == type_param_count) {
+            SEMA_ERR(sema, args->loc,
+                     "wrong number of type arguments for '%s': expected %d, got %d", name,
+                     type_param_count, args->type_arg_count);
+        } else {
+            SEMA_ERR(sema, args->loc,
+                     "wrong number of type arguments for '%s': expected %d to %d, got %d", name,
+                     min_required, type_param_count, args->type_arg_count);
+        }
         *out_resolved = NULL;
         return NULL;
     }
 
+    // Resolve explicit type args
     const Type **resolved = resolve_type_args(sema, args->type_args, args->type_arg_count);
-    const char *mangled = build_mangled_name(sema, name, resolved, args->type_arg_count);
+
+    // Fill in defaults for missing args
+    for (int32_t i = args->type_arg_count; i < type_param_count; i++) {
+        const Type *dt = resolve_ast_type(sema, type_params[i].default_type);
+        if (dt == NULL) {
+            dt = &TYPE_ERR_INST;
+        }
+        BUF_PUSH(resolved, dt);
+    }
+
+    const char *mangled = build_mangled_name(sema, name, resolved, type_param_count);
 
     *out_resolved = resolved;
     return mangled;
@@ -258,7 +291,8 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
                                        const GenericInstArgs *args) {
     const Type **resolved_args = NULL;
     const char *mangled =
-        generic_inst_preamble(sema, gdef->name, gdef->type_param_count, args, &resolved_args);
+        generic_inst_preamble(sema, gdef->name, gdef->type_param_count,
+                              gdef->decl->struct_decl.type_params, args, &resolved_args);
     if (mangled == NULL) {
         return NULL;
     }
@@ -267,7 +301,8 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
         return mangled;
     }
 
-    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count);
+    const Type **struct_saved = NULL;
+    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count, &struct_saved);
 
     // Build concrete struct field types
     ASTNode *orig = gdef->decl;
@@ -276,6 +311,16 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
     def->fields = NULL;
     def->methods = NULL;
     def->embedded = NULL;
+
+    // Forward-declare: register a stub Type* before resolving fields so that
+    // recursive references (e.g., Node<T> containing ?*Node<T>) find the entry
+    // in the cache and don't infinitely recurse.
+    StructTypeSpec stub_spec = {
+        .name = mangled, .fields = NULL, .field_count = 0, .embedded = NULL, .embed_count = 0};
+    Type *fwd_type = type_create_struct(sema->arena, &stub_spec);
+    def->type = fwd_type;
+    hash_table_insert(&sema->struct_table, mangled, def);
+    hash_table_insert(&sema->type_alias_table, mangled, (void *)fwd_type);
 
     for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
         ASTStructField *ast_field = &orig->struct_decl.fields[i];
@@ -288,26 +333,16 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
         BUF_PUSH(def->fields, fi);
     }
 
-    // Build the Type*
+    // Backpatch the forward-declared Type* with resolved fields
     StructField *type_fields = NULL;
     for (int32_t i = 0; i < BUF_LEN(def->fields); i++) {
         StructField sf = {.name = def->fields[i].name, .type = def->fields[i].type};
         BUF_PUSH(type_fields, sf);
     }
-
-    StructTypeSpec spec = {
-        .name = mangled,
-        .fields = type_fields,
-        .field_count = BUF_LEN(type_fields),
-        .embedded = NULL,
-        .embed_count = 0,
-    };
-    def->type = type_create_struct(sema->arena, &spec);
+    fwd_type->struct_type.fields = type_fields;
+    fwd_type->struct_type.field_count = BUF_LEN(type_fields);
 
     register_generic_methods(sema, orig->struct_decl.methods, &def->methods, mangled);
-
-    hash_table_insert(&sema->struct_table, mangled, def);
-    hash_table_insert(&sema->type_alias_table, mangled, (void *)def->type);
 
     // Create synthetic AST node for lowering/codegen
     ASTNode *synth = ast_new(sema->arena, NODE_STRUCT_DECL, orig->loc);
@@ -344,7 +379,7 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    pop_type_params(sema, gdef->type_params, gdef->type_param_count);
+    pop_type_params(sema, gdef->type_params, gdef->type_param_count, struct_saved);
 
     BUF_FREE(resolved_args);
     return mangled;
@@ -356,7 +391,8 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
                                      const GenericInstArgs *args) {
     const Type **resolved_args = NULL;
     const char *mangled =
-        generic_inst_preamble(sema, gdef->name, gdef->type_param_count, args, &resolved_args);
+        generic_inst_preamble(sema, gdef->name, gdef->type_param_count,
+                              gdef->decl->enum_decl.type_params, args, &resolved_args);
     if (mangled == NULL) {
         return NULL;
     }
@@ -365,10 +401,21 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
         return mangled;
     }
 
-    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count);
+    const Type **enum_saved = NULL;
+    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count, &enum_saved);
+
+    // Forward-declare: register a stub Type* before resolving variants so that
+    // recursive references through option/result types don't infinitely recurse.
+    ASTNode *orig = gdef->decl;
+    Type *fwd_enum = type_create_enum(sema->arena, mangled, NULL, 0);
+    EnumDef *def = rsg_malloc(sizeof(*def));
+    def->name = mangled;
+    def->methods = NULL;
+    def->type = fwd_enum;
+    hash_table_insert(&sema->enum_table, mangled, def);
+    hash_table_insert(&sema->type_alias_table, mangled, (void *)fwd_enum);
 
     // Build concrete enum variants
-    ASTNode *orig = gdef->decl;
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
     for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
@@ -421,17 +468,11 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
         BUF_PUSH(variants, variant);
     }
 
-    const Type *enum_type = type_create_enum(sema->arena, mangled, variants, BUF_LEN(variants));
-
-    EnumDef *def = rsg_malloc(sizeof(*def));
-    def->name = mangled;
-    def->methods = NULL;
-    def->type = enum_type;
+    // Backpatch the forward-declared enum Type* with resolved variants
+    fwd_enum->enum_type.variants = variants;
+    fwd_enum->enum_type.variant_count = BUF_LEN(variants);
 
     register_generic_methods(sema, orig->enum_decl.methods, &def->methods, mangled);
-
-    hash_table_insert(&sema->enum_table, mangled, def);
-    hash_table_insert(&sema->type_alias_table, mangled, (void *)enum_type);
 
     // Create synthetic AST node for lowering/codegen
     ASTNode *synth = ast_new(sema->arena, NODE_ENUM_DECL, orig->loc);
@@ -444,10 +485,10 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
     for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
         BUF_PUSH(synth->enum_decl.variants, orig->enum_decl.variants[i]);
     }
-    synth->type = enum_type;
+    synth->type = fwd_enum;
 
     // Clone and type-check method bodies (via callback if available)
-    const Type *ptr_type = type_create_ptr(sema->arena, enum_type, false);
+    const Type *ptr_type = type_create_ptr(sema->arena, fwd_enum, false);
     for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
         ASTNode *method = orig->enum_decl.methods[i];
         ASTNode *mclone = ast_clone(sema->arena, method);
@@ -466,7 +507,7 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
     // Append to file decls for lowering
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    pop_type_params(sema, gdef->type_params, gdef->type_param_count);
+    pop_type_params(sema, gdef->type_params, gdef->type_param_count, enum_saved);
 
     BUF_FREE(resolved_args);
     return mangled;

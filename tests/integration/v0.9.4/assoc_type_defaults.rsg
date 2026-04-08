@@ -1,0 +1,122 @@
+// v0.9.4 — Associated type defaults: pact-side defaults applied when implementor omits
+
+// ── pact with bounded default ──
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Clone {
+    fn clone(*self) -> Self
+}
+
+pact Iterator {
+    type Item: Clone = i32
+    type Index = usize
+
+    fn next(mut *self) -> ?Self::Item
+    fn current_index(*self) -> Self::Index
+}
+
+// ── struct providing Item, inheriting Index default ──
+
+struct MyInt: Clone {
+    value: i32 = 0
+
+    fn clone(*self) -> Self {
+        Self { value = self.value }
+    }
+}
+
+struct RangeIter: Iterator {
+    type Item = MyInt
+
+    current: usize = 0
+    end: usize = 0
+
+    fn next(mut *self) -> ?MyInt {
+        if self.current < self.end {
+            val := MyInt { value = i32(self.current) }
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+
+    fn current_index(*self) -> usize {
+        self.current
+    }
+}
+
+fn test_default_index_inherited() {
+    iter := RangeIter { current = 0, end = 3 }
+    assert(iter.current_index() == 0)
+    match iter.next() {
+        Some(v) => assert(v.value == 0),
+        None => assert(false),
+    }
+    assert(iter.current_index() == 1)
+}
+
+// ── struct that overrides default with another Clone type ──
+
+struct WrappedStr: Clone {
+    data: str = ""
+    fn clone(*self) -> Self { Self { data = self.data } }
+}
+
+struct WrappedIter: Iterator {
+    type Item = WrappedStr
+    type Index = i32
+
+    pos: i32 = 0
+
+    fn next(mut *self) -> ?WrappedStr {
+        if self.pos < 2 {
+            self.pos = self.pos + 1
+            Some(WrappedStr { data = "item" })
+        } else {
+            None
+        }
+    }
+
+    fn current_index(*self) -> i32 {
+        self.pos
+    }
+}
+
+fn test_default_overridden() {
+    iter := WrappedIter {}
+    assert(iter.current_index() == 0)
+    match iter.next() {
+        Some(s) => assert(s.data == "item"),
+        None => assert(false),
+    }
+    assert(iter.current_index() == 1)
+}
+
+// ── struct inheriting all defaults (no bounds) ──
+
+pact Accumulator {
+    type Value = i32
+    type Result = bool
+
+    fn accumulate(mut *self, v: Self::Value) -> Self::Result
+}
+
+struct SimpleAcc: Accumulator {
+    total: i32 = 0
+
+    fn accumulate(mut *self, v: i32) -> bool {
+        self.total = self.total + v
+        self.total > 10
+    }
+}
+
+fn test_all_defaults_inherited() {
+    acc := SimpleAcc {}
+    assert(acc.accumulate(5) == false)
+    assert(acc.accumulate(6) == true)
+    assert(acc.total == 11)
+}

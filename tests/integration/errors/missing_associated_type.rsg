@@ -1,0 +1,22 @@
+// TEST: compile_error
+// EXPECT-ERROR: missing associated type
+// v0.9.4 — Error: struct conforming to pact with associated type must define it
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+    fn has_next(*self) -> bool
+}
+
+struct BadIter: Iterator {
+    fn next(mut *self) -> ?i32 {
+        None
+    }
+    fn has_next(*self) -> bool {
+        false
+    }
+}
+
+fn main() {
+    iter := BadIter {}
+}

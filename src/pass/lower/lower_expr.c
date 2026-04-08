@@ -412,7 +412,7 @@ static HirNode *build_method_call(Lower *low, const ASTNode *ast, HirNode *recv,
                                   const HirSym *method_sym) {
     HirNode **args = lower_elem_list(low, ast->call.args);
     HirNode *node = hir_new(low->hir_arena, HIR_METHOD_CALL, ast->type, ast->loc);
-    node->method_call.recv = recv;
+    node->method_call.recv = method_sym->is_static ? NULL : recv;
     node->method_call.mangled_name = method_sym->mangled_name;
     node->method_call.args = args;
     node->method_call.is_ptr_recv = method_sym->is_ptr_recv;
@@ -634,9 +634,14 @@ static HirNode *lower_enum_tuple_init(Lower *low, const EnumVariantSpec *spec, A
     }
 
     for (int32_t i = 0; i < BUF_LEN(args); i++) {
+        // Skip unit-typed fields — they have no C representation
+        if (state.variant->tuple_types[i]->kind == TYPE_UNIT) {
+            continue;
+        }
+        HirNode *val = lower_expr(low, args[i]);
         const char *fname = arena_sprintf(low->hir_arena, "_data.%s._%d", spec->variant_name, i);
         BUF_PUSH(state.field_names, fname);
-        BUF_PUSH(state.field_values, lower_expr(low, args[i]));
+        BUF_PUSH(state.field_values, val);
     }
     return finish_enum_init(low, spec, &state);
 }

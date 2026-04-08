@@ -185,12 +185,12 @@ Higher-order programming and code organization.
 
 ## v0.9.4 — Higher Generics
 
-- [ ] Recursive Generics
-- [ ] `Self` and `*Self` type
-- [ ] `comptime` Generics
-- [ ] Default generics
-- [ ] `where`
-- [ ] Associated Types
+- [x] Recursive Generics
+- [x] `Self` and `*Self` type
+- [x] `comptime` Generics
+- [x] Default generics
+- [x] `where`
+- [x] Associated Types
 
 ## v0.9.5 — Before Ecosystem
 
@@ -202,8 +202,8 @@ Higher-order programming and code organization.
 
 ## v0.9.6 — Ecosystem & Runtime
 
-- [ ] Comprehensive standard library (`std/io`, …)
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
+- [ ] Comprehensive standard library (`std/io`, …)
 - [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
 - [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
 - [ ] `assert` rewritten on top of `panic`
@@ -251,5 +251,4 @@ Language completeness, tooling, and ecosystem.
 
 ### Types
 
-- [ ] Literal Types
 - [ ] Template Literal Types

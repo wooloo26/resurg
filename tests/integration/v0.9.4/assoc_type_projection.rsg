@@ -1,0 +1,114 @@
+// v0.9.4 — Associated type projections in signatures, where clauses, and structs
+
+// ── setup ──
+
+pact Clone {
+    fn clone(*self) -> Self
+}
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct IntIter: Iterator {
+    type Item = i32
+    current: i32 = 0
+    end: i32 = 0
+
+    fn next(mut *self) -> ?i32 {
+        if self.current < self.end {
+            val := self.current
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+// ── projection in function return type ──
+
+fn first<I: Iterator>(mut iter: *I) -> ?I::Item {
+    iter.next()
+}
+
+fn test_projection_return() {
+    iter := IntIter { current = 5, end = 8 }
+    match first<IntIter>(mut &iter) {
+        Some(v) => assert(v == 5),
+        None => assert(false),
+    }
+}
+
+// ── projection in where clause bounds ──
+
+struct CloneInt: Clone {
+    value: i32 = 0
+    fn clone(*self) -> Self { Self { value = self.value } }
+}
+
+struct CloneIter: Iterator {
+    type Item = CloneInt
+    current: i32 = 0
+    end: i32 = 0
+
+    fn next(mut *self) -> ?CloneInt {
+        if self.current < self.end {
+            val := CloneInt { value = self.current }
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+fn clone_first<I>(mut iter: *I) -> ?I::Item
+where I: Iterator, I::Item: Clone,
+{
+    match iter.next() {
+        Some(v) => Some(v.clone()),
+        None => None,
+    }
+}
+
+fn test_projection_where_bound() {
+    iter := CloneIter { current = 0, end = 2 }
+    match clone_first<CloneIter>(mut &iter) {
+        Some(v) => assert(v.value == 0),
+        None => assert(false),
+    }
+}
+
+// ── projection in type alias ──
+
+type FirstOf<I: Iterator> = ?I::Item
+
+fn get_first<I: Iterator>(mut iter: *I) -> FirstOf<I> {
+    iter.next()
+}
+
+fn test_projection_type_alias() {
+    iter := IntIter { current = 10, end = 12 }
+    match get_first<IntIter>(mut &iter) {
+        Some(v) => assert(v == 10),
+        None => assert(false),
+    }
+}
+
+// ── projection in struct fields ──
+
+struct Cache<I: Iterator> {
+    last: ?I::Item
+    count: i32 = 0
+}
+
+fn test_projection_struct_field() {
+    c := Cache<IntIter> { last = Some(42) }
+    match c.last {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+    assert(c.count == 0)
+}

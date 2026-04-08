@@ -100,32 +100,37 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
     bool is_mut_recv = ast->fn_decl.is_mut_recv;
     bool is_ptr_recv = ast->fn_decl.is_ptr_recv;
 
-    HirSymSpec recv_spec = {HIR_SYM_PARAM, recv_name, struct_type, false, ast->loc};
-    HirSym *recv_sym = lower_make_sym(low, &recv_spec);
-    recv_sym->is_ptr_recv = is_ptr_recv;
-    lower_scope_define(low, recv_name, recv_sym);
-
-    // Store is_ptr_recv on the method sym for call-site lookup
-    func_sym->is_ptr_recv = is_ptr_recv;
-
-    HirNode *recv_param = hir_new(low->hir_arena, HIR_PARAM, struct_type, ast->loc);
-    recv_param->param.sym = recv_sym;
-    recv_param->param.name = recv_name;
-    recv_param->param.param_type = struct_type;
-    recv_param->param.is_recv = true;
-    recv_param->param.is_mut_recv = is_mut_recv;
-    recv_param->param.is_ptr_recv = is_ptr_recv;
-    BUF_PUSH(params, recv_param);
-
     // Set current recv for via_ptr detection
     HirSym *saved_recv = low->current_recv;
     const char *saved_name = low->current_recv_name;
     bool saved_is_ptr = low->current_is_ptr_recv;
     const Type *saved_return_type = low->fn_return_type;
-    low->current_recv = recv_sym;
-    low->current_recv_name = recv_name;
-    low->current_is_ptr_recv = is_ptr_recv;
     low->fn_return_type = return_type;
+
+    if (recv_name != NULL) {
+        HirSymSpec recv_spec = {HIR_SYM_PARAM, recv_name, struct_type, false, ast->loc};
+        HirSym *recv_sym = lower_make_sym(low, &recv_spec);
+        recv_sym->is_ptr_recv = is_ptr_recv;
+        lower_scope_define(low, recv_name, recv_sym);
+
+        // Store is_ptr_recv on the method sym for call-site lookup
+        func_sym->is_ptr_recv = is_ptr_recv;
+
+        HirNode *recv_param = hir_new(low->hir_arena, HIR_PARAM, struct_type, ast->loc);
+        recv_param->param.sym = recv_sym;
+        recv_param->param.name = recv_name;
+        recv_param->param.param_type = struct_type;
+        recv_param->param.is_recv = true;
+        recv_param->param.is_mut_recv = is_mut_recv;
+        recv_param->param.is_ptr_recv = is_ptr_recv;
+        BUF_PUSH(params, recv_param);
+
+        low->current_recv = recv_sym;
+        low->current_recv_name = recv_name;
+        low->current_is_ptr_recv = is_ptr_recv;
+    } else {
+        func_sym->is_static = true;
+    }
 
     // Lower other params
     lower_param_list(low, ast->fn_decl.params, BUF_LEN(ast->fn_decl.params), &params);

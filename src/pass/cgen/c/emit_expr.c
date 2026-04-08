@@ -348,8 +348,18 @@ static const char *emit_struct_field_access_expr(CGen *cgen, const HirNode *node
 }
 
 static const char *emit_method_call_expr(CGen *cgen, const HirNode *node) {
-    const char *recv = emit_expr(cgen, node->method_call.recv);
     int32_t arg_count = BUF_LEN(node->method_call.args);
+
+    // Static method call — no receiver
+    if (node->method_call.recv == NULL) {
+        if (arg_count > 0) {
+            const char *args = join_exprs(cgen, node->method_call.args, arg_count);
+            return arena_sprintf(cgen->arena, "%s(%s)", node->method_call.mangled_name, args);
+        }
+        return arena_sprintf(cgen->arena, "%s()", node->method_call.mangled_name);
+    }
+
+    const char *recv = emit_expr(cgen, node->method_call.recv);
     bool recv_is_ptr =
         (node->method_call.recv->type != NULL && node->method_call.recv->type->kind == TYPE_PTR) ||
         (node->method_call.recv->kind == HIR_VAR_REF &&

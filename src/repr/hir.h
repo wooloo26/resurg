@@ -38,6 +38,7 @@ struct HirSym {
     const Type *type;
     bool is_mut;
     bool is_ptr_recv; // for method syms: recv is *T
+    bool is_static;   // for method syms: no receiver
     const char *mangled_name;
     SrcLoc loc;
 };

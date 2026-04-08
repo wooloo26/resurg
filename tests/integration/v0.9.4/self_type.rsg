@@ -1,0 +1,132 @@
+// v0.9.4 — Self and *Self type: Self refers to the concrete type inside struct/enum/pact/ext
+
+// ── Self in struct: static constructor and value-returning methods ──
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+
+    fn origin() -> Self {
+        Self { x = 0.0, y = 0.0 }
+    }
+
+    fn translate(p, dx: f64, dy: f64) -> Self {
+        Self { x = p.x + dx, y = p.y + dy }
+    }
+
+    fn reset(mut *self) {
+        self.x = 0.0
+        self.y = 0.0
+    }
+}
+
+fn test_struct_self_static_constructor() {
+    p := Point::origin()
+    assert(p.x == 0.0)
+    assert(p.y == 0.0)
+}
+
+fn test_struct_self_return_type() {
+    p := Point { x = 1.0, y = 2.0 }
+    q := p.translate(3.0, 4.0)
+    assert(q.x == 4.0)
+    assert(q.y == 6.0)
+}
+
+fn test_struct_self_mut_pointer_receiver() {
+    p := Point { x = 5.0, y = 10.0 }
+    p.reset()
+    assert(p.x == 0.0)
+    assert(p.y == 0.0)
+}
+
+// ── Self in enum: static constructor ──
+
+enum Token {
+    Number(f64),
+    Ident(str),
+
+    fn dummy() -> Self {
+        Self::Number(0.0)
+    }
+}
+
+fn test_enum_self_static_constructor() {
+    t := Token::dummy()
+    match t {
+        Number(v) => assert(v == 0.0),
+        Ident(_) => assert(false),
+    }
+}
+
+// ── Self in pact: return type ──
+
+pact Clonable {
+    fn clone(*self) -> Self
+}
+
+struct Color: Clonable {
+    r: i32 = 0
+    g: i32 = 0
+    b: i32 = 0
+
+    fn clone(*c) -> Self {
+        Self { r = c.r, g = c.g, b = c.b }
+    }
+}
+
+fn test_pact_self_return_type() {
+    c := Color { r = 255, g = 128, b = 0 }
+    d := c.clone()
+    assert(d.r == 255)
+    assert(d.g == 128)
+    assert(d.b == 0)
+}
+
+// ── Self in ext: return type ──
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn new(initial: i32) -> Self {
+        Self { value = initial }
+    }
+
+    fn incremented(c) -> Self {
+        Self { value = c.value + 1 }
+    }
+}
+
+fn test_ext_self_static_constructor() {
+    c := Counter::new(10)
+    assert(c.value == 10)
+}
+
+fn test_ext_self_return_type() {
+    c := Counter { value = 5 }
+    d := c.incremented()
+    assert(d.value == 6)
+}
+
+// ── *Self pointer receiver ──
+
+struct Accumulator {
+    total: i32 = 0
+
+    fn add(mut *self, n: i32) {
+        self.total = self.total + n
+    }
+
+    fn get_total(*self) -> i32 {
+        self.total
+    }
+}
+
+fn test_self_pointer_receiver() {
+    a := Accumulator { total = 0 }
+    a.add(10)
+    a.add(20)
+    assert(a.get_total() == 30)
+}

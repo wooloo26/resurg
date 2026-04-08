@@ -46,7 +46,19 @@ static const Type *resolve_array_type(Sema *sema, const ASTType *ast_type) {
         SEMA_ERR(sema, ast_type->loc, "array elem type required");
         return &TYPE_ERR_INST;
     }
-    return type_create_array(sema->arena, elem, ast_type->array_size);
+    int32_t size = ast_type->array_size;
+    if (ast_type->array_size_name != NULL) {
+        // Comptime param: look up the integer value from type_param_table
+        const Type *ct = hash_table_lookup(&sema->type_param_table, ast_type->array_size_name);
+        if (ct != NULL && ct->kind == TYPE_COMPTIME_INT) {
+            size = (int32_t)ct->comptime_int.value;
+        } else {
+            SEMA_ERR(sema, ast_type->loc, "expected comptime integer for array size '%s'",
+                     ast_type->array_size_name);
+            return &TYPE_ERR_INST;
+        }
+    }
+    return type_create_array(sema->arena, elem, size);
 }
 
 static const Type *resolve_slice_type(Sema *sema, const ASTType *ast_type) {
@@ -130,6 +142,18 @@ static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
 }
 
 static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
+    // Resolve Self to the enclosing type
+    if (strcmp(ast_type->name, "Self") == 0) {
+        if (sema->self_type_name == NULL) {
+            SEMA_ERR(sema, ast_type->loc, "'Self' used outside of a type context");
+            return &TYPE_ERR_INST;
+        }
+        ASTType self_ast = {.kind = AST_TYPE_NAME,
+                            .name = sema->self_type_name,
+                            .loc = ast_type->loc,
+                            .type_args = NULL};
+        return resolve_name_type(sema, &self_ast);
+    }
     const Type *type = type_from_name(ast_type->name);
     if (type != NULL) {
         return type;
@@ -155,15 +179,36 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
         if (gta != NULL) {
             int32_t expected = gta->type_param_count;
             int32_t got = BUF_LEN(ast_type->type_args);
-            if (got != expected) {
-                SEMA_ERR(sema, ast_type->loc,
-                         "wrong number of type arguments for '%s': expected %d, got %d",
-                         ast_type->name, expected, got);
+            // Count minimum required (params without defaults)
+            int32_t min_required = 0;
+            for (int32_t i = 0; i < expected; i++) {
+                if (gta->type_params[i].default_type == NULL) {
+                    min_required = i + 1;
+                }
+            }
+            if (got < min_required || got > expected) {
+                if (min_required == expected) {
+                    SEMA_ERR(sema, ast_type->loc,
+                             "wrong number of type arguments for '%s': expected %d, got %d",
+                             ast_type->name, expected, got);
+                } else {
+                    SEMA_ERR(sema, ast_type->loc,
+                             "wrong number of type arguments for '%s': expected %d to %d, got %d",
+                             ast_type->name, min_required, expected, got);
+                }
                 return &TYPE_ERR_INST;
             }
-            // Push type param substitutions
-            for (int32_t i = 0; i < expected; i++) {
+            // Push explicit type param substitutions
+            for (int32_t i = 0; i < got; i++) {
                 const Type *t = resolve_ast_type(sema, ast_type->type_args[i]);
+                if (t == NULL) {
+                    t = &TYPE_ERR_INST;
+                }
+                hash_table_insert(&sema->type_param_table, gta->type_params[i].name, (void *)t);
+            }
+            // Fill defaults for remaining
+            for (int32_t i = got; i < expected; i++) {
+                const Type *t = resolve_ast_type(sema, gta->type_params[i].default_type);
                 if (t == NULL) {
                     t = &TYPE_ERR_INST;
                 }
@@ -214,7 +259,54 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     return &TYPE_ERR_INST;
 }
 
+/** Resolve associated type access: T::Item. */
+static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
+    const char *base_name = ast_type->name;
+    const char *assoc_member = ast_type->assoc_member;
+
+    // Resolve the base type name to a concrete struct name
+    const char *resolved_name = NULL;
+    if (strcmp(base_name, "Self") == 0) {
+        resolved_name = sema->self_type_name;
+    } else {
+        const Type *param_type = hash_table_lookup(&sema->type_param_table, base_name);
+        if (param_type != NULL && param_type->kind == TYPE_STRUCT) {
+            resolved_name = param_type->struct_type.name;
+        }
+    }
+
+    if (resolved_name == NULL) {
+        SEMA_ERR(sema, ast_type->loc, "cannot resolve '%s' for associated type '%s::%s'", base_name,
+                 base_name, assoc_member);
+        return &TYPE_ERR_INST;
+    }
+
+    // Look up the struct def and find the associated type
+    StructDef *sdef = sema_lookup_struct(sema, resolved_name);
+    if (sdef != NULL) {
+        for (int32_t i = 0; i < BUF_LEN(sdef->assoc_types); i++) {
+            if (strcmp(sdef->assoc_types[i].name, assoc_member) == 0) {
+                if (sdef->assoc_types[i].concrete_type != NULL) {
+                    return resolve_ast_type(sema, sdef->assoc_types[i].concrete_type);
+                }
+                SEMA_ERR(sema, ast_type->loc, "associated type '%s::%s' has no concrete definition",
+                         resolved_name, assoc_member);
+                return &TYPE_ERR_INST;
+            }
+        }
+    }
+
+    SEMA_ERR(sema, ast_type->loc, "type '%s' does not define associated type '%s'", resolved_name,
+             assoc_member);
+    return &TYPE_ERR_INST;
+}
+
 // ── Dispatch table ─────────────────────────────────────────────────────
+
+/** Resolve compile-time integer value (for comptime generics). */
+static const Type *resolve_comptime_int_type(Sema *sema, const ASTType *ast_type) {
+    return type_create_comptime_int(sema->arena, ast_type->comptime_int_value);
+}
 
 typedef const Type *(*TypeResolver)(Sema *, const ASTType *);
 
@@ -223,6 +315,7 @@ static const TypeResolver TYPE_RESOLVERS[] = {
     [AST_TYPE_SLICE] = resolve_slice_type,   [AST_TYPE_TUPLE] = resolve_tuple_type,
     [AST_TYPE_PTR] = resolve_ptr_type,       [AST_TYPE_OPTION] = resolve_option_type,
     [AST_TYPE_RESULT] = resolve_result_type, [AST_TYPE_FN] = resolve_fn_type,
+    [AST_TYPE_ASSOC] = resolve_assoc_type,   [AST_TYPE_COMPTIME_INT] = resolve_comptime_int_type,
 };
 
 #define TYPE_RESOLVER_COUNT ((int32_t)(sizeof(TYPE_RESOLVERS) / sizeof(TYPE_RESOLVERS[0])))

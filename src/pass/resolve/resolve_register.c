@@ -267,6 +267,13 @@ static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodIn
 void register_fn_sig(Sema *sema, ASTNode *decl) {
     // If the fn has type params, store as a generic template instead
     if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+        // Reject default generics on functions
+        for (int32_t i = 0; i < BUF_LEN(decl->fn_decl.type_params); i++) {
+            if (decl->fn_decl.type_params[i].default_type != NULL) {
+                SEMA_ERR(sema, decl->loc, "default generics are not allowed on fn declarations");
+                return;
+            }
+        }
         GenericFnDef *gdef = rsg_malloc(sizeof(*gdef));
         gdef->name = decl->fn_decl.name;
         gdef->decl = decl;
@@ -303,11 +310,20 @@ void register_struct_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
+    const char *prev_self = sema->self_type_name;
+    sema->self_type_name = struct_name;
+
     StructDef *def = rsg_malloc(sizeof(*def));
     def->name = struct_name;
     def->fields = NULL;
     def->methods = NULL;
     def->embedded = NULL;
+    def->assoc_types = NULL;
+
+    // Copy associated types from AST
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->struct_decl.assoc_types[i]);
+    }
 
     // Collect embedded struct types
     for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.embedded); i++) {
@@ -316,15 +332,15 @@ void register_struct_def(Sema *sema, ASTNode *decl) {
 
     compose_struct_fields(sema, decl, def);
     build_struct_type(sema, decl, def);
+
+    // Register type alias early so Self-referencing method sigs can resolve
+    hash_table_insert(&sema->struct_table, struct_name, def);
+    hash_table_insert(&sema->type_alias_table, struct_name, (void *)def->type);
+    scope_define(sema, &(SymDef){struct_name, def->type, false, SYM_TYPE});
+
     register_struct_methods(sema, decl, def);
 
-    hash_table_insert(&sema->struct_table, struct_name, def);
-
-    // Register struct as a type alias so resolve_ast_type can find it
-    hash_table_insert(&sema->type_alias_table, struct_name, (void *)def->type);
-
-    // Register struct name as a type sym
-    scope_define(sema, &(SymDef){struct_name, def->type, false, SYM_TYPE});
+    sema->self_type_name = prev_self;
 }
 
 void register_enum_def(Sema *sema, ASTNode *decl) {
@@ -346,6 +362,9 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
+    const char *prev_self = sema->self_type_name;
+    sema->self_type_name = enum_name;
+
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
     for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.variants); i++) {
@@ -362,13 +381,16 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
     def->methods = NULL;
     def->type = enum_type;
 
+    // Register type alias early so Self-referencing method sigs can resolve
+    hash_table_insert(&sema->enum_table, enum_name, def);
+    hash_table_insert(&sema->type_alias_table, enum_name, (void *)enum_type);
+    scope_define(sema, &(SymDef){enum_name, enum_type, false, SYM_TYPE});
+
     for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.methods); i++) {
         register_method_sig(sema, enum_name, decl->enum_decl.methods[i], &def->methods);
     }
 
-    hash_table_insert(&sema->enum_table, enum_name, def);
-    hash_table_insert(&sema->type_alias_table, enum_name, (void *)enum_type);
-    scope_define(sema, &(SymDef){enum_name, enum_type, false, SYM_TYPE});
+    sema->self_type_name = prev_self;
 }
 
 void register_pact_def(Sema *sema, ASTNode *decl) {
@@ -379,11 +401,20 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
+    const char *prev_self = sema->self_type_name;
+    sema->self_type_name = pact_name;
+
     PactDef *def = rsg_malloc(sizeof(*def));
     def->name = pact_name;
     def->fields = NULL;
     def->methods = NULL;
     def->super_pacts = NULL;
+    def->assoc_types = NULL;
+
+    // Copy associated types from AST
+    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->pact_decl.assoc_types[i]);
+    }
 
     // Copy super pact refs
     for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.super_pacts); i++) {
@@ -413,6 +444,7 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     }
 
     hash_table_insert(&sema->pact_table, pact_name, def);
+    sema->self_type_name = prev_self;
 }
 
 /** Verify that all pact-required fields are present and type-correct. */
@@ -481,6 +513,91 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
         if (pact == NULL) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
             continue;
+        }
+        // Check required associated types — apply defaults when available
+        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+            const char *at_name = pact->assoc_types[i].name;
+            bool found = false;
+            for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+                if (strcmp(def->assoc_types[j].name, at_name) != 0) {
+                    continue;
+                }
+                // If qualified, only match when qualifier matches this pact
+                if (def->assoc_types[j].pact_qualifier != NULL &&
+                    strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                    continue;
+                }
+                found = true;
+                break;
+            }
+            if (!found) {
+                if (pact->assoc_types[i].concrete_type != NULL) {
+                    // Apply pact-side default
+                    ASTAssocType defaulted = {
+                        .name = at_name,
+                        .pact_qualifier = NULL,
+                        .bounds = NULL,
+                        .concrete_type = pact->assoc_types[i].concrete_type,
+                    };
+                    BUF_PUSH(def->assoc_types, defaulted);
+                    BUF_PUSH(decl->struct_decl.assoc_types, defaulted);
+                } else {
+                    SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
+                             at_name, pact_name);
+                }
+            }
+        }
+        // Check struct doesn't define associated types not in the pact
+        for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+            const char *at_name = def->assoc_types[j].name;
+            // Skip types qualified for a different pact
+            if (def->assoc_types[j].pact_qualifier != NULL &&
+                strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                continue;
+            }
+            bool in_pact = false;
+            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+                if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
+                    in_pact = true;
+                    break;
+                }
+            }
+            if (!in_pact) {
+                SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'",
+                         at_name, pact_name);
+            }
+        }
+        // Enforce bounds on associated types
+        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+            if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
+                continue;
+            }
+            const char *at_name = pact->assoc_types[i].name;
+            for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+                if (strcmp(def->assoc_types[j].name, at_name) != 0) {
+                    continue;
+                }
+                if (def->assoc_types[j].pact_qualifier != NULL &&
+                    strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                    continue;
+                }
+                if (def->assoc_types[j].concrete_type == NULL) {
+                    break;
+                }
+                const Type *concrete = resolve_ast_type(sema, def->assoc_types[j].concrete_type);
+                if (concrete == NULL || concrete->kind == TYPE_ERR) {
+                    break;
+                }
+                for (int32_t b = 0; b < BUF_LEN(pact->assoc_types[i].bounds); b++) {
+                    const char *bound = pact->assoc_types[i].bounds[b];
+                    if (!type_satisfies_bound(sema, concrete, bound)) {
+                        SEMA_ERR(sema, decl->loc,
+                                 "associated type '%s' = '%s' does not satisfy bound '%s'", at_name,
+                                 type_name(sema->arena, concrete), bound);
+                    }
+                }
+                break;
+            }
         }
         enforce_pact_fields(sema, decl, def, pact);
         enforce_pact_methods(sema, decl, def, pact);
@@ -764,22 +881,28 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     // Try to find the target as a struct
     StructDef *sdef = sema_lookup_struct(sema, target_name);
     if (sdef != NULL) {
+        const char *prev_self = sema->self_type_name;
+        sema->self_type_name = target_name;
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
             method->fn_decl.owner_struct = target_name;
             register_method_sig(sema, target_name, method, &sdef->methods);
         }
+        sema->self_type_name = prev_self;
         return;
     }
 
     // Try to find the target as an enum
     EnumDef *edef = sema_lookup_enum(sema, target_name);
     if (edef != NULL) {
+        const char *prev_self = sema->self_type_name;
+        sema->self_type_name = target_name;
         for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
             ASTNode *method = decl->ext_decl.methods[i];
             method->fn_decl.owner_struct = target_name;
             register_method_sig(sema, target_name, method, &edef->methods);
         }
+        sema->self_type_name = prev_self;
         return;
     }
 

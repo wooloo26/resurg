@@ -1,0 +1,123 @@
+// v0.9.4 — where clauses: move complex bounds out of the signature
+
+// ── basic where clause on function ──
+
+pact Ord {
+    fn compare(*self, other: *Self) -> i32
+}
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Clone {
+    fn clone(*self) -> Self
+}
+
+struct MyInt: Ord + Display + Clone {
+    value: i32 = 0
+
+    fn compare(*self, other: *Self) -> i32 {
+        if self.value < other.value { -1 }
+        else if self.value > other.value { 1 }
+        else { 0 }
+    }
+
+    fn to_display(*self) -> str {
+        "MyInt"
+    }
+
+    fn clone(*self) -> Self {
+        Self { value = self.value }
+    }
+}
+
+fn max_val<T>(a: T, b: T) -> T
+where T: Ord,
+{
+    if a.compare(&b) > 0 { a } else { b }
+}
+
+fn test_where_function() {
+    a := MyInt { value = 10 }
+    b := MyInt { value = 20 }
+    result := max_val<MyInt>(a, b)
+    assert(result.value == 20)
+}
+
+// ── where clause with multiple bounds ──
+
+fn show_max<T>(a: T, b: T) -> str
+where T: Ord + Display,
+{
+    result := max_val<T>(a, b)
+    result.to_display()
+}
+
+fn test_where_multiple_bounds() {
+    a := MyInt { value = 5 }
+    b := MyInt { value = 15 }
+    s := show_max<MyInt>(a, b)
+    assert(s == "MyInt")
+}
+
+// ── where clause with multiple type params ──
+
+fn pick_and_show<T, U>(a: T, b: U) -> str
+where
+    T: Display,
+    U: Display,
+{
+    a.to_display()
+}
+
+struct MyStr: Display {
+    data: str = ""
+
+    fn to_display(*self) -> str {
+        self.data
+    }
+}
+
+fn test_where_multi_type_params() {
+    a := MyInt { value = 1 }
+    b := MyStr { data = "hello" }
+    result := pick_and_show<MyInt, MyStr>(a, b)
+    assert(result == "MyInt")
+}
+
+// ── where clause on struct ──
+
+struct SortedPair<T>
+where T: Ord,
+{
+    first: T
+    second: T
+}
+
+fn test_where_struct() {
+    p := SortedPair<MyInt> { first = MyInt { value = 1 }, second = MyInt { value = 2 } }
+    assert(p.first.value == 1)
+    assert(p.second.value == 2)
+}
+
+// ── where clause on pact ──
+
+pact Transformer<In, Out>
+where In: Display, Out: Display,
+{
+    fn transform(*self, input: In) -> Out
+}
+
+struct IdentityTransform: Transformer<MyInt, MyInt> {
+    fn transform(*self, input: MyInt) -> MyInt {
+        input
+    }
+}
+
+fn test_where_pact() {
+    t := IdentityTransform {}
+    input := MyInt { value = 99 }
+    output := t.transform(input)
+    assert(output.value == 99)
+}

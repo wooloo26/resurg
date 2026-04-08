@@ -1,0 +1,30 @@
+// TEST: compile_error
+// EXPECT-ERROR: does not satisfy
+// v0.9.4 — Error: concrete associated type does not satisfy pact bounds
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Container {
+    type Element: Display
+    fn first(*self) -> ?Self::Element
+}
+
+struct PlainInt {
+    value: i32 = 0
+}
+
+struct BadContainer: Container {
+    type Element = PlainInt
+
+    fn first(*self) -> ?PlainInt {
+        Some(self.item)
+    }
+
+    item: PlainInt
+}
+
+fn main() {
+    c := BadContainer { item = PlainInt { value = 1 } }
+}

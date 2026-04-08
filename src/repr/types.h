@@ -27,16 +27,17 @@ typedef enum {
     TYPE_CHAR,
     TYPE_STR,
     TYPE_UNIT,
-    TYPE_NEVER,  // bottom type (never completes)
-    TYPE_ARRAY,  // [N]T
-    TYPE_SLICE,  // []T
-    TYPE_TUPLE,  // (A, B, ...)
-    TYPE_STRUCT, // struct { fields }
-    TYPE_PTR,    // *T
-    TYPE_ENUM,   // enum { variants }
-    TYPE_FN,     // fn(Params) -> Return
-    TYPE_ERR,    // sentinel for continued checking after type errs
-    TYPE_MODULE, // namespace type for nested modules
+    TYPE_NEVER,        // bottom type (never completes)
+    TYPE_ARRAY,        // [N]T
+    TYPE_SLICE,        // []T
+    TYPE_TUPLE,        // (A, B, ...)
+    TYPE_STRUCT,       // struct { fields }
+    TYPE_PTR,          // *T
+    TYPE_ENUM,         // enum { variants }
+    TYPE_FN,           // fn(Params) -> Return
+    TYPE_ERR,          // sentinel for continued checking after type errs
+    TYPE_MODULE,       // namespace type for nested modules
+    TYPE_COMPTIME_INT, // compile-time integer value (comptime generics)
 } TypeKind;
 
 /** Distinguishes fn/Fn/FnMut function type kinds. */
@@ -111,6 +112,9 @@ struct Type {
         struct {
             const char *name;
         } module_type;
+        struct {
+            int64_t value;
+        } comptime_int;
     };
 };
 
@@ -246,5 +250,8 @@ bool type_assignable(const Type *from, const Type *to);
 
 /** Create a module type with the given name. */
 Type *type_create_module(Arena *arena, const char *name);
+
+/** Create a compile-time integer value type (for comptime generics). */
+Type *type_create_comptime_int(Arena *arena, int64_t value);
 
 #endif // RSG_TYPES_H

@@ -58,13 +58,19 @@ static ASTType parse_bracket_type(Parser *parser, SrcLoc loc) {
 
     // Array type: [N]T
     type.kind = AST_TYPE_ARRAY;
-    if (!parser_check(parser, TOKEN_INTEGER_LIT)) {
+    type.array_size_name = NULL;
+    if (parser_check(parser, TOKEN_INTEGER_LIT)) {
+        type.array_size = (int32_t)parser_current_token(parser)->lit_value.integer_value;
+        parser_advance(parser); // consume size
+    } else if (parser_check(parser, TOKEN_ID)) {
+        type.array_size = 0;
+        type.array_size_name = parser_current_token(parser)->lexeme;
+        parser_advance(parser); // consume identifier
+    } else {
         rsg_err(parser_current_loc(parser), "expected array size");
         type.kind = AST_TYPE_INFERRED;
         return type;
     }
-    type.array_size = (int32_t)parser_current_token(parser)->lit_value.integer_value;
-    parser_advance(parser); // consume size
     parser_expect(parser, TOKEN_RIGHT_BRACKET);
     ASTType *elem = arena_alloc(parser->arena, sizeof(ASTType));
     *elem = parser_parse_type(parser);
@@ -101,7 +107,16 @@ static void parse_generic_args(Parser *parser, ASTType *type) {
     parser_advance(parser); // consume '<'
     do {
         ASTType *arg = arena_alloc(parser->arena, sizeof(ASTType));
-        *arg = parser_parse_type(parser);
+        if (parser_check(parser, TOKEN_INTEGER_LIT)) {
+            // Comptime integer arg (e.g., 5 in ArrayWrapper<i32, 5>)
+            arg->kind = AST_TYPE_COMPTIME_INT;
+            arg->loc = parser_current_loc(parser);
+            arg->comptime_int_value =
+                (int64_t)parser_current_token(parser)->lit_value.integer_value;
+            parser_advance(parser); // consume integer
+        } else {
+            *arg = parser_parse_type(parser);
+        }
         BUF_PUSH(type->type_args, arg);
     } while (parser_match(parser, TOKEN_COMMA));
     parser_expect(parser, TOKEN_GREATER);
@@ -168,14 +183,21 @@ ASTType parser_parse_type(Parser *parser) {
         }
     }
 
-    // Named type
+    // Named type (including Self)
     ASTType type = {.kind = AST_TYPE_NAME, .loc = loc};
     if (token_is_type_keyword(parser_current_token(parser)->kind) ||
-        parser_check(parser, TOKEN_ID)) {
+        parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_SELF)) {
         type.name = parser_advance(parser)->lexeme;
     } else {
         rsg_err(parser_current_loc(parser), "expected type name");
         type.kind = AST_TYPE_INFERRED;
+        return type;
+    }
+
+    // Associated type access: T::Item
+    if (parser_match(parser, TOKEN_COLON_COLON)) {
+        type.kind = AST_TYPE_ASSOC;
+        type.assoc_member = parser_expect(parser, TOKEN_ID)->lexeme;
         return type;
     }
 

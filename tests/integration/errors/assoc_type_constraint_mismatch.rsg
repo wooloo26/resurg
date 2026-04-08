@@ -1,0 +1,22 @@
+// TEST: compile_error
+// EXPECT-ERROR: associated type 'Item' is 'str', expected 'i32'
+// v0.9.4 — Error: associated type constraint mismatch
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct StrIter: Iterator {
+    type Item = str
+    fn next(mut *self) -> ?str { None }
+}
+
+fn only_i32<I: Iterator<Item = i32>>(mut iter: *I) -> ?i32 {
+    iter.next()
+}
+
+fn main() {
+    iter := StrIter {}
+    only_i32<StrIter>(mut &iter)
+}

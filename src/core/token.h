@@ -45,6 +45,9 @@ typedef enum {
     TOKEN_EXT,      // ext
     TOKEN_USE,      // use
     TOKEN_IMPL,     // impl
+    TOKEN_WHERE,    // where
+    TOKEN_COMPTIME, // comptime
+    TOKEN_SELF,     // Self
 
     // Type keywords
     TOKEN_BOOL,  // bool

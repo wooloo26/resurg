@@ -2,6 +2,7 @@
 
 // ── Forward declarations ──────────────────────────────────────────────
 static ASTTypeParam *parse_type_params(Parser *parser);
+static ASTWhereClause *parse_where_clauses(Parser *parser);
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -153,7 +154,13 @@ static ASTNode *parse_pact_decl(Parser *parser) {
     node->pact_decl.fields = NULL;
     node->pact_decl.methods = NULL;
     node->pact_decl.super_pacts = NULL;
+    node->pact_decl.where_clauses = NULL;
+    node->pact_decl.assoc_types = NULL;
     node->pact_decl.type_params = parse_type_params(parser);
+
+    // Optional where clauses
+    parser_skip_newlines(parser);
+    node->pact_decl.where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
 
@@ -173,6 +180,24 @@ static ASTNode *parse_pact_decl(Parser *parser) {
         if (parser_check(parser, TOKEN_FN)) {
             ASTNode *method = parse_pact_method(parser, node->pact_decl.name);
             BUF_PUSH(node->pact_decl.methods, method);
+        } else if (parser_check(parser, TOKEN_TYPE)) {
+            // Associated type: type Name, type Name: Bound, type Name = Default
+            parser_advance(parser); // consume 'type'
+            ASTAssocType at = {0};
+            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            at.bounds = NULL;
+            at.concrete_type = NULL;
+            if (parser_match(parser, TOKEN_COLON)) {
+                do {
+                    const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
+                    BUF_PUSH(at.bounds, bound);
+                } while (parser_match(parser, TOKEN_PLUS));
+            }
+            if (parser_match(parser, TOKEN_EQUAL)) {
+                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                *at.concrete_type = parser_parse_type(parser);
+            }
+            BUF_PUSH(node->pact_decl.assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             const char *name = parser_advance(parser)->lexeme;
 
@@ -216,7 +241,12 @@ static ASTNode *parse_enum_decl(Parser *parser) {
     node->enum_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->enum_decl.variants = NULL;
     node->enum_decl.methods = NULL;
+    node->enum_decl.where_clauses = NULL;
     node->enum_decl.type_params = parse_type_params(parser);
+
+    // Optional where clauses
+    parser_skip_newlines(parser);
+    node->enum_decl.where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
     parser_expect(parser, TOKEN_LEFT_BRACE);
@@ -295,6 +325,8 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.methods = NULL;
     node->struct_decl.embedded = NULL;
     node->struct_decl.conformances = NULL;
+    node->struct_decl.where_clauses = NULL;
+    node->struct_decl.assoc_types = NULL;
     node->struct_decl.type_params = parse_type_params(parser);
 
     // Parse optional conformance list: struct Foo: Pact1 + Pact2 + Into<str>
@@ -313,6 +345,10 @@ static ASTNode *parse_struct_decl(Parser *parser) {
         } while (parser_match(parser, TOKEN_PLUS));
     }
 
+    // Optional where clauses
+    parser_skip_newlines(parser);
+    node->struct_decl.where_clauses = parse_where_clauses(parser);
+
     parser_skip_newlines(parser);
     parser_expect(parser, TOKEN_LEFT_BRACE);
     parser_skip_newlines(parser);
@@ -322,6 +358,24 @@ static ASTNode *parse_struct_decl(Parser *parser) {
             // Method decl
             ASTNode *method = parse_method_decl(parser, node->struct_decl.name);
             BUF_PUSH(node->struct_decl.methods, method);
+        } else if (parser_check(parser, TOKEN_TYPE)) {
+            // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType
+            parser_advance(parser); // consume 'type'
+            ASTAssocType at = {0};
+            at.pact_qualifier = NULL;
+            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            if (parser_match(parser, TOKEN_COLON_COLON)) {
+                // Qualified: type Pact::Name = ...
+                at.pact_qualifier = at.name;
+                at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            }
+            at.bounds = NULL;
+            at.concrete_type = NULL;
+            if (parser_match(parser, TOKEN_EQUAL)) {
+                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                *at.concrete_type = parser_parse_type(parser);
+            }
+            BUF_PUSH(node->struct_decl.assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             const char *name = parser_advance(parser)->lexeme;
 
@@ -353,7 +407,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
 // ── Fn decl ───────────────────────────────────────────────
 
 /**
- * Parse generic type param list: `<T, U: Bound1 + Bound2, ...>`.
+ * Parse generic type param list: `<T, U: Bound1 + Bound2, comptime N: usize, V = str>`.
  * Returns a stretchy buf of ASTTypeParam, or NULL if no `<` present.
  */
 static ASTTypeParam *parse_type_params(Parser *parser) {
@@ -363,18 +417,82 @@ static ASTTypeParam *parse_type_params(Parser *parser) {
     ASTTypeParam *params = NULL;
     do {
         ASTTypeParam tp = {0};
-        tp.name = parser_expect(parser, TOKEN_ID)->lexeme;
         tp.bounds = NULL;
+        tp.is_comptime = parser_match(parser, TOKEN_COMPTIME);
+        tp.comptime_type = NULL;
+        tp.default_type = NULL;
+        tp.name = parser_expect(parser, TOKEN_ID)->lexeme;
+        tp.assoc_constraints = NULL;
         if (parser_match(parser, TOKEN_COLON)) {
-            do {
-                const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
-                BUF_PUSH(tp.bounds, bound);
-            } while (parser_match(parser, TOKEN_PLUS));
+            if (tp.is_comptime) {
+                // comptime N: usize — parse the type, not pact bounds
+                tp.comptime_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                *tp.comptime_type = parser_parse_type(parser);
+            } else {
+                do {
+                    const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
+                    BUF_PUSH(tp.bounds, bound);
+                    // Parse associated type constraints: Pact<Name = Type, ...>
+                    if (parser_match(parser, TOKEN_LESS)) {
+                        do {
+                            ASTAssocConstraint ac = {0};
+                            ac.pact_name = bound;
+                            ac.assoc_name = parser_expect(parser, TOKEN_ID)->lexeme;
+                            parser_expect(parser, TOKEN_EQUAL);
+                            ac.expected_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+                            *ac.expected_type = parser_parse_type(parser);
+                            BUF_PUSH(tp.assoc_constraints, ac);
+                        } while (parser_match(parser, TOKEN_COMMA));
+                        parser_expect(parser, TOKEN_GREATER);
+                    }
+                } while (parser_match(parser, TOKEN_PLUS));
+            }
+        }
+        if (parser_match(parser, TOKEN_EQUAL)) {
+            tp.default_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
+            *tp.default_type = parser_parse_type(parser);
         }
         BUF_PUSH(params, tp);
     } while (parser_match(parser, TOKEN_COMMA));
     parser_expect(parser, TOKEN_GREATER);
     return params;
+}
+
+/**
+ * Parse where clauses: `where T: Bound1 + Bound2, U: Bound3`.
+ * Returns a stretchy buf of ASTWhereClause, or NULL if no `where` present.
+ */
+static ASTWhereClause *parse_where_clauses(Parser *parser) {
+    if (!parser_match(parser, TOKEN_WHERE)) {
+        return NULL;
+    }
+    parser_skip_newlines(parser);
+    ASTWhereClause *clauses = NULL;
+    for (;;) {
+        parser_skip_newlines(parser);
+        ASTWhereClause wc = {0};
+        wc.bounds = NULL;
+        wc.assoc_member = NULL;
+        wc.type_name = parser_expect(parser, TOKEN_ID)->lexeme;
+        // Support projection: I::Item
+        if (parser_match(parser, TOKEN_COLON_COLON)) {
+            wc.assoc_member = parser_expect(parser, TOKEN_ID)->lexeme;
+        }
+        parser_expect(parser, TOKEN_COLON);
+        do {
+            const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
+            BUF_PUSH(wc.bounds, bound);
+        } while (parser_match(parser, TOKEN_PLUS));
+        BUF_PUSH(clauses, wc);
+        if (!parser_match(parser, TOKEN_COMMA)) {
+            break;
+        }
+        parser_skip_newlines(parser);
+        if (!parser_check(parser, TOKEN_ID)) {
+            break;
+        }
+    }
+    return clauses;
 }
 
 static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
@@ -389,6 +507,7 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     node->fn_decl.is_mut_recv = false;
     node->fn_decl.is_ptr_recv = false;
     node->fn_decl.owner_struct = NULL;
+    node->fn_decl.where_clauses = NULL;
     node->fn_decl.type_params = parse_type_params(parser);
 
     // Parameters
@@ -411,6 +530,10 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     if (parser_match(parser, TOKEN_ARROW)) {
         node->fn_decl.return_type = parser_parse_type(parser);
     }
+
+    // Optional where clauses
+    parser_skip_newlines(parser);
+    node->fn_decl.where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
 
