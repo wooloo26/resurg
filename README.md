@@ -1113,6 +1113,113 @@ String interpolation: `"Hello, {name}!"`, `"result: {a + b}"`
 
 ---
 
+## 12. Patterns & Idioms
+
+### Newtype
+
+Single-field tuple struct (`struct Name(T)`) creating a distinct type, which can wrap any type that is valid as a struct field—including primitives (`i32`, `f64`, `str`), compound types (`?T`, `T ! E`, `[N]T`, `[]T`, `*T`, tuples), user-defined `struct`/`enum`, and generic parameters. Access inner value via `.0`. The idiomatic way to get type-safe domain modeling, smart constructors, and conversions — leveraging Resurg's no-implicit-conversions rule and `T ! E` result types.
+
+**Domain modeling — primitive safety & smart constructors:**
+
+```rsg
+struct Meters(f64)
+struct Seconds(f64)
+struct MetersPerSecond(f64)
+
+fn compute_speed(distance: Meters, time: Seconds) -> MetersPerSecond {
+    MetersPerSecond(distance.0 / time.0)
+}
+
+d := Meters(100.0)
+t := Seconds(9.58)
+speed := compute_speed(d, t)       // OK
+// compute_speed(t, d)             // ERROR: expected Meters, got Seconds
+
+struct UserId(u64)
+struct OrderId(u64)
+
+fn lookup_order(uid: UserId, oid: OrderId) -> ?Order { ... }
+// lookup_order(oid, uid)   // ERROR: expected UserId, got OrderId
+
+struct Email(str)
+
+ext Email {
+    fn parse(input: str) -> Self ! str {
+        if !contains(input, "@") { Err("invalid email") }
+        else { Ok(Self(input)) }
+    }
+}
+
+ext Email impl Display {
+    fn to_string(*self) -> str { self.0 }
+}
+
+email := Email::parse("alice@example.com")!
+// var e: Email = "not-an-email"   // ERROR: type mismatch
+```
+
+**Generic invariants — encoding structural contracts:**
+
+```rsg
+struct NonEmpty<T>([]T)
+
+ext<T> NonEmpty<T> {
+    fn from_slice(s: []T) -> Self ! str {
+        if s.len() == 0 { Err("slice must not be empty") }
+        else { Ok(Self(s)) }
+    }
+
+    fn first(*self) -> T { self.0[0] }
+    fn items(*self) -> []T { self.0 }
+}
+
+names := NonEmpty::from_slice([]str{"Alice", "Bob"})!
+println(names.first())   // "Alice"
+```
+
+**Conversions — `Into` / `TryInto`:**
+
+```rsg
+struct Meters(f64)
+struct Feet(f64)
+
+ext Meters impl Into<f64> {
+    fn into(self) -> f64 { self.0 }
+}
+
+ext Meters impl Into<Feet> {
+    fn into(self) -> Feet { Feet(self.0 * 3.28084) }
+}
+
+ext Feet impl Into<Meters> {
+    fn into(self) -> Meters { Meters(self.0 / 3.28084) }
+}
+
+d := Meters(100.0)
+var raw: f64 = d.into()            // 100.0
+var feet: Feet = d.into()          // Feet(328.084)
+back := feet.into()                // Meters(≈100.0)
+```
+
+Fallible variant via `TryInto`:
+
+```rsg
+struct PositiveInt(i32)
+
+ext i32 impl TryInto<PositiveInt> {
+    type Error = str
+    fn try_into(self) -> PositiveInt ! str {
+        if self <= 0 { Err("must be positive") }
+        else { Ok(PositiveInt(self)) }
+    }
+}
+
+p: PositiveInt = 42.try_into()!          // OK
+// p2: PositiveInt = (-1).try_into()!    // Err("must be positive")
+```
+
+---
+
 ## Appendix: Compiler Pipeline
 
 Written in C17. Compiles `.rsg` source to C17. Future back-ends: C++20, Go, Typescript.

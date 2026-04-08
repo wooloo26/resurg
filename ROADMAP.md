@@ -195,6 +195,7 @@ Higher-order programming and code organization.
 ## v0.9.5 — Before Ecosystem
 
 - [ ] `pub` applies to `struct` fields, `enum` functions, `pact` fields, `ext` functions.
+- [ ] Newtype
 - [ ] Refactor slice
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
