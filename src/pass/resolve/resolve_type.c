@@ -141,6 +141,63 @@ static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
     return type_create_fn(sema->arena, &fn_spec);
 }
 
+/** Resolve a generic type alias instantiation. */
+static const Type *resolve_generic_type_alias(Sema *sema, const ASTType *ast_type,
+                                              GenericTypeAlias *gta) {
+    int32_t expected = gta->base.type_param_count;
+    int32_t got = BUF_LEN(ast_type->type_args);
+    // Count minimum required (params without defaults)
+    int32_t min_required = 0;
+    for (int32_t i = 0; i < expected; i++) {
+        if (gta->base.type_params[i].default_type == NULL) {
+            min_required = i + 1;
+        }
+    }
+    if (got < min_required || got > expected) {
+        if (min_required == expected) {
+            SEMA_ERR(sema, ast_type->loc,
+                     "wrong number of type arguments for '%s': expected %d, got %d", ast_type->name,
+                     expected, got);
+        } else {
+            SEMA_ERR(sema, ast_type->loc,
+                     "wrong number of type arguments for '%s': expected %d to %d, got %d",
+                     ast_type->name, min_required, expected, got);
+        }
+        return &TYPE_ERR_INST;
+    }
+    // Push explicit type param substitutions
+    for (int32_t i = 0; i < got; i++) {
+        const Type *t = resolve_ast_type(sema, ast_type->type_args[i]);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+    }
+    // Fill defaults for remaining
+    for (int32_t i = got; i < expected; i++) {
+        const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+    }
+    const Type *result = resolve_ast_type(sema, &gta->alias_type);
+    // Clear type param substitutions
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
+    }
+    return result;
+}
+
+/** Convert ASTType** ptr buf to a flat ASTType* value buf for instantiation. */
+static ASTType *collect_type_arg_values(const ASTType *ast_type) {
+    ASTType *val_args = NULL;
+    for (int32_t i = 0; i < BUF_LEN(ast_type->type_args); i++) {
+        BUF_PUSH(val_args, *ast_type->type_args[i]);
+    }
+    return val_args;
+}
+
 static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     // Resolve Self to the enclosing type
     if (strcmp(ast_type->name, "Self") == 0) {
@@ -177,62 +234,13 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     if (BUF_LEN(ast_type->type_args) > 0) {
         GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, ast_type->name);
         if (gta != NULL) {
-            int32_t expected = gta->base.type_param_count;
-            int32_t got = BUF_LEN(ast_type->type_args);
-            // Count minimum required (params without defaults)
-            int32_t min_required = 0;
-            for (int32_t i = 0; i < expected; i++) {
-                if (gta->base.type_params[i].default_type == NULL) {
-                    min_required = i + 1;
-                }
-            }
-            if (got < min_required || got > expected) {
-                if (min_required == expected) {
-                    SEMA_ERR(sema, ast_type->loc,
-                             "wrong number of type arguments for '%s': expected %d, got %d",
-                             ast_type->name, expected, got);
-                } else {
-                    SEMA_ERR(sema, ast_type->loc,
-                             "wrong number of type arguments for '%s': expected %d to %d, got %d",
-                             ast_type->name, min_required, expected, got);
-                }
-                return &TYPE_ERR_INST;
-            }
-            // Push explicit type param substitutions
-            for (int32_t i = 0; i < got; i++) {
-                const Type *t = resolve_ast_type(sema, ast_type->type_args[i]);
-                if (t == NULL) {
-                    t = &TYPE_ERR_INST;
-                }
-                hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
-                                  (void *)t);
-            }
-            // Fill defaults for remaining
-            for (int32_t i = got; i < expected; i++) {
-                const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
-                if (t == NULL) {
-                    t = &TYPE_ERR_INST;
-                }
-                hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
-                                  (void *)t);
-            }
-            const Type *result = resolve_ast_type(sema, &gta->alias_type);
-            // Clear type param substitutions
-            for (int32_t i = 0; i < expected; i++) {
-                hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
-            }
-            return result;
+            return resolve_generic_type_alias(sema, ast_type, gta);
         }
         // Check generic structs with type args (e.g., Pair<i32, str>)
         GenericStructDef *gsdef = sema_lookup_generic_struct(sema, ast_type->name);
         if (gsdef != NULL) {
-            int32_t got = BUF_LEN(ast_type->type_args);
-            // Convert ASTType** (ptr buf) to ASTType* (value buf)
-            ASTType *val_args = NULL;
-            for (int32_t i = 0; i < got; i++) {
-                BUF_PUSH(val_args, *ast_type->type_args[i]);
-            }
-            GenericInstArgs inst_args = {val_args, got, ast_type->loc};
+            ASTType *val_args = collect_type_arg_values(ast_type);
+            GenericInstArgs inst_args = {val_args, BUF_LEN(val_args), ast_type->loc};
             const char *mangled = instantiate_generic_struct(sema, gsdef, &inst_args);
             BUF_FREE(val_args);
             if (mangled != NULL) {
@@ -243,12 +251,8 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
         // Check generic enums with type args (e.g., Either<i32, str>)
         GenericEnumDef *gedef = sema_lookup_generic_enum(sema, ast_type->name);
         if (gedef != NULL) {
-            int32_t got = BUF_LEN(ast_type->type_args);
-            ASTType *val_args = NULL;
-            for (int32_t i = 0; i < got; i++) {
-                BUF_PUSH(val_args, *ast_type->type_args[i]);
-            }
-            GenericInstArgs inst_args = {val_args, got, ast_type->loc};
+            ASTType *val_args = collect_type_arg_values(ast_type);
+            GenericInstArgs inst_args = {val_args, BUF_LEN(val_args), ast_type->loc};
             const char *mangled = instantiate_generic_enum(sema, gedef, &inst_args);
             BUF_FREE(val_args);
             if (mangled != NULL) {

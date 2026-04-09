@@ -232,6 +232,41 @@ static ASTNode *parse_pact_decl(Parser *parser) {
     return node;
 }
 
+// ── Enum variant sub-parsers ───────────────────────────────────────
+
+/** Parse a tuple variant body: (type1, type2, ...) */
+static void parse_variant_tuple_body(Parser *parser, ASTEnumVariant *variant) {
+    variant->kind = VARIANT_TUPLE;
+    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            ASTType *elem = arena_alloc_zero(parser->arena, sizeof(ASTType));
+            *elem = parser_parse_type(parser);
+            BUF_PUSH(variant->tuple_types, *elem);
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+}
+
+/** Parse a struct variant body: { field: type, ... } */
+static void parse_variant_struct_body(Parser *parser, ASTEnumVariant *variant) {
+    variant->kind = VARIANT_STRUCT;
+    parser_expect(parser, TOKEN_LEFT_BRACE);
+    parser_skip_newlines(parser);
+    if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+        do {
+            parser_skip_newlines(parser);
+            ASTStructField field = {0};
+            field.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            parser_expect(parser, TOKEN_COLON);
+            field.type = parser_parse_type(parser);
+            field.default_value = NULL;
+            BUF_PUSH(variant->fields, field);
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    parser_skip_newlines(parser);
+    parser_expect(parser, TOKEN_RIGHT_BRACE);
+}
+
 // ── Enum decl ───────────────────────────────────────────────────
 
 static ASTNode *parse_enum_decl(Parser *parser) {
@@ -286,34 +321,9 @@ static ASTNode *parse_enum_decl(Parser *parser) {
             variant.discriminant = NULL;
 
             if (parser_match(parser, TOKEN_LEFT_PAREN)) {
-                // Tuple variant: Name(type1, type2, ...)
-                variant.kind = VARIANT_TUPLE;
-                if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-                    do {
-                        ASTType *elem = arena_alloc_zero(parser->arena, sizeof(ASTType));
-                        *elem = parser_parse_type(parser);
-                        BUF_PUSH(variant.tuple_types, *elem);
-                    } while (parser_match(parser, TOKEN_COMMA));
-                }
-                parser_expect(parser, TOKEN_RIGHT_PAREN);
+                parse_variant_tuple_body(parser, &variant);
             } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
-                // Struct variant: Name { field: type, ... }
-                variant.kind = VARIANT_STRUCT;
-                parser_expect(parser, TOKEN_LEFT_BRACE);
-                parser_skip_newlines(parser);
-                if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
-                    do {
-                        parser_skip_newlines(parser);
-                        ASTStructField field = {0};
-                        field.name = parser_expect(parser, TOKEN_ID)->lexeme;
-                        parser_expect(parser, TOKEN_COLON);
-                        field.type = parser_parse_type(parser);
-                        field.default_value = NULL;
-                        BUF_PUSH(variant.fields, field);
-                    } while (parser_match(parser, TOKEN_COMMA));
-                }
-                parser_skip_newlines(parser);
-                parser_expect(parser, TOKEN_RIGHT_BRACE);
+                parse_variant_struct_body(parser, &variant);
             } else if (parser_match(parser, TOKEN_EQUAL)) {
                 // Explicit discriminant: Name = expr
                 variant.discriminant = parser_parse_expr(parser);

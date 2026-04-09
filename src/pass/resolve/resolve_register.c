@@ -943,6 +943,31 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
 
 // ── Extension method registration ──────────────────────────────────
 
+/** Push ext-declared associated types into @p target_buf and register as type aliases. */
+static void register_ext_assoc_types(Sema *sema, const ASTNode *decl, ASTAssocType **target_buf) {
+    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
+        BUF_PUSH(*target_buf, decl->ext_decl.assoc_types[i]);
+        if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
+            const Type *at_type =
+                resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
+            if (at_type != NULL && at_type->kind != TYPE_ERR) {
+                hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
+                                  (void *)at_type);
+            }
+        }
+    }
+}
+
+/** Register ext methods into the fn table and append to @p methods buf. */
+static void register_ext_methods(Sema *sema, const char *target_name, const ASTNode *decl,
+                                 StructMethodInfo **methods) {
+    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
+        ASTNode *method = decl->ext_decl.methods[i];
+        method->fn_decl.owner_struct = target_name;
+        register_method_sig(sema, target_name, method, methods);
+    }
+}
+
 /** Register a single primitive ext method into the fn_table with "type.method" key. */
 static void register_primitive_method(Sema *sema, const char *type_name, ASTNode *method) {
     method->fn_decl.owner_struct = type_name;
@@ -973,23 +998,8 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     if (sdef != NULL) {
         const char *prev_self = sema->self_type_name;
         sema->self_type_name = target_name;
-        // Push ext associated types to struct def and register as type aliases
-        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
-            BUF_PUSH(sdef->assoc_types, decl->ext_decl.assoc_types[i]);
-            if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
-                const Type *at_type =
-                    resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
-                if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                    hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
-                                      (void *)at_type);
-                }
-            }
-        }
-        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-            ASTNode *method = decl->ext_decl.methods[i];
-            method->fn_decl.owner_struct = target_name;
-            register_method_sig(sema, target_name, method, &sdef->methods);
-        }
+        register_ext_assoc_types(sema, decl, &sdef->assoc_types);
+        register_ext_methods(sema, target_name, decl, &sdef->methods);
         sema->self_type_name = prev_self;
         return;
     }
@@ -999,23 +1009,8 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     if (edef != NULL) {
         const char *prev_self = sema->self_type_name;
         sema->self_type_name = target_name;
-        // Push ext associated types to enum def and register as type aliases
-        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
-            BUF_PUSH(edef->assoc_types, decl->ext_decl.assoc_types[i]);
-            if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
-                const Type *at_type =
-                    resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
-                if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                    hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
-                                      (void *)at_type);
-                }
-            }
-        }
-        for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-            ASTNode *method = decl->ext_decl.methods[i];
-            method->fn_decl.owner_struct = target_name;
-            register_method_sig(sema, target_name, method, &edef->methods);
-        }
+        register_ext_assoc_types(sema, decl, &edef->assoc_types);
+        register_ext_methods(sema, target_name, decl, &edef->methods);
         sema->self_type_name = prev_self;
         return;
     }
@@ -1042,6 +1037,89 @@ static bool ext_method_exists(const Sema *sema, const char *target_name, const c
     return sema_lookup_fn(sema, key) != NULL;
 }
 
+/** Enforce a single pact conformance for a struct-targeted ext decl. */
+static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
+                                    const char *pact_name, PactDef *pact) {
+    // Apply defaults for missing associated types
+    for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+        const char *at_name = pact->assoc_types[i].name;
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
+            if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
+                continue;
+            }
+            if (sdef->assoc_types[j].pact_qualifier != NULL &&
+                strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                continue;
+            }
+            found = true;
+            break;
+        }
+        if (!found) {
+            if (pact->assoc_types[i].concrete_type != NULL) {
+                ASTAssocType defaulted = {
+                    .name = at_name,
+                    .pact_qualifier = NULL,
+                    .bounds = NULL,
+                    .concrete_type = pact->assoc_types[i].concrete_type,
+                };
+                BUF_PUSH(sdef->assoc_types, defaulted);
+            } else {
+                SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
+                         at_name, pact_name);
+            }
+        }
+    }
+    // Reject ext-declared assoc types not present in the pact
+    for (int32_t j = 0; j < BUF_LEN(decl->ext_decl.assoc_types); j++) {
+        const char *at_name = decl->ext_decl.assoc_types[j].name;
+        if (decl->ext_decl.assoc_types[j].pact_qualifier != NULL &&
+            strcmp(decl->ext_decl.assoc_types[j].pact_qualifier, pact_name) != 0) {
+            continue;
+        }
+        bool in_pact = false;
+        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+            if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
+                in_pact = true;
+                break;
+            }
+        }
+        if (!in_pact) {
+            SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'", at_name,
+                     pact_name);
+        }
+    }
+    // Reuse shared bounds enforcement
+    enforce_pact_assoc_type_bounds(sema, decl, sdef, pact);
+
+    // Enforce required methods and inject defaults
+    StructMethodInfo *pact_methods = NULL;
+    collect_pact_methods(sema, pact, &pact_methods);
+    for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
+            if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            bool has_body =
+                pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
+            if (has_body) {
+                ASTNode *method_ast = pact_methods[i].decl;
+                method_ast->fn_decl.owner_struct = sdef->name;
+                BUF_PUSH(decl->ext_decl.methods, method_ast);
+                register_method_sig(sema, sdef->name, method_ast, &sdef->methods);
+            } else {
+                SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
+                         pact_methods[i].name, pact_name);
+            }
+        }
+    }
+    BUF_FREE(pact_methods);
+}
+
 void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
     if (BUF_LEN(decl->ext_decl.impl_pacts) == 0) {
         return;
@@ -1049,7 +1127,7 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
 
     const char *target_name = decl->ext_decl.target_name;
 
-    // For struct targets, delegate to the existing conformance system
+    // For struct targets, delegate per-pact enforcement
     StructDef *sdef = sema_lookup_struct(sema, target_name);
     if (sdef != NULL) {
         for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
@@ -1059,119 +1137,7 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
                 SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
                 continue;
             }
-
-            // Check required associated types — apply defaults when available
-            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-                const char *at_name = pact->assoc_types[i].name;
-                bool found = false;
-                for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
-                    if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
-                        continue;
-                    }
-                    if (sdef->assoc_types[j].pact_qualifier != NULL &&
-                        strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                        continue;
-                    }
-                    found = true;
-                    break;
-                }
-                if (!found) {
-                    if (pact->assoc_types[i].concrete_type != NULL) {
-                        ASTAssocType defaulted = {
-                            .name = at_name,
-                            .pact_qualifier = NULL,
-                            .bounds = NULL,
-                            .concrete_type = pact->assoc_types[i].concrete_type,
-                        };
-                        BUF_PUSH(sdef->assoc_types, defaulted);
-                    } else {
-                        SEMA_ERR(sema, decl->loc,
-                                 "missing associated type '%s' required by pact '%s'", at_name,
-                                 pact_name);
-                    }
-                }
-            }
-            // Check ext doesn't define associated types not in the pact
-            for (int32_t j = 0; j < BUF_LEN(decl->ext_decl.assoc_types); j++) {
-                const char *at_name = decl->ext_decl.assoc_types[j].name;
-                if (decl->ext_decl.assoc_types[j].pact_qualifier != NULL &&
-                    strcmp(decl->ext_decl.assoc_types[j].pact_qualifier, pact_name) != 0) {
-                    continue;
-                }
-                bool in_pact = false;
-                for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-                    if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
-                        in_pact = true;
-                        break;
-                    }
-                }
-                if (!in_pact) {
-                    SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'",
-                             at_name, pact_name);
-                }
-            }
-            // Enforce bounds on associated types
-            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-                if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
-                    continue;
-                }
-                const char *at_name = pact->assoc_types[i].name;
-                for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
-                    if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
-                        continue;
-                    }
-                    if (sdef->assoc_types[j].pact_qualifier != NULL &&
-                        strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                        continue;
-                    }
-                    if (sdef->assoc_types[j].concrete_type == NULL) {
-                        break;
-                    }
-                    const Type *concrete =
-                        resolve_ast_type(sema, sdef->assoc_types[j].concrete_type);
-                    if (concrete == NULL || concrete->kind == TYPE_ERR) {
-                        break;
-                    }
-                    for (int32_t b = 0; b < BUF_LEN(pact->assoc_types[i].bounds); b++) {
-                        const char *bound = pact->assoc_types[i].bounds[b];
-                        if (!type_satisfies_bound(sema, concrete, bound)) {
-                            SEMA_ERR(sema, decl->loc,
-                                     "associated type '%s' = '%s' does not satisfy bound '%s'",
-                                     at_name, type_name(sema->arena, concrete), bound);
-                        }
-                    }
-                    break;
-                }
-            }
-
-            StructMethodInfo *pact_methods = NULL;
-            collect_pact_methods(sema, pact, &pact_methods);
-
-            // Check required methods & inject defaults for ext impl conformance
-            for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-                bool found = false;
-                for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
-                    if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    bool has_body =
-                        pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
-                    if (has_body) {
-                        ASTNode *method_ast = pact_methods[i].decl;
-                        method_ast->fn_decl.owner_struct = sdef->name;
-                        BUF_PUSH(decl->ext_decl.methods, method_ast);
-                        register_method_sig(sema, sdef->name, method_ast, &sdef->methods);
-                    } else {
-                        SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                                 pact_methods[i].name, pact_name);
-                    }
-                }
-            }
-
-            BUF_FREE(pact_methods);
+            enforce_ext_struct_pact(sema, decl, sdef, pact_name, pact);
         }
         return;
     }

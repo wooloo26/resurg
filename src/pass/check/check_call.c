@@ -739,6 +739,40 @@ static const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_
  * Handle `Name(value)` or `Name<T>(value)` as a tuple struct constructor.
  * Rewrites the call node to NODE_STRUCT_LIT on success.
  */
+/** Infer generic type args for a tuple struct from the argument types. */
+static StructDef *infer_tuple_struct_type_args(Sema *sema, ASTNode *node, const char **fn_name) {
+    GenericStructDef *gdef = sema_lookup_generic_struct(sema, *fn_name);
+    if (gdef == NULL || BUF_LEN(node->call.args) != gdef->type_param_count) {
+        return NULL;
+    }
+    // Build type args from argument types
+    ASTType *inferred_args = NULL;
+    for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+        const Type *arg_type = node->call.args[i]->type;
+        if (arg_type == NULL || arg_type->kind == TYPE_ERR) {
+            BUF_FREE(inferred_args);
+            return NULL;
+        }
+        ASTType ta = {.kind = AST_TYPE_NAME,
+                      .name = type_name(sema->arena, arg_type),
+                      .type_args = NULL,
+                      .loc = node->loc};
+        hash_table_insert(&sema->generics.type_params, ta.name, (void *)arg_type);
+        BUF_PUSH(inferred_args, ta);
+    }
+    GenericInstArgs inst_args = {inferred_args, BUF_LEN(inferred_args), node->loc};
+    const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
+    for (int32_t i = 0; i < BUF_LEN(inferred_args); i++) {
+        hash_table_remove(&sema->generics.type_params, inferred_args[i].name);
+    }
+    BUF_FREE(inferred_args);
+    if (mangled != NULL) {
+        *fn_name = mangled;
+        return sema_lookup_struct(sema, mangled);
+    }
+    return NULL;
+}
+
 static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char *fn_name) {
     // Resolve Self to enclosing type name
     if (strcmp(fn_name, "Self") == 0 && sema->self_type_name != NULL) {
@@ -764,34 +798,7 @@ static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char
 
     // Try generic inference from arg types
     if (sdef == NULL && BUF_LEN(node->call.type_args) == 0) {
-        GenericStructDef *gdef = sema_lookup_generic_struct(sema, fn_name);
-        if (gdef != NULL && BUF_LEN(node->call.args) == gdef->type_param_count) {
-            // Build type args from argument types
-            ASTType *inferred_args = NULL;
-            for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-                const Type *arg_type = node->call.args[i]->type;
-                if (arg_type == NULL || arg_type->kind == TYPE_ERR) {
-                    BUF_FREE(inferred_args);
-                    return NULL;
-                }
-                ASTType ta = {.kind = AST_TYPE_NAME,
-                              .name = type_name(sema->arena, arg_type),
-                              .type_args = NULL,
-                              .loc = node->loc};
-                hash_table_insert(&sema->generics.type_params, ta.name, (void *)arg_type);
-                BUF_PUSH(inferred_args, ta);
-            }
-            GenericInstArgs inst_args = {inferred_args, BUF_LEN(inferred_args), node->loc};
-            const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
-            for (int32_t i = 0; i < BUF_LEN(inferred_args); i++) {
-                hash_table_remove(&sema->generics.type_params, inferred_args[i].name);
-            }
-            BUF_FREE(inferred_args);
-            if (mangled != NULL) {
-                sdef = sema_lookup_struct(sema, mangled);
-                fn_name = mangled;
-            }
-        }
+        sdef = infer_tuple_struct_type_args(sema, node, &fn_name);
     }
 
     if (sdef == NULL || !sdef->is_tuple_struct) {

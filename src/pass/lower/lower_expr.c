@@ -1,6 +1,45 @@
 #include "_lower.h"
 
-// ── Expression lower ───────────────────────────────────────────────
+// ── Enum desugaring helpers ────────────────────────────────────────
+
+/** Build a tag comparison: @p sym._tag == @p variant->discriminant. */
+static HirNode *lower_enum_tag_check(Lower *low, HirSym *sym, const EnumVariant *variant,
+                                     SrcLoc loc) {
+    HirNode *tag =
+        lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, sym, loc), "_tag",
+                                                        &TYPE_I32_INST, false, loc});
+    HirNode *tag_val = lower_make_int_lit(
+        low, &(IntLitSpec){(uint64_t)variant->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
+    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
+    cond->binary.op = TOKEN_EQUAL_EQUAL;
+    cond->binary.left = tag;
+    cond->binary.right = tag_val;
+    return cond;
+}
+
+/**
+ * Build an enum variant struct literal with the given discriminant tag.
+ * If @p data_field is non-NULL, the literal also contains the data payload.
+ */
+static HirNode *lower_enum_variant_lit(Lower *low, const EnumVariant *variant,
+                                       const char *data_field, HirNode *data_val,
+                                       const Type *result_type, SrcLoc loc) {
+    const char **fn = NULL;
+    HirNode **fv = NULL;
+    BUF_PUSH(fn, "_tag");
+    BUF_PUSH(fv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)variant->discriminant,
+                                                       &TYPE_I32_INST, TYPE_I32, loc}));
+    if (data_field != NULL) {
+        BUF_PUSH(fn, data_field);
+        BUF_PUSH(fv, data_val);
+    }
+    HirNode *lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
+    lit->struct_lit.field_names = fn;
+    lit->struct_lit.field_values = fv;
+    return lit;
+}
+
+// ── Expression lowering ────────────────────────────────────────────
 
 static HirNode *lower_lit(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
@@ -893,17 +932,7 @@ static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
     const EnumVariant *res_some = type_enum_find_variant(result_type, "Some");
     const EnumVariant *res_none = type_enum_find_variant(result_type, "None");
 
-    // Tag check: __tmp._tag == SOME_TAG
-    HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, loc);
-    HirNode *tag = lower_make_field_access(
-        low, &(FieldAccessSpec){tmp_ref, "_tag", &TYPE_I32_INST, false, loc});
-
-    HirNode *some_tag = lower_make_int_lit(
-        low, &(IntLitSpec){(uint64_t)some_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
-    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
-    cond->binary.op = TOKEN_EQUAL_EQUAL;
-    cond->binary.left = tag;
-    cond->binary.right = some_tag;
+    HirNode *cond = lower_enum_tag_check(low, tmp_sym, some_v, loc);
 
     // Then: extract inner, access field, wrap in Some
     HirNode *inner =
@@ -923,29 +952,12 @@ static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
         // Field is already Option — propagate directly (no double-wrap)
         then_val = field;
     } else {
-        // Wrap in Some of result type
-        const char **sfn = NULL;
-        HirNode **sfv = NULL;
-        BUF_PUSH(sfn, "_tag");
-        BUF_PUSH(sfv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)res_some->discriminant,
-                                                            &TYPE_I32_INST, TYPE_I32, loc}));
-        BUF_PUSH(sfn, "_data.Some._0");
-        BUF_PUSH(sfv, field);
-        then_val = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
-        then_val->struct_lit.field_names = sfn;
-        then_val->struct_lit.field_values = sfv;
+        then_val = lower_enum_variant_lit(low, res_some, "_data.Some._0", field, result_type, loc);
     }
     BUF_PUSH(low->compound_types, result_type);
 
     // Else: None of result type
-    const char **nfn = NULL;
-    HirNode **nfv = NULL;
-    BUF_PUSH(nfn, "_tag");
-    BUF_PUSH(nfv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)res_none->discriminant,
-                                                        &TYPE_I32_INST, TYPE_I32, loc}));
-    HirNode *none_lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
-    none_lit->struct_lit.field_names = nfn;
-    none_lit->struct_lit.field_values = nfv;
+    HirNode *none_lit = lower_enum_variant_lit(low, res_none, NULL, NULL, result_type, loc);
 
     // Build if
     HirNode *if_node = hir_new(low->hir_arena, HIR_IF, result_type, loc);
@@ -982,17 +994,7 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
 
     const EnumVariant *err_v = type_enum_find_variant(op_type, "Err");
 
-    // Tag check: __tmp._tag == ERR_TAG
-    HirNode *tmp_ref = lower_make_var_ref(low, tmp_sym, loc);
-    HirNode *tag = lower_make_field_access(
-        low, &(FieldAccessSpec){tmp_ref, "_tag", &TYPE_I32_INST, false, loc});
-
-    HirNode *err_tag = lower_make_int_lit(
-        low, &(IntLitSpec){(uint64_t)err_v->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
-    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
-    cond->binary.op = TOKEN_EQUAL_EQUAL;
-    cond->binary.left = tag;
-    cond->binary.right = err_tag;
+    HirNode *cond = lower_enum_tag_check(low, tmp_sym, err_v, loc);
 
     // Extract err data: __tmp._data.Err._0
     const Type *err_type = err_v->tuple_count > 0 ? err_v->tuple_types[0] : &TYPE_UNIT_INST;
@@ -1004,16 +1006,8 @@ static HirNode *lower_try_expr(Lower *low, const ASTNode *ast) {
     const Type *ret_type = low->fn_return_type;
     const EnumVariant *ret_err = type_enum_find_variant(ret_type, "Err");
 
-    const char **efn = NULL;
-    HirNode **efv = NULL;
-    BUF_PUSH(efn, "_tag");
-    BUF_PUSH(efv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)ret_err->discriminant,
-                                                        &TYPE_I32_INST, TYPE_I32, loc}));
-    BUF_PUSH(efn, "_data.Err._0");
-    BUF_PUSH(efv, err_data);
-    HirNode *err_lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, ret_type, loc);
-    err_lit->struct_lit.field_names = efn;
-    err_lit->struct_lit.field_values = efv;
+    HirNode *err_lit =
+        lower_enum_variant_lit(low, ret_err, "_data.Err._0", err_data, ret_type, loc);
     BUF_PUSH(low->compound_types, ret_type);
 
     // Return the Err
