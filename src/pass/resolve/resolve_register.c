@@ -541,6 +541,97 @@ static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, Pact
     BUF_FREE(pact_methods);
 }
 
+/** Apply defaults for missing assoc types and reject unknown ones. */
+static void validate_pact_assoc_types(Sema *sema, ASTNode *decl, StructDef *def,
+                                      const PactDef *pact, const char *pact_name) {
+    // Check required associated types — apply defaults when available
+    for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+        const char *at_name = pact->assoc_types[i].name;
+        bool found = false;
+        for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+            if (strcmp(def->assoc_types[j].name, at_name) != 0) {
+                continue;
+            }
+            if (def->assoc_types[j].pact_qualifier != NULL &&
+                strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
+                continue;
+            }
+            found = true;
+            break;
+        }
+        if (!found) {
+            if (pact->assoc_types[i].concrete_type != NULL) {
+                ASTAssocType defaulted = {
+                    .name = at_name,
+                    .pact_qualifier = NULL,
+                    .bounds = NULL,
+                    .concrete_type = pact->assoc_types[i].concrete_type,
+                };
+                BUF_PUSH(def->assoc_types, defaulted);
+                BUF_PUSH(decl->struct_decl.assoc_types, defaulted);
+            } else {
+                SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
+                         at_name, pact_name);
+            }
+        }
+    }
+    // Check struct doesn't define associated types not in the pact
+    for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+        const char *at_name = def->assoc_types[j].name;
+        if (def->assoc_types[j].pact_qualifier != NULL &&
+            strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
+            continue;
+        }
+        bool in_pact = false;
+        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+            if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
+                in_pact = true;
+                break;
+            }
+        }
+        if (!in_pact) {
+            SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'", at_name,
+                     pact_name);
+        }
+    }
+}
+
+/** Enforce pact-declared bounds on each associated type. */
+static void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def,
+                                           const PactDef *pact) {
+    for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
+        if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
+            continue;
+        }
+        const char *at_name = pact->assoc_types[i].name;
+        for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
+            if (strcmp(def->assoc_types[j].name, at_name) != 0) {
+                continue;
+            }
+            if (def->assoc_types[j].pact_qualifier != NULL &&
+                strcmp(def->assoc_types[j].pact_qualifier, pact->name) != 0) {
+                continue;
+            }
+            if (def->assoc_types[j].concrete_type == NULL) {
+                break;
+            }
+            const Type *concrete = resolve_ast_type(sema, def->assoc_types[j].concrete_type);
+            if (concrete == NULL || concrete->kind == TYPE_ERR) {
+                break;
+            }
+            for (int32_t b = 0; b < BUF_LEN(pact->assoc_types[i].bounds); b++) {
+                const char *bound = pact->assoc_types[i].bounds[b];
+                if (!type_satisfies_bound(sema, concrete, bound)) {
+                    SEMA_ERR(sema, decl->loc,
+                             "associated type '%s' = '%s' does not satisfy bound '%s'", at_name,
+                             type_name(sema->arena, concrete), bound);
+                }
+            }
+            break;
+        }
+    }
+}
+
 void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
     for (int32_t ci = 0; ci < BUF_LEN(decl->struct_decl.conformances); ci++) {
         const char *pact_name = decl->struct_decl.conformances[ci];
@@ -549,91 +640,8 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
             continue;
         }
-        // Check required associated types — apply defaults when available
-        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-            const char *at_name = pact->assoc_types[i].name;
-            bool found = false;
-            for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
-                if (strcmp(def->assoc_types[j].name, at_name) != 0) {
-                    continue;
-                }
-                // If qualified, only match when qualifier matches this pact
-                if (def->assoc_types[j].pact_qualifier != NULL &&
-                    strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                    continue;
-                }
-                found = true;
-                break;
-            }
-            if (!found) {
-                if (pact->assoc_types[i].concrete_type != NULL) {
-                    // Apply pact-side default
-                    ASTAssocType defaulted = {
-                        .name = at_name,
-                        .pact_qualifier = NULL,
-                        .bounds = NULL,
-                        .concrete_type = pact->assoc_types[i].concrete_type,
-                    };
-                    BUF_PUSH(def->assoc_types, defaulted);
-                    BUF_PUSH(decl->struct_decl.assoc_types, defaulted);
-                } else {
-                    SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
-                             at_name, pact_name);
-                }
-            }
-        }
-        // Check struct doesn't define associated types not in the pact
-        for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
-            const char *at_name = def->assoc_types[j].name;
-            // Skip types qualified for a different pact
-            if (def->assoc_types[j].pact_qualifier != NULL &&
-                strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                continue;
-            }
-            bool in_pact = false;
-            for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-                if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
-                    in_pact = true;
-                    break;
-                }
-            }
-            if (!in_pact) {
-                SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'",
-                         at_name, pact_name);
-            }
-        }
-        // Enforce bounds on associated types
-        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-            if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
-                continue;
-            }
-            const char *at_name = pact->assoc_types[i].name;
-            for (int32_t j = 0; j < BUF_LEN(def->assoc_types); j++) {
-                if (strcmp(def->assoc_types[j].name, at_name) != 0) {
-                    continue;
-                }
-                if (def->assoc_types[j].pact_qualifier != NULL &&
-                    strcmp(def->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                    continue;
-                }
-                if (def->assoc_types[j].concrete_type == NULL) {
-                    break;
-                }
-                const Type *concrete = resolve_ast_type(sema, def->assoc_types[j].concrete_type);
-                if (concrete == NULL || concrete->kind == TYPE_ERR) {
-                    break;
-                }
-                for (int32_t b = 0; b < BUF_LEN(pact->assoc_types[i].bounds); b++) {
-                    const char *bound = pact->assoc_types[i].bounds[b];
-                    if (!type_satisfies_bound(sema, concrete, bound)) {
-                        SEMA_ERR(sema, decl->loc,
-                                 "associated type '%s' = '%s' does not satisfy bound '%s'", at_name,
-                                 type_name(sema->arena, concrete), bound);
-                    }
-                }
-                break;
-            }
-        }
+        validate_pact_assoc_types(sema, decl, def, pact, pact_name);
+        enforce_pact_assoc_type_bounds(sema, decl, def, pact);
         enforce_pact_fields(sema, decl, def, pact);
         enforce_pact_methods(sema, decl, def, pact);
     }

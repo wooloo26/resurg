@@ -513,6 +513,52 @@ static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericS
 }
 
 /** Resolve struct literal name through aliases, generics, and type inference. */
+/**
+ * Try to resolve a generic type alias by pushing @p got explicit type args
+ * (filling remaining from defaults).  Returns the resolved StructDef or NULL.
+ */
+static StructDef *try_resolve_generic_type_alias(Sema *sema, ASTNode *node, GenericTypeAlias *gta,
+                                                 ASTType *type_args, int32_t got) {
+    int32_t expected = gta->base.type_param_count;
+    int32_t min_required = 0;
+    for (int32_t i = 0; i < expected; i++) {
+        if (gta->base.type_params[i].default_type == NULL) {
+            min_required = i + 1;
+        }
+    }
+    if (got < min_required || got > expected) {
+        return NULL;
+    }
+    // Push explicit type params
+    for (int32_t i = 0; i < got; i++) {
+        const Type *t = resolve_ast_type(sema, &type_args[i]);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+    }
+    // Fill defaults for remaining
+    for (int32_t i = got; i < expected; i++) {
+        const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
+        if (t == NULL) {
+            t = &TYPE_ERR_INST;
+        }
+        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+    }
+    const Type *result = resolve_ast_type(sema, &gta->alias_type);
+    for (int32_t i = 0; i < expected; i++) {
+        hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
+    }
+    if (result != NULL && result->kind == TYPE_STRUCT) {
+        StructDef *sdef = sema_lookup_struct(sema, result->struct_type.name);
+        if (sdef != NULL) {
+            node->struct_lit.name = sdef->name;
+        }
+        return sdef;
+    }
+    return NULL;
+}
+
 static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     const char *struct_name = node->struct_lit.name;
 
@@ -553,45 +599,8 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) > 0) {
         GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, struct_name);
         if (gta != NULL) {
-            int32_t expected = gta->base.type_param_count;
-            int32_t got = BUF_LEN(node->struct_lit.type_args);
-            // Count min required (params without defaults)
-            int32_t min_required = 0;
-            for (int32_t i = 0; i < expected; i++) {
-                if (gta->base.type_params[i].default_type == NULL) {
-                    min_required = i + 1;
-                }
-            }
-            if (got >= min_required && got <= expected) {
-                // Push explicit type params
-                for (int32_t i = 0; i < got; i++) {
-                    const Type *t = resolve_ast_type(sema, &node->struct_lit.type_args[i]);
-                    if (t == NULL) {
-                        t = &TYPE_ERR_INST;
-                    }
-                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
-                                      (void *)t);
-                }
-                // Fill defaults for remaining
-                for (int32_t i = got; i < expected; i++) {
-                    const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
-                    if (t == NULL) {
-                        t = &TYPE_ERR_INST;
-                    }
-                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
-                                      (void *)t);
-                }
-                const Type *result = resolve_ast_type(sema, &gta->alias_type);
-                for (int32_t i = 0; i < expected; i++) {
-                    hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
-                }
-                if (result != NULL && result->kind == TYPE_STRUCT) {
-                    sdef = sema_lookup_struct(sema, result->struct_type.name);
-                    if (sdef != NULL) {
-                        node->struct_lit.name = sdef->name;
-                    }
-                }
-            }
+            sdef = try_resolve_generic_type_alias(sema, node, gta, node->struct_lit.type_args,
+                                                  BUF_LEN(node->struct_lit.type_args));
         }
     }
 
@@ -611,35 +620,7 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     if (sdef == NULL && BUF_LEN(node->struct_lit.type_args) == 0) {
         GenericTypeAlias *gta = sema_lookup_generic_type_alias(sema, struct_name);
         if (gta != NULL) {
-            // Check if all params have defaults
-            bool all_defaults = true;
-            for (int32_t i = 0; i < gta->base.type_param_count; i++) {
-                if (gta->base.type_params[i].default_type == NULL) {
-                    all_defaults = false;
-                    break;
-                }
-            }
-            if (all_defaults) {
-                // Push default type params
-                for (int32_t i = 0; i < gta->base.type_param_count; i++) {
-                    const Type *t = resolve_ast_type(sema, gta->base.type_params[i].default_type);
-                    if (t == NULL) {
-                        t = &TYPE_ERR_INST;
-                    }
-                    hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name,
-                                      (void *)t);
-                }
-                const Type *result = resolve_ast_type(sema, &gta->alias_type);
-                for (int32_t i = 0; i < gta->base.type_param_count; i++) {
-                    hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
-                }
-                if (result != NULL && result->kind == TYPE_STRUCT) {
-                    sdef = sema_lookup_struct(sema, result->struct_type.name);
-                    if (sdef != NULL) {
-                        node->struct_lit.name = sdef->name;
-                    }
-                }
-            }
+            sdef = try_resolve_generic_type_alias(sema, node, gta, NULL, 0);
         }
     }
 

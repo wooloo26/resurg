@@ -256,6 +256,40 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
     scope_pop(sema);
 }
 
+/**
+ * If inside a Fn/FnMut closure, check whether @p name refers to a captured
+ * variable (i.e. not defined within the closure scope).  Fn closures may
+ * not mutate captures; FnMut closures record the mutation for codegen.
+ */
+static void check_closure_capture_mutation(Sema *sema, ASTNode *target) {
+    if (sema->closure.scope == NULL) {
+        return;
+    }
+    if (sema->closure.fn_kind != FN_CLOSURE && sema->closure.fn_kind != FN_CLOSURE_MUT) {
+        return;
+    }
+    const char *name = target->id.name;
+    bool found_local = false;
+    for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
+         s = s->parent) {
+        if (hash_table_lookup(&s->table, name) != NULL) {
+            found_local = true;
+            break;
+        }
+    }
+    if (found_local) {
+        return;
+    }
+    if (sema->closure.fn_kind == FN_CLOSURE) {
+        SEMA_ERR(sema, target->loc,
+                 "cannot assign mutable closure to Fn: "
+                 "captured variable '%s' is mutated",
+                 name);
+    } else {
+        sema->closure.captures_mutated = true;
+    }
+}
+
 /** Shared logic for simple and compound assignment type-checking. */
 static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode *value) {
     const Type *target_type = check_node(sema, target);
@@ -273,30 +307,7 @@ static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode 
         if (sym != NULL && sym->is_immut) {
             SEMA_ERR(sema, target->loc, "cannot assign to immutable var '%s'", target->id.name);
         }
-        // Check Fn closure: cannot mutate captured variables
-        if (sema->closure.scope != NULL &&
-            (sema->closure.fn_kind == FN_CLOSURE || sema->closure.fn_kind == FN_CLOSURE_MUT)) {
-            const char *name = target->id.name;
-            // Search only within the closure scope (closure params + body locals)
-            bool found_local = false;
-            for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
-                 s = s->parent) {
-                if (hash_table_lookup(&s->table, name) != NULL) {
-                    found_local = true;
-                    break;
-                }
-            }
-            if (!found_local) {
-                if (sema->closure.fn_kind == FN_CLOSURE) {
-                    SEMA_ERR(sema, target->loc,
-                             "cannot assign mutable closure to Fn: "
-                             "captured variable '%s' is mutated",
-                             name);
-                } else {
-                    sema->closure.captures_mutated = true;
-                }
-            }
-        }
+        check_closure_capture_mutation(sema, target);
     }
 
     return &TYPE_UNIT_INST;

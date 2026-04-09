@@ -301,6 +301,9 @@ static void emit_fns(CGen *cgen, const HirNode *file) {
     FILE *real_out = cgen->output;
     cgen->real_output = real_out;
     FILE *body_tmp = tmpfile();
+    if (body_tmp == NULL) {
+        rsg_fatal("emit_fns: failed to create temporary file");
+    }
     cgen->output = body_tmp;
 
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {

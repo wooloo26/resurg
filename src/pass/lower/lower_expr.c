@@ -573,9 +573,9 @@ static HirNode *lower_variadic_args(Lower *low, const ASTNode *ast, int32_t star
         BUF_PUSH(segments, seg);
     }
 
-    // If only one segment remains, return it directly
-    if (BUF_LEN(segments) == 1) {
-        return segments[0];
+    // If zero or one segment remains, return it directly
+    if (BUF_LEN(segments) <= 1) {
+        return BUF_LEN(segments) == 1 ? segments[0] : NULL;
     }
 
     // Multiple segments: fold with binary rsg_slice_concat calls.

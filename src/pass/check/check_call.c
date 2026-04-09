@@ -276,6 +276,63 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
 }
 
 /** Try to resolve a member call (enum variant, enum method, or struct method). */
+/**
+ * Handle module-qualified calls: mod::fn(args), mod::Enum::Variant(args),
+ * mod::Type, or mod::inner sub-module lookup.
+ *
+ * @return Resolved return type on direct function call hit,
+ *         TYPE_ERR on error, or NULL when the caller should continue dispatch.
+ */
+static const Type *try_module_qualified_call(Sema *sema, ASTNode *node, const Type *obj_type,
+                                             const char *method_name, const char **out_fn_name,
+                                             const Type **out_obj_type) {
+    const char *mod_name = obj_type->module_type.name;
+    const char *qualified;
+    if (strlen(mod_name) == 0) {
+        qualified = method_name;
+    } else {
+        qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
+    }
+
+    // Try as fn call: mod::fn(args)
+    FnSig *sig = sema_lookup_fn(sema, qualified);
+    if (sig != NULL) {
+        if (!sig->is_pub) {
+            SEMA_ERR(sema, node->loc, "'%s' is private in module '%s'", method_name, mod_name);
+            return &TYPE_ERR_INST;
+        }
+        node->call.callee->kind = NODE_ID;
+        node->call.callee->id.name = qualified;
+        for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+            check_node(sema, node->call.args[i]);
+        }
+        return resolve_call(sema, node, sig);
+    }
+
+    // Try as struct lit or enum access: mod::Type
+    StructDef *sdef = sema_lookup_struct(sema, qualified);
+    if (sdef != NULL) {
+        node->call.callee->member.object->type = sdef->type;
+        *out_fn_name = method_name;
+        return NULL;
+    }
+
+    EnumDef *edef = sema_lookup_enum(sema, qualified);
+    if (edef != NULL) {
+        node->call.callee->member.object->type = edef->type;
+        node->call.callee->member.object->id.name = qualified;
+        *out_obj_type = edef->type;
+        return NULL;
+    }
+
+    // Try as sub-module: mod::inner::...
+    Sym *mod_sym = scope_lookup(sema, qualified);
+    if (mod_sym != NULL && mod_sym->type != NULL && mod_sym->type->kind == TYPE_MODULE) {
+        *out_obj_type = mod_sym->type;
+    }
+    return NULL;
+}
+
 static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_name) {
     const char *method_name = node->call.callee->member.member;
     const Type *obj_type = NULL;
@@ -311,58 +368,10 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
 
     // Module-qualified call: mod::fn(args) or mod::Enum::Variant(args)
     if (obj_type != NULL && obj_type->kind == TYPE_MODULE) {
-        const char *mod_name = obj_type->module_type.name;
-        const char *qualified;
-        if (strlen(mod_name) == 0) {
-            qualified = method_name;
-        } else {
-            qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
-        }
-
-        // Try as fn call: mod::fn(args)
-        FnSig *sig = sema_lookup_fn(sema, qualified);
-        if (sig != NULL) {
-            // Visibility check: fn must be pub for external access
-            if (!sig->is_pub) {
-                SEMA_ERR(sema, node->loc, "'%s' is private in module '%s'", method_name, mod_name);
-                return &TYPE_ERR_INST;
-            }
-            // Rewrite callee to a simple id with the qualified name
-            node->call.callee->kind = NODE_ID;
-            node->call.callee->id.name = qualified;
-            for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-                check_node(sema, node->call.args[i]);
-            }
-            return resolve_call(sema, node, sig);
-        }
-
-        // Try as struct lit or enum access: mod::Type
-        StructDef *sdef = sema_lookup_struct(sema, qualified);
-        if (sdef != NULL) {
-            node->call.callee->member.object->type = sdef->type;
-            // Return the struct type — the caller will handle struct lit or method dispatch
-            *out_fn_name = method_name;
-            return NULL;
-        }
-
-        EnumDef *edef = sema_lookup_enum(sema, qualified);
-        if (edef != NULL) {
-            // Replace the object with the qualified enum type for further dispatch
-            node->call.callee->member.object->type = edef->type;
-            node->call.callee->member.object->id.name = qualified;
-            obj_type = edef->type;
-            // Fall through to enum variant handling below
-        }
-
-        // Try as sub-module: mod::inner::...
-        const Type *sub_mod = (const Type *)hash_table_lookup(&sema->type_alias_table, qualified);
-        if (sub_mod == NULL) {
-            // Check scope for the qualified name as a module
-            Sym *mod_sym = scope_lookup(sema, qualified);
-            if (mod_sym != NULL && mod_sym->type != NULL && mod_sym->type->kind == TYPE_MODULE) {
-                obj_type = mod_sym->type;
-                // Continue — this falls through to the rest of the dispatch
-            }
+        const Type *result =
+            try_module_qualified_call(sema, node, obj_type, method_name, out_fn_name, &obj_type);
+        if (result != NULL) {
+            return result;
         }
     }
 
@@ -478,11 +487,10 @@ static const Type **resolve_generic_type_args(Sema *sema, ASTNode *node, Generic
 }
 
 /** Validate pact bounds, associated type constraints, and where clauses. Returns false on error. */
-static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                    const Type **resolved_args) {
+/** Validate type params against their declared pact bounds. */
+static bool validate_pact_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                 const Type **resolved_args) {
     int32_t expected = gdef->type_param_count;
-
-    // Check bounds
     for (int32_t i = 0; i < expected; i++) {
         for (int32_t b = 0; b < BUF_LEN(gdef->type_params[i].bounds); b++) {
             const char *bound = gdef->type_params[i].bounds[b];
@@ -492,7 +500,15 @@ static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gde
                 return false;
             }
         }
-        // Check associated type constraints: T: Pact<Item = i32>
+    }
+    return true;
+}
+
+/** Validate associated type constraints (e.g. T: Pact<Item = i32>). */
+static bool validate_assoc_constraints(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                       const Type **resolved_args) {
+    int32_t expected = gdef->type_param_count;
+    for (int32_t i = 0; i < expected; i++) {
         for (int32_t c = 0; c < BUF_LEN(gdef->type_params[i].assoc_constraints); c++) {
             ASTAssocConstraint *ac = &gdef->type_params[i].assoc_constraints[c];
             if (resolved_args[i]->kind != TYPE_STRUCT) {
@@ -515,7 +531,6 @@ static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gde
                          type_name(sema->arena, resolved_args[i]), ac->assoc_name, ac->pact_name);
                 return false;
             }
-            // Resolve expected type (may reference other type params)
             const Type *expected_type = resolve_ast_type(sema, ac->expected_type);
             if (expected_type != NULL && expected_type->kind != TYPE_ERR &&
                 !type_equal(assoc_resolved, expected_type)) {
@@ -526,8 +541,13 @@ static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gde
             }
         }
     }
+    return true;
+}
 
-    // Check where clause bounds
+/** Validate where clause bounds (including association type projections). */
+static bool validate_where_clauses(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                   const Type **resolved_args) {
+    int32_t expected = gdef->type_param_count;
     ASTWhereClause *wcs = gdef->decl->fn_decl.where_clauses;
     for (int32_t w = 0; w < BUF_LEN(wcs); w++) {
         const Type *wc_type = NULL;
@@ -578,6 +598,14 @@ static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gde
         }
     }
     return true;
+}
+
+/** Validate all generic bounds: pact bounds, assoc constraints, and where clauses. */
+static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
+                                    const Type **resolved_args) {
+    return validate_pact_bounds(sema, node, gdef, resolved_args) &&
+           validate_assoc_constraints(sema, node, gdef, resolved_args) &&
+           validate_where_clauses(sema, node, gdef, resolved_args);
 }
 
 /** Build a concrete FnSig from a generic template and queue a deferred instantiation. */

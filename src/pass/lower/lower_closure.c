@@ -2,31 +2,39 @@
 
 // ── Closure capture analysis + lowering ────────────────────────────
 
+/** Invariant context for a single capture-scanning pass. */
+typedef struct {
+    const char **param_names;
+    int32_t param_count;
+    Lower *low;
+    const char ***out_names;
+    HirSym ***out_syms;
+} CaptureCtx;
+
 /** Recursively scan AST for NODE_ID references that aren't closure params. */
-static void scan_captures(const ASTNode *ast, const char **param_names, int32_t param_count,
-                          Lower *low, const char ***out_names, HirSym ***out_syms) {
+static void scan_captures(const CaptureCtx *ctx, const ASTNode *ast) {
     if (ast == NULL) {
         return;
     }
     if (ast->kind == NODE_ID) {
         const char *name = ast->id.name;
         // Skip if it's a closure param
-        for (int32_t i = 0; i < param_count; i++) {
-            if (strcmp(name, param_names[i]) == 0) {
+        for (int32_t i = 0; i < ctx->param_count; i++) {
+            if (strcmp(name, ctx->param_names[i]) == 0) {
                 return;
             }
         }
         // Skip if already captured
-        for (int32_t i = 0; i < BUF_LEN(*out_names); i++) {
-            if (strcmp(name, (*out_syms)[i]->name) == 0) {
+        for (int32_t i = 0; i < BUF_LEN(*ctx->out_names); i++) {
+            if (strcmp(name, (*ctx->out_syms)[i]->name) == 0) {
                 return;
             }
         }
         // Check if it refers to a local variable in enclosing scope
-        HirSym *sym = lower_scope_lookup(low, name);
+        HirSym *sym = lower_scope_lookup(ctx->low, name);
         if (sym != NULL && (sym->kind == HIR_SYM_VAR || sym->kind == HIR_SYM_PARAM)) {
-            BUF_PUSH(*out_names, sym->mangled_name);
-            BUF_PUSH(*out_syms, sym);
+            BUF_PUSH(*ctx->out_names, sym->mangled_name);
+            BUF_PUSH(*ctx->out_syms, sym);
         }
         return;
     }
@@ -36,50 +44,50 @@ static void scan_captures(const ASTNode *ast, const char **param_names, int32_t 
     // Recurse into children based on node kind
     switch (ast->kind) {
     case NODE_UNARY:
-        scan_captures(ast->unary.operand, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->unary.operand);
         break;
     case NODE_BINARY:
-        scan_captures(ast->binary.left, param_names, param_count, low, out_names, out_syms);
-        scan_captures(ast->binary.right, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->binary.left);
+        scan_captures(ctx, ast->binary.right);
         break;
     case NODE_CALL:
-        scan_captures(ast->call.callee, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->call.callee);
         for (int32_t i = 0; i < BUF_LEN(ast->call.args); i++) {
-            scan_captures(ast->call.args[i], param_names, param_count, low, out_names, out_syms);
+            scan_captures(ctx, ast->call.args[i]);
         }
         break;
     case NODE_BLOCK:
         for (int32_t i = 0; i < BUF_LEN(ast->block.stmts); i++) {
-            scan_captures(ast->block.stmts[i], param_names, param_count, low, out_names, out_syms);
+            scan_captures(ctx, ast->block.stmts[i]);
         }
         if (ast->block.result != NULL) {
-            scan_captures(ast->block.result, param_names, param_count, low, out_names, out_syms);
+            scan_captures(ctx, ast->block.result);
         }
         break;
     case NODE_IF:
-        scan_captures(ast->if_expr.cond, param_names, param_count, low, out_names, out_syms);
-        scan_captures(ast->if_expr.then_body, param_names, param_count, low, out_names, out_syms);
-        scan_captures(ast->if_expr.else_body, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->if_expr.cond);
+        scan_captures(ctx, ast->if_expr.then_body);
+        scan_captures(ctx, ast->if_expr.else_body);
         break;
     case NODE_RETURN:
-        scan_captures(ast->return_stmt.value, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->return_stmt.value);
         break;
     case NODE_VAR_DECL:
-        scan_captures(ast->var_decl.init, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->var_decl.init);
         break;
     case NODE_EXPR_STMT:
-        scan_captures(ast->expr_stmt.expr, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->expr_stmt.expr);
         break;
     case NODE_MEMBER:
-        scan_captures(ast->member.object, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->member.object);
         break;
     case NODE_IDX:
-        scan_captures(ast->idx_access.object, param_names, param_count, low, out_names, out_syms);
-        scan_captures(ast->idx_access.idx, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->idx_access.object);
+        scan_captures(ctx, ast->idx_access.idx);
         break;
     case NODE_ASSIGN:
-        scan_captures(ast->assign.target, param_names, param_count, low, out_names, out_syms);
-        scan_captures(ast->assign.value, param_names, param_count, low, out_names, out_syms);
+        scan_captures(ctx, ast->assign.target);
+        scan_captures(ctx, ast->assign.value);
         break;
     case NODE_LIT: // NOLINT(bugprone-branch-clone)
     case NODE_STR_INTERPOLATION:
@@ -106,7 +114,14 @@ HirNode *lower_closure(Lower *low, const ASTNode *ast) {
     // Scan for captured variables
     const char **capture_names = NULL;
     HirSym **capture_syms = NULL;
-    scan_captures(ast->closure.body, param_names, param_count, low, &capture_names, &capture_syms);
+    CaptureCtx cap_ctx = {
+        .param_names = param_names,
+        .param_count = param_count,
+        .low = low,
+        .out_names = &capture_names,
+        .out_syms = &capture_syms,
+    };
+    scan_captures(&cap_ctx, ast->closure.body);
 
     // Lower closure params to HIR_PARAM
     HirNode **hir_params = NULL;
