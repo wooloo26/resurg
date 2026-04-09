@@ -740,11 +740,23 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     check_call_args(sema, node, fn_name);
 
     // Built-in fns
-    if (fn_name != NULL && strcmp(fn_name, "assert") == 0) {
-        return &TYPE_UNIT_INST;
-    }
-    if (fn_name != NULL && (strcmp(fn_name, "print") == 0 || strcmp(fn_name, "println") == 0)) {
-        return &TYPE_UNIT_INST;
+    if (fn_name != NULL) {
+        const BuiltinFn *bfn = builtin_lookup_fn(&sema->builtins, fn_name);
+        if (bfn != NULL) {
+            if (bfn->kind == BUILTIN_LEN) {
+                if (BUF_LEN(node->call.args) != 1) {
+                    SEMA_ERR(sema, node->loc, "'len' expects exactly 1 argument");
+                    return &TYPE_ERR_INST;
+                }
+                const Type *arg_type = node->call.args[0]->type;
+                if (arg_type == NULL ||
+                    (arg_type->kind != TYPE_SLICE && arg_type->kind != TYPE_STR)) {
+                    SEMA_ERR(sema, node->loc, "'len' requires a slice or str argument");
+                    return &TYPE_ERR_INST;
+                }
+            }
+            return bfn->return_type;
+        }
     }
 
     // Generic call: fn_name<Type, ...>(args)

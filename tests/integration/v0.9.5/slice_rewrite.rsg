@@ -4,7 +4,7 @@
 
 fn test_slice_literal() {
     s := []i32{1, 2, 3, 4, 5}
-    assert(s.len == 5)
+    assert(len(s) == 5)
     assert(s[0] == 1)
     assert(s[4] == 5)
 }
@@ -13,14 +13,14 @@ fn test_slice_literal() {
 
 fn test_empty_slice() {
     s := []i32{}
-    assert(s.len == 0)
+    assert(len(s) == 0)
 }
 
 // ── typed slice declaration ──
 
 fn test_slice_typed() {
     var s: []i32 = []i32{10, 20, 30}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[1] == 20)
 }
 
@@ -39,7 +39,7 @@ fn test_array_to_slice_copy() {
 fn test_sub_slice_shared() {
     s := []i32{10, 20, 30, 40, 50}
     t := s[1..4]
-    assert(t.len == 3)
+    assert(len(t) == 3)
     assert(t[0] == 20)
     t[0] = 99
     assert(s[1] == 99)
@@ -50,14 +50,14 @@ fn test_sub_slice_shared() {
 fn test_sub_slice_open_end() {
     s := []i32{10, 20, 30, 40, 50}
     t := s[2..]
-    assert(t.len == 3)
+    assert(len(t) == 3)
     assert(t[0] == 30)
 }
 
 fn test_sub_slice_open_start() {
     s := []i32{10, 20, 30, 40, 50}
     t := s[..3]
-    assert(t.len == 3)
+    assert(len(t) == 3)
     assert(t[2] == 30)
 }
 
@@ -74,21 +74,21 @@ fn test_slice_mutation() {
 
 fn test_slice_bool() {
     s := []bool{true, false, true}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == true)
     assert(s[1] == false)
 }
 
 fn test_slice_str() {
     s := []str{"hello", "world"}
-    assert(s.len == 2)
+    assert(len(s) == 2)
     assert(s[0] == "hello")
     assert(s[1] == "world")
 }
 
 fn test_slice_f64() {
     s := []f64{1.5, 2.5, 3.5}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == 1.5)
 }
 
@@ -119,8 +119,8 @@ fn test_for_slice_value_index() {
 
 fn test_slice_of_slices() {
     s := [][]i32{[]i32{1, 2}, []i32{3, 4}}
-    assert(s.len == 2)
-    assert(s[0].len == 2)
+    assert(len(s) == 2)
+    assert(len(s[0]) == 2)
     assert(s[0][0] == 1)
     assert(s[1][1] == 4)
 }

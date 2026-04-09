@@ -1,56 +1,56 @@
 // v0.9.5 — str is fat pointer (data + length)
 
-// ── str.len on literal ──
+// ── len(str) on literal ──
 
 fn test_str_len() {
     s := "hello"
-    assert(s.len == 5)
+    assert(len(s) == 5)
 }
 
-// ── str.len on empty string ──
+// ── len(str) on empty string ──
 
 fn test_str_empty_len() {
     s := ""
-    assert(s.len == 0)
+    assert(len(s) == 0)
 }
 
-// ── str.len on single character ──
+// ── len(str) on single character ──
 
 fn test_str_single_char_len() {
     s := "a"
-    assert(s.len == 1)
+    assert(len(s) == 1)
 }
 
-// ── str.len with spaces ──
+// ── len(str) with spaces ──
 
 fn test_str_len_with_spaces() {
     s := "hello world"
-    assert(s.len == 11)
+    assert(len(s) == 11)
 }
 
-// ── str.len with different lengths ──
+// ── len(str) with different lengths ──
 
 fn test_str_len_two() {
     s := "ab"
-    assert(s.len == 2)
+    assert(len(s) == 2)
 }
 
 fn test_str_len_ten() {
     s := "0123456789"
-    assert(s.len == 10)
+    assert(len(s) == 10)
 }
 
-// ── str.len with explicit type annotation ──
+// ── len(str) with explicit type annotation ──
 
 fn test_str_len_typed() {
     var s: str = "test"
-    assert(s.len == 4)
+    assert(len(s) == 4)
 }
 
-// ── str.len via function parameter ──
+// ── len(str) via function parameter ──
 
 fn string_length(s: str) -> i32 {
-    s.len
+    len(s)
 }
 
 fn test_str_len_param() {
@@ -59,13 +59,13 @@ fn test_str_len_param() {
     assert(string_length("x") == 1)
 }
 
-// ── str.len after copy ──
+// ── len(str) after copy ──
 
 fn test_str_len_copy() {
     a := "test"
     b := a
-    assert(a.len == 4)
-    assert(b.len == 4)
+    assert(len(a) == 4)
+    assert(len(b) == 4)
 }
 
 // ── str equality still works ──
@@ -78,17 +78,17 @@ fn test_str_equality() {
     assert(a != c)
 }
 
-// ── str.len on interpolated string ──
+// ── len(str) on interpolated string ──
 
 fn test_str_len_interpolated() {
     name := "Bob"
     s := "Hi {name}"
-    assert(s.len == 6)
+    assert(len(s) == 6)
 }
 
-// ── str.len on longer string ──
+// ── len(str) on longer string ──
 
 fn test_str_len_long() {
     s := "the quick brown fox"
-    assert(s.len == 19)
+    assert(len(s) == 19)
 }

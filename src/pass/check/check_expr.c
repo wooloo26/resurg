@@ -251,20 +251,6 @@ const Type *check_member(Sema *sema, ASTNode *node) {
         return &TYPE_ERR_INST;
     }
 
-    // Slice .len access
-    if (object_type != NULL && object_type->kind == TYPE_SLICE) {
-        if (strcmp(node->member.member, "len") == 0) {
-            return &TYPE_I32_INST;
-        }
-    }
-
-    // str .len access
-    if (object_type != NULL && object_type->kind == TYPE_STR) {
-        if (strcmp(node->member.member, "len") == 0) {
-            return &TYPE_I32_INST;
-        }
-    }
-
     // Tuple field access: .0, .1, .2, ...
     if (object_type != NULL && object_type->kind == TYPE_TUPLE) {
         char *end = NULL;

@@ -6,7 +6,7 @@ struct Iterator {
 }
 
 fn iter_next(mut iter: *Iterator) -> ?i32 {
-    if iter.index < iter.items.len {
+    if iter.index < len(iter.items) {
         val := iter.items[iter.index]
         iter.index = iter.index + 1
         Some(val)

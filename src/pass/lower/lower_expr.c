@@ -259,6 +259,14 @@ static bool is_assert_callee(const ASTNode *callee) {
     return strcmp(callee->id.name, "assert") == 0;
 }
 
+/** Return true if the callee AST node resolves to the builtin "len". */
+static bool is_len_callee(const ASTNode *callee) {
+    if (callee->kind != NODE_ID) {
+        return false;
+    }
+    return strcmp(callee->id.name, "len") == 0;
+}
+
 /** Return true if the callee AST resolves to "print" or "println". */
 static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
     if (callee->kind != NODE_ID) {
@@ -353,6 +361,25 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
 
     return lower_make_builtin_call(low,
                                    &(BuiltinCallSpec){"rsg_assert", &TYPE_UNIT_INST, args, loc});
+}
+
+/**
+ * Expand len(arg) → arg.len (struct field access).
+ *
+ * Works on both slices and strings, whose C structs have a `len` field.
+ */
+static HirNode *lower_len_call(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    if (BUF_LEN(ast->call.args) != 1) {
+        return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
+    }
+    HirNode *arg = lower_expr(low, ast->call.args[0]);
+    bool via_ptr = false;
+    if (arg->type != NULL && arg->type->kind == TYPE_PTR) {
+        via_ptr = true;
+    }
+    return lower_make_field_access(low,
+                                   &(FieldAccessSpec){arg, "len", &TYPE_I32_INST, via_ptr, loc});
 }
 
 /** Lower a buf of AST expr nodes into a buf of HIR nodes. */
@@ -478,6 +505,10 @@ static HirNode *lower_call(Lower *low, const ASTNode *ast) {
         return lower_assert_call(low, ast);
     }
 
+    if (is_len_callee(ast->call.callee)) {
+        return lower_len_call(low, ast);
+    }
+
     bool newline = false;
     if (is_print_callee(ast->call.callee, &newline)) {
         return lower_print_call(low, ast, newline);
@@ -519,20 +550,6 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
     if (lookup_type != NULL && lookup_type->kind == TYPE_PTR) {
         lookup_type = lookup_type->ptr.pointee;
         via_ptr = true;
-    }
-
-    // Slice .len → struct field access on "len" (matches RsgSlice C field)
-    if (lookup_type != NULL && lookup_type->kind == TYPE_SLICE &&
-        strcmp(ast->member.member, "len") == 0) {
-        return lower_make_field_access(
-            low, &(FieldAccessSpec){object, "len", ast->type, via_ptr, ast->loc});
-    }
-
-    // str .len → struct field access on "len" (matches RsgStr C field)
-    if (lookup_type != NULL && lookup_type->kind == TYPE_STR &&
-        strcmp(ast->member.member, "len") == 0) {
-        return lower_make_field_access(
-            low, &(FieldAccessSpec){object, "len", ast->type, via_ptr, ast->loc});
     }
 
     // Struct field access

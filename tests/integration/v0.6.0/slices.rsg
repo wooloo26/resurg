@@ -4,7 +4,7 @@
 
 fn test_slice_literal() {
     s := []i32{1, 2, 3, 4, 5}
-    assert(s.len == 5)
+    assert(len(s) == 5)
     assert(s[0] == 1)
     assert(s[1] == 2)
     assert(s[2] == 3)
@@ -16,14 +16,14 @@ fn test_slice_literal() {
 
 fn test_empty_slice() {
     s := []i32{}
-    assert(s.len == 0)
+    assert(len(s) == 0)
 }
 
 // ── typed declaration ──
 
 fn test_slice_typed_declaration() {
     var s: []i32 = []i32{10, 20, 30}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == 10)
     assert(s[2] == 30)
 }
@@ -32,7 +32,7 @@ fn test_slice_typed_declaration() {
 
 fn test_slice_bool() {
     s := []bool{true, false, true}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == true)
     assert(s[1] == false)
     assert(s[2] == true)
@@ -42,7 +42,7 @@ fn test_slice_bool() {
 
 fn test_slice_str() {
     s := []str{"hello", "world"}
-    assert(s.len == 2)
+    assert(len(s) == 2)
     assert(s[0] == "hello")
     assert(s[1] == "world")
 }
@@ -51,7 +51,7 @@ fn test_slice_str() {
 
 fn test_slice_f64() {
     s := []f64{1.5, 2.5, 3.5}
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == 1.5)
     assert(s[2] == 3.5)
 }
@@ -70,7 +70,7 @@ fn test_slice_mutation() {
 
 fn sum_slice(s: []i32) -> i32 {
     total := 0
-    for 0..s.len |i| {
+    for 0..len(s) |i| {
         total = total + s[i]
     }
     total
@@ -85,6 +85,6 @@ fn test_slice_pass_to_function() {
 
 fn test_single_element_slice() {
     s := []i32{42}
-    assert(s.len == 1)
+    assert(len(s) == 1)
     assert(s[0] == 42)
 }

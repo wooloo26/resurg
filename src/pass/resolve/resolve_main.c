@@ -33,6 +33,8 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
     hash_table_init(&sema->generics.type_alias, NULL);
     hash_table_destroy(&sema->generics.type_params);
     hash_table_init(&sema->generics.type_params, NULL);
+    builtin_registry_destroy(&sema->builtins);
+    builtin_registry_init(&sema->builtins);
     BUF_FREE(sema->pending_insts);
     sema->pending_insts = NULL;
     BUF_FREE(sema->generic_ext_defs);
@@ -177,6 +179,7 @@ Sema *sema_create(Arena *arena) {
     hash_table_init(&sema->generics.enums, NULL);
     hash_table_init(&sema->generics.type_alias, NULL);
     hash_table_init(&sema->generics.type_params, NULL);
+    builtin_registry_init(&sema->builtins);
     sema->pending_insts = NULL;
     sema->generic_ext_defs = NULL;
     sema->synthetic_decls = NULL;
@@ -195,6 +198,7 @@ void sema_destroy(Sema *sema) {
         hash_table_destroy(&sema->generics.enums);
         hash_table_destroy(&sema->generics.type_alias);
         hash_table_destroy(&sema->generics.type_params);
+        builtin_registry_destroy(&sema->builtins);
         BUF_FREE(sema->pending_insts);
         BUF_FREE(sema->generic_ext_defs);
         BUF_FREE(sema->synthetic_decls);

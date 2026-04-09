@@ -212,17 +212,17 @@ Higher-order programming and code organization.
 ## v0.9.8 — Newtype
 
 - [ ] Newtype
+- [ ] `str` support escapes
 
 ## v0.9.9 — Before Ecosystem
 
-- [ ] `str` support escapes
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
 - [ ] Module resolution (file system)
 
 ## v0.9.10 — Prelude
 
-- [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, Primitive methods, `len()`, etc.), No longer hardcode
+- [ ] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
 - [ ] `panic(message)`
 - [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`

@@ -5,7 +5,7 @@
 fn test_array_to_slice_basic() {
     arr := [5]i32{1, 2, 3, 4, 5}
     s := arr[..]
-    assert(s.len == 5)
+    assert(len(s) == 5)
     assert(s[0] == 1)
     assert(s[4] == 5)
 }
@@ -15,7 +15,7 @@ fn test_array_to_slice_basic() {
 fn test_array_to_slice_typed() {
     arr := [3]i32{10, 20, 30}
     var s: []i32 = arr[..]
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == 10)
     assert(s[1] == 20)
     assert(s[2] == 30)
@@ -36,7 +36,7 @@ fn test_array_to_slice_copies() {
 fn test_array_to_slice_bool() {
     arr := [2]bool{true, false}
     s := arr[..]
-    assert(s.len == 2)
+    assert(len(s) == 2)
     assert(s[0] == true)
     assert(s[1] == false)
 }
@@ -46,7 +46,7 @@ fn test_array_to_slice_bool() {
 fn test_array_to_slice_str() {
     arr := [3]str{"a", "b", "c"}
     s := arr[..]
-    assert(s.len == 3)
+    assert(len(s) == 3)
     assert(s[0] == "a")
     assert(s[2] == "c")
 }
@@ -56,6 +56,6 @@ fn test_array_to_slice_str() {
 fn test_single_element_array_to_slice() {
     arr := [1]i32{42}
     s := arr[..]
-    assert(s.len == 1)
+    assert(len(s) == 1)
     assert(s[0] == 42)
 }
