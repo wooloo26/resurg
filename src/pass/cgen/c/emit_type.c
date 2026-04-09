@@ -73,8 +73,8 @@ static bool type_already_emitted(const Type **types, int32_t limit, const Type *
     return false;
 }
 
-/** Check if a value-type dependency is satisfied (emitted or not compound). */
-static bool dep_ready(const Type **compounds, const bool *done, int32_t count, const Type *dep) {
+/** Check if a value-type dependency is emitted (or not compound). */
+static bool dep_emitted(const Type **compounds, const bool *done, int32_t count, const Type *dep) {
     if (dep == NULL) {
         return true;
     }
@@ -83,7 +83,7 @@ static bool dep_ready(const Type **compounds, const bool *done, int32_t count, c
     }
     if (dep->kind != TYPE_STRUCT && dep->kind != TYPE_ENUM && dep->kind != TYPE_ARRAY &&
         dep->kind != TYPE_TUPLE) {
-        return true; // primitives always ready
+        return true; // primitives always emitted
     }
     for (int32_t i = 0; i < count; i++) {
         if (compounds[i] == dep) {
@@ -94,12 +94,12 @@ static bool dep_ready(const Type **compounds, const bool *done, int32_t count, c
 }
 
 /** Check if all by-value deps of a compound type are emitted. */
-static bool compound_deps_ready(const Type **compounds, const bool *done, int32_t count,
-                                const Type *type) {
+static bool compound_deps_emitted(const Type **compounds, const bool *done, int32_t count,
+                                  const Type *type) {
     switch (type->kind) {
     case TYPE_STRUCT:
         for (int32_t f = 0; f < type->struct_type.field_count; f++) {
-            if (!dep_ready(compounds, done, count, type->struct_type.fields[f].type)) {
+            if (!dep_emitted(compounds, done, count, type->struct_type.fields[f].type)) {
                 return false;
             }
         }
@@ -109,13 +109,13 @@ static bool compound_deps_ready(const Type **compounds, const bool *done, int32_
             const EnumVariant *var = &type->enum_type.variants[v];
             if (var->kind == ENUM_VARIANT_TUPLE) {
                 for (int32_t k = 0; k < var->tuple_count; k++) {
-                    if (!dep_ready(compounds, done, count, var->tuple_types[k])) {
+                    if (!dep_emitted(compounds, done, count, var->tuple_types[k])) {
                         return false;
                     }
                 }
             } else if (var->kind == ENUM_VARIANT_STRUCT) {
                 for (int32_t k = 0; k < var->field_count; k++) {
-                    if (!dep_ready(compounds, done, count, var->fields[k].type)) {
+                    if (!dep_emitted(compounds, done, count, var->fields[k].type)) {
                         return false;
                     }
                 }
@@ -123,10 +123,10 @@ static bool compound_deps_ready(const Type **compounds, const bool *done, int32_
         }
         return true;
     case TYPE_ARRAY:
-        return dep_ready(compounds, done, count, type->array.elem);
+        return dep_emitted(compounds, done, count, type->array.elem);
     case TYPE_TUPLE:
         for (int32_t i = 0; i < type->tuple.count; i++) {
-            if (!dep_ready(compounds, done, count, type->tuple.elems[i])) {
+            if (!dep_emitted(compounds, done, count, type->tuple.elems[i])) {
                 return false;
             }
         }
@@ -190,7 +190,7 @@ void emit_compound_typedefs(CGen *cgen) {
                 continue;
             }
             const Type *type = cgen->compound_types[i];
-            if (!compound_deps_ready(cgen->compound_types, done, count, type)) {
+            if (!compound_deps_emitted(cgen->compound_types, done, count, type)) {
                 continue;
             }
             const char *name = c_type_for(cgen, type);

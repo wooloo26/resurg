@@ -41,8 +41,8 @@ static HirNode *lower_str_part(Lower *low, const ASTNode *part) {
     return lowered;
 }
 
-/** Collect non-empty str parts into a buf. Returns NULL if empty. */
-static HirNode **collect_str_parts(Lower *low, const ASTNode *ast) {
+/** Collect non-empty str parts into a buf, skipping empty literals. */
+static HirNode **collect_nonempty_str_parts(Lower *low, const ASTNode *ast) {
     int32_t part_count = BUF_LEN(ast->str_interpolation.parts);
     HirNode **str_parts = NULL;
     for (int32_t i = 0; i < part_count; i++) {
@@ -78,7 +78,7 @@ HirNode *lower_str_interpolation(Lower *low, const ASTNode *ast) {
         return node;
     }
 
-    HirNode **str_parts = collect_str_parts(low, ast);
+    HirNode **str_parts = collect_nonempty_str_parts(low, ast);
     int32_t count = BUF_LEN(str_parts);
 
     if (count == 0) {

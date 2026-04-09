@@ -17,8 +17,8 @@
 #define PATH_SEP '/'
 #endif
 
-/** Compute the directory portion of @p file_path (arena-allocated). */
-static const char *dir_of(Arena *arena, const char *file_path) {
+/** Extract the directory portion of @p file_path (arena-allocated). */
+static const char *extract_dir_path(Arena *arena, const char *file_path) {
     const char *last_sep = strrchr(file_path, '/');
 #ifdef _WIN32
     const char *last_bsep = strrchr(file_path, '\\');
@@ -270,9 +270,9 @@ bool sema_resolve(Sema *sema, ASTNode *file) {
 
     // Derive module search directory from the first decl's source location
     if (BUF_LEN(file->file.decls) > 0 && file->file.decls[0]->loc.file != NULL) {
-        sema->module_search_dir = dir_of(sema->arena, file->file.decls[0]->loc.file);
+        sema->module_search_dir = extract_dir_path(sema->arena, file->file.decls[0]->loc.file);
     } else if (file->loc.file != NULL) {
-        sema->module_search_dir = dir_of(sema->arena, file->loc.file);
+        sema->module_search_dir = extract_dir_path(sema->arena, file->loc.file);
     }
 
     scope_push(sema, false); // global scope

@@ -76,7 +76,7 @@ static HirNode *lower_unary(Lower *low, const ASTNode *ast) {
 }
 
 /** Negate a boolean expr with a unary `!`. */
-static HirNode *build_bool_negate(Lower *low, HirNode *expr, SrcLoc loc) {
+static HirNode *lower_bool_negate(Lower *low, HirNode *expr, SrcLoc loc) {
     HirNode *neg = hir_new(low->hir_arena, HIR_UNARY, &TYPE_BOOL_INST, loc);
     neg->unary.op = TOKEN_BANG;
     neg->unary.operand = expr;
@@ -84,13 +84,13 @@ static HirNode *build_bool_negate(Lower *low, HirNode *expr, SrcLoc loc) {
 }
 
 /**
- * Build an equality check for a single elem pair.
+ * Lower a single elem-pair equality comparison.
  *
  * For TYPE_STR elems, emits rsg_str_equal(l, r) (negated for !=).
  * Otherwise emits a plain binary comparison.
  */
-static HirNode *build_equality_check(Lower *low, HirNode *left_elem, HirNode *right_elem,
-                                     TokenKind elem_op) {
+static HirNode *lower_elem_comparison(Lower *low, HirNode *left_elem, HirNode *right_elem,
+                                      TokenKind elem_op) {
     SrcLoc loc = left_elem->loc;
     const Type *elem_type = left_elem->type;
     if (elem_type->kind == TYPE_STR) {
@@ -100,7 +100,7 @@ static HirNode *build_equality_check(Lower *low, HirNode *left_elem, HirNode *ri
         HirNode *cmp = lower_make_builtin_call(
             low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, loc});
         if (elem_op != TOKEN_EQUAL_EQUAL) {
-            cmp = build_bool_negate(low, cmp, loc);
+            cmp = lower_bool_negate(low, cmp, loc);
         }
         return cmp;
     }
@@ -111,9 +111,9 @@ static HirNode *build_equality_check(Lower *low, HirNode *left_elem, HirNode *ri
     return cmp;
 }
 
-/** Join @p cmp into the running @p result chain with @p join_op. */
-static HirNode *join_comparison(Lower *low, HirNode *result, HirNode *cmp, TokenKind join_op,
-                                SrcLoc loc) {
+/** Chain @p cmp into the running @p result with @p join_op (&&/||). */
+static HirNode *chain_bool_result(Lower *low, HirNode *result, HirNode *cmp, TokenKind join_op,
+                                  SrcLoc loc) {
     if (result == NULL) {
         return cmp;
     }
@@ -133,8 +133,8 @@ typedef struct {
     SrcLoc loc;
 } ElemAccessSpec;
 
-/** Build an elem access: array idx or tuple idx depending on @p spec->kind. */
-static HirNode *build_elem_access(Lower *low, const ElemAccessSpec *spec) {
+/** Lower an elem access: array idx or tuple idx depending on @p spec->kind. */
+static HirNode *lower_elem_access(Lower *low, const ElemAccessSpec *spec) {
     HirNode *ref = lower_make_var_ref(low, spec->sym, spec->loc);
     if (spec->kind == HIR_IDX) {
         IntLitSpec idx_spec = {(uint64_t)spec->idx, &TYPE_I32_INST, TYPE_I32, spec->loc};
@@ -184,10 +184,10 @@ static HirNode *lower_compound_equality(Lower *low, const EqualitySpec *eq) {
         const Type *elem_type = is_array ? type->array.elem : type->tuple.elems[i];
         ElemAccessSpec left_ea = {left_sym, i, elem_type, access_kind, eq->loc};
         ElemAccessSpec right_ea = {right_sym, i, elem_type, access_kind, eq->loc};
-        HirNode *left_elem = build_elem_access(low, &left_ea);
-        HirNode *right_elem = build_elem_access(low, &right_ea);
-        HirNode *cmp = build_equality_check(low, left_elem, right_elem, elem_op);
-        result = join_comparison(low, result, cmp, join_op, eq->loc);
+        HirNode *left_elem = lower_elem_access(low, &left_ea);
+        HirNode *right_elem = lower_elem_access(low, &right_ea);
+        HirNode *cmp = lower_elem_comparison(low, left_elem, right_elem, elem_op);
+        result = chain_bool_result(low, result, cmp, join_op, eq->loc);
     }
 
     if (result == NULL) {
@@ -214,7 +214,7 @@ static HirNode *lower_str_equality(Lower *low, const EqualitySpec *eq) {
     HirNode *call = lower_make_builtin_call(
         low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, eq->loc});
     if (eq->op == TOKEN_BANG_EQUAL) {
-        return build_bool_negate(low, call, eq->loc);
+        return lower_bool_negate(low, call, eq->loc);
     }
     return call;
 }
@@ -268,8 +268,8 @@ static bool is_len_callee(const ASTNode *callee) {
     return strcmp(callee->id.name, "len") == 0;
 }
 
-/** Return true if the callee AST resolves to "print" or "println". */
-static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
+/** Match callee against "print" or "println"; set @p out_newline on match. */
+static bool match_print_callee(const ASTNode *callee, bool *out_newline) {
     if (callee->kind != NODE_ID) {
         return false;
     }
@@ -284,8 +284,8 @@ static bool is_print_callee(const ASTNode *callee, bool *out_newline) {
     return false;
 }
 
-/** Resolve the rsg_print[ln]_* fn name for @p type, derived from type_name(). */
-static const char *resolve_print_fn(Arena *arena, const Type *type, bool newline) {
+/** Compose the rsg_print[ln]_* fn name for @p type, derived from type_name(). */
+static const char *compose_print_fn_name(Arena *arena, const Type *type, bool newline) {
     if (!type_is_printable(type)) {
         return NULL;
     }
@@ -306,7 +306,7 @@ static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
     }
 
     HirNode *arg = lower_expr(low, ast->call.args[0]);
-    const char *fn_name = resolve_print_fn(low->hir_arena, arg->type, newline);
+    const char *fn_name = compose_print_fn_name(low->hir_arena, arg->type, newline);
     if (fn_name == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
     }
@@ -401,9 +401,9 @@ static HirNode **lower_elem_list(Lower *low, ASTNode **ast_elems) {
  * method calls (including promoted methods from embedded structs).
  * Returns NULL when the callee is not a recognized method.
  */
-/** Walk embedded structs to find a promoted method sym. */
-static HirSym *find_promoted_method(Lower *low, const Type *struct_type, const char *method_name,
-                                    HirNode **recv_ptr, bool via_ptr) {
+/** Walk embedded structs to look up a promoted method sym. */
+static HirSym *lookup_embedded_method(Lower *low, const Type *struct_type, const char *method_name,
+                                      HirNode **recv_ptr, bool via_ptr) {
     for (int32_t i = 0; i < struct_type->struct_type.embed_count; i++) {
         const Type *embed_type = struct_type->struct_type.embedded[i];
         const char *embed_key =
@@ -419,9 +419,9 @@ static HirSym *find_promoted_method(Lower *low, const Type *struct_type, const c
     return NULL;
 }
 
-/** Build a HIR_METHOD_CALL node from a resolved method sym. */
-static HirNode *build_method_call(Lower *low, const ASTNode *ast, HirNode *recv,
-                                  const HirSym *method_sym) {
+/** Lower a resolved method sym into a HIR_METHOD_CALL node. */
+static HirNode *lower_method_call_node(Lower *low, const ASTNode *ast, HirNode *recv,
+                                       const HirSym *method_sym) {
     HirNode **args = lower_elem_list(low, ast->call.args);
     HirNode *node = hir_new(low->hir_arena, HIR_METHOD_CALL, ast->type, ast->loc);
     node->method_call.recv = method_sym->is_static ? NULL : recv;
@@ -458,7 +458,7 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         HirSym *method_sym = lower_scope_lookup(low, method_key);
         if (method_sym != NULL) {
             HirNode *recv = lower_expr(low, member_ast->member.object);
-            return build_method_call(low, ast, recv, method_sym);
+            return lower_method_call_node(low, ast, recv, method_sym);
         }
     }
 
@@ -477,11 +477,11 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         HirSym *method_sym = lower_scope_lookup(low, key);
 
         if (method_sym == NULL) {
-            method_sym = find_promoted_method(low, obj_type, method_name, &recv, via_ptr);
+            method_sym = lookup_embedded_method(low, obj_type, method_name, &recv, via_ptr);
         }
 
         if (method_sym != NULL) {
-            return build_method_call(low, ast, recv, method_sym);
+            return lower_method_call_node(low, ast, recv, method_sym);
         }
     }
 
@@ -494,7 +494,7 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
             HirSym *method_sym = lower_scope_lookup(low, key);
             if (method_sym != NULL) {
                 HirNode *recv = lower_expr(low, member_ast->member.object);
-                return build_method_call(low, ast, recv, method_sym);
+                return lower_method_call_node(low, ast, recv, method_sym);
             }
         }
     }
@@ -601,7 +601,7 @@ static HirNode *lower_call(Lower *low, const ASTNode *ast) {
     }
 
     bool newline = false;
-    if (is_print_callee(ast->call.callee, &newline)) {
+    if (match_print_callee(ast->call.callee, &newline)) {
         return lower_print_call(low, ast, newline);
     }
 
@@ -798,8 +798,9 @@ static int32_t find_ast_field_idx(const ASTNode *ast, const char *name) {
     return -1;
 }
 
-/** Collect AST-level promoted fields that belong to @p embed_type into a sub-lit. */
-static HirNode *collect_promoted_fields(Lower *low, const ASTNode *ast, const Type *embed_type) {
+/** Gather AST-level promoted field values for @p embed_type into a sub-literal. */
+static HirNode *gather_embedded_field_values(Lower *low, const ASTNode *ast,
+                                             const Type *embed_type) {
     const char **sub_names = NULL;
     HirNode **sub_values = NULL;
 
@@ -848,7 +849,7 @@ static HirNode *lower_struct_lit(Lower *low, const ASTNode *ast) {
                 BUF_PUSH(field_names, sf->name);
                 BUF_PUSH(field_values, lower_expr(low, ast->struct_lit.field_values[ai]));
             } else {
-                HirNode *sub = collect_promoted_fields(low, ast, sf->type);
+                HirNode *sub = gather_embedded_field_values(low, ast, sf->type);
                 if (sub != NULL) {
                     BUF_PUSH(field_names, sf->name);
                     BUF_PUSH(field_values, sub);

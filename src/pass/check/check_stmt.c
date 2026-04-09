@@ -3,7 +3,7 @@
 // ── Reserved-prefix validation ─────────────────────────────────────────
 
 /**
- * Return true (and emit a diagnostic) if @p name starts with a prefix
+ * Emit a diagnostic and return true if @p name starts with a prefix
  * reserved for the pipeline or runtime.  Checked prefixes:
  *
  *   rsg_   – runtime fns / types
@@ -11,7 +11,7 @@
  *   _rsg   – codegen temporaries and internal vars
  *   _Rsg   – codegen compound-type names
  */
-static bool is_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
+static bool check_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
     bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "rsgu_", 5) == 0 ||
                     strncmp(name, "_rsg", 4) == 0 || strncmp(name, "_Rsg", 4) == 0;
     if (reserved) {
@@ -177,7 +177,7 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
         // Same-scope rebinding is allowed (shadowing)
     }
 
-    is_reserved_id(sema, node->loc, node->var_decl.name);
+    check_reserved_id(sema, node->loc, node->var_decl.name);
 
     scope_define(sema, &(SymDef){node->var_decl.name, var_type, false, SYM_VAR});
 
@@ -193,7 +193,7 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
 }
 
 void check_fn_body(Sema *sema, ASTNode *fn_node) {
-    is_reserved_id(sema, fn_node->loc, fn_node->fn_decl.name);
+    check_reserved_id(sema, fn_node->loc, fn_node->fn_decl.name);
 
     scope_push(sema, false);
 
@@ -209,7 +209,7 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
             param_type = type_create_slice(sema->arena, param_type);
         }
         param->type = param_type;
-        is_reserved_id(sema, param->loc, param->param.name);
+        check_reserved_id(sema, param->loc, param->param.name);
         scope_define(sema, &(SymDef){param->param.name, param_type, false, SYM_PARAM});
     }
 
@@ -372,10 +372,10 @@ static void check_for(Sema *sema, ASTNode *node) {
         if (iter_type != NULL && iter_type->kind == TYPE_SLICE) {
             elem_type = iter_type->slice.elem;
         }
-        is_reserved_id(sema, node->loc, node->for_loop.var_name);
+        check_reserved_id(sema, node->loc, node->for_loop.var_name);
         scope_define(sema, &(SymDef){node->for_loop.var_name, elem_type, false, SYM_VAR});
         if (node->for_loop.idx_name != NULL) {
-            is_reserved_id(sema, node->loc, node->for_loop.idx_name);
+            check_reserved_id(sema, node->loc, node->for_loop.idx_name);
             scope_define(sema, &(SymDef){node->for_loop.idx_name, &TYPE_I32_INST, false, SYM_VAR});
         }
         check_node(sema, node->for_loop.body);
@@ -385,7 +385,7 @@ static void check_for(Sema *sema, ASTNode *node) {
         check_node(sema, node->for_loop.start);
         check_node(sema, node->for_loop.end);
         scope_push(sema, true);
-        is_reserved_id(sema, node->loc, node->for_loop.var_name);
+        check_reserved_id(sema, node->loc, node->for_loop.var_name);
         scope_define(sema, &(SymDef){node->for_loop.var_name, &TYPE_I32_INST, false, SYM_VAR});
         check_node(sema, node->for_loop.body);
         scope_pop(sema);
