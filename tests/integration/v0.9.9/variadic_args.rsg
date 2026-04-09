@@ -1,0 +1,186 @@
+// v0.9.9 — Variadic Arguments: ..T parameter type and ..expr spread syntax
+// EXPECT-STDOUT: a b c
+// EXPECT-STDOUT: count: 3
+// EXPECT-STDOUT: 1 2 3
+
+// ── basic variadic function with single type ──
+
+fn sum(values: ..i32) -> i32 {
+    total := 0
+    for values |v| { total += v }
+    total
+}
+
+fn test_variadic_single_arg() {
+    assert(sum(42) == 42)
+}
+
+fn test_variadic_multiple_args() {
+    assert(sum(1, 2, 3) == 6)
+}
+
+fn test_variadic_many_args() {
+    assert(sum(1, 2, 3, 4, 5) == 15)
+}
+
+// ── variadic with zero arguments ──
+
+fn test_variadic_zero_args() {
+    assert(sum() == 0)
+}
+
+// ── variadic with regular prefix parameters ──
+
+fn log_sum(prefix: str, values: ..i32) -> i32 {
+    total := 0
+    for values |v| { total += v }
+    total
+}
+
+fn test_variadic_with_prefix_param() {
+    result := log_sum("test", 10, 20, 30)
+    assert(result == 60)
+}
+
+fn test_variadic_with_prefix_zero_variadic() {
+    result := log_sum("empty")
+    assert(result == 0)
+}
+
+// ── spread a slice into variadic call ──
+
+fn test_variadic_spread_slice() {
+    nums := []i32{1, 2, 3}
+    assert(sum(..nums) == 6)
+}
+
+// ── mix positional and spread ──
+
+fn test_variadic_mixed_spread() {
+    nums := []i32{1, 2, 3}
+    assert(sum(0, ..nums, 99) == 105)
+}
+
+fn test_variadic_spread_with_prefix_param() {
+    nums := []i32{5, 10}
+    result := log_sum("tag", 1, ..nums, 100)
+    assert(result == 116)
+}
+
+// ── variadic with index in for loop ──
+
+fn sum_indexed(values: ..i32) -> i32 {
+    total := 0
+    for values |v, i| {
+        total += v * (i + 1)
+    }
+    total
+}
+
+fn test_variadic_for_with_index() {
+    // 1*1 + 2*2 + 3*3 = 1+4+9 = 14
+    assert(sum_indexed(1, 2, 3) == 14)
+}
+
+// ── len() on variadic parameter ──
+
+fn count_manual(values: ..i32) -> i32 {
+    n := 0
+    for values |_| { n += 1 }
+    n
+}
+
+fn test_variadic_len_manual() {
+    assert(count_manual() == 0)
+    assert(count_manual(1) == 1)
+    assert(count_manual(1, 2, 3) == 3)
+}
+
+fn test_variadic_len_builtin() {
+    // variadic param is a []T, so len() should work
+    assert(len_variadic() == 0)
+    assert(len_variadic(1) == 1)
+    assert(len_variadic(1, 2, 3) == 3)
+}
+
+fn len_variadic(values: ..i32) -> i32 {
+    len(values)
+}
+
+// ── variadic with string type ──
+
+fn join_strings(sep: str, parts: ..str) -> str {
+    result := ""
+    for parts |p, i| {
+        if i > 0 { result = "{result}{sep}{p}" }
+        else { result = p }
+    }
+    result
+}
+
+fn test_variadic_str() {
+    s := join_strings(" ", "a", "b", "c")
+    println(s)
+    assert(s == "a b c")
+}
+
+// ── variadic with bool type ──
+
+fn any_true(flags: ..bool) -> bool {
+    for flags |f| {
+        if f { return true }
+    }
+    false
+}
+
+fn test_variadic_bool() {
+    assert(any_true(false, false, true) == true)
+    assert(any_true(false, false) == false)
+    assert(any_true() == false)
+}
+
+// ── pass variadic slice to another function ──
+
+fn double_sum(values: ..i32) -> i32 {
+    sum(..values) * 2
+}
+
+fn test_variadic_forward() {
+    assert(double_sum(1, 2, 3) == 12)
+}
+
+// ── variadic with f64 ──
+
+fn sum_f64(values: ..f64) -> f64 {
+    total := 0.0
+    for values |v| { total += v }
+    total
+}
+
+fn test_variadic_f64() {
+    result := sum_f64(1.5, 2.5, 3.0)
+    assert(result == 7.0)
+}
+
+// ── spread empty slice ──
+
+fn test_variadic_spread_empty() {
+    empty := []i32{}
+    assert(sum(..empty) == 0)
+}
+
+// ── variadic used with println ──
+
+fn print_all(values: ..i32) {
+    count := len(values)
+    println("count: {count}")
+    for values |v, i| {
+        if i > 0 { print(" ") }
+        print("{v}")
+    }
+    println("")
+}
+
+fn test_variadic_print() {
+    print_all(1, 2, 3)
+}

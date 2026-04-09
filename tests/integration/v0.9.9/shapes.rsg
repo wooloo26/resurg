@@ -1,0 +1,4 @@
+// SKIP: module file, not a standalone test
+
+pub mod circle
+pub mod rect

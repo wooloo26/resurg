@@ -159,7 +159,10 @@ ASTNode *ast_clone(Arena *arena, ASTNode *src) {
         dst->call.args = clone_node_buf(arena, src->call.args);
         dst->call.arg_names = clone_str_buf(src->call.arg_names);
         dst->call.arg_is_mut = clone_bool_buf(src->call.arg_is_mut);
+        dst->call.arg_is_spread = clone_bool_buf(src->call.arg_is_spread);
         dst->call.type_args = clone_ast_type_buf(src->call.type_args);
+        dst->call.variadic_start = src->call.variadic_start;
+        dst->call.variadic_type = src->call.variadic_type;
         break;
     case NODE_FOR:
         dst->for_loop = src->for_loop;

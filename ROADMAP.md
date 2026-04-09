@@ -216,9 +216,9 @@ Higher-order programming and code organization.
 
 ## v0.9.9 — Before Ecosystem
 
-- [ ] Variadic Arguments
-- [ ] Documentation Comments
-- [ ] Module resolution (file system)
+- [x] Variadic Arguments
+- [x] Documentation Comments
+- [x] Module resolution (file system)
 
 ## v0.9.10 — Prelude
 
@@ -227,13 +227,13 @@ Higher-order programming and code organization.
 - [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`
 
-## v0.9.11 — Standard Library
-
-- [ ] Comprehensive standard library (`std/io`, …)
-  
-## v0.9.12 — Test Cases
+## v0.9.11 — Test Cases
 
 - [ ] Better Test Cases
+
+## v0.9.12 — Standard Library
+
+- [ ] Comprehensive standard library (`std/io`, …)
 
 ## v1.0 — Stable Release
 
@@ -276,6 +276,6 @@ Language completeness, tooling, and ecosystem.
 - [ ] Official website + documentation
 - [ ] Web Playground (WASM-powered)
 
-### Types
+### GAT
 
 - [ ] Generic Associated Types

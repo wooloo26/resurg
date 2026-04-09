@@ -1,0 +1,12 @@
+// TEST: compile_error
+// EXPECT-ERROR: field 'secret' is private
+
+mod field_vis_mod
+
+use self::field_vis_mod::Config
+use self::field_vis_mod::make_config
+
+fn main() {
+    c := make_config()
+    x := c.secret
+}

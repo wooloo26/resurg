@@ -424,13 +424,15 @@ static ASTNode *parse_struct_decl(Parser *parser) {
             if (parser_match(parser, TOKEN_EQUAL)) {
                 parser_parse_type(parser);
             }
-        } else if (parser_check(parser, TOKEN_ID)) {
-            const char *name = parser_advance(parser)->lexeme;
+        } else if (parser_check(parser, TOKEN_PUB) || parser_check(parser, TOKEN_ID)) {
+            bool is_pub_field = parser_match(parser, TOKEN_PUB);
+            const char *name = parser_expect(parser, TOKEN_ID)->lexeme;
 
             if (parser_match(parser, TOKEN_COLON)) {
-                // Field: name: Type [= default]
+                // Field: [pub] name: Type [= default]
                 ASTStructField field = {0};
                 field.name = name;
+                field.is_pub = is_pub_field;
                 field.type = parser_parse_type(parser);
                 field.default_value = NULL;
                 if (parser_match(parser, TOKEN_EQUAL)) {
@@ -566,13 +568,29 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
             SrcLoc param_loc = parser_current_loc(parser);
             ASTNode *param = ast_new(parser->arena, NODE_PARAM, param_loc);
             param->param.is_mut = parser_match(parser, TOKEN_MUT);
+            param->param.is_variadic = false;
             param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
             parser_expect(parser, TOKEN_COLON);
+            // Detect variadic: `name: ..T`
+            if (parser_match(parser, TOKEN_DOT_DOT)) {
+                param->param.is_variadic = true;
+            }
             param->param.type = parser_parse_type(parser);
             BUF_PUSH(node->fn_decl.params, param);
         } while (parser_match(parser, TOKEN_COMMA));
     }
     parser_expect(parser, TOKEN_RIGHT_PAREN);
+
+    // Validate: variadic param must be last
+    {
+        int32_t param_count = BUF_LEN(node->fn_decl.params);
+        for (int32_t i = 0; i < param_count; i++) {
+            ASTNode *p = node->fn_decl.params[i];
+            if (p->param.is_variadic && i != param_count - 1) {
+                rsg_err(p->loc, "variadic must be last parameter");
+            }
+        }
+    }
 
     // Return type
     node->fn_decl.return_type.kind = AST_TYPE_INFERRED;

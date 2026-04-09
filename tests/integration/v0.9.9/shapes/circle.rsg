@@ -1,0 +1,6 @@
+// SKIP: module file, not a standalone test
+
+/// Computes the area of a circle.
+pub fn area(radius: f64) -> f64 {
+    3.14159265358979 * radius * radius
+}

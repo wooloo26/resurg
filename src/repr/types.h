@@ -53,6 +53,7 @@ typedef struct Type Type;
 typedef struct {
     const char *name;
     const Type *type;
+    bool is_pub;
 } StructField;
 
 /** Variant kind in an enum type. */

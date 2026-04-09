@@ -502,6 +502,95 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
     return NULL;
 }
 
+/** Build a HIR_SLICE_LIT node from variadic call-site args. */
+static HirNode *lower_variadic_args(Lower *low, const ASTNode *ast, int32_t start,
+                                    const Type *slice_type) {
+    SrcLoc loc = ast->loc;
+    int32_t arg_count = BUF_LEN(ast->call.args);
+    int32_t va_count = arg_count - start;
+
+    // Count spread vs positional args
+    bool has_spread = false;
+    bool has_positional = false;
+    for (int32_t i = start; i < arg_count; i++) {
+        bool is_spread = ast->call.arg_is_spread != NULL && ast->call.arg_is_spread[i];
+        if (is_spread) {
+            has_spread = true;
+        } else {
+            has_positional = true;
+        }
+    }
+
+    // Case 1: Single spread, no positional — pass spread expression directly
+    if (has_spread && !has_positional && va_count == 1) {
+        return lower_expr(low, ast->call.args[start]);
+    }
+
+    // Case 2: All positional, no spread — build a HIR_SLICE_LIT
+    if (!has_spread) {
+        HirNode **elems = NULL;
+        for (int32_t i = start; i < arg_count; i++) {
+            BUF_PUSH(elems, lower_expr(low, ast->call.args[i]));
+        }
+        HirNode *slice_lit = hir_new(low->hir_arena, HIR_SLICE_LIT, slice_type, loc);
+        slice_lit->slice_lit.elems = elems;
+        return slice_lit;
+    }
+
+    // Case 3: Mixed spread + positional — build inline block that constructs slice.
+    // Collects segments: each segment is either a single element or a spread slice.
+    // Result is a block that: 1) computes total len, 2) allocs, 3) copies, 4) creates slice.
+    // We generate:
+    //   { var _seg0 = elem0; var _seg1 = spread_slice; var _seg2 = elem2; ...
+    //     var _len = 1 + _seg1.len + 1;
+    //     var _s = []T with capacity _len;  (emitted as a slice lit placeholder)
+    //     ... copy segments into _s ... }
+    // For simplicity, collect all positional into sub-groups and spreads as-is,
+    // then build via concatenation of slice literals and spreads.
+
+    // Build segments: alternating positional-group slice lits and spread expressions
+    HirNode **segments = NULL;
+    HirNode **pos_group = NULL;
+
+    for (int32_t i = start; i < arg_count; i++) {
+        bool is_spread = ast->call.arg_is_spread != NULL && ast->call.arg_is_spread[i];
+        if (is_spread) {
+            // Flush accumulated positional group as a slice lit
+            if (BUF_LEN(pos_group) > 0) {
+                HirNode *seg = hir_new(low->hir_arena, HIR_SLICE_LIT, slice_type, loc);
+                seg->slice_lit.elems = pos_group;
+                BUF_PUSH(segments, seg);
+                pos_group = NULL;
+            }
+            BUF_PUSH(segments, lower_expr(low, ast->call.args[i]));
+        } else {
+            BUF_PUSH(pos_group, lower_expr(low, ast->call.args[i]));
+        }
+    }
+    if (BUF_LEN(pos_group) > 0) {
+        HirNode *seg = hir_new(low->hir_arena, HIR_SLICE_LIT, slice_type, loc);
+        seg->slice_lit.elems = pos_group;
+        BUF_PUSH(segments, seg);
+    }
+
+    // If only one segment remains, return it directly
+    if (BUF_LEN(segments) == 1) {
+        return segments[0];
+    }
+
+    // Multiple segments: fold with binary rsg_slice_concat calls.
+    // rsg_slice_concat(a, b) → CGen appends sizeof(T) automatically.
+    HirNode *result = segments[0];
+    for (int32_t i = 1; i < BUF_LEN(segments); i++) {
+        HirNode **args = NULL;
+        BUF_PUSH(args, result);
+        BUF_PUSH(args, segments[i]);
+        result = lower_make_builtin_call(
+            low, &(BuiltinCallSpec){"rsg_slice_concat", slice_type, args, loc});
+    }
+    return result;
+}
+
 static HirNode *lower_call(Lower *low, const ASTNode *ast) {
     if (is_assert_callee(ast->call.callee)) {
         return lower_assert_call(low, ast);
@@ -521,6 +610,39 @@ static HirNode *lower_call(Lower *low, const ASTNode *ast) {
         if (method != NULL) {
             return method;
         }
+    }
+
+    // Variadic call: pack variadic args into a single slice argument
+    if (ast->call.variadic_start >= 0) {
+        HirNode *callee = lower_expr(low, ast->call.callee);
+        HirNode **args = NULL;
+
+        // Lower fixed args
+        for (int32_t i = 0; i < ast->call.variadic_start; i++) {
+            BUF_PUSH(args, lower_expr(low, ast->call.args[i]));
+        }
+
+        // Use the variadic slice type stored by the checker
+        const Type *slice_type = ast->call.variadic_type;
+        if (slice_type == NULL) {
+            slice_type = ast->type; // fallback to return type
+        }
+
+        // Check if there are zero variadic args
+        int32_t va_count = BUF_LEN(ast->call.args) - ast->call.variadic_start;
+        if (va_count == 0) {
+            // Empty variadic → empty slice literal
+            HirNode *empty = hir_new(low->hir_arena, HIR_SLICE_LIT, slice_type, ast->loc);
+            empty->slice_lit.elems = NULL;
+            BUF_PUSH(args, empty);
+        } else {
+            BUF_PUSH(args, lower_variadic_args(low, ast, ast->call.variadic_start, slice_type));
+        }
+
+        HirNode *node = hir_new(low->hir_arena, HIR_CALL, ast->type, ast->loc);
+        node->call.callee = callee;
+        node->call.args = args;
+        return node;
     }
 
     HirNode *callee = lower_expr(low, ast->call.callee);

@@ -359,18 +359,23 @@ static ASTNode *parse_primary(Parser *parser) {
 
 // ── Postfix / unary / precedence climbing ──────────────────────────────
 
-/** Parse a comma-separated arg list (posal, named, and mut). */
+/** Parse a comma-separated arg list (posal, named, mut, and spread). */
 static ASTNode *parse_call_args(Parser *parser, ASTNode *callee, SrcLoc loc) {
     ASTNode *node = ast_new(parser->arena, NODE_CALL, loc);
     node->call.callee = callee;
     node->call.args = NULL;
     node->call.arg_names = NULL;
     node->call.arg_is_mut = NULL;
+    node->call.arg_is_spread = NULL;
+    node->call.variadic_start = -1;
+    node->call.variadic_type = NULL;
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
         do {
             parser_skip_newlines(parser);
             bool is_mut_arg = parser_match(parser, TOKEN_MUT);
-            bool is_named_arg = parser_check(parser, TOKEN_ID) && parser->pos + 1 < parser->count &&
+            bool is_spread_arg = parser_match(parser, TOKEN_DOT_DOT);
+            bool is_named_arg = !is_spread_arg && parser_check(parser, TOKEN_ID) &&
+                                parser->pos + 1 < parser->count &&
                                 parser->tokens[parser->pos + 1].kind == TOKEN_EQUAL;
             if (is_named_arg) {
                 const char *arg_name = parser_advance(parser)->lexeme;
@@ -379,11 +384,13 @@ static ASTNode *parse_call_args(Parser *parser, ASTNode *callee, SrcLoc loc) {
                 BUF_PUSH(node->call.args, value);
                 BUF_PUSH(node->call.arg_names, arg_name);
                 BUF_PUSH(node->call.arg_is_mut, is_mut_arg);
+                BUF_PUSH(node->call.arg_is_spread, false);
             } else {
                 ASTNode *arg = parser_parse_expr(parser);
                 BUF_PUSH(node->call.args, arg);
                 BUF_PUSH(node->call.arg_names, (const char *)NULL);
                 BUF_PUSH(node->call.arg_is_mut, is_mut_arg);
+                BUF_PUSH(node->call.arg_is_spread, is_spread_arg);
             }
         } while (parser_match(parser, TOKEN_COMMA));
     }
@@ -475,6 +482,7 @@ static ASTNode *parse_generic_postfix(Parser *parser, ASTNode *left, SrcLoc loc)
         call->call.arg_names = NULL;
         call->call.arg_is_mut = NULL;
         call->call.type_args = type_args;
+        call->call.variadic_start = -1;
         return call;
     }
 
@@ -718,6 +726,7 @@ static ASTNode *parse_precedence(Parser *parser, Precedence minimum_precedence) 
                 call->call.arg_names = NULL;
                 call->call.arg_is_mut = NULL;
                 call->call.type_args = NULL;
+                call->call.variadic_start = -1;
                 BUF_PUSH(call->call.args, left);
                 left = call;
             }

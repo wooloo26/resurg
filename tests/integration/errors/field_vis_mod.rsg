@@ -1,0 +1,11 @@
+// SKIP: module file, not a standalone test
+
+pub struct Config {
+    pub name: str = "default"
+    secret: i32 = 42
+    pub enabled: bool = true
+}
+
+pub fn make_config() -> Config {
+    Config { name = "test", secret = 99, enabled = true }
+}

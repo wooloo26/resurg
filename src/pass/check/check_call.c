@@ -47,6 +47,20 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     if (node->call.arg_names == NULL || arg_count == 0) {
         return;
     }
+
+    // Skip reordering when no arg is actually named (all positional).
+    bool has_named = false;
+    for (int32_t i = 0; i < arg_count; i++) {
+        if (node->call.arg_names[i] != NULL) {
+            has_named = true;
+            break;
+        }
+    }
+    if (!has_named) {
+        node->call.arg_names = NULL;
+        return;
+    }
+
     ASTNode **reordered = NULL;
     for (int32_t i = 0; i < sig->param_count; i++) {
         BUF_PUSH(reordered, (ASTNode *)NULL);
@@ -65,6 +79,9 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
             }
         } else if (i < BUF_LEN(reordered)) {
             reordered[i] = node->call.args[i];
+        } else {
+            // Excess positional args beyond param_count (variadic) — append.
+            BUF_PUSH(reordered, node->call.args[i]);
         }
     }
     node->call.args = reordered;
@@ -73,14 +90,28 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
 
 /**
  * Validate arg count against @p sig, promote lit args, and type-check each arg.
+ * Handles variadic parameters: when the last param is variadic (..T → []T),
+ * remaining call-site args are checked against the element type.
  */
 static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     int32_t arg_count = BUF_LEN(node->call.args);
-    if (arg_count != sig->param_count) {
-        SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
-        return;
+    int32_t fixed_count = sig->has_variadic ? sig->param_count - 1 : sig->param_count;
+
+    if (sig->has_variadic) {
+        // Variadic: need at least the fixed args
+        if (arg_count < fixed_count) {
+            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", fixed_count, arg_count);
+            return;
+        }
+    } else {
+        if (arg_count != sig->param_count) {
+            SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
+            return;
+        }
     }
-    for (int32_t i = 0; i < arg_count; i++) {
+
+    // Check fixed (non-variadic) args
+    for (int32_t i = 0; i < fixed_count && i < arg_count; i++) {
         ASTNode *arg = node->call.args[i];
         if (arg == NULL) {
             continue;
@@ -93,6 +124,45 @@ static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *
             SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
                      type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
         }
+    }
+
+    // Check variadic args against the slice element type
+    if (sig->has_variadic && arg_count > fixed_count) {
+        const Type *slice_type = sig->param_types[sig->param_count - 1];
+        const Type *elem_type =
+            (slice_type != NULL && slice_type->kind == TYPE_SLICE) ? slice_type->slice.elem : NULL;
+        for (int32_t i = fixed_count; i < arg_count; i++) {
+            ASTNode *arg = node->call.args[i];
+            if (arg == NULL || elem_type == NULL) {
+                continue;
+            }
+            bool is_spread = node->call.arg_is_spread != NULL && node->call.arg_is_spread[i];
+            if (is_spread) {
+                // Spread arg must be a []T matching the variadic slice type
+                promote_lit(arg, slice_type);
+                const Type *arg_type = arg->type;
+                if (arg_type != NULL && !type_assignable(arg_type, slice_type) &&
+                    arg_type->kind != TYPE_ERR) {
+                    SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
+                             type_name(sema->arena, slice_type), type_name(sema->arena, arg_type));
+                }
+            } else {
+                // Individual arg must match element type
+                promote_lit(arg, elem_type);
+                const Type *arg_type = arg->type;
+                if (arg_type != NULL && !type_assignable(arg_type, elem_type) &&
+                    arg_type->kind != TYPE_ERR) {
+                    SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
+                             type_name(sema->arena, elem_type), type_name(sema->arena, arg_type));
+                }
+            }
+        }
+    }
+
+    // Annotate the call for the lower pass
+    if (sig->has_variadic) {
+        node->call.variadic_start = fixed_count;
+        node->call.variadic_type = sig->param_types[sig->param_count - 1];
     }
 }
 
@@ -520,11 +590,16 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
     sig->param_types = NULL;
     sig->param_names = NULL;
     sig->is_pub = false;
+    sig->has_variadic = false;
     for (int32_t i = 0; i < sig->param_count; i++) {
         ASTNode *param = orig->fn_decl.params[i];
         const Type *pt = resolve_ast_type(sema, &param->param.type);
         if (pt == NULL) {
             pt = &TYPE_ERR_INST;
+        }
+        if (param->param.is_variadic) {
+            pt = type_create_slice(sema->arena, pt);
+            sig->has_variadic = true;
         }
         BUF_PUSH(sig->param_types, pt);
         BUF_PUSH(sig->param_names, param->param.name);

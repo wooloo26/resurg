@@ -31,6 +31,10 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
         if (pt == NULL) {
             pt = &TYPE_ERR_INST;
         }
+        // Variadic param: ..T → []T (slice type)
+        if (param->param.is_variadic) {
+            pt = type_create_slice(sema->arena, pt);
+        }
         param->type = pt;
         scope_define(sema, &(SymDef){param->param.name, pt, false, SYM_PARAM});
     }

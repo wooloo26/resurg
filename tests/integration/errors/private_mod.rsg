@@ -1,0 +1,3 @@
+// SKIP: module file, not a standalone test
+
+fn secret() -> i32 { 42 }

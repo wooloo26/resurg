@@ -32,6 +32,7 @@ struct FnSig {
     int32_t param_count;
     bool is_pub;
     bool is_ptr_recv;
+    bool has_variadic; // true when last param is variadic (..T)
 };
 
 /** Base for all generic templates (fn, struct, enum). */
@@ -72,6 +73,7 @@ typedef struct StructFieldInfo {
     const char *name;
     const Type *type;
     ASTNode *default_value; // may be NULL (field is required)
+    bool is_pub;
 } StructFieldInfo;
 
 /** A method def inside a struct. */
@@ -141,16 +143,18 @@ struct Sema {
     const Type *expected_type;    // expected type for current expr (bidirectional inference)
     const Type *fn_return_type;   // return type of the enclosing function (for Ok/Err/None)
     const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
-    ClosureCtx closure;           // closure capture tracking (check pass)
-    ASTNode *file_node;           // root file node (for appending monomorphized fns)
-    BuiltinRegistry builtins;     // centralized built-in fn/member registry
-    HashTable type_alias_table;   // name → const Type*
-    HashTable fn_table;           // name → FnSig*
-    HashTable struct_table;       // name → StructDef*
-    HashTable enum_table;         // name → EnumDef*
-    HashTable pact_table;         // name → PactDef*
-    GenericTables generics;       // generic template tables + active type params
-    GenericInst *pending_insts;   /* buf - deferred generic instantiations */
+    const char *current_module;   // current module prefix (e.g. "math_helper"); NULL for root file
+    const char *module_search_dir;    // directory for resolving filesystem modules
+    ClosureCtx closure;               // closure capture tracking (check pass)
+    ASTNode *file_node;               // root file node (for appending monomorphized fns)
+    BuiltinRegistry builtins;         // centralized built-in fn/member registry
+    HashTable type_alias_table;       // name → const Type*
+    HashTable fn_table;               // name → FnSig*
+    HashTable struct_table;           // name → StructDef*
+    HashTable enum_table;             // name → EnumDef*
+    HashTable pact_table;             // name → PactDef*
+    GenericTables generics;           // generic template tables + active type params
+    GenericInst *pending_insts;       /* buf - deferred generic instantiations */
     GenericExtDef **generic_ext_defs; /* buf - generic ext templates */
     ASTNode **synthetic_decls;        /* buf - monomorphized struct/enum decls to append */
 };

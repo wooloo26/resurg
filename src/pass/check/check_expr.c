@@ -2,6 +2,26 @@
 
 // ── Shared helpers ─────────────────────────────────────────────────────
 
+/** Return true when @p struct_name belongs to a foreign module and the
+ *  current context is NOT inside an ext block for that type. */
+static bool is_foreign_struct(const Sema *sema, const char *struct_name) {
+    const char *dot = strchr(struct_name, '.');
+    if (dot == NULL) {
+        return false; // same-file struct
+    }
+    if (sema->self_type_name != NULL && strcmp(sema->self_type_name, struct_name) == 0) {
+        return false; // inside ext block for this type
+    }
+    if (sema->current_module != NULL) {
+        size_t mod_len = strlen(sema->current_module);
+        if (strncmp(struct_name, sema->current_module, mod_len) == 0 &&
+            struct_name[mod_len] == '.') {
+            return false; // same-module struct
+        }
+    }
+    return true;
+}
+
 ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc) {
     ASTNode *call = ast_new(arena, NODE_CALL, loc);
     ASTNode *callee = ast_new(arena, NODE_MEMBER, loc);
@@ -14,6 +34,7 @@ ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc
     call->call.arg_names = NULL;
     call->call.arg_is_mut = NULL;
     call->call.type_args = NULL;
+    call->call.variadic_start = -1;
     call->type = enum_type;
     return call;
 }
@@ -278,6 +299,11 @@ const Type *check_member(Sema *sema, ASTNode *node) {
         // Check own fields (including embedded struct fields by name, e.g., e.Base)
         const StructField *sf = type_struct_find_field(object_type, field_name);
         if (sf != NULL) {
+            if (!sf->is_pub && is_foreign_struct(sema, object_type->struct_type.name)) {
+                SEMA_ERR(sema, node->loc, "field '%s' is private in struct '%s'", field_name,
+                         object_type->struct_type.name);
+                return &TYPE_ERR_INST;
+            }
             return sf->type;
         }
 
@@ -633,6 +659,7 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
     }
 
     // Check that all provided fields exist and have the right types
+    bool foreign = is_foreign_struct(sema, sdef->name);
     int32_t provided_count = BUF_LEN(node->struct_lit.field_names);
     for (int32_t i = 0; i < provided_count; i++) {
         const char *fname = node->struct_lit.field_names[i];
@@ -640,11 +667,18 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
 
         // Find the field type for expected_type propagation
         const Type *field_type = NULL;
+        bool field_is_pub = false;
         for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
             if (strcmp(sdef->fields[j].name, fname) == 0) {
                 field_type = sdef->fields[j].type;
+                field_is_pub = sdef->fields[j].is_pub;
                 break;
             }
+        }
+
+        // Check field visibility for cross-module access
+        if (field_type != NULL && !field_is_pub && foreign) {
+            SEMA_ERR(sema, fvalue->loc, "field '%s' is private in struct '%s'", fname, struct_name);
         }
 
         // Set expected type before checking (aids closure param inference)

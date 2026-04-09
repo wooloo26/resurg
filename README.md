@@ -845,6 +845,55 @@ where
 }
 ```
 
+### Generic Associated Types (Proposal)
+
+Associated types with generic parameters — enables higher-kinded polymorphism patterns.
+
+```rsg
+pact Mapper {
+    type Item
+    type Mapped<T>                    // GAT declaration
+    fn map<U>(m, f: fn(Self::Item) -> U) -> Self::Mapped<U>
+}
+
+pact Iterable {
+    type Item
+    type Iter<T>                       // GAT: iterator over T
+    fn iter(*i) -> Self::Iter<Self::Item>
+}
+
+struct Vec<T> { data: []T }
+
+ext<T> Vec<T> impl Iterable {
+    type Item = T
+    type Iter<U> = VecIter<U>          // concretize GAT
+    
+    fn iter(*v) -> VecIter<T> { ... }
+}
+
+// Usage: chained transforms with type inference
+nums := Vec<i32> { data = [1, 2, 3] }
+result := nums.iter()
+               .map(|x| x * 2)         // Iter<i32> → Iter<i32>
+               .filter(|x| x > 3)      // Iter<i32> → Iter<i32>
+               .collect()              // []i32
+```
+
+**Constraints on GATs:**
+
+```rsg
+pact Repository {
+    type Entity
+    type Query<R> where R: Clone      // bounded GAT
+    fn find<Q>(*r, q: Q) -> ?Self::Query<Q::Result>
+    where 
+        Q: Criterion<Result = Entity>
+        Q::Result: Clone
+}
+```
+
+> **Note**: GATs are monomorphized at compile-time. `Self::Mapped<U>` resolves to a concrete type per instantiation.
+
 ---
 
 ## 8. Functions & Closures

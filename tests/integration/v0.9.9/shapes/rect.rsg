@@ -1,0 +1,6 @@
+// SKIP: module file, not a standalone test
+
+/// Computes the perimeter of a rectangle.
+pub fn perimeter(w: f64, h: f64) -> f64 {
+    2.0 * (w + h)
+}

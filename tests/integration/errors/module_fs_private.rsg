@@ -1,0 +1,8 @@
+// TEST: compile_error
+// EXPECT-ERROR: private
+
+mod private_mod
+
+fn main() {
+    private_mod::secret()
+}

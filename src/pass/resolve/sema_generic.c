@@ -347,15 +347,19 @@ static StructMethodInfo **struct_resolve_members(Sema *sema, ASTNode *orig, Type
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
         }
-        StructFieldInfo fi = {
-            .name = ast_field->name, .type = field_type, .default_value = ast_field->default_value};
+        StructFieldInfo fi = {.name = ast_field->name,
+                              .type = field_type,
+                              .default_value = ast_field->default_value,
+                              .is_pub = ast_field->is_pub};
         BUF_PUSH(def->fields, fi);
     }
 
     // Backpatch the forward-declared Type* with resolved fields
     StructField *type_fields = NULL;
     for (int32_t i = 0; i < BUF_LEN(def->fields); i++) {
-        StructField sf = {.name = def->fields[i].name, .type = def->fields[i].type};
+        StructField sf = {.name = def->fields[i].name,
+                          .type = def->fields[i].type,
+                          .is_pub = def->fields[i].is_pub};
         BUF_PUSH(type_fields, sf);
     }
     stub->struct_type.fields = type_fields;

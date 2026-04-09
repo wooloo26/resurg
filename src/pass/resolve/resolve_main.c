@@ -1,5 +1,12 @@
+#include <sys/stat.h>
+
 #include "_sema.h"
+#include "pass/lex/lex.h"
+#include "rsg/pass/parse/parse.h"
 #include "rsg/pass/resolve/resolve.h"
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#endif
 
 /**
  * @file resolve_main.c
@@ -10,6 +17,78 @@
  */
 
 // ── Static helpers ─────────────────────────────────────────────────
+
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
+/** Read a file into a NUL-terminated heap buffer. Returns NULL on failure. */
+static char *read_module_file(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return NULL;
+    }
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return NULL;
+    }
+    size_t size = (size_t)st.st_size;
+    char *buf = rsg_calloc(size + 1, 1);
+    size_t n = fread(buf, 1, size, f);
+    fclose(f);
+    if (n != size) {
+        free(buf);
+        return NULL;
+    }
+    return buf;
+}
+
+/** Compute the directory portion of @p file_path (arena-allocated). */
+static const char *dir_of(Arena *arena, const char *file_path) {
+    const char *last_sep = strrchr(file_path, '/');
+#ifdef _WIN32
+    const char *last_bsep = strrchr(file_path, '\\');
+    if (last_bsep != NULL && (last_sep == NULL || last_bsep > last_sep)) {
+        last_sep = last_bsep;
+    }
+#endif
+    if (last_sep == NULL) {
+        return arena_strdup(arena, ".");
+    }
+    size_t len = (size_t)(last_sep - file_path);
+    char *dir = arena_alloc(arena, len + 1);
+    memcpy(dir, file_path, len);
+    dir[len] = '\0';
+    return dir;
+}
+
+/**
+ * Load a filesystem module: read the file, lex, and parse.
+ * Returns the parsed declarations or NULL on failure.
+ */
+ASTNode **load_module_decls(Sema *sema, const char *mod_path) {
+    char *src = read_module_file(mod_path);
+    if (src == NULL) {
+        return NULL;
+    }
+    Lex *lex = lex_create(src, mod_path, sema->arena);
+    Token *tokens = lex_scan_all(lex);
+    lex_destroy(lex);
+
+    int32_t count = BUF_LEN(tokens);
+    Parser *parser = parser_create(tokens, count, sema->arena, mod_path);
+    ASTNode *file_node = parser_parse(parser);
+    int32_t errs = parser_err_count(parser);
+    parser_destroy(parser);
+    free(src);
+
+    if (errs > 0 || file_node == NULL) {
+        return NULL;
+    }
+    return file_node->file.decls;
+}
 
 /** Destroy and reinitialize all hash tables and buffers for a fresh compilation. */
 static void sema_destroy_and_reinit_tables(Sema *sema) {
@@ -73,10 +152,22 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
             continue;
         }
         if (decl->module.decls == NULL) {
-            rsg_warn(decl->loc,
-                     "'mod %s' declares a sub-module and requires file resolution "
-                     "(not yet supported); declaration ignored",
-                     decl->module.name);
+            // Filesystem module resolution: load <name>.rsg from module search dir
+            const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->module_search_dir,
+                                                 PATH_SEP, decl->module.name);
+            ASTNode **decls = load_module_decls(sema, mod_path);
+            if (decls == NULL) {
+                SEMA_ERR(sema, decl->loc, "cannot find module file '%s'", mod_path);
+                continue;
+            }
+            decl->module.decls = decls;
+
+            // Child modules of this file search in <search_dir>/<name>/
+            const char *prev_dir = sema->module_search_dir;
+            sema->module_search_dir =
+                arena_sprintf(sema->arena, "%s%c%s", prev_dir, PATH_SEP, decl->module.name);
+            register_module_decl(sema, decl);
+            sema->module_search_dir = prev_dir;
             continue;
         }
         register_module_decl(sema, decl);
@@ -166,6 +257,8 @@ Sema *sema_create(Arena *arena) {
     sema->expected_type = NULL;
     sema->fn_return_type = NULL;
     sema->self_type_name = NULL;
+    sema->current_module = NULL;
+    sema->module_search_dir = NULL;
     sema->closure = (ClosureCtx){0};
     sema->file_node = NULL;
     sema->method_checker = NULL;
@@ -209,6 +302,14 @@ void sema_destroy(Sema *sema) {
 bool sema_resolve(Sema *sema, ASTNode *file) {
     sema_destroy_and_reinit_tables(sema);
     sema->file_node = file;
+
+    // Derive module search directory from the first decl's source location
+    if (BUF_LEN(file->file.decls) > 0 && file->file.decls[0]->loc.file != NULL) {
+        sema->module_search_dir = dir_of(sema->arena, file->file.decls[0]->loc.file);
+    } else if (file->loc.file != NULL) {
+        sema->module_search_dir = dir_of(sema->arena, file->loc.file);
+    }
+
     scope_push(sema, false); // global scope
     register_all_decls(sema, file);
     return sema->err_count == 0;

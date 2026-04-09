@@ -100,6 +100,7 @@ typedef struct {
     const char *name;
     ASTType type;
     ASTNode *default_value; // may be NULL
+    bool is_pub;
 } ASTStructField;
 
 /** Variant kind in an enum decl. */
@@ -281,7 +282,8 @@ struct ASTNode {
         struct {
             const char *name;
             ASTType type;
-            bool is_mut; // true for `mut name: *T`
+            bool is_mut;      // true for `mut name: *T`
+            bool is_variadic; // true for `name: ..T`
         } param;
 
         // NODE_VAR_DECL
@@ -345,10 +347,13 @@ struct ASTNode {
         // NODE_CALL
         struct {
             ASTNode *callee;
-            ASTNode **args;         /* buf */
-            const char **arg_names; /* buf - NULL entry = posal */
-            bool *arg_is_mut;       /* buf - true = `mut` at call site */
-            ASTType *type_args;     /* buf - explicit generic type args */
+            ASTNode **args;            /* buf */
+            const char **arg_names;    /* buf - NULL entry = posal */
+            bool *arg_is_mut;          /* buf - true = `mut` at call site */
+            bool *arg_is_spread;       /* buf - true = `..expr` at call site */
+            ASTType *type_args;        /* buf - explicit generic type args */
+            int32_t variadic_start;    /* -1 = not variadic; >= 0 = index of first variadic arg */
+            const Type *variadic_type; /* slice type for variadic param (set by checker) */
         } call;
 
         // NODE_MEMBER

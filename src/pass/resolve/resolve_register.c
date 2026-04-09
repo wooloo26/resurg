@@ -1,5 +1,11 @@
 #include "_sema.h"
 
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
 /**
  * @file resolve_register.c
  * @brief Declaration registration — first-pass symbol table population.
@@ -24,7 +30,8 @@ static void compose_struct_fields(Sema *sema, const ASTNode *decl, StructDef *de
         }
         for (int32_t j = 0; j < embed_def->type->struct_type.field_count; j++) {
             const StructField *ef = &embed_def->type->struct_type.fields[j];
-            StructFieldInfo fi = {.name = ef->name, .type = ef->type, .default_value = NULL};
+            StructFieldInfo fi = {
+                .name = ef->name, .type = ef->type, .default_value = NULL, .is_pub = ef->is_pub};
             for (int32_t k = 0; k < BUF_LEN(embed_def->fields); k++) {
                 if (strcmp(embed_def->fields[k].name, ef->name) == 0) {
                     fi.default_value = embed_def->fields[k].default_value;
@@ -53,7 +60,8 @@ static void compose_struct_fields(Sema *sema, const ASTNode *decl, StructDef *de
             }
             StructFieldInfo fi = {.name = ast_field->name,
                                   .type = field_type,
-                                  .default_value = ast_field->default_value};
+                                  .default_value = ast_field->default_value,
+                                  .is_pub = ast_field->is_pub};
             BUF_PUSH(def->fields, fi);
         }
     }
@@ -72,7 +80,7 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
         StructDef *embed_def = sema_lookup_struct(sema, def->embedded[i]);
         if (embed_def != NULL) {
             BUF_PUSH(embedded_types, embed_def->type);
-            StructField sf = {.name = def->embedded[i], .type = embed_def->type};
+            StructField sf = {.name = def->embedded[i], .type = embed_def->type, .is_pub = true};
             BUF_PUSH(type_fields, sf);
         }
     }
@@ -84,7 +92,7 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
         }
-        StructField sf = {.name = ast_field->name, .type = field_type};
+        StructField sf = {.name = ast_field->name, .type = field_type, .is_pub = ast_field->is_pub};
         BUF_PUSH(type_fields, sf);
     }
 
@@ -119,12 +127,18 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
     sig->param_names = NULL;
     sig->param_count = BUF_LEN(decl->fn_decl.params);
     sig->is_pub = is_pub;
+    sig->has_variadic = false;
 
     for (int32_t j = 0; j < sig->param_count; j++) {
         ASTNode *param = decl->fn_decl.params[j];
         const Type *pt = resolve_ast_type(sema, &param->param.type);
         if (pt == NULL) {
             pt = &TYPE_ERR_INST;
+        }
+        // Variadic param: ..T → []T (slice type)
+        if (param->param.is_variadic) {
+            pt = type_create_slice(sema->arena, pt);
+            sig->has_variadic = true;
         }
         BUF_PUSH(sig->param_types, pt);
         BUF_PUSH(sig->param_names, param->param.name);
@@ -448,7 +462,8 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
         }
-        StructFieldInfo fi = {.name = ast_field->name, .type = field_type, .default_value = NULL};
+        StructFieldInfo fi = {
+            .name = ast_field->name, .type = field_type, .default_value = NULL, .is_pub = true};
         BUF_PUSH(def->fields, fi);
     }
 
@@ -718,6 +733,26 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
             // Nested sub-module: prefix its name and recurse
             const char *orig_name = inner->module.name;
             inner->module.name = arena_sprintf(sema->arena, "%s.%s", mod_name, orig_name);
+
+            // Filesystem module: load from module_search_dir/<orig_name>.rsg
+            if (inner->module.decls == NULL && sema->module_search_dir != NULL) {
+                const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg",
+                                                     sema->module_search_dir, PATH_SEP, orig_name);
+                ASTNode **decls = load_module_decls(sema, mod_path);
+                if (decls == NULL) {
+                    SEMA_ERR(sema, inner->loc, "cannot find module file '%s'", mod_path);
+                } else {
+                    inner->module.decls = decls;
+                    // Update search dir for grandchild modules
+                    const char *prev_dir = sema->module_search_dir;
+                    sema->module_search_dir =
+                        arena_sprintf(sema->arena, "%s%c%s", prev_dir, PATH_SEP, orig_name);
+                    register_module_decl(sema, inner);
+                    sema->module_search_dir = prev_dir;
+                    continue;
+                }
+            }
+
             register_module_decl(sema, inner);
             continue;
         }
@@ -823,6 +858,12 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         }
         mod_name = resolved;
         decl->use_decl.module_path = resolved;
+    }
+
+    // Strip leading self:: prefix (refers to current crate/module root)
+    if (strncmp(mod_name, "self::", 6) == 0) {
+        mod_name = mod_name + 6;
+        decl->use_decl.module_path = mod_name;
     }
 
     // Normalize :: separators to . for internal lookup

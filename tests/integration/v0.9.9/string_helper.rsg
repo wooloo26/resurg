@@ -1,0 +1,6 @@
+// SKIP: module file, not a standalone test
+
+/// Greets with a name.
+pub fn greet(name: str) -> str {
+    "hello, {name}"
+}

@@ -50,6 +50,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
             np->param.name = op->param.name;
             np->param.type = op->param.type;
             np->param.is_mut = op->param.is_mut;
+            np->param.is_variadic = op->param.is_variadic;
             BUF_PUSH(clone->fn_decl.params, np);
         }
 

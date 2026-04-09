@@ -204,6 +204,10 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
         if (param_type == NULL) {
             param_type = &TYPE_ERR_INST;
         }
+        // Variadic param: ..T → []T (slice type)
+        if (param->param.is_variadic) {
+            param_type = type_create_slice(sema->arena, param_type);
+        }
         param->type = param_type;
         is_reserved_id(sema, param->loc, param->param.name);
         scope_define(sema, &(SymDef){param->param.name, param_type, false, SYM_PARAM});
@@ -475,13 +479,17 @@ const Type *check_node(Sema *sema, ASTNode *node) {
         }
         break;
 
-    case NODE_MODULE:
+    case NODE_MODULE: {
         sema->current_scope->module_name = node->module.name;
+        const char *prev_module = sema->current_module;
+        sema->current_module = node->module.name;
         // Check nested module body declarations
         for (int32_t i = 0; i < BUF_LEN(node->module.decls); i++) {
             check_node(sema, node->module.decls[i]);
         }
+        sema->current_module = prev_module;
         break;
+    }
 
     case NODE_TYPE_ALIAS:
         // Already processed in first pass

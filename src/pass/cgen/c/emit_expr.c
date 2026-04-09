@@ -83,6 +83,13 @@ static bool is_rsg_assert_call(const HirNode *node) {
     return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_assert") == 0;
 }
 
+static bool is_rsg_slice_concat_call(const HirNode *node) {
+    if (node->call.callee->kind != HIR_VAR_REF) {
+        return false;
+    }
+    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_slice_concat") == 0;
+}
+
 /**
  * Emit rsg_assert(cond, msg, file, line).
  * Lower has already expanded assert() into rsg_assert() with four args.
@@ -118,6 +125,15 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
 static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
     if (is_rsg_assert_call(node)) {
         return emit_rsg_assert_call(cgen, node);
+    }
+
+    // rsg_slice_concat(a, b) → rsg_slice_concat(a, b, sizeof(ElemType))
+    if (is_rsg_slice_concat_call(node)) {
+        const char *a = emit_expr(cgen, node->call.args[0]);
+        const char *b = emit_expr(cgen, node->call.args[1]);
+        const Type *elem_type = node->type->slice.elem;
+        const char *elem_c = c_type_for(cgen, elem_type);
+        return arena_sprintf(cgen->arena, "rsg_slice_concat(%s, %s, sizeof(%s))", a, b, elem_c);
     }
 
     // Indirect call through fn-typed variable: ((Ret(*)(void*,P1,...))f.fn)(f.env, args)
