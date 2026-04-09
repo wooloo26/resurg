@@ -321,6 +321,7 @@ typedef struct GenericTypeInstSpec {
 static Type *struct_create_stub(Sema *sema, const char *mangled) {
     StructDef *def = rsg_malloc(sizeof(*def));
     def->name = mangled;
+    def->is_tuple_struct = false;
     def->fields = NULL;
     def->methods = NULL;
     def->embedded = NULL;
@@ -338,6 +339,7 @@ static Type *struct_create_stub(Sema *sema, const char *mangled) {
 static StructMethodInfo **struct_resolve_members(Sema *sema, ASTNode *orig, Type *stub,
                                                  const char *mangled) {
     StructDef *def = sema_lookup_struct(sema, mangled);
+    def->is_tuple_struct = orig->struct_decl.is_tuple_struct;
 
     for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
         ASTStructField *ast_field = &orig->struct_decl.fields[i];
@@ -366,6 +368,7 @@ static StructMethodInfo **struct_resolve_members(Sema *sema, ASTNode *orig, Type
 static ASTNode *struct_build_synth(Sema *sema, ASTNode *orig, const char *mangled, Type *stub) {
     ASTNode *synth = ast_new(sema->arena, NODE_STRUCT_DECL, orig->loc);
     synth->struct_decl.name = mangled;
+    synth->struct_decl.is_tuple_struct = orig->struct_decl.is_tuple_struct;
     synth->struct_decl.fields = NULL;
     synth->struct_decl.methods = NULL;
     synth->struct_decl.embedded = NULL;

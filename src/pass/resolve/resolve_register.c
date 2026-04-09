@@ -315,6 +315,7 @@ void register_struct_def(Sema *sema, ASTNode *decl) {
 
     StructDef *def = rsg_malloc(sizeof(*def));
     def->name = struct_name;
+    def->is_tuple_struct = decl->struct_decl.is_tuple_struct;
     def->fields = NULL;
     def->methods = NULL;
     def->embedded = NULL;

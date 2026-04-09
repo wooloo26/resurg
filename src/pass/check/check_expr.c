@@ -263,6 +263,18 @@ const Type *check_member(Sema *sema, ASTNode *node) {
     if (object_type != NULL && object_type->kind == TYPE_STRUCT) {
         const char *field_name = node->member.member;
 
+        // Tuple struct index: .0, .1, ... → look up field _0, _1, ...
+        char *end = NULL;
+        long idx = strtol(field_name, &end, 10);
+        if (end != NULL && *end == '\0' && idx >= 0) {
+            const char *synth_name = arena_sprintf(sema->arena, "_%ld", idx);
+            const StructField *sf = type_struct_find_field(object_type, synth_name);
+            if (sf != NULL) {
+                node->member.member = synth_name;
+                return sf->type;
+            }
+        }
+
         // Check own fields (including embedded struct fields by name, e.g., e.Base)
         const StructField *sf = type_struct_find_field(object_type, field_name);
         if (sf != NULL) {

@@ -219,6 +219,7 @@ struct HirNode {
         // HIR_STR_LIT
         struct {
             const char *value;
+            int32_t len; // decoded byte length
         } str_lit;
 
         // HIR_ARRAY_LIT

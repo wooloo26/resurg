@@ -49,7 +49,7 @@ const char *next_str_builder(CGen *cgen);
 // ── C fmtting helpers (emit_helpers.c) ───────────────────────────
 
 /** Escape @p src for embedding inside a C str lit. */
-const char *c_str_escape(const CGen *cgen, const char *src);
+const char *c_str_escape(const CGen *cgen, const char *src, int32_t src_len);
 /** Format @p value as a C double lit with a trailing .0 when needed. */
 const char *fmt_float64(const CGen *cgen, double value);
 /** Format @p value as a C float lit with the f suffix. */

@@ -62,6 +62,7 @@ static ASTPattern *parse_pattern(Parser *parser) {
         pattern->lit = ast_new(parser->arena, NODE_LIT, pattern->loc);
         pattern->lit->lit.kind = LIT_STR;
         pattern->lit->lit.str_value = parser_previous_token(parser)->lit_value.str_value;
+        pattern->lit->lit.str_len = parser_previous_token(parser)->len;
         return pattern;
     }
 

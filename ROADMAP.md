@@ -211,8 +211,8 @@ Higher-order programming and code organization.
 
 ## v0.9.8 — Newtype
 
-- [ ] Newtype
-- [ ] `str` support escapes
+- [x] Newtype
+- [x] `str` support escapes
 
 ## v0.9.9 — Before Ecosystem
 

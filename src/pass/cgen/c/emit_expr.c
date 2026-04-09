@@ -53,8 +53,8 @@ static const char *emit_float_lit(CGen *cgen, const HirNode *node) {
 }
 
 static const char *emit_str_lit(CGen *cgen, const HirNode *node) {
-    const char *escaped = c_str_escape(cgen, node->str_lit.value);
-    return arena_sprintf(cgen->arena, "rsg_str_lit(\"%s\")", escaped);
+    const char *escaped = c_str_escape(cgen, node->str_lit.value, node->str_lit.len);
+    return arena_sprintf(cgen->arena, "rsg_str_new(\"%s\", %d)", escaped, node->str_lit.len);
 }
 
 static const char *emit_unary_expr(CGen *cgen, const HirNode *node) {
@@ -98,7 +98,8 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
     if (msg_node->kind == HIR_UNIT_LIT) {
         msg = "NULL";
     } else if (msg_node->kind == HIR_STR_LIT) {
-        msg = arena_sprintf(cgen->arena, "\"%s\"", c_str_escape(cgen, msg_node->str_lit.value));
+        msg = arena_sprintf(cgen->arena, "\"%s\"",
+                            c_str_escape(cgen, msg_node->str_lit.value, msg_node->str_lit.len));
     } else {
         const char *msg_expr = emit_expr(cgen, msg_node);
         msg = arena_sprintf(cgen->arena, "%s.data", msg_expr);
@@ -106,7 +107,8 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
 
     const HirNode *file_node = node->call.args[2];
     const char *file =
-        arena_sprintf(cgen->arena, "\"%s\"", c_str_escape(cgen, file_node->str_lit.value));
+        arena_sprintf(cgen->arena, "\"%s\"",
+                      c_str_escape(cgen, file_node->str_lit.value, file_node->str_lit.len));
 
     const char *line = emit_expr(cgen, node->call.args[3]);
 

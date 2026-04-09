@@ -1,0 +1,249 @@
+// v0.9.8 — Newtype: single-field tuple struct creating a distinct type
+
+// ── basic newtype definition and construction ──
+
+struct Meters(f64)
+struct Seconds(f64)
+struct MetersPerSecond(f64)
+
+fn test_newtype_basic() {
+    d := Meters(100.0)
+    assert(d.0 == 100.0)
+}
+
+fn test_newtype_multiple() {
+    d := Meters(100.0)
+    t := Seconds(9.58)
+    assert(d.0 == 100.0)
+    assert(t.0 == 9.58)
+}
+
+// ── field access via .0 ──
+
+fn test_newtype_field_access() {
+    m := Meters(42.5)
+    val := m.0
+    assert(val == 42.5)
+}
+
+// ── newtype in arithmetic (through .0) ──
+
+fn compute_speed(distance: Meters, time: Seconds) -> MetersPerSecond {
+    MetersPerSecond(distance.0 / time.0)
+}
+
+fn test_newtype_compute() {
+    d := Meters(100.0)
+    t := Seconds(10.0)
+    speed := compute_speed(d, t)
+    assert(speed.0 == 10.0)
+}
+
+// ── newtype as function parameters and return values ──
+
+fn double_meters(m: Meters) -> Meters {
+    Meters(m.0 * 2.0)
+}
+
+fn test_newtype_fn_param_return() {
+    m := Meters(5.0)
+    doubled := double_meters(m)
+    assert(doubled.0 == 10.0)
+}
+
+// ── newtype wrapping different types ──
+
+struct UserId(u64)
+struct OrderId(u64)
+struct Label(str)
+struct Flag(bool)
+struct Count(i32)
+
+fn test_newtype_u64() {
+    uid := UserId(42)
+    assert(uid.0 == 42)
+}
+
+fn test_newtype_str() {
+    label := Label("hello")
+    assert(label.0 == "hello")
+}
+
+fn test_newtype_bool() {
+    flag := Flag(true)
+    assert(flag.0 == true)
+}
+
+fn test_newtype_i32() {
+    c := Count(10)
+    assert(c.0 == 10)
+}
+
+// ── newtype copy semantics (value type) ──
+
+fn test_newtype_copy() {
+    a := Meters(1.0)
+    b := a
+    assert(b.0 == 1.0)
+    assert(a.0 == 1.0)
+}
+
+// ── newtype with pointer ──
+
+fn test_newtype_pointer() {
+    m := &Meters(100.0)
+    assert(m.0 == 100.0)
+}
+
+fn modify_meters(mut m: *Meters) {
+    *m = Meters(200.0)
+}
+
+fn test_newtype_mut_pointer() {
+    m := Meters(100.0)
+    modify_meters(mut &m)
+    assert(m.0 == 200.0)
+}
+
+// ── extension methods on newtype ──
+
+ext Meters {
+    fn to_f64(m) -> f64 { m.0 }
+    fn add(a, b: Meters) -> Meters { Meters(a.0 + b.0) }
+}
+
+fn test_newtype_ext_method() {
+    m := Meters(3.14)
+    assert(m.to_f64() == 3.14)
+}
+
+fn test_newtype_ext_method_two_args() {
+    a := Meters(10.0)
+    b := Meters(20.0)
+    c := a.add(b)
+    assert(c.0 == 30.0)
+}
+
+// ── extension methods with pointer receiver ──
+
+ext Count {
+    fn increment(mut *c) {
+        *c = Count(c.0 + 1)
+    }
+    fn value(c) -> i32 { c.0 }
+}
+
+fn test_newtype_ext_ptr_receiver() {
+    c := Count(0)
+    c.increment()
+    assert(c.value() == 1)
+    c.increment()
+    assert(c.value() == 2)
+}
+
+// ── generic newtype ──
+
+struct Wrapper<T>(T)
+
+fn test_generic_newtype_i32() {
+    w := Wrapper<i32>(42)
+    assert(w.0 == 42)
+}
+
+fn test_generic_newtype_str() {
+    w := Wrapper<str>("hello")
+    assert(w.0 == "hello")
+}
+
+fn test_generic_newtype_bool() {
+    w := Wrapper<bool>(true)
+    assert(w.0 == true)
+}
+
+// ── generic newtype with extension ──
+
+ext<T> Wrapper<T> {
+    fn unwrap(w) -> T { w.0 }
+}
+
+fn test_generic_newtype_ext() {
+    w := Wrapper<i32>(99)
+    assert(w.unwrap() == 99)
+}
+
+fn test_generic_newtype_ext_str() {
+    w := Wrapper<str>("test")
+    assert(w.unwrap() == "test")
+}
+
+// ── newtype wrapping compound types ──
+
+struct Ids([]i32)
+
+fn test_newtype_slice() {
+    ids := Ids([]i32{1, 2, 3})
+    assert(len(ids.0) == 3)
+    assert(ids.0[0] == 1)
+    assert(ids.0[1] == 2)
+    assert(ids.0[2] == 3)
+}
+
+struct IntArray([3]i32)
+
+fn test_newtype_array() {
+    a := IntArray([1, 2, 3])
+    assert(a.0[0] == 1)
+    assert(a.0[1] == 2)
+    assert(a.0[2] == 3)
+}
+
+struct OptionalCount(?i32)
+
+fn test_newtype_option() {
+    a := OptionalCount(Some(42))
+    match a.0 {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+}
+
+fn test_newtype_option_none() {
+    var n: ?i32 = None
+    a := OptionalCount(n)
+    match a.0 {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── newtype wrapping tuple ──
+
+struct Point2D((f64, f64))
+
+fn test_newtype_tuple() {
+    p := Point2D((1.0, 2.0))
+    assert(p.0.0 == 1.0)
+    assert(p.0.1 == 2.0)
+}
+
+// ── newtype with Self in ext ──
+
+ext Label {
+    fn new(s: str) -> Self { Self(s) }
+    fn text(l) -> str { l.0 }
+}
+
+fn test_newtype_self() {
+    l := Label.new("tag")
+    assert(l.text() == "tag")
+}
+
+// ── newtype passed to generic function ──
+
+fn identity<T>(x: T) -> T { x }
+
+fn test_newtype_generic_fn() {
+    m := Meters(7.5)
+    result := identity(m)
+    assert(result.0 == 7.5)
+}

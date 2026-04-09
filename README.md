@@ -23,7 +23,7 @@ Statically typed, compiled. ADTs, pattern matching, value-based errors. **Extens
 - `char`: Unicode scalar value. Supports `==`, `!=`, `<`, `>`, `<=`, `>=`. Escapes: `\n`, `\t`, `\\`, `\'`, `\0`, `\u{XXXX}`.
 - `f32`/`f64`: `-0.0 == 0.0`. Scientific: `1.5e2`, `2.0e-1`.
 - Numeric literals allow `_` separators: `1_000_000`, `1_000.5`.
-- `str`: supports `==` and `!=`.
+- `str`: supports `==` and `!=`. Escapes: `\n`, `\t`, `\\`, `\"`, `\0`, `\u{XXXX}`.
 
 ### Compound Types
 

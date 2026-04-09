@@ -13,6 +13,7 @@ static ASTNode *parse_str_interpolation(Parser *parser, SrcLoc loc) {
     ASTNode *text = ast_new(parser->arena, NODE_LIT, loc);
     text->lit.kind = LIT_STR;
     text->lit.str_value = parser_previous_token(parser)->lit_value.str_value;
+    text->lit.str_len = parser_previous_token(parser)->len;
     BUF_PUSH(interpolation->str_interpolation.parts, text);
 
     while (parser_match(parser, TOKEN_INTERPOLATION_START)) {
@@ -25,6 +26,7 @@ static ASTNode *parse_str_interpolation(Parser *parser, SrcLoc loc) {
         ASTNode *text2 = ast_new(parser->arena, NODE_LIT, text_loc);
         text2->lit.kind = LIT_STR;
         text2->lit.str_value = parser_previous_token(parser)->lit_value.str_value;
+        text2->lit.str_len = parser_previous_token(parser)->len;
         BUF_PUSH(interpolation->str_interpolation.parts, text2);
     }
     return interpolation;
@@ -266,6 +268,7 @@ static ASTNode *parse_primary(Parser *parser) {
         ASTNode *node = ast_new(parser->arena, NODE_LIT, loc);
         node->lit.kind = LIT_STR;
         node->lit.str_value = parser_previous_token(parser)->lit_value.str_value;
+        node->lit.str_len = parser_previous_token(parser)->len;
         return node;
     }
     if (parser_match(parser, TOKEN_TRUE)) {

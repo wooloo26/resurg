@@ -1,0 +1,182 @@
+// v0.9.8 — str support escapes: \n, \t, \\, \", \0, \u{XXXX}
+// EXPECT-STDOUT: hello
+// EXPECT-STDOUT: world
+// EXPECT-STDOUT: tab:	here
+// EXPECT-STDOUT: back\slash
+// EXPECT-STDOUT: say "hi"
+// EXPECT-STDOUT: A
+// EXPECT-STDOUT: ABC
+
+// ── \n newline escape produces a single byte ──
+
+fn test_newline_len() {
+    s := "\n"
+    assert(len(s) == 1)
+}
+
+fn test_newline_in_string() {
+    s := "hello\nworld"
+    assert(len(s) == 11)
+}
+
+fn test_newline_println() {
+    // prints two lines
+    println("hello\nworld")
+}
+
+// ── \t tab escape produces a single byte ──
+
+fn test_tab_len() {
+    s := "\t"
+    assert(len(s) == 1)
+}
+
+fn test_tab_in_string() {
+    s := "a\tb"
+    assert(len(s) == 3)
+}
+
+fn test_tab_println() {
+    println("tab:\there")
+}
+
+// ── \\ backslash escape produces a single byte ──
+
+fn test_backslash_len() {
+    s := "\\"
+    assert(len(s) == 1)
+}
+
+fn test_backslash_in_string() {
+    s := "a\\b"
+    assert(len(s) == 3)
+}
+
+fn test_backslash_println() {
+    println("back\\slash")
+}
+
+// ── \" double quote escape produces a single byte ──
+
+fn test_quote_len() {
+    s := "\""
+    assert(len(s) == 1)
+}
+
+fn test_quote_in_string() {
+    s := "say \"hi\""
+    assert(len(s) == 8)
+}
+
+fn test_quote_println() {
+    println("say \"hi\"")
+}
+
+// ── \0 null escape produces a single byte ──
+
+fn test_null_len() {
+    s := "\0"
+    assert(len(s) == 1)
+}
+
+fn test_null_in_string() {
+    s := "a\0b"
+    assert(len(s) == 3)
+}
+
+// ── \u{XXXX} unicode escape ──
+
+fn test_unicode_escape_ascii() {
+    // \u{0041} = 'A' — 1 byte in UTF-8
+    s := "\u{0041}"
+    assert(len(s) == 1)
+    assert(s == "A")
+}
+
+fn test_unicode_escape_ascii_println() {
+    println("\u{0041}")
+}
+
+fn test_unicode_escape_multi() {
+    // Multiple unicode escapes
+    s := "\u{0041}\u{0042}\u{0043}"
+    assert(s == "ABC")
+    assert(len(s) == 3)
+}
+
+fn test_unicode_escape_multi_println() {
+    println("\u{0041}\u{0042}\u{0043}")
+}
+
+fn test_unicode_escape_two_byte() {
+    // \u{00E9} = 'é' — 2 bytes in UTF-8
+    s := "\u{00E9}"
+    assert(len(s) == 2)
+}
+
+fn test_unicode_escape_three_byte() {
+    // \u{4E16} = '世' — 3 bytes in UTF-8
+    s := "\u{4E16}"
+    assert(len(s) == 3)
+}
+
+fn test_unicode_escape_four_byte() {
+    // \u{1F600} = '😀' — 4 bytes in UTF-8
+    s := "\u{1F600}"
+    assert(len(s) == 4)
+}
+
+// ── mixed escapes in one string ──
+
+fn test_mixed_escapes() {
+    s := "a\tb\nc"
+    assert(len(s) == 5)
+}
+
+fn test_mixed_escapes_with_unicode() {
+    s := "\u{0041}\n\u{0042}"
+    assert(len(s) == 3)
+    // "A\nB" — 'A' + newline + 'B'
+}
+
+// ── escapes in interpolated strings ──
+
+fn test_escape_in_interpolation() {
+    name := "world"
+    s := "hello\t{name}"
+    assert(len(s) == 11)
+}
+
+fn test_newline_in_interpolation() {
+    x := 42
+    s := "val:\n{x}"
+    assert(len(s) == 7)
+}
+
+// ── escape at string boundaries ──
+
+fn test_escape_at_start() {
+    s := "\nhello"
+    assert(len(s) == 6)
+}
+
+fn test_escape_at_end() {
+    s := "hello\n"
+    assert(len(s) == 6)
+}
+
+fn test_multiple_escapes_consecutive() {
+    s := "\n\n\n"
+    assert(len(s) == 3)
+}
+
+// ── backslash before non-escape char preserved ──
+// This is intentionally not tested as it should be a compile error
+// or implementation-defined behavior.
+
+// ── empty string with no escapes ──
+
+fn test_no_escapes() {
+    s := "plain text"
+    assert(len(s) == 10)
+}

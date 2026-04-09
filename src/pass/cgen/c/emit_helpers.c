@@ -45,19 +45,20 @@ const char *next_str_builder(CGen *cgen) {
 
 // ── C fmtting helpers ───────────────────────────────────────────────
 
-const char *c_str_escape(const CGen *cgen, const char *src) {
+const char *c_str_escape(const CGen *cgen, const char *src, int32_t src_len) {
     if (src == NULL) {
         return "";
     }
     // Count extra space needed for escapes
     int32_t extra = 0;
-    for (const char *ptr = src; *ptr != '\0'; ptr++) {
-        switch (*ptr) {
+    for (int32_t i = 0; i < src_len; i++) {
+        switch (src[i]) {
         case '\\':
         case '"':
         case '\n':
         case '\r':
         case '\t':
+        case '\0':
             extra++;
             break;
         default:
@@ -67,11 +68,10 @@ const char *c_str_escape(const CGen *cgen, const char *src) {
     if (extra == 0) {
         return src;
     }
-    int32_t len = (int32_t)strlen(src);
-    char *buf = arena_alloc(cgen->arena, len + extra + 1);
+    char *buf = arena_alloc(cgen->arena, src_len + extra + 1);
     int32_t write_idx = 0;
-    for (const char *ptr = src; *ptr != '\0'; ptr++) {
-        switch (*ptr) {
+    for (int32_t i = 0; i < src_len; i++) {
+        switch (src[i]) {
         case '\\':
             buf[write_idx++] = '\\';
             buf[write_idx++] = '\\';
@@ -92,8 +92,12 @@ const char *c_str_escape(const CGen *cgen, const char *src) {
             buf[write_idx++] = '\\';
             buf[write_idx++] = 't';
             break;
+        case '\0':
+            buf[write_idx++] = '\\';
+            buf[write_idx++] = '0';
+            break;
         default:
-            buf[write_idx++] = *ptr;
+            buf[write_idx++] = src[i];
             break;
         }
     }

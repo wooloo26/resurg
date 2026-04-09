@@ -308,6 +308,7 @@ struct ASTNode {
                 const char *str_value;
                 uint32_t char_value; // Unicode scalar value (for LIT_CHAR)
             };
+            int32_t str_len; // decoded byte length (for LIT_STR)
         } lit;
 
         // NODE_ID
@@ -433,6 +434,7 @@ struct ASTNode {
         struct {
             const char *name;
             bool is_pub;
+            bool is_tuple_struct;          /* true for `struct Name(T, ...)` */
             ASTStructField *fields;        /* buf */
             ASTNode **methods;             /* buf - NODE_FN_DECL */
             const char **embedded;         /* buf - embedded struct names */

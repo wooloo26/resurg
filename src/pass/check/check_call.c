@@ -630,6 +630,122 @@ static const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_
     return check_call(sema, node);
 }
 
+// ── Tuple struct constructors ─────────────────────────────────────
+
+/**
+ * Handle `Name(value)` or `Name<T>(value)` as a tuple struct constructor.
+ * Rewrites the call node to NODE_STRUCT_LIT on success.
+ */
+static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char *fn_name) {
+    // Resolve Self to enclosing type name
+    if (strcmp(fn_name, "Self") == 0 && sema->self_type_name != NULL) {
+        fn_name = sema->self_type_name;
+        node->call.callee->id.name = fn_name;
+    }
+
+    StructDef *sdef = sema_lookup_struct(sema, fn_name);
+
+    // Try generic instantiation with explicit type args
+    if (sdef == NULL && BUF_LEN(node->call.type_args) > 0) {
+        GenericStructDef *gdef = sema_lookup_generic_struct(sema, fn_name);
+        if (gdef != NULL) {
+            GenericInstArgs inst_args = {node->call.type_args, BUF_LEN(node->call.type_args),
+                                         node->loc};
+            const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
+            if (mangled != NULL) {
+                sdef = sema_lookup_struct(sema, mangled);
+                fn_name = mangled;
+            }
+        }
+    }
+
+    // Try generic inference from arg types
+    if (sdef == NULL && BUF_LEN(node->call.type_args) == 0) {
+        GenericStructDef *gdef = sema_lookup_generic_struct(sema, fn_name);
+        if (gdef != NULL && BUF_LEN(node->call.args) == gdef->type_param_count) {
+            // Build type args from argument types
+            ASTType *inferred_args = NULL;
+            for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+                const Type *arg_type = node->call.args[i]->type;
+                if (arg_type == NULL || arg_type->kind == TYPE_ERR) {
+                    BUF_FREE(inferred_args);
+                    return NULL;
+                }
+                ASTType ta = {.kind = AST_TYPE_NAME,
+                              .name = type_name(sema->arena, arg_type),
+                              .type_args = NULL,
+                              .loc = node->loc};
+                hash_table_insert(&sema->generics.type_params, ta.name, (void *)arg_type);
+                BUF_PUSH(inferred_args, ta);
+            }
+            GenericInstArgs inst_args = {inferred_args, BUF_LEN(inferred_args), node->loc};
+            const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
+            for (int32_t i = 0; i < BUF_LEN(inferred_args); i++) {
+                hash_table_remove(&sema->generics.type_params, inferred_args[i].name);
+            }
+            BUF_FREE(inferred_args);
+            if (mangled != NULL) {
+                sdef = sema_lookup_struct(sema, mangled);
+                fn_name = mangled;
+            }
+        }
+    }
+
+    if (sdef == NULL || !sdef->is_tuple_struct) {
+        return NULL;
+    }
+
+    int32_t field_count = sdef->type->struct_type.field_count;
+    int32_t arg_count = BUF_LEN(node->call.args);
+    if (arg_count != field_count) {
+        SEMA_ERR(sema, node->loc, "tuple struct '%s' expects %d argument(s), got %d", fn_name,
+                 field_count, arg_count);
+        return &TYPE_ERR_INST;
+    }
+
+    // Type-check each argument against the corresponding _N field
+    for (int32_t i = 0; i < field_count; i++) {
+        const Type *expected = sdef->type->struct_type.fields[i].type;
+        const Type *actual = node->call.args[i]->type;
+        // Re-check arg with expected type if initial check failed (e.g., bare None)
+        if (actual == NULL || actual->kind == TYPE_ERR) {
+            const Type *saved = sema->expected_type;
+            sema->expected_type = expected;
+            actual = check_node(sema, node->call.args[i]);
+            sema->expected_type = saved;
+        }
+        if (actual == NULL || actual->kind == TYPE_ERR) {
+            continue;
+        }
+        if (!type_assignable(expected, actual)) {
+            promote_lit(node->call.args[i], expected);
+            actual = node->call.args[i]->type;
+            if (!type_assignable(expected, actual)) {
+                SEMA_ERR(sema, node->call.args[i]->loc,
+                         "type mismatch in tuple struct '%s' field %d: expected '%s', got '%s'",
+                         fn_name, i, type_name(sema->arena, expected),
+                         type_name(sema->arena, actual));
+                return &TYPE_ERR_INST;
+            }
+        }
+    }
+
+    // Rewrite NODE_CALL → NODE_STRUCT_LIT
+    node->kind = NODE_STRUCT_LIT;
+    const char **field_names = NULL;
+    ASTNode **field_values = NULL;
+    for (int32_t i = 0; i < field_count; i++) {
+        BUF_PUSH(field_names, sdef->type->struct_type.fields[i].name);
+        BUF_PUSH(field_values, node->call.args[i]);
+    }
+    node->struct_lit.name = fn_name;
+    node->struct_lit.field_names = field_names;
+    node->struct_lit.field_values = field_values;
+    node->struct_lit.type_args = NULL;
+    node->type = sdef->type;
+    return sdef->type;
+}
+
 // ── Bare variant constructors ─────────────────────────────────────
 
 /** Rewrite callee to a member access and check as enum variant call. */
@@ -765,6 +881,11 @@ const Type *check_call(Sema *sema, ASTNode *node) {
 
     // Generic call: fn_name<Type, ...>(args)
     if (fn_name != NULL && BUF_LEN(node->call.type_args) > 0) {
+        // Try tuple struct constructor first for generic types
+        const Type *ts = check_tuple_struct_call(sema, node, fn_name);
+        if (ts != NULL) {
+            return ts;
+        }
         return check_generic_fn_call(sema, node, fn_name);
     }
 
@@ -799,6 +920,15 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         if (sym != NULL && sym->type != NULL && sym->type->kind == TYPE_FN) {
             return check_fn_type_call(sema, node, sym->type);
         }
+
+        // Tuple struct constructor: Name(value, ...)
+        {
+            const Type *tuple_struct = check_tuple_struct_call(sema, node, fn_name);
+            if (tuple_struct != NULL) {
+                return tuple_struct;
+            }
+        }
+
         if (sym == NULL) {
             const Type *variant_result = check_bare_variant_call(sema, node, fn_name);
             if (variant_result != NULL) {

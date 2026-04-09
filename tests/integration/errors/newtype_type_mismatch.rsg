@@ -1,0 +1,14 @@
+// TEST: compile_error
+// EXPECT-ERROR: type mismatch
+
+// Newtypes are distinct — passing Seconds where Meters is expected must fail.
+
+struct Meters(f64)
+struct Seconds(f64)
+
+fn requires_meters(m: Meters) -> f64 { m.0 }
+
+fn main() {
+    t := Seconds(9.58)
+    requires_meters(t)
+}

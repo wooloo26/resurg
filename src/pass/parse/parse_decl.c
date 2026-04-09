@@ -348,6 +348,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.conformances = NULL;
     node->struct_decl.where_clauses = NULL;
     node->struct_decl.assoc_types = NULL;
+    node->struct_decl.is_tuple_struct = false;
     node->struct_decl.type_params = parse_type_params(parser);
 
     // Reject conformance lists: use ext blocks instead
@@ -377,6 +378,27 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
+
+    // Tuple struct: struct Name(Type, ...)
+    if (parser_match(parser, TOKEN_LEFT_PAREN)) {
+        node->struct_decl.is_tuple_struct = true;
+        int32_t idx = 0;
+        do {
+            parser_skip_newlines(parser);
+            if (parser_check(parser, TOKEN_RIGHT_PAREN)) {
+                break;
+            }
+            ASTStructField field = {0};
+            field.name = arena_sprintf(parser->arena, "_%d", idx);
+            field.type = parser_parse_type(parser);
+            field.default_value = NULL;
+            BUF_PUSH(node->struct_decl.fields, field);
+            idx++;
+        } while (parser_match(parser, TOKEN_COMMA));
+        parser_expect(parser, TOKEN_RIGHT_PAREN);
+        return node;
+    }
+
     parser_expect(parser, TOKEN_LEFT_BRACE);
     parser_skip_newlines(parser);
 

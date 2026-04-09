@@ -86,6 +86,7 @@ typedef struct StructMethodInfo {
 /** Struct def — registered during the first pass. */
 struct StructDef {
     const char *name;
+    bool is_tuple_struct;      /* true for `struct Name(T, ...)` */
     StructFieldInfo *fields;   /* buf */
     StructMethodInfo *methods; /* buf */
     const char **embedded;     /* buf */

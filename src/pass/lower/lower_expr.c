@@ -44,6 +44,7 @@ static HirNode *lower_lit(Lower *low, const ASTNode *ast) {
     case LIT_STR: {
         HirNode *node = hir_new(low->hir_arena, HIR_STR_LIT, type, loc);
         node->str_lit.value = ast->lit.str_value;
+        node->str_lit.len = ast->lit.str_len;
         return node;
     }
     case LIT_UNIT:
@@ -348,6 +349,7 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
     // File name as str lit
     HirNode *file_node = hir_new(low->hir_arena, HIR_STR_LIT, &TYPE_STR_INST, loc);
     file_node->str_lit.value = loc.file != NULL ? loc.file : "<unknown>";
+    file_node->str_lit.len = (int32_t)strlen(file_node->str_lit.value);
 
     // Line number as i32 lit
     IntLitSpec line_spec = {(uint64_t)loc.line, &TYPE_I32_INST, TYPE_I32, loc};
