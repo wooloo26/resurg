@@ -1,0 +1,14 @@
+// TEST: compile_error
+// EXPECT-ERROR: expected enum variant
+// v0.9.6 — Methods are not allowed inside enum blocks; use ext blocks
+
+enum Foo {
+    A,
+    B,
+
+    fn bad_method(*f) -> i32 { 0 }
+}
+
+fn main() {
+    f := Foo::A
+}

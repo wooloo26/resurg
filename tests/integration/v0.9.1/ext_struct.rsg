@@ -67,18 +67,18 @@ fn test_ext_multiple_methods() {
     assert(r.perimeter() == 14.0)
 }
 
-// ── ext method alongside struct-defined methods ──
+// ── ext method on struct with methods in ext block ──
 
 struct Counter {
     value: i32 = 0
-    fn current(*c) -> i32 { c.value }
 }
 
 ext Counter {
+    fn current(*c) -> i32 { c.value }
     fn doubled(*c) -> i32 { c.value * 2 }
 }
 
-fn test_ext_alongside_struct_methods() {
+fn test_ext_struct_methods() {
     c := Counter { value = 5 }
     assert(c.current() == 5)
     assert(c.doubled() == 10)

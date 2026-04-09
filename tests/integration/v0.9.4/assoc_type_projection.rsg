@@ -11,10 +11,13 @@ pact Iterator {
     fn next(mut *self) -> ?Self::Item
 }
 
-struct IntIter: Iterator {
-    type Item = i32
+struct IntIter {
     current: i32 = 0
     end: i32 = 0
+}
+
+ext IntIter impl Iterator {
+    type Item = i32
 
     fn next(mut *self) -> ?i32 {
         if self.current < self.end {
@@ -43,15 +46,21 @@ fn test_projection_return() {
 
 // ── projection in where clause bounds ──
 
-struct CloneInt: Clone {
+struct CloneInt {
     value: i32 = 0
+}
+
+ext CloneInt impl Clone {
     fn clone(*self) -> Self { Self { value = self.value } }
 }
 
-struct CloneIter: Iterator {
-    type Item = CloneInt
+struct CloneIter {
     current: i32 = 0
     end: i32 = 0
+}
+
+ext CloneIter impl Iterator {
+    type Item = CloneInt
 
     fn next(mut *self) -> ?CloneInt {
         if self.current < self.end {

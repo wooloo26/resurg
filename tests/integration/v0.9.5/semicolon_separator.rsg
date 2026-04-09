@@ -74,9 +74,11 @@ fn test_for_semicolons() {
     assert(sum == 3)
 }
 
-// ── struct definition with methods using semicolons ──
+// ── struct with methods in ext block using semicolons ──
 
-struct Counter { value: i32 = 0; fn inc(mut *c) { c.value += 1 } }
+struct Counter { value: i32 = 0 }
+
+ext Counter { fn inc(mut *c) { c.value += 1 } }
 
 fn test_struct_method_semicolons() {
     c := &Counter {}

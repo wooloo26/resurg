@@ -4,7 +4,9 @@ enum Msg {
     Quit,
     Move { x: i32, y: i32 },
     Write(str),
+}
 
+ext Msg {
     fn is_quit(*m) -> bool {
         match *m {
             Quit => true,

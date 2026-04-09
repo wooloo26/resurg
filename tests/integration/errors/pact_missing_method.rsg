@@ -5,9 +5,11 @@ pact Printable {
     fn to_string() -> str
 }
 
-struct Foo: Printable {
+struct Foo {
     x: i32 = 0
 }
+
+ext Foo impl Printable {}
 
 fn main() {
     f := Foo {}

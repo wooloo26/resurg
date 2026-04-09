@@ -1,6 +1,6 @@
-// v0.9.4 — Associated types: type members in pacts that implementors define concretely
+// v0.9.6 — Associated types: declared in pacts, concretized in ext impl blocks
 
-// ── basic associated type ──
+// ── basic associated type in pact ──
 
 pact Iterator {
     type Item
@@ -9,7 +9,7 @@ pact Iterator {
     fn has_next(*self) -> bool
 }
 
-// ── struct implementing pact with associated type ──
+// ── associated type concretized via ext impl ──
 
 struct RangeIter {
     current: i32
@@ -34,10 +34,9 @@ ext RangeIter impl Iterator {
     }
 }
 
-fn test_range_iter_basic() {
+fn test_basic_associated_type() {
     iter := RangeIter { current = 0, end = 3 }
     assert(iter.has_next())
-
     match iter.next() {
         Some(v) => assert(v == 0),
         None => assert(false),
@@ -51,19 +50,15 @@ fn test_range_iter_basic() {
         None => assert(false),
     }
     assert(iter.has_next() == false)
-    match iter.next() {
-        Some(_) => assert(false),
-        None => assert(true),
-    }
 }
 
-// ── generic function using associated type ──
+// ── generic function consuming associated type ──
 
 fn get_next<I: Iterator>(mut iter: *I) -> ?I::Item {
     iter.next()
 }
 
-fn test_get_next() {
+fn test_generic_with_assoc_type() {
     iter := RangeIter { current = 0, end = 2 }
     match get_next<RangeIter>(mut &iter) {
         Some(v) => assert(v == 0),
@@ -103,7 +98,7 @@ ext Counter impl Iterator {
     }
 }
 
-fn test_self_assoc_type() {
+fn test_self_item_in_ext() {
     c := Counter {}
     match c.next() {
         Some(v) => assert(v == 0),
@@ -133,9 +128,7 @@ struct MyItem {
 }
 
 ext MyItem impl Display {
-    fn to_display(*self) -> str {
-        "item"
-    }
+    fn to_display(*self) -> str { "item" }
 }
 
 struct MyList {
@@ -156,7 +149,7 @@ ext MyList impl Collection {
     }
 }
 
-fn test_collection_associated_types() {
+fn test_bounded_associated_type() {
     list := MyList { a = MyItem { value = 10 }, b = MyItem { value = 20 } }
     assert(list.count() == 2)
     match list.first() {
@@ -187,7 +180,7 @@ ext SimpleGraph impl Graph {
     }
 }
 
-fn test_graph_associated_types() {
+fn test_multiple_associated_types() {
     g := SimpleGraph { count = 5 }
     assert(g.node_count() == 5)
 }

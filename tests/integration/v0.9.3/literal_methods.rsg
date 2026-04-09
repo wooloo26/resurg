@@ -32,10 +32,13 @@ fn test_int_pointer_receiver_on_variable() {
     assert(x == 11)
 }
 
-// ── struct with value + pointer receiver methods ──
+// ── struct with value + pointer receiver methods in ext ──
 
 struct Counter {
     value: i32 = 0
+}
+
+ext Counter {
     fn get_value(c) -> i32 { c.value }
     fn inc(mut *c) { c.value = c.value + 1 }
 }

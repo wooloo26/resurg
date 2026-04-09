@@ -1,29 +1,18 @@
-// v0.7.0 — Pact definition: required fields, required methods, conformance
+// v0.7.0 — Pact definition: required methods, conformance via ext impl
 
-// ── pact with required field and required method ──
+// ── pact with required method ──
 
 pact Printable {
     fn to_string() -> str
 }
 
-struct Point: Printable {
+struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
-
-    fn to_string(p) -> str {
-        "point"
-    }
 }
 
-// ── pact with required field ──
-
-pact Named {
-    name: str
-}
-
-struct User: Named {
-    name: str
-    age: i32 = 0
+ext Point impl Printable {
+    fn to_string(p) -> str { "point" }
 }
 
 // ── conforming struct can be instantiated and used ──
@@ -34,34 +23,6 @@ fn test_basic_conformance() {
     assert(s == "point")
 }
 
-fn test_required_field() {
-    u := User { name = "Alice", age = 30 }
-    assert(u.name == "Alice")
-    assert(u.age == 30)
-}
-
-// ── pact with required field and method combined ──
-
-pact Describable {
-    name: str
-    fn describe() -> str
-}
-
-struct Animal: Describable {
-    name: str
-    sound: str = ""
-
-    fn describe(a) -> str {
-        "{a.name} says {a.sound}"
-    }
-}
-
-fn test_field_and_method() {
-    a := Animal { name = "Dog", sound = "woof" }
-    assert(a.describe() == "Dog says woof")
-    assert(a.name == "Dog")
-}
-
 // ── pact with multiple required methods ──
 
 pact Shape {
@@ -69,21 +30,39 @@ pact Shape {
     fn perimeter() -> f64
 }
 
-struct Rectangle: Shape {
+struct Rectangle {
     width: f64 = 0.0
     height: f64 = 0.0
+}
 
-    fn area(r) -> f64 {
-        r.width * r.height
-    }
-
-    fn perimeter(r) -> f64 {
-        2.0 * (r.width + r.height)
-    }
+ext Rectangle impl Shape {
+    fn area(r) -> f64 { r.width * r.height }
+    fn perimeter(r) -> f64 { 2.0 * (r.width + r.height) }
 }
 
 fn test_multiple_required_methods() {
     r := Rectangle { width = 3.0, height = 4.0 }
     assert(r.area() == 12.0)
     assert(r.perimeter() == 14.0)
+}
+
+// ── pact with required method + extra method ──
+
+pact Describable {
+    fn describe() -> str
+}
+
+struct Animal {
+    name: str
+    sound: str = ""
+}
+
+ext Animal impl Describable {
+    fn describe(a) -> str { "{a.name} says {a.sound}" }
+}
+
+fn test_field_and_method() {
+    a := Animal { name = "Dog", sound = "woof" }
+    assert(a.describe() == "Dog says woof")
+    assert(a.name == "Dog")
 }

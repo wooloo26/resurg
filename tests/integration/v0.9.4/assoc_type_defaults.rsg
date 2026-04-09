@@ -20,19 +20,23 @@ pact Iterator {
 
 // ── struct providing Item, inheriting Index default ──
 
-struct MyInt: Clone {
+struct MyInt {
     value: i32 = 0
+}
 
+ext MyInt impl Clone {
     fn clone(*self) -> Self {
         Self { value = self.value }
     }
 }
 
-struct RangeIter: Iterator {
-    type Item = MyInt
-
+struct RangeIter {
     current: usize = 0
     end: usize = 0
+}
+
+ext RangeIter impl Iterator {
+    type Item = MyInt
 
     fn next(mut *self) -> ?MyInt {
         if self.current < self.end {
@@ -61,16 +65,21 @@ fn test_default_index_inherited() {
 
 // ── struct that overrides default with another Clone type ──
 
-struct WrappedStr: Clone {
+struct WrappedStr {
     data: str = ""
+}
+
+ext WrappedStr impl Clone {
     fn clone(*self) -> Self { Self { data = self.data } }
 }
 
-struct WrappedIter: Iterator {
+struct WrappedIter {
+    pos: i32 = 0
+}
+
+ext WrappedIter impl Iterator {
     type Item = WrappedStr
     type Index = i32
-
-    pos: i32 = 0
 
     fn next(mut *self) -> ?WrappedStr {
         if self.pos < 2 {
@@ -105,9 +114,11 @@ pact Accumulator {
     fn accumulate(mut *self, v: Self::Value) -> Self::Result
 }
 
-struct SimpleAcc: Accumulator {
+struct SimpleAcc {
     total: i32 = 0
+}
 
+ext SimpleAcc impl Accumulator {
     fn accumulate(mut *self, v: i32) -> bool {
         self.total = self.total + v
         self.total > 10

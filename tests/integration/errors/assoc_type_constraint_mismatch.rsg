@@ -7,7 +7,9 @@ pact Iterator {
     fn next(mut *self) -> ?Self::Item
 }
 
-struct StrIter: Iterator {
+struct StrIter {}
+
+ext StrIter impl Iterator {
     type Item = str
     fn next(mut *self) -> ?str { None }
 }

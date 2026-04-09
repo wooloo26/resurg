@@ -8,7 +8,9 @@ pact Iterator {
     fn has_next(*self) -> bool
 }
 
-struct BadIter: Iterator {
+struct BadIter {}
+
+ext BadIter impl Iterator {
     fn next(mut *self) -> ?i32 {
         None
     }

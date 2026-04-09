@@ -8,17 +8,21 @@ pact Into<T> {
 
 // ── struct conforming to generic pact instantiation ──
 
-struct IntToStr: Into<str> {
+struct IntToStr {
     value: i32 = 0
+}
 
+ext IntToStr impl Into {
     fn into(self) -> str {
         "{self.value}"
     }
 }
 
-struct F64Wrapper: Into<f64> {
+struct F64Wrapper {
     inner: f64 = 0.0
+}
 
+ext F64Wrapper impl Into {
     fn into(self) -> f64 {
         self.inner
     }
@@ -47,9 +51,11 @@ pact Convertible<T> {
     AsStr
 }
 
-struct StrBox: Convertible<str> {
+struct StrBox {
     text: str
+}
 
+ext StrBox impl Convertible {
     fn into(self) -> str {
         self.text
     }

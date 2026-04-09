@@ -7,7 +7,7 @@ pact Display {
 }
 
 pact HasName {
-    name: str
+    fn name() -> str
 }
 
 // ── two type params, no bounds ──
@@ -25,20 +25,29 @@ fn triple<A, B, C>(a: A, b: B, c: C) -> (A, B, C) {
 // ── two type params, each with different bounds ──
 
 fn show_named<T: Display, U: HasName>(x: T, y: U) -> str {
-    y.name
+    y.name()
 }
 
 // ── conforming structs ──
 
-struct Tag: Display {
+struct Tag {
     label: str
+}
+
+ext Tag impl Display {
     fn to_display(t) -> str {
         t.label
     }
 }
 
-struct Pet: HasName {
-    name: str
+struct Pet {
+    pet_name: str
+}
+
+ext Pet impl HasName {
+    fn name(p) -> str {
+        p.pet_name
+    }
 }
 
 fn test_swap() {
@@ -56,7 +65,7 @@ fn test_triple() {
 
 fn test_mixed_bounds() {
     t := Tag { label = "animal" }
-    p := Pet { name = "Rex" }
+    p := Pet { pet_name = "Rex" }
     s := show_named<Tag, Pet>(t, p)
     assert(s == "Rex")
 }

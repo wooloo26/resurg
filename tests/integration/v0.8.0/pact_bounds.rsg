@@ -7,7 +7,7 @@ pact Display {
 }
 
 pact HasAge {
-    age: i32
+    fn age() -> i32
 }
 
 // ── single bound ──
@@ -25,33 +25,41 @@ fn describe<T: Display + HasAge>(x: T) -> str {
 
 // ── struct conforming to Display ──
 
-struct Dog: Display {
-    name: str
+struct Dog {
+    dog_name: str
+}
 
+ext Dog impl Display {
     fn to_display(d) -> str {
-        d.name
+        d.dog_name
     }
 }
 
 // ── struct conforming to Display + HasAge ──
 
-struct Cat: Display + HasAge {
-    name: str
-    age: i32 = 0
+struct Cat {
+    cat_name: str
+    cat_age: i32 = 0
+}
 
+ext Cat impl Display + HasAge {
     fn to_display(c) -> str {
-        c.name
+        c.cat_name
+    }
+
+    fn age(c) -> i32 {
+        c.cat_age
     }
 }
 
 fn test_single_bound() {
-    d := Dog { name = "Dog" }
+    d := Dog { dog_name = "Dog" }
     s := show<Dog>(d)
     assert(s == "Dog")
 }
 
 fn test_multiple_bounds() {
-    c := Cat { name = "Cat", age = 5 }
+    c := Cat { cat_name = "Cat", cat_age = 5 }
     s := describe<Cat>(c)
     assert(s == "Cat")
 }

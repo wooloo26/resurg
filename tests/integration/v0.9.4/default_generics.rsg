@@ -97,7 +97,9 @@ pact Converter<T, U = str> {
     fn convert(*self, input: T) -> U
 }
 
-struct IntToStr: Converter<i32> {
+struct IntToStr {}
+
+ext IntToStr impl Converter {
     fn convert(*self, input: i32) -> str {
         "converted"
     }

@@ -15,14 +15,16 @@ struct PlainInt {
     value: i32 = 0
 }
 
-struct BadContainer: Container {
+struct BadContainer {
+    item: PlainInt
+}
+
+ext BadContainer impl Container {
     type Element = PlainInt
 
     fn first(*self) -> ?PlainInt {
         Some(self.item)
     }
-
-    item: PlainInt
 }
 
 fn main() {

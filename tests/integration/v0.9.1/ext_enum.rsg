@@ -88,21 +88,21 @@ fn test_ext_enum_pointer_receiver() {
     assert(r.is_circle() == false)
 }
 
-// ── ext alongside enum-defined methods ──
+// ── ext methods on enum (no inline methods) ──
 
 enum Status {
     Active,
     Inactive,
+}
 
+ext Status {
     fn is_active(*s) -> bool {
         match *s {
             Active => true,
             _ => false,
         }
     }
-}
 
-ext Status {
     fn is_inactive(*s) -> bool {
         match *s {
             Inactive => true,
@@ -111,7 +111,7 @@ ext Status {
     }
 }
 
-fn test_ext_alongside_enum_methods() {
+fn test_ext_enum_methods() {
     a := Status::Active
     assert(a.is_active())
     assert(a.is_inactive() == false)

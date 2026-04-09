@@ -1,11 +1,13 @@
 // v0.9.4 — Self and *Self type: Self refers to the concrete type inside struct/enum/pact/ext
 
-// ── Self in struct: static constructor and value-returning methods ──
+// ── Self in ext: static constructor and value-returning methods ──
 
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
+}
 
+ext Point {
     fn origin() -> Self {
         Self { x = 0.0, y = 0.0 }
     }
@@ -40,12 +42,14 @@ fn test_struct_self_mut_pointer_receiver() {
     assert(p.y == 0.0)
 }
 
-// ── Self in enum: static constructor ──
+// ── Self in enum ext: static constructor ──
 
 enum Token {
     Number(f64),
     Ident(str),
+}
 
+ext Token {
     fn dummy() -> Self {
         Self::Number(0.0)
     }
@@ -65,11 +69,13 @@ pact Clonable {
     fn clone(*self) -> Self
 }
 
-struct Color: Clonable {
+struct Color {
     r: i32 = 0
     g: i32 = 0
     b: i32 = 0
+}
 
+ext Color impl Clonable {
     fn clone(*c) -> Self {
         Self { r = c.r, g = c.g, b = c.b }
     }
@@ -114,7 +120,9 @@ fn test_ext_self_return_type() {
 
 struct Accumulator {
     total: i32 = 0
+}
 
+ext Accumulator {
     fn add(mut *self, n: i32) {
         self.total = self.total + n
     }

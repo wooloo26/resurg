@@ -201,8 +201,8 @@ Higher-order programming and code organization.
 
 ## v0.9.6 — Break Changes
 
-- [ ] Rewrite `pact`, `struct`, `enum`, `pub`
-- [ ] Rewrite Associated Types
+- [x] Rewrite `pact`, `struct`, `enum`, `pub`
+- [x] Rewrite Associated Types
 
 ## v0.9.7 — Break Changes
 

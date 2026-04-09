@@ -14,9 +14,11 @@ pact Clone {
     fn clone(*self) -> Self
 }
 
-struct MyInt: Ord + Display + Clone {
+struct MyInt {
     value: i32 = 0
+}
 
+ext MyInt impl Ord + Display + Clone {
     fn compare(*self, other: *Self) -> i32 {
         if self.value < other.value { -1 }
         else if self.value > other.value { 1 }
@@ -71,9 +73,11 @@ where
     a.to_display()
 }
 
-struct MyStr: Display {
+struct MyStr {
     data: str = ""
+}
 
+ext MyStr impl Display {
     fn to_display(*self) -> str {
         self.data
     }
@@ -109,7 +113,9 @@ where In: Display, Out: Display,
     fn transform(*self, input: In) -> Out
 }
 
-struct IdentityTransform: Transformer<MyInt, MyInt> {
+struct IdentityTransform {}
+
+ext IdentityTransform impl Transformer {
     fn transform(*self, input: MyInt) -> MyInt {
         input
     }

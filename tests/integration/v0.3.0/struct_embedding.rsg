@@ -3,14 +3,11 @@
 struct Base {
     x: i32 = 0
     y: i32 = 0
+}
 
-    fn sum(*b) -> i32 {
-        b.x + b.y
-    }
-
-    fn label(*b) -> str {
-        "base"
-    }
+ext Base {
+    fn sum(*b) -> i32 { b.x + b.y }
+    fn label(*b) -> str { "base" }
 }
 
 struct Extended {
@@ -18,7 +15,6 @@ struct Extended {
     z: i32 = 0
 }
 
-// ── promoted field access ──
 fn test_field_promotion() {
     e := Extended { x = 1, y = 2, z = 3 }
     assert(e.x == 1)
@@ -26,13 +22,11 @@ fn test_field_promotion() {
     assert(e.z == 3)
 }
 
-// ── promoted method call ──
 fn test_method_promotion() {
     e := Extended { x = 3, y = 4, z = 5 }
     assert(e.sum() == 7)
 }
 
-// ── explicit embedded access ──
 fn test_explicit_embed_access() {
     e := Extended { x = 10, y = 20, z = 30 }
     assert(e.Base.x == 10)
@@ -40,13 +34,12 @@ fn test_explicit_embed_access() {
     assert(e.Base.sum() == 30)
 }
 
-// ── method override ──
 struct Overrider {
     Base
+}
 
-    fn sum(*o) -> i32 {
-        o.Base.sum() + 100
-    }
+ext Overrider {
+    fn sum(*o) -> i32 { o.Base.sum() + 100 }
 }
 
 fn test_method_override() {
@@ -55,13 +48,11 @@ fn test_method_override() {
     assert(o.Base.sum() == 7)
 }
 
-// ── override does not affect promoted non-overridden method ──
 fn test_non_overridden_promotion() {
     o := Overrider { x = 1, y = 2 }
     assert(o.label() == "base")
 }
 
-// ── promoted field assignment ──
 fn test_embed_field_assign() {
     e := Extended { x = 0, y = 0, z = 0 }
     e.x = 10

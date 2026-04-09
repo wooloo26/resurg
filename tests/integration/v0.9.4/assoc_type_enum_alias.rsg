@@ -1,15 +1,17 @@
 // v0.9.4 — Associated types in enums: type aliases binding to generic parameters
 
-// ── enum with associated type alias for generic param ──
+// ── enum with type alias moved to ext block ──
 
 enum Message<T> {
+    Text(str),
+    Data(T),
+    Signal,
+}
+
+ext<T> Message<T> {
     type Payload = T
 
-    Text(str),
-    Data(Payload),
-    Signal,
-
-    fn extract_data(*self) -> ?Payload {
+    fn extract_data(*self) -> ?T {
         match *self {
             Data(d) => Some(d),
             _ => None,
@@ -44,11 +46,13 @@ fn test_enum_assoc_type_alias_text() {
 // ── enum with multiple assoc type aliases and default generics ──
 
 enum Response<Body = str, Err = str> {
+    Success(Body),
+    Failure(Err),
+}
+
+ext<Body, Err> Response<Body, Err> {
     type BodyType = Body
     type ErrorType = Err
-
-    Success(BodyType),
-    Failure(ErrorType),
 
     fn is_success(*self) -> bool {
         match *self {

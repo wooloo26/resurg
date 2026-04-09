@@ -44,7 +44,9 @@ pub pact Checkable {
     fn check() -> bool
 }
 
-struct Validator: Checkable {
+struct Validator {}
+
+ext Validator impl Checkable {
     fn check(v) -> bool = true
 }
 

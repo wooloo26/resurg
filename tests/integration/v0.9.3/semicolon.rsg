@@ -15,11 +15,14 @@ fn test_multiple_semicolons() {
     assert(a + b + c == 60)
 }
 
-// ── semicolon in function body (expression-bodied struct methods) ──
+// ── semicolon in function body (methods via ext block) ──
 
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
+}
+
+ext Point {
     fn reset(mut *p) { p.x = 0.0; p.y = 0.0 }
 }
 

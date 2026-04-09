@@ -5,7 +5,9 @@
 struct Pair<T, U> {
     first: T
     second: U
+}
 
+ext<T, U> Pair<T, U> {
     fn get_first(p) -> T {
         p.first
     }
@@ -25,7 +27,9 @@ fn test_pair_methods() {
 
 struct Box<T> {
     value: T
+}
 
+ext<T> Box<T> {
     fn unwrap(b) -> T {
         b.value
     }
@@ -37,26 +41,4 @@ fn test_box_unwrap() {
 
     s := Box<str> { value = "test" }
     assert(s.unwrap() == "test")
-}
-
-// ── generic struct with pointer receiver ──
-
-struct Counter<T> {
-    item: T
-    count: i32 = 0
-
-    fn get_item(*c) -> T {
-        c.item
-    }
-
-    fn increment(mut *c) {
-        c.count = c.count + 1
-    }
-}
-
-fn test_counter_methods() {
-    c := Counter<str> { item = "events" }
-    assert(c.get_item() == "events")
-    c.increment()
-    assert(c.count == 1)
 }

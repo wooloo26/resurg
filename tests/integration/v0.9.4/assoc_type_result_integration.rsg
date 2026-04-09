@@ -11,12 +11,14 @@ pact Fallible {
 
 // ── struct implementing Fallible ──
 
-struct FallibleSource: Fallible {
-    type Value = i32
-    type Error = str
-
+struct FallibleSource {
     current: i32
     fail_at: i32
+}
+
+ext FallibleSource impl Fallible {
+    type Value = i32
+    type Error = str
 
     fn try_get(mut *self) -> i32 ! str {
         if self.current == self.fail_at {

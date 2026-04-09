@@ -201,13 +201,14 @@ static ASTNode *parse_pact_decl(Parser *parser) {
         } else if (parser_check(parser, TOKEN_ID)) {
             const char *name = parser_advance(parser)->lexeme;
 
-            if (parser_match(parser, TOKEN_COLON)) {
-                // Required field: name: Type
-                ASTStructField field = {0};
-                field.name = name;
-                field.type = parser_parse_type(parser);
-                field.default_value = NULL;
-                BUF_PUSH(node->pact_decl.fields, field);
+            if (parser_check(parser, TOKEN_COLON)) {
+                // Reject field declarations: pacts define methods only
+                rsg_err(parser_current_loc(parser),
+                        "expected method or pact name in pact declaration; "
+                        "fields are not supported in pacts");
+                parser->err_count++;
+                parser_advance(parser); // consume ':'
+                parser_parse_type(parser);
             } else {
                 // Super pact ref (constraint alias brace syntax)
                 BUF_PUSH(node->pact_decl.super_pacts, name);
@@ -220,8 +221,8 @@ static ASTNode *parse_pact_decl(Parser *parser) {
                 }
             }
         } else {
-            rsg_err(parser_current_loc(parser),
-                    "expected field, method, or pact name in pact decl");
+            rsg_err(parser_current_loc(parser), "expected method or pact name in pact declaration");
+            parser->err_count++;
             parser_advance(parser);
         }
         parser_skip_newlines(parser);
@@ -255,28 +256,27 @@ static ASTNode *parse_enum_decl(Parser *parser) {
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
         if (parser_check(parser, TOKEN_FN)) {
-            // Method decl inside enum
-            ASTNode *method = parse_method_decl(parser, node->enum_decl.name);
-            BUF_PUSH(node->enum_decl.methods, method);
+            // Reject inline methods: use ext blocks instead
+            rsg_err(parser_current_loc(parser), "expected enum variant in enum block; "
+                                                "methods must be defined in ext blocks");
+            parser->err_count++;
+            parse_method_decl(parser, node->enum_decl.name);
         } else if (parser_check(parser, TOKEN_TYPE)) {
-            // Associated type: type Name = ConcreteType
+            // Reject inline associated types: use ext impl blocks instead
+            rsg_err(parser_current_loc(parser),
+                    "expected enum variant in enum block; "
+                    "associated types must be defined in ext impl blocks");
+            parser->err_count++;
             parser_advance(parser); // consume 'type'
-            ASTAssocType at = {0};
-            at.pact_qualifier = NULL;
-            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
-            at.bounds = NULL;
-            at.concrete_type = NULL;
+            parser_expect(parser, TOKEN_ID);
             if (parser_match(parser, TOKEN_COLON)) {
                 do {
-                    const char *bound = parser_expect(parser, TOKEN_ID)->lexeme;
-                    BUF_PUSH(at.bounds, bound);
+                    parser_expect(parser, TOKEN_ID);
                 } while (parser_match(parser, TOKEN_PLUS));
             }
             if (parser_match(parser, TOKEN_EQUAL)) {
-                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
-                *at.concrete_type = parser_parse_type(parser);
+                parser_parse_type(parser);
             }
-            BUF_PUSH(node->enum_decl.assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             ASTEnumVariant variant = {0};
             variant.name = parser_advance(parser)->lexeme;
@@ -321,7 +321,8 @@ static ASTNode *parse_enum_decl(Parser *parser) {
 
             BUF_PUSH(node->enum_decl.variants, variant);
         } else {
-            rsg_err(parser_current_loc(parser), "expected variant or method in enum");
+            rsg_err(parser_current_loc(parser), "expected enum variant");
+            parser->err_count++;
             parser_advance(parser);
         }
         // Consume optional comma and newlines between variants
@@ -349,13 +350,19 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     node->struct_decl.assoc_types = NULL;
     node->struct_decl.type_params = parse_type_params(parser);
 
-    // Parse optional conformance list: struct Foo: Pact1 + Pact2 + Into<str>
-    if (parser_match(parser, TOKEN_COLON)) {
+    // Reject conformance lists: use ext blocks instead
+    if (parser_check(parser, TOKEN_COLON)) {
+        rsg_err(parser_current_loc(parser),
+                "conformance lists on struct declarations are not supported; "
+                "use 'ext Type impl Pact { ... }' instead");
+        parser->err_count++;
+        parser_advance(parser); // consume ':'
+        // Consume the conformance list to recover
         do {
             parser_skip_newlines(parser);
-            const char *pact_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            BUF_PUSH(node->struct_decl.conformances, pact_name);
-            // Consume optional generic type args: Into<str>
+            if (parser_check(parser, TOKEN_ID)) {
+                parser_advance(parser);
+            }
             if (parser_match(parser, TOKEN_LESS)) {
                 do {
                     parser_parse_type(parser);
@@ -375,27 +382,26 @@ static ASTNode *parse_struct_decl(Parser *parser) {
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
         if (parser_check(parser, TOKEN_FN)) {
-            // Method decl
-            ASTNode *method = parse_method_decl(parser, node->struct_decl.name);
-            BUF_PUSH(node->struct_decl.methods, method);
+            // Reject inline methods: use ext blocks instead
+            rsg_err(parser_current_loc(parser),
+                    "expected field or embedded struct in struct block; "
+                    "methods must be defined in ext blocks");
+            parser->err_count++;
+            parse_method_decl(parser, node->struct_decl.name);
         } else if (parser_check(parser, TOKEN_TYPE)) {
-            // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType
+            // Reject inline associated types: use ext impl blocks instead
+            rsg_err(parser_current_loc(parser),
+                    "expected field or embedded struct in struct block; "
+                    "associated types must be defined in ext impl blocks");
+            parser->err_count++;
             parser_advance(parser); // consume 'type'
-            ASTAssocType at = {0};
-            at.pact_qualifier = NULL;
-            at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            parser_expect(parser, TOKEN_ID);
             if (parser_match(parser, TOKEN_COLON_COLON)) {
-                // Qualified: type Pact::Name = ...
-                at.pact_qualifier = at.name;
-                at.name = parser_expect(parser, TOKEN_ID)->lexeme;
+                parser_expect(parser, TOKEN_ID);
             }
-            at.bounds = NULL;
-            at.concrete_type = NULL;
             if (parser_match(parser, TOKEN_EQUAL)) {
-                at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
-                *at.concrete_type = parser_parse_type(parser);
+                parser_parse_type(parser);
             }
-            BUF_PUSH(node->struct_decl.assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             const char *name = parser_advance(parser)->lexeme;
 
@@ -414,7 +420,8 @@ static ASTNode *parse_struct_decl(Parser *parser) {
                 BUF_PUSH(node->struct_decl.embedded, name);
             }
         } else {
-            rsg_err(parser_current_loc(parser), "expected field, method, or embedded struct");
+            rsg_err(parser_current_loc(parser), "expected field or embedded struct");
+            parser->err_count++;
             parser_advance(parser);
         }
         parser_skip_newlines(parser);

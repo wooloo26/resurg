@@ -1,14 +1,9 @@
 // TEST: compile_error
-// EXPECT-ERROR: missing required field 'name' from pact 'Named'
+// EXPECT-ERROR: expected method or pact name in pact declaration; fields are not supported in pacts
+// v0.9.6 — Error: pact field declarations are no longer supported
 
 pact Named {
     name: str
 }
 
-struct Foo: Named {
-    x: i32 = 0
-}
-
-fn main() {
-    f := Foo { x = 1 }
-}
+fn main() {}

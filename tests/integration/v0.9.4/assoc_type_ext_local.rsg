@@ -4,9 +4,11 @@ pact Clone {
     fn clone(*self) -> Self
 }
 
-struct MyInt: Clone {
+struct MyInt {
     value: i32 = 0
+}
 
+ext MyInt impl Clone {
     fn clone(*self) -> Self {
         Self { value = self.value }
     }

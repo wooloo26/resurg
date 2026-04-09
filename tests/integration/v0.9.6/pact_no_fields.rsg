@@ -1,0 +1,163 @@
+// v0.9.6 — Pacts define methods only (no fields); conformance via ext impl
+
+// ── pact with required methods ──
+
+pact Printable {
+    fn to_string() -> str
+}
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+ext Point impl Printable {
+    fn to_string(p) -> str {
+        "point"
+    }
+}
+
+fn test_basic_pact_conformance() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.to_string() == "point")
+}
+
+// ── pact with default methods ──
+
+pact Labeled {
+    fn label() -> str
+    fn display() -> str {
+        "label"
+    }
+}
+
+struct Box {
+    name: str
+}
+
+ext Box impl Labeled {
+    fn label(*b) -> str { b.name }
+}
+
+fn test_default_method() {
+    b := Box { name = "crate" }
+    assert(b.label() == "crate")
+    assert(b.display() == "label")
+}
+
+// ── pact with multiple required methods ──
+
+pact Shape {
+    fn area() -> f64
+    fn perimeter() -> f64
+}
+
+struct Rectangle {
+    width: f64 = 0.0
+    height: f64 = 0.0
+}
+
+ext Rectangle impl Shape {
+    fn area(r) -> f64 { r.width * r.height }
+    fn perimeter(r) -> f64 { 2.0 * (r.width + r.height) }
+}
+
+fn test_multiple_required_methods() {
+    r := Rectangle { width = 3.0, height = 4.0 }
+    assert(r.area() == 12.0)
+    assert(r.perimeter() == 14.0)
+}
+
+// ── pact with mut pointer receiver ──
+
+pact Resettable {
+    fn reset(mut *self)
+}
+
+struct Accumulator {
+    total: i32 = 0
+}
+
+ext Accumulator {
+    fn add(mut *a, n: i32) { a.total = a.total + n }
+    fn get(a) -> i32 { a.total }
+}
+
+ext Accumulator impl Resettable {
+    fn reset(mut *self) { self.total = 0 }
+}
+
+fn test_pact_mut_receiver() {
+    acc := Accumulator {}
+    acc.add(10)
+    acc.add(20)
+    assert(acc.get() == 30)
+    acc.reset()
+    assert(acc.get() == 0)
+}
+
+// ── override default method ──
+
+pact Describable {
+    fn name() -> str
+    fn describe() -> str {
+        "unknown"
+    }
+}
+
+struct Product {
+    title: str
+    price: f64 = 0.0
+}
+
+ext Product impl Describable {
+    fn name(p) -> str { p.title }
+    fn describe(p) -> str { "{p.title}: {p.price}" }
+}
+
+struct SimpleItem {
+    tag: str
+}
+
+ext SimpleItem impl Describable {
+    fn name(s) -> str { s.tag }
+    // uses default describe()
+}
+
+fn test_override_default() {
+    p := Product { title = "Widget", price = 9.99 }
+    assert(p.name() == "Widget")
+    assert(p.describe() == "Widget: 9.99")
+
+    s := SimpleItem { tag = "thing" }
+    assert(s.name() == "thing")
+    assert(s.describe() == "unknown")
+}
+
+// ── constraint alias pact ──
+
+pact Displayable {
+    fn display() -> str
+}
+
+pact Nameable {
+    fn get_name() -> str
+}
+
+pact ShowName = Displayable + Nameable
+
+struct User {
+    name: str
+    age: i32 = 0
+}
+
+ext User impl ShowName {
+    fn display(u) -> str { "User({u.name})" }
+    fn get_name(u) -> str { u.name }
+}
+
+fn test_constraint_alias() {
+    u := User { name = "Alice", age = 30 }
+    assert(u.display() == "User(Alice)")
+    assert(u.get_name() == "Alice")
+}

@@ -958,35 +958,6 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     }
 }
 
-/** Grouped params for pact method conformance checking. */
-typedef struct {
-    const ASTNode *decl;
-    const char *pact_name;
-    const StructMethodInfo *pact_methods;
-    const StructMethodInfo *impl_methods;
-} PactMethodCheck;
-
-/** Report missing pact methods that lack default bodies. */
-static void enforce_required_methods(Sema *sema, const PactMethodCheck *check) {
-    for (int32_t i = 0; i < BUF_LEN(check->pact_methods); i++) {
-        bool found = false;
-        for (int32_t j = 0; j < BUF_LEN(check->impl_methods); j++) {
-            if (strcmp(check->impl_methods[j].name, check->pact_methods[i].name) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            bool has_body = check->pact_methods[i].decl != NULL &&
-                            check->pact_methods[i].decl->fn_decl.body != NULL;
-            if (!has_body) {
-                SEMA_ERR(sema, check->decl->loc, "missing required method '%s' from pact '%s'",
-                         check->pact_methods[i].name, check->pact_name);
-            }
-        }
-    }
-}
-
 /** Check whether a pact method exists for an enum/primitive target. */
 static bool ext_method_exists(const Sema *sema, const char *target_name, const char *method_name,
                               const EnumDef *edef) {
@@ -1107,11 +1078,31 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
 
             StructMethodInfo *pact_methods = NULL;
             collect_pact_methods(sema, pact, &pact_methods);
-            PactMethodCheck method_check = {.decl = decl,
-                                            .pact_name = pact_name,
-                                            .pact_methods = pact_methods,
-                                            .impl_methods = sdef->methods};
-            enforce_required_methods(sema, &method_check);
+
+            // Check required methods & inject defaults for ext impl conformance
+            for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
+                bool found = false;
+                for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
+                    if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    bool has_body =
+                        pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
+                    if (has_body) {
+                        ASTNode *method_ast = pact_methods[i].decl;
+                        method_ast->fn_decl.owner_struct = sdef->name;
+                        BUF_PUSH(decl->ext_decl.methods, method_ast);
+                        register_method_sig(sema, sdef->name, method_ast, &sdef->methods);
+                    } else {
+                        SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
+                                 pact_methods[i].name, pact_name);
+                    }
+                }
+            }
+
             BUF_FREE(pact_methods);
         }
         return;

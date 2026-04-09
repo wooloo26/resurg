@@ -8,12 +8,14 @@ pact B {
     type Value
 }
 
-struct Dual: A + B {
-    type A::Value = i32
-    type B::Value = str
-
+struct Dual {
     a_val: i32
     b_val: str
+}
+
+ext Dual impl A + B {
+    type A::Value = i32
+    type B::Value = str
 }
 
 fn get_a_value<T: A>(t: T) -> i32 {

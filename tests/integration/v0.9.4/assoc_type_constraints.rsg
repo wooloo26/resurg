@@ -15,16 +15,22 @@ pact Iterator {
     fn next(mut *self) -> ?Self::Item
 }
 
-struct MyInt: Clone + Display {
+struct MyInt {
     value: i32 = 0
+}
+
+ext MyInt impl Clone + Display {
     fn clone(*self) -> Self { Self { value = self.value } }
     fn to_display(*self) -> str { "MyInt" }
 }
 
-struct IntIter: Iterator {
-    type Item = i32
+struct IntIter {
     current: i32 = 0
     end: i32 = 0
+}
+
+ext IntIter impl Iterator {
+    type Item = i32
 
     fn next(mut *self) -> ?i32 {
         if self.current < self.end {
@@ -37,10 +43,13 @@ struct IntIter: Iterator {
     }
 }
 
-struct MyIntIter: Iterator {
-    type Item = MyInt
+struct MyIntIter {
     current: i32 = 0
     end: i32 = 0
+}
+
+ext MyIntIter impl Iterator {
+    type Item = MyInt
 
     fn next(mut *self) -> ?MyInt {
         if self.current < self.end {

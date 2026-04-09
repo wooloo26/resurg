@@ -1,0 +1,13 @@
+// TEST: compile_error
+// EXPECT-ERROR: expected field
+// v0.9.6 — Methods are not allowed inside struct blocks; use ext blocks
+
+struct Foo {
+    x: i32 = 0
+
+    fn bad_method(f) -> i32 { f.x }
+}
+
+fn main() {
+    f := Foo {}
+}

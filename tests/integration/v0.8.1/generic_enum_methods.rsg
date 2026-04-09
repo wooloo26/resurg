@@ -5,7 +5,9 @@
 enum Either<L, R> {
     Left(L),
     Right(R),
+}
 
+ext<L, R> Either<L, R> {
     fn is_left(*e) -> bool {
         match *e {
             Left(_) => true,
@@ -38,7 +40,9 @@ fn test_is_right() {
 enum Maybe<T> {
     Nothing,
     Just(T),
+}
 
+ext<T> Maybe<T> {
     fn is_nothing(*m) -> bool {
         match *m {
             Nothing => true,

@@ -7,7 +7,7 @@ pact Display {
 }
 
 pact HasName {
-    name: str
+    fn name() -> str
 }
 
 // ── constraint alias (brace syntax) ──
@@ -28,35 +28,47 @@ fn show_printable<T: Printable>(x: T) -> str {
 }
 
 fn show_combo<T: ShowName>(x: T) -> str {
-    x.name
+    x.name()
 }
 
 // ── struct conforming to constraint alias ──
 
-struct Person: Printable {
-    name: str
+struct Person {
+    person_name: str
+}
 
+ext Person impl Printable {
     fn to_display(p) -> str {
-        p.name
+        p.person_name
+    }
+
+    fn name(p) -> str {
+        p.person_name
     }
 }
 
-struct User: ShowName {
-    name: str
+struct User {
+    user_name: str
+}
 
+ext User impl ShowName {
     fn to_display(u) -> str {
-        u.name
+        u.user_name
+    }
+
+    fn name(u) -> str {
+        u.user_name
     }
 }
 
 fn test_constraint_alias_brace() {
-    p := Person { name = "Alice" }
+    p := Person { person_name = "Alice" }
     s := show_printable<Person>(p)
     assert(s == "Alice")
 }
 
 fn test_constraint_alias_equals() {
-    u := User { name = "Bob" }
+    u := User { user_name = "Bob" }
     s := show_combo<User>(u)
     assert(s == "Bob")
 }

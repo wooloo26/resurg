@@ -1,68 +1,90 @@
 // v0.7.0 — Default method implementations in pacts
 
-// ── pact with default method using receiver ──
+// ── pact with default method ──
 
 pact Labeled {
-    label: str
-    fn display(thing) -> str {
-        "Label: {thing.label}"
+    fn label() -> str
+    fn display() -> str {
+        "label"
     }
 }
 
-struct Box: Labeled {
-    label: str
+struct Box {
+    name: str
     size: i32 = 0
 }
 
-fn test_default_method_accesses_field() {
-    b := Box { label = "Fragile", size = 10 }
-    assert(b.display() == "Label: Fragile")
+ext Box impl Labeled {
+    fn label(*b) -> str { b.name }
+}
+
+fn test_default_method_used() {
+    b := Box { name = "Fragile", size = 10 }
+    assert(b.label() == "Fragile")
+    assert(b.display() == "label")
 }
 
 // ── override default method ──
 
 pact Describable {
-    name: str
-    fn describe(thing) -> str {
-        thing.name
+    fn name() -> str
+    fn describe() -> str {
+        "unknown"
     }
 }
 
-struct Product: Describable {
-    name: str
+struct Product {
+    title: str
     price: f64 = 0.0
-
-    fn describe(p) -> str {
-        "{p.name} costs {p.price}"
-    }
 }
 
-struct SimpleItem: Describable {
-    name: str
+ext Product impl Describable {
+    fn name(p) -> str { p.title }
+    fn describe(p) -> str { "{p.title} costs {p.price}" }
+}
+
+struct SimpleItem {
+    tag: str
+}
+
+ext SimpleItem impl Describable {
+    fn name(s) -> str { s.tag }
 }
 
 fn test_override_default() {
-    p := Product { name = "Widget", price = 9.99 }
+    p := Product { title = "Widget", price = 9.99 }
     assert(p.describe() == "Widget costs 9.99")
 }
 
 fn test_use_default() {
-    s := SimpleItem { name = "Thing" }
-    assert(s.describe() == "Thing")
+    s := SimpleItem { tag = "Thing" }
+    assert(s.describe() == "unknown")
 }
 
 // ── default method with mutation ──
 
 pact Counter {
-    count: i32
+    fn get_count() -> i32
     fn increment(mut *c) {
-        c.count = c.count + 1
+        c.set_count(c.get_count() + 1)
     }
 }
 
-struct Tally: Counter {
+pact CounterInternal {
+    fn set_count(mut *self, n: i32)
+}
+
+struct Tally {
     count: i32 = 0
     name: str = ""
+}
+
+ext Tally impl CounterInternal {
+    fn set_count(mut *t, n: i32) { t.count = n }
+}
+
+ext Tally impl Counter {
+    fn get_count(t) -> i32 { t.count }
 }
 
 fn test_default_mutating_method() {
@@ -77,20 +99,23 @@ fn test_default_mutating_method() {
 // ── pact with default method that has extra params ──
 
 pact Animal {
-    name: str
-    fn set_name(mut *animal, new_name: str) {
-        animal.name = new_name
-    }
+    fn get_name() -> str
+    fn set_name(mut *animal, new_name: str)
 }
 
-struct Dog: Animal {
+struct Dog {
     name: str
     breed: str = ""
 }
 
-fn test_default_method_with_params() {
+ext Dog impl Animal {
+    fn get_name(d) -> str { d.name }
+    fn set_name(mut *d, new_name: str) { d.name = new_name }
+}
+
+fn test_method_with_params() {
     d := Dog { name = "Rex", breed = "Labrador" }
-    assert(d.name == "Rex")
+    assert(d.get_name() == "Rex")
     d.set_name(new_name = "Buddy")
-    assert(d.name == "Buddy")
+    assert(d.get_name() == "Buddy")
 }

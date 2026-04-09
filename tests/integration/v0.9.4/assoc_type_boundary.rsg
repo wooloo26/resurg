@@ -7,11 +7,13 @@ pact Iterator {
 
 // ── unit as associated type ──
 
-struct UnitIter: Iterator {
-    type Item = ()
-
+struct UnitIter {
     count: i32 = 0
     limit: i32
+}
+
+ext UnitIter impl Iterator {
+    type Item = ()
 
     fn next(mut *self) -> ?() {
         if self.count < self.limit {
