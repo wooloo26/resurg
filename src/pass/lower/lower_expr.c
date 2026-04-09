@@ -528,6 +528,13 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
             low, &(FieldAccessSpec){object, "len", ast->type, via_ptr, ast->loc});
     }
 
+    // str .len → struct field access on "len" (matches RsgStr C field)
+    if (lookup_type != NULL && lookup_type->kind == TYPE_STR &&
+        strcmp(ast->member.member, "len") == 0) {
+        return lower_make_field_access(
+            low, &(FieldAccessSpec){object, "len", ast->type, via_ptr, ast->loc});
+    }
+
     // Struct field access
     if (lookup_type != NULL && lookup_type->kind == TYPE_STRUCT) {
         const char *field_name = ast->member.member;

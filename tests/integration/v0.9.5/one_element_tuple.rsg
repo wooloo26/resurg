@@ -1,0 +1,104 @@
+// v0.9.5 — 1-element tuple support
+
+// ── basic creation and access ──
+
+fn test_one_elem_tuple_i32() {
+    t := (42,)
+    assert(t.0 == 42)
+}
+
+fn test_one_elem_tuple_str() {
+    t := ("hello",)
+    assert(t.0 == "hello")
+}
+
+fn test_one_elem_tuple_bool() {
+    t := (true,)
+    assert(t.0 == true)
+}
+
+fn test_one_elem_tuple_f64() {
+    t := (3.14,)
+    assert(t.0 == 3.14)
+}
+
+// ── type annotation ──
+
+fn test_one_elem_tuple_typed() {
+    var t: (i32,) = (99,)
+    assert(t.0 == 99)
+}
+
+fn test_one_elem_tuple_typed_str() {
+    var t: (str,) = ("world",)
+    assert(t.0 == "world")
+}
+
+// ── function return type ──
+
+fn make_single() -> (i32,) {
+    (7,)
+}
+
+fn test_one_elem_tuple_return() {
+    t := make_single()
+    assert(t.0 == 7)
+}
+
+// ── function parameter ──
+
+fn unwrap_single(t: (i32,)) -> i32 {
+    t.0
+}
+
+fn test_one_elem_tuple_param() {
+    assert(unwrap_single((42,)) == 42)
+}
+
+// ── equality ──
+
+fn test_one_elem_tuple_eq() {
+    a := (5,)
+    b := (5,)
+    c := (6,)
+    assert(a == b)
+    assert(a != c)
+}
+
+// ── destructuring ──
+
+fn test_one_elem_tuple_destructure() {
+    (x,) := (42,)
+    assert(x == 42)
+}
+
+// ── nested 1-element tuples ──
+
+fn test_nested_one_elem_tuple() {
+    t := ((1,),)
+    assert(t.0.0 == 1)
+}
+
+// ── 1-element tuple inside a pair ──
+
+fn test_one_elem_in_pair() {
+    t := ((1,), (2,))
+    assert(t.0.0 == 1)
+    assert(t.1.0 == 2)
+}
+
+// ── parenthesized expression is NOT a tuple ──
+
+fn test_parens_not_tuple() {
+    x := (42)
+    assert(x == 42)
+}
+
+// ── 0-element tuple regression ──
+
+fn test_zero_elem_tuple() {
+    x := ()
+    var y: () = unit
+    assert(unit == ())
+    assert(() == unit)
+}

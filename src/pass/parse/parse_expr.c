@@ -320,11 +320,13 @@ static ASTNode *parse_primary(Parser *parser) {
         }
         ASTNode *first = parser_parse_expr(parser);
         if (parser_match(parser, TOKEN_COMMA)) {
-            // Tuple lit: (expr, expr, ...)
+            // Tuple lit: (expr,) or (expr, expr, ...)
             ASTNode *node = ast_new(parser->arena, NODE_TUPLE_LIT, loc);
             node->tuple_lit.elems = NULL;
             BUF_PUSH(node->tuple_lit.elems, first);
-            parse_comma_separated(parser, &node->tuple_lit.elems);
+            if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+                parse_comma_separated(parser, &node->tuple_lit.elems);
+            }
             parser_expect(parser, TOKEN_RIGHT_PAREN);
             return node;
         }

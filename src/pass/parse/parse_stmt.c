@@ -237,6 +237,11 @@ static bool is_tuple_destructure(const Parser *parser) {
         }
         if (parser->tokens[pos].kind == TOKEN_COMMA) {
             pos++;
+            // Trailing comma: (x,) :=
+            if (pos < parser->count && parser->tokens[pos].kind == TOKEN_RIGHT_PAREN) {
+                return name_count >= 1 && pos + 1 < parser->count &&
+                       parser->tokens[pos + 1].kind == TOKEN_COLON_EQUAL;
+            }
             continue;
         }
         return false;
@@ -294,7 +299,7 @@ static ASTNode *parse_tuple_destructure(Parser *parser) {
             BUF_PUSH(node->tuple_destructure.names, name);
             idx++;
         }
-    } while (parser_match(parser, TOKEN_COMMA));
+    } while (parser_match(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_RIGHT_PAREN));
 
     parser_expect(parser, TOKEN_RIGHT_PAREN);
     parser_expect(parser, TOKEN_COLON_EQUAL);
@@ -330,8 +335,8 @@ ASTNode *parser_parse_stmt(Parser *parser) {
         parser_advance(parser); // consume 'break'
         ASTNode *node = ast_new(parser->arena, NODE_BREAK, loc);
         node->break_stmt.value = NULL;
-        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_RIGHT_BRACE) &&
-            !parser_at_end(parser)) {
+        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_SEMICOLON) &&
+            !parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
             node->break_stmt.value = parser_parse_expr(parser);
         }
         return node;
@@ -347,8 +352,8 @@ ASTNode *parser_parse_stmt(Parser *parser) {
         parser_advance(parser); // consume 'return'
         ASTNode *node = ast_new(parser->arena, NODE_RETURN, loc);
         node->return_stmt.value = NULL;
-        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_RIGHT_BRACE) &&
-            !parser_at_end(parser)) {
+        if (!parser_check(parser, TOKEN_NEWLINE) && !parser_check(parser, TOKEN_SEMICOLON) &&
+            !parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
             node->return_stmt.value = parser_parse_expr(parser);
         }
         return node;

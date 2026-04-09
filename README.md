@@ -504,7 +504,7 @@ c.increment()        // OK: implicitly &c
 (&Counter { value = 0 }).increment() // OK
 
 ext<T> []T {
-    fn len(s) -> usize { ... }
+    fn len(s) -> usize { len(s) }
     fn push(mut *s, item: T) { ... }
 }
 ([]i32{1, 2, 3}).len()           // OK: temporary slice copy
@@ -1165,7 +1165,7 @@ struct NonEmpty<T>([]T)
 
 ext<T> NonEmpty<T> {
     fn from_slice(s: []T) -> Self ! str {
-        if s.len() == 0 { Err("slice must not be empty") }
+        if len(s) == 0 { Err("slice must not be empty") }
         else { Ok(Self(s)) }
     }
 

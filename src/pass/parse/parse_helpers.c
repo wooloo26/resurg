@@ -43,7 +43,7 @@ const Token *parser_expect(Parser *parser, TokenKind kind) {
 }
 
 void parser_skip_newlines(Parser *parser) {
-    while (parser_check(parser, TOKEN_NEWLINE)) {
+    while (parser_check(parser, TOKEN_NEWLINE) || parser_check(parser, TOKEN_SEMICOLON)) {
         parser_advance(parser);
     }
 }

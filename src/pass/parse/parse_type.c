@@ -91,7 +91,7 @@ static ASTType parse_tuple_type(Parser *parser, SrcLoc loc) {
         ASTType *elem = arena_alloc(parser->arena, sizeof(ASTType));
         *elem = parser_parse_type(parser);
         BUF_PUSH(type.tuple_elems, elem);
-    } while (parser_match(parser, TOKEN_COMMA));
+    } while (parser_match(parser, TOKEN_COMMA) && !parser_check(parser, TOKEN_RIGHT_PAREN));
     parser_expect(parser, TOKEN_RIGHT_PAREN);
     return type;
 }

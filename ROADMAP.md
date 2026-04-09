@@ -194,20 +194,19 @@ Higher-order programming and code organization.
 
 ## v0.9.5 — Fix Bugs
 
-- [ ] `str` is fat pointer
-- [ ] Support 1-element and 0-element (`()`/`unit`) tuple
-- [ ] Semicolon/Separator Rules
+- [x] `str` is fat pointer
+- [x] Rewrite slice
+- [x] Support 1-element and 0-element (`()`/`unit`) tuple
+- [x] Semicolon/Separator Rules
 
 ## v0.9.6 — Break Changes
 
-- [ ] Rewrite `pact`, `struct`, `enum`
+- [ ] Rewrite `pact`, `struct`, `enum`, `pub`
 - [ ] Rewrite Associated Types
-- [ ] Rewrite `pub`
 
 ## v0.9.7 — Break Changes
 
 - [ ] Rewrite `use`
-- [ ] Rewrite slice
 - [ ] Rewrite `defer`
 
 ## v0.9.8 — Newtype
@@ -216,13 +215,14 @@ Higher-order programming and code organization.
 
 ## v0.9.9 — Before Ecosystem
 
+- [ ] `str` support escapes
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
 - [ ] Module resolution (file system)
 
 ## v0.9.10 — Prelude
 
-- [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
+- [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, Primitive methods, `len()`, etc.), No longer hardcode
 - [ ] `panic(message)`
 - [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`
