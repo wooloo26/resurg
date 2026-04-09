@@ -142,7 +142,7 @@ struct Point {
 
 ### Memory Model
 
-No pointer arithmetic. Auto-deref on field access (`p.field` works on `*T`).
+No pointer arithmetic. Auto-deref on access (`p` works on `*T` and receiver `fn(*p)`; `*p` works on `**T`).
 
 **Struct:** Structs are value types (copied on assignment). `&` heap-allocates and returns `*T`.
 
@@ -229,18 +229,23 @@ process(&Point { x = 1.0, y = 2.0 })
 
 **Pointer types:**
 
-| Type   | Meaning                 | Typical Use                          |
-| ------ | ----------------------- | ------------------------------------ |
-| `*T`   | Pointer to `T`          | Heap allocation, optional references |
-| `*[]T` | Pointer to slice header | Reassign slice (len/data) in-place   |
-| `**T`  | Pointer to pointer      | Reassign pointer target in-place     |
-| `[]*T` | Slice of pointers       | Collection of heap-allocated items   |
+| Type   | Meaning                 |
+| ------ | ----------------------- |
+| `*T`   | Pointer to `T`          |
+| `*[]T` | Pointer to slice header |
+| `**T`  | Pointer to pointer      |
+| `[]*T` | Slice of pointers       |
+
+Auto-deref applies to pointer-to-fat-pointer (`*[]T`, `*str`): indexing, slicing, and `len()` work through the pointer.
 
 ```rsg
 fn extend(mut s: *[]i32) {
-    *s = (*s)[..] + [99]   // reassign slice header
+    s[0] = 99                         // auto-deref index
+    s = s[1..]                        // auto-deref slice + assign
 }
+```
 
+```rsg
 fn allocate(p: **Node) {
     *p = &Node{ value = 42 }
 }

@@ -82,6 +82,13 @@ static HirNode *lower_var_decl(Lower *low, const ASTNode *ast) {
 static HirNode *lower_assign(Lower *low, const ASTNode *ast) {
     HirNode *target = lower_expr(low, ast->assign.target);
     HirNode *value = lower_expr(low, ast->assign.value);
+    // Auto-deref: insert deref when target is *T and value matches pointee
+    if (target->type != NULL && target->type->kind == TYPE_PTR && value->type != NULL &&
+        type_equal(value->type, target->type->ptr.pointee)) {
+        HirNode *deref = hir_new(low->hir_arena, HIR_DEREF, target->type->ptr.pointee, ast->loc);
+        deref->deref.operand = target;
+        target = deref;
+    }
     HirNode *node = hir_new(low->hir_arena, HIR_ASSIGN, &TYPE_UNIT_INST, ast->loc);
     node->assign.target = target;
     node->assign.value = value;

@@ -2,26 +2,68 @@
 
 // ── Fn body / decl ────────────────────────────────────────
 
-/** Return true if the top-level block contains any HIR_DEFER nodes. */
-static bool block_has_defers(const HirNode *body) {
-    if (body == NULL || body->kind != HIR_BLOCK) {
+/** Recursively check whether @p node (or any descendant) contains HIR_DEFER. */
+static bool tree_has_defers(const HirNode *node) {
+    if (node == NULL) {
         return false;
     }
-    for (int32_t i = 0; i < BUF_LEN(body->block.stmts); i++) {
-        if (body->block.stmts[i]->kind == HIR_DEFER) {
-            return true;
-        }
+    if (node->kind == HIR_DEFER) {
+        return true;
     }
-    return false;
+    switch (node->kind) {
+    case HIR_BLOCK:
+        for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
+            if (tree_has_defers(node->block.stmts[i])) {
+                return true;
+            }
+        }
+        return tree_has_defers(node->block.result);
+    case HIR_IF:
+        return tree_has_defers(node->if_expr.then_body) || tree_has_defers(node->if_expr.else_body);
+    case HIR_LOOP:
+        return tree_has_defers(node->loop.body);
+    default:
+        return false;
+    }
 }
 
-/** Emit defer bodies in LIFO order and the cleanup return. */
+/** Count every HIR_DEFER node reachable from @p node. */
+static int32_t count_defers(const HirNode *node) {
+    if (node == NULL) {
+        return 0;
+    }
+    if (node->kind == HIR_DEFER) {
+        return 1;
+    }
+    switch (node->kind) {
+    case HIR_BLOCK: {
+        int32_t n = 0;
+        for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
+            n += count_defers(node->block.stmts[i]);
+        }
+        n += count_defers(node->block.result);
+        return n;
+    }
+    case HIR_IF:
+        return count_defers(node->if_expr.then_body) + count_defers(node->if_expr.else_body);
+    case HIR_LOOP:
+        return count_defers(node->loop.body);
+    default:
+        return 0;
+    }
+}
+
+/** Emit defer bodies in LIFO order, guarded by their activation flags. */
 static void emit_deferred_cleanup(CGen *cgen, const Type *return_type) {
     emit_line(cgen, "_rsg_cleanup:;");
     for (int32_t i = BUF_LEN(cgen->defer_bodies) - 1; i >= 0; i--) {
         const HirNode *defer_node = cgen->defer_bodies[i];
         if (defer_node->defer_stmt.body != NULL) {
+            emit_line(cgen, "if (_rsg_defer_%d) {", i);
+            cgen->indent++;
             emit_stmt(cgen, defer_node->defer_stmt.body);
+            cgen->indent--;
+            emit_line(cgen, "}");
         }
     }
     if (return_type != NULL && return_type->kind != TYPE_UNIT) {
@@ -61,16 +103,26 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
     const Type *return_type = fn_node->fn_decl.return_type;
     bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
     bool is_main = strcmp(fn_node->fn_decl.name, "main") == 0;
-    bool has_defers = block_has_defers(body);
+    bool has_defers = tree_has_defers(body);
 
     // Save and set defer state
     const HirNode **saved_defers = cgen->defer_bodies;
     bool saved_in_deferred = cgen->in_deferred_fn;
+    int32_t saved_defer_counter = cgen->defer_counter;
     cgen->defer_bodies = NULL;
     cgen->in_deferred_fn = has_defers;
+    cgen->defer_counter = 0;
 
     if (has_defers && !is_unit && !is_main) {
         emit_line(cgen, "%s _rsg_result;", c_type_for(cgen, return_type));
+    }
+
+    // Emit boolean activation flags for every defer in this function
+    if (has_defers) {
+        int32_t defer_count = count_defers(body);
+        for (int32_t i = 0; i < defer_count; i++) {
+            emit_line(cgen, "bool _rsg_defer_%d = false;", i);
+        }
     }
 
     if (body != NULL && body->kind == HIR_BLOCK) {
@@ -103,6 +155,7 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
     // Restore defer state
     cgen->defer_bodies = saved_defers;
     cgen->in_deferred_fn = saved_in_deferred;
+    cgen->defer_counter = saved_defer_counter;
 }
 
 /** Emit the fn sig: return-type name(params). */

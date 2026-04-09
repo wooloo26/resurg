@@ -8,14 +8,14 @@ enum Msg {
 
 ext Msg {
     fn is_quit(*m) -> bool {
-        match *m {
+        match m {
             Quit => true,
             _ => false,
         }
     }
 
     fn describe(*m) -> str {
-        match *m {
+        match m {
             Quit => "quit",
             Move { x, y } => "move",
             Write(text) => text,

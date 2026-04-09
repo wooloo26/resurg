@@ -12,7 +12,7 @@ ext<T> Message<T> {
     type Payload = T
 
     fn extract_data(*self) -> ?T {
-        match *self {
+        match self {
             Data(d) => Some(d),
             _ => None,
         }
@@ -55,7 +55,7 @@ ext<Body, Err> Response<Body, Err> {
     type ErrorType = Err
 
     fn is_success(*self) -> bool {
-        match *self {
+        match self {
             Success(_) => true,
             Failure(_) => false,
         }

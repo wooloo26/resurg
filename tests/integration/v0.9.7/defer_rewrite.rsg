@@ -1,0 +1,143 @@
+// v0.9.7 — Rewrite defer: single-statement form and function-scoped semantics
+
+// ── single-statement defer (no braces) ──
+
+fn set_flag(mut p: *i32) {
+    defer *p = 42
+}
+
+fn test_defer_single_statement() {
+    x := 0
+    set_flag(mut &x)
+    assert(x == 42)
+}
+
+// ── single-statement defer with function call ──
+
+fn apply_value(mut p: *i32, val: i32) {
+    *p = val
+}
+
+fn defer_call(mut p: *i32) {
+    defer apply_value(mut p, 99)
+}
+
+fn test_defer_single_call() {
+    x := 0
+    defer_call(mut &x)
+    assert(x == 99)
+}
+
+// ── block defer still works ──
+
+fn block_defer(mut p: *i32) {
+    defer { *p = *p + 100 }
+    *p = 5
+}
+
+fn test_defer_block_form() {
+    x := 0
+    block_defer(mut &x)
+    assert(x == 105)
+}
+
+// ── LIFO with mixed single-statement and block defers ──
+
+fn lifo_mixed(mut p: *i32) {
+    defer *p = *p * 10 + 1
+    defer { *p = *p * 10 + 2 }
+    defer *p = *p * 10 + 3
+}
+
+fn test_defer_lifo_mixed() {
+    result := 0
+    lifo_mixed(mut &result)
+    assert(result == 321)
+}
+
+// ── defer inside if-block: function-scoped, runs at function exit ──
+
+fn defer_in_if(mut p: *i32, cond: bool) {
+    if cond {
+        defer *p = *p + 10
+    }
+    *p = *p + 1
+}
+
+fn test_defer_inside_if_true() {
+    x := 0
+    defer_in_if(mut &x, true)
+    // body: x = 0 + 1 = 1
+    // defer at function exit: x = 1 + 10 = 11
+    assert(x == 11)
+}
+
+fn test_defer_inside_if_false() {
+    x := 0
+    defer_in_if(mut &x, false)
+    // if-branch not taken, defer not reached
+    // body: x = 0 + 1 = 1
+    assert(x == 1)
+}
+
+// ── defer inside nested block: function-scoped ──
+
+fn defer_in_nested_block(mut p: *i32) {
+    {
+        defer *p = *p + 100
+    }
+    *p = *p + 1
+}
+
+fn test_defer_in_nested_block() {
+    x := 0
+    defer_in_nested_block(mut &x)
+    // block: defer registered
+    // body after block: x = 0 + 1 = 1
+    // function exit: x = 1 + 100 = 101
+    assert(x == 101)
+}
+
+// ── defer with early return ──
+
+fn defer_early_return(mut p: *i32) -> i32 {
+    defer *p = 42
+    return 10
+}
+
+fn test_defer_with_early_return() {
+    x := 0
+    r := defer_early_return(mut &x)
+    assert(r == 10)
+    assert(x == 42)
+}
+
+// ── multiple defers across if/else branches ──
+
+fn defers_in_branches(mut p: *i32, cond: bool) {
+    defer *p = *p + 1
+    if cond {
+        defer *p = *p * 10
+    } else {
+        defer *p = *p * 100
+    }
+    *p = 5
+}
+
+fn test_defers_in_branches_true() {
+    x := 0
+    defers_in_branches(mut &x, true)
+    // body: x = 5
+    // LIFO: if-defer first (x = 5 * 10 = 50), then top-defer (x = 50 + 1 = 51)
+    assert(x == 51)
+}
+
+fn test_defers_in_branches_false() {
+    x := 0
+    defers_in_branches(mut &x, false)
+    // body: x = 5
+    // LIFO: else-defer first (x = 5 * 100 = 500), then top-defer (x = 500 + 1 = 501)
+    assert(x == 501)
+}
+
+

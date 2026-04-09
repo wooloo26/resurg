@@ -206,8 +206,8 @@ Higher-order programming and code organization.
 
 ## v0.9.7 — Break Changes
 
-- [ ] Rewrite `use`
-- [ ] Rewrite `defer`
+- [x] Rewrite `use`
+- [x] Rewrite `defer`
 
 ## v0.9.8 — Newtype
 
@@ -230,6 +230,10 @@ Higher-order programming and code organization.
 ## v0.9.11 — Standard Library
 
 - [ ] Comprehensive standard library (`std/io`, …)
+  
+## v0.9.12 — Test Cases
+
+- [ ] Better Test Cases
 
 ## v1.0 — Stable Release
 

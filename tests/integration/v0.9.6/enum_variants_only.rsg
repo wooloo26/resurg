@@ -10,7 +10,7 @@ enum Message {
 
 ext Message {
     fn describe(*m) -> str {
-        match *m {
+        match m {
             Quit => "quit",
             Write(text) => text,
             Move { x, y } => "move",
@@ -51,16 +51,16 @@ enum Toggle {
 
 ext Toggle {
     fn is_on(*t) -> bool {
-        match *t {
+        match t {
             On => true,
             Off => false,
         }
     }
 
     fn flip(mut *t) {
-        match *t {
-            On => { *t = Toggle::Off },
-            Off => { *t = Toggle::On },
+        match t {
+            On => { t = Toggle::Off },
+            Off => { t = Toggle::On },
         }
     }
 }

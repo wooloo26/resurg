@@ -87,7 +87,12 @@ static ASTNode *parse_defer(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_DEFER);
     ASTNode *node = ast_new(parser->arena, NODE_DEFER, loc);
-    node->defer_stmt.body = parser_parse_block(parser);
+    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+        node->defer_stmt.body = parser_parse_block(parser);
+    } else {
+        // Single-statement defer: defer expr
+        node->defer_stmt.body = parser_parse_stmt(parser);
+    }
     return node;
 }
 

@@ -749,6 +749,10 @@ const Type *check_call(Sema *sema, ASTNode *node) {
                     return &TYPE_ERR_INST;
                 }
                 const Type *arg_type = node->call.args[0]->type;
+                // Auto-deref: unwrap *[]T / *str
+                if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
+                    arg_type = arg_type->ptr.pointee;
+                }
                 if (arg_type == NULL ||
                     (arg_type->kind != TYPE_SLICE && arg_type->kind != TYPE_STR)) {
                     SEMA_ERR(sema, node->loc, "'len' requires a slice or str argument");

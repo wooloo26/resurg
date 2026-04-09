@@ -38,6 +38,7 @@ CGenTarget *cgen_create(FILE *output, Arena *arena) {
     cgen->compound_types = NULL;
     cgen->defer_bodies = NULL;
     cgen->in_deferred_fn = false;
+    cgen->defer_counter = 0;
     cgen->real_output = NULL;
     hash_table_init(&cgen->wrapper_set, NULL);
     return &cgen->base;

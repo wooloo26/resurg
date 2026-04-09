@@ -28,6 +28,7 @@ struct CGen {
     const Type **compound_types;  /* buf */
     const HirNode **defer_bodies; /* buf – active defers in current fn */
     bool in_deferred_fn;          // true when current fn has defers
+    int32_t defer_counter;        // monotonic index for _rsg_defer_N flags
     HashTable wrapper_set;        // dedup for fn ref wrappers
 };
 

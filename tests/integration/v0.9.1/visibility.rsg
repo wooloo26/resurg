@@ -16,7 +16,7 @@ fn test_public_fn_access() {
 
 // ── use imported public item ──
 
-use config { get_max }
+use config::{get_max}
 
 fn test_use_imported() {
     assert(get_max() == 100)
@@ -24,7 +24,7 @@ fn test_use_imported() {
 
 // ── use with alias ──
 
-use config { get_computed as compute }
+use config::{get_computed as compute}
 
 fn test_use_alias() {
     assert(compute() == 42)

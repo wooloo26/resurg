@@ -20,7 +20,7 @@ fn test_qualified_access() {
 
 // ── use brings items into scope ──
 
-use math { multiply }
+use math::{multiply}
 
 fn test_use_import_single() {
     result := multiply(6, 7)
@@ -29,7 +29,7 @@ fn test_use_import_single() {
 
 // ── use with alias ──
 
-use math { add as sum }
+use math::{add as sum}
 
 fn test_use_alias() {
     result := sum(10, 20)

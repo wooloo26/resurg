@@ -63,7 +63,7 @@ enum Color {
 
 ext Color impl Describable {
     fn describe(*c) -> str {
-        match *c {
+        match c {
             Red => "red",
             Green => "green",
             Blue => "blue",

@@ -71,14 +71,14 @@ enum Either<L, R> {
 
 ext<L, R> Either<L, R> {
     fn is_left(*e) -> bool {
-        match *e {
+        match e {
             Left(_) => true,
             Right(_) => false,
         }
     }
 
     fn is_right(*e) -> bool {
-        match *e {
+        match e {
             Left(_) => false,
             Right(_) => true,
         }

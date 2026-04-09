@@ -187,6 +187,8 @@ void emit_stmt(CGen *cgen, const HirNode *node) {
         emit_loop_stmt(cgen, node);
         break;
     case HIR_DEFER:
+        emit_line(cgen, "_rsg_defer_%d = true;", cgen->defer_counter);
+        cgen->defer_counter++;
         BUF_PUSH(cgen->defer_bodies, node);
         break;
     case HIR_IF:

@@ -3,7 +3,7 @@
 // ── pass slice pointer to function ──
 
 fn append_value(mut s: *[]i32) {
-    *s = []i32{1, 2, 3, 99}
+    s = []i32{1, 2, 3, 99}
 }
 
 fn test_slice_pointer_reassign() {
@@ -18,14 +18,14 @@ fn test_slice_pointer_reassign() {
 fn test_slice_pointer_type() {
     s := []i32{10, 20, 30}
     p := &s
-    assert(len(*p) == 3)
-    assert((*p)[0] == 10)
+    assert(len(p) == 3)
+    assert(p[0] == 10)
 }
 
 // ── mutate via slice pointer ──
 
 fn replace_slice(mut s: *[]i32) {
-    *s = []i32{100, 200}
+    s = []i32{100, 200}
 }
 
 fn test_replace_slice() {

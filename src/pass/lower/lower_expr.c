@@ -596,6 +596,15 @@ static HirNode *lower_member(Lower *low, const ASTNode *ast) {
 static HirNode *lower_idx(Lower *low, const ASTNode *ast) {
     HirNode *object = lower_expr(low, ast->idx_access.object);
     HirNode *idx = lower_expr(low, ast->idx_access.idx);
+    // Auto-deref: insert deref for *[]T / *[N]T
+    if (object->type != NULL && object->type->kind == TYPE_PTR) {
+        const Type *pointee = object->type->ptr.pointee;
+        if (pointee->kind == TYPE_SLICE || pointee->kind == TYPE_ARRAY) {
+            HirNode *deref = hir_new(low->hir_arena, HIR_DEREF, pointee, ast->loc);
+            deref->deref.operand = object;
+            object = deref;
+        }
+    }
     HirNode *node = hir_new(low->hir_arena, HIR_IDX, ast->type, ast->loc);
     node->idx_access.object = object;
     node->idx_access.idx = idx;
@@ -628,6 +637,15 @@ static HirNode *lower_slice_expr(Lower *low, const ASTNode *ast) {
     HirNode *object = lower_expr(low, ast->slice_expr.object);
     HirNode *start = ast->slice_expr.start != NULL ? lower_expr(low, ast->slice_expr.start) : NULL;
     HirNode *end = ast->slice_expr.end != NULL ? lower_expr(low, ast->slice_expr.end) : NULL;
+    // Auto-deref: insert deref for *[]T / *[N]T
+    if (object->type != NULL && object->type->kind == TYPE_PTR) {
+        const Type *pointee = object->type->ptr.pointee;
+        if (pointee->kind == TYPE_SLICE || pointee->kind == TYPE_ARRAY) {
+            HirNode *deref = hir_new(low->hir_arena, HIR_DEREF, pointee, ast->loc);
+            deref->deref.operand = object;
+            object = deref;
+        }
+    }
     bool from_array = object->type != NULL && object->type->kind == TYPE_ARRAY;
     HirNode *node = hir_new(low->hir_arena, HIR_SLICE_EXPR, ast->type, ast->loc);
     node->slice_expr.object = object;

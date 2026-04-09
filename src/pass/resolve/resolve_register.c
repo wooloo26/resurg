@@ -814,7 +814,7 @@ static const char *resolve_super_path(Sema *sema, const char *path, SrcLoc loc) 
 void register_use_decl(Sema *sema, ASTNode *decl) {
     const char *mod_name = decl->use_decl.module_path;
 
-    // Resolve super:: paths
+    // Resolve super:: paths first (before normalizing separators)
     if (strncmp(mod_name, "super", 5) == 0) {
         const char *resolved = resolve_super_path(sema, mod_name, decl->loc);
         if (resolved == NULL) {
@@ -822,6 +822,24 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         }
         mod_name = resolved;
         decl->use_decl.module_path = resolved;
+    }
+
+    // Normalize :: separators to . for internal lookup
+    if (strstr(mod_name, "::") != NULL) {
+        size_t len = strlen(mod_name);
+        char *normalized = arena_alloc(sema->arena, len + 1);
+        size_t j = 0;
+        for (size_t i = 0; i < len; i++) {
+            if (mod_name[i] == ':' && i + 1 < len && mod_name[i + 1] == ':') {
+                normalized[j++] = '.';
+                i++; // skip second ':'
+            } else {
+                normalized[j++] = mod_name[i];
+            }
+        }
+        normalized[j] = '\0';
+        mod_name = normalized;
+        decl->use_decl.module_path = normalized;
     }
 
     for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {

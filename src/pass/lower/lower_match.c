@@ -198,6 +198,15 @@ HirNode *lower_match(Lower *low, const ASTNode *ast) {
     const Type *operand_type = operand->type;
     SrcLoc loc = ast->loc;
 
+    // Auto-deref: insert deref for *T
+    if (operand_type != NULL && operand_type->kind == TYPE_PTR) {
+        const Type *pointee = operand_type->ptr.pointee;
+        HirNode *deref = hir_new(low->hir_arena, HIR_DEREF, pointee, loc);
+        deref->deref.operand = operand;
+        operand = deref;
+        operand_type = pointee;
+    }
+
     // Store operand in a temp to avoid re-evaluation
     const char *match_tmp = lower_make_temp_name(low);
     HirSymSpec match_spec = {HIR_SYM_VAR, match_tmp, operand_type, false, loc};

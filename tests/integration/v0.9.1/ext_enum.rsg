@@ -11,7 +11,7 @@ enum Direction {
 
 ext Direction {
     fn is_vertical(*d) -> bool {
-        match *d {
+        match d {
             North => true,
             South => true,
             _ => false,
@@ -19,7 +19,7 @@ ext Direction {
     }
 
     fn is_horizontal(*d) -> bool {
-        match *d {
+        match d {
             East => true,
             West => true,
             _ => false,
@@ -46,14 +46,14 @@ enum Shape {
 
 ext Shape {
     fn area(*s) -> f64 {
-        match *s {
+        match s {
             Circle(r) => 3.14159 * r * r,
             Rect { w, h } => w * h,
         }
     }
 
     fn describe(*s) -> str {
-        match *s {
+        match s {
             Circle(_) => "circle",
             Rect { w, h } => "rectangle",
         }
@@ -73,7 +73,7 @@ fn test_ext_adt_enum() {
 
 ext Shape {
     fn is_circle(*s) -> bool {
-        match *s {
+        match s {
             Circle(_) => true,
             _ => false,
         }
@@ -97,14 +97,14 @@ enum Status {
 
 ext Status {
     fn is_active(*s) -> bool {
-        match *s {
+        match s {
             Active => true,
             _ => false,
         }
     }
 
     fn is_inactive(*s) -> bool {
-        match *s {
+        match s {
             Inactive => true,
             _ => false,
         }

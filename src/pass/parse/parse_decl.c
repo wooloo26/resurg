@@ -663,57 +663,55 @@ static ASTNode *parse_ext_decl(Parser *parser) {
 // ── Use decl ────────────────────────────────────────────────────
 
 /**
- * Parse use import:
- *   use module_name { name1, name2 as alias, ... }
- *   use module_name
+ * Parse use import (v0.9.7 path-style syntax):
+ *   use module::{name1, name2 as alias, ...}
+ *   use module::name [as alias]
  *   use super::name
  *   use super::super::name
- *   use self::name
+ *   use outer::inner::{name1, name2}
+ *   use outer::inner::name [as alias]
  */
 static ASTNode *parse_use_decl(Parser *parser) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_USE);
 
     ASTNode *node = ast_new(parser->arena, NODE_USE_DECL, loc);
-    node->use_decl.module_path = parser_expect(parser, TOKEN_ID)->lexeme;
     node->use_decl.imported_names = NULL;
     node->use_decl.aliases = NULL;
 
-    // Handle path-style use: use super::name or use super::super::name
-    // Consume :: chain, building the module path; the last segment is the imported name
-    if (parser_check(parser, TOKEN_COLON_COLON)) {
-        // Collect segments: module_path :: seg1 :: seg2 :: ... :: name
-        const char **segments = NULL;
-        BUF_PUSH(segments, node->use_decl.module_path);
-        while (parser_match(parser, TOKEN_COLON_COLON)) {
-            const char *seg = parser_expect(parser, TOKEN_ID)->lexeme;
-            BUF_PUSH(segments, seg);
+    // Collect path segments separated by ::
+    const char **segments = NULL;
+    BUF_PUSH(segments, parser_expect(parser, TOKEN_ID)->lexeme);
+
+    bool selective = false;
+    while (parser_match(parser, TOKEN_COLON_COLON)) {
+        if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+            selective = true;
+            break;
         }
-        // Last segment is the imported name, rest is the module path
-        int32_t seg_count = BUF_LEN(segments);
-        const char *imported = segments[seg_count - 1];
-        BUF_PUSH(node->use_decl.imported_names, imported);
-        BUF_PUSH(node->use_decl.aliases, imported);
-        // Rebuild module path from segments[0..seg_count-2]
+        BUF_PUSH(segments, parser_expect(parser, TOKEN_ID)->lexeme);
+    }
+
+    // Require at least one :: (e.g., use module::name or use module::{...})
+    if (BUF_LEN(segments) < 2 && !selective) {
+        rsg_err(loc, "expected '::' after module name in use declaration");
+    }
+
+    if (selective) {
+        // Selective import: use path::{name1, name2 as alias, ...}
+        // Build module path from all segments
         const char *path = segments[0];
-        for (int32_t i = 1; i < seg_count - 1; i++) {
+        for (int32_t i = 1; i < BUF_LEN(segments); i++) {
             path = arena_sprintf(parser->arena, "%s::%s", path, segments[i]);
         }
         node->use_decl.module_path = path;
-        BUF_FREE(segments);
-        return node;
-    }
 
-    parser_skip_newlines(parser);
-
-    // Selective import: use module { name1, name2 as alias }
-    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
+        parser_advance(parser); // consume '{'
         parser_skip_newlines(parser);
         while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
             const char *name = parser_expect(parser, TOKEN_ID)->lexeme;
             BUF_PUSH(node->use_decl.imported_names, name);
 
-            // Check for alias: name as alias
             if (parser_check(parser, TOKEN_ID) &&
                 strcmp(parser_current_token(parser)->lexeme, "as") == 0) {
                 parser_advance(parser); // consume 'as'
@@ -727,8 +725,30 @@ static ASTNode *parse_use_decl(Parser *parser) {
             parser_skip_newlines(parser);
         }
         parser_expect(parser, TOKEN_RIGHT_BRACE);
+    } else {
+        // Single path import: use module::name [as alias]
+        int32_t seg_count = BUF_LEN(segments);
+        const char *imported = segments[seg_count - 1];
+
+        const char *alias = imported;
+        if (parser_check(parser, TOKEN_ID) &&
+            strcmp(parser_current_token(parser)->lexeme, "as") == 0) {
+            parser_advance(parser); // consume 'as'
+            alias = parser_expect(parser, TOKEN_ID)->lexeme;
+        }
+
+        BUF_PUSH(node->use_decl.imported_names, imported);
+        BUF_PUSH(node->use_decl.aliases, alias);
+
+        // Build module path from segments[0..seg_count-2]
+        const char *path = segments[0];
+        for (int32_t i = 1; i < seg_count - 1; i++) {
+            path = arena_sprintf(parser->arena, "%s::%s", path, segments[i]);
+        }
+        node->use_decl.module_path = path;
     }
 
+    BUF_FREE(segments);
     return node;
 }
 

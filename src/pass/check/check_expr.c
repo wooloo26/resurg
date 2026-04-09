@@ -300,6 +300,10 @@ const Type *check_member(Sema *sema, ASTNode *node) {
 const Type *check_idx(Sema *sema, ASTNode *node) {
     const Type *object_type = check_node(sema, node->idx_access.object);
     check_node(sema, node->idx_access.idx);
+    // Auto-deref: unwrap *[]T / *[N]T
+    if (object_type != NULL && object_type->kind == TYPE_PTR) {
+        object_type = object_type->ptr.pointee;
+    }
     if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
         return object_type->array.elem;
     }
@@ -367,6 +371,10 @@ const Type *check_slice_expr(Sema *sema, ASTNode *node) {
     }
     if (node->slice_expr.end != NULL) {
         check_node(sema, node->slice_expr.end);
+    }
+    // Auto-deref: unwrap *[]T / *[N]T
+    if (object_type != NULL && object_type->kind == TYPE_PTR) {
+        object_type = object_type->ptr.pointee;
     }
     if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
         return type_create_slice(sema->arena, object_type->array.elem);
