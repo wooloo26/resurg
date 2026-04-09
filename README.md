@@ -27,15 +27,18 @@ Statically typed, compiled. ADTs, pattern matching, value-based errors. **Extens
 
 ### Compound Types
 
-| Kind     | Syntax       | Example                    | Notes                                         |
-| -------- | ------------ | -------------------------- | --------------------------------------------- |
-| Array    | `[N]T`       | `[5]i32`                   | Fixed-size value type                         |
-| Slice    | `[]T`        | `[]i32`                    | Fat pointer (data + length)                   |
-| Pointer  | `*T`         | `*i32`                     | No arithmetic                                 |
-| Tuple    | `(A, B, …)`  | `(i32, str)`               | ≥ 2 elements, `==`/`!=`, chain access `t.0.1` |
-| Option   | `?T`         | `Some(value)` / `None`     | Compiler-enforced null safety                 |
-| Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling              |
-| Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures                |
+| Kind     | Syntax       | Example                    | Notes                            |
+| -------- | ------------ | -------------------------- | -------------------------------- |
+| Array    | `[N]T`       | `[5]i32`                   | Fixed-size value type            |
+| Slice    | `[]T`        | `[]i32`                    | Fat pointer (data + length)      |
+| Pointer  | `*T`         | `*i32`                     | No arithmetic                    |
+| Tuple    | `(A, B, …)`  | `(i32, str)`               | `==`/`!=`, chain access `t.0.1`  |
+| Option   | `?T`         | `Some(value)` / `None`     | Compiler-enforced null safety    |
+| Result   | `T ! E`      | `Ok(value)` / `Err(error)` | Compiler-enforced error handling |
+| Function | `fn(…) -> R` | `fn(i32) -> bool`          | First-class, supports closures   |
+
+- 1-element tuple: `(A,)`
+- 0-element tuple: `()`/`unit`
 
 ### Type Aliases
 
@@ -62,7 +65,7 @@ unit == ()                           // true
 
 match x {
     () => println("got unit/zero tuple"),
-    _  => println!("B"), // ERROR: unreachable pattern
+    _  => println("B"), // ERROR: unreachable pattern
 }
 
 x := { return 123 }                  // x: never
@@ -121,6 +124,18 @@ fn main() {
 }
 ```
 
+### Semicolon/Separator Rules
+
+You can use `;` instead of line breaks in the source code.
+
+```rsg
+struct Point { x: f64; y: f64 }         // semicolons
+struct Point { 
+    x: f64
+    y: f64
+}
+```
+
 ---
 
 ## 4. Memory Model & Safety
@@ -148,10 +163,10 @@ fn build_tree() -> *Node {
 
 **Parameter passing:** `*T` parameter receives a pointer; caller must pass `&` explicitly for value types.
 
-| Category          | Types                                                          | Semantics |
-| ----------------- | -------------------------------------------------------------- | --------- |
-| **Value types**   | Primitives, `str`, `[N]T`, tuples, structs, enums, `?T`, `T!E` | Copied    |
-| **Pointer types** | `*T` (pointer via `&`), `fn`                                   | Shared    |
+| Category          | Types                                                      | Semantics |
+| ----------------- | ---------------------------------------------------------- | --------- |
+| **Value types**   | Primitives, `str`, `[N]T`, `[]T`, tuples, `struct`, `enum` | Copied    |
+| **Pointer types** | `*T` (pointer via `&`), `fn`                               | Shared    |
 
 Value types are **automatically copied** on assignment/passing — callee gets an independent copy.
 
@@ -183,7 +198,7 @@ var arr2: [3]i32 = [1, 2, 3]         // type prefix omitted on right
 
 ```rsg
 // Essentially a slice, but with private fields to enforce abstraction as an opaque type.
-struct CustomSlice {
+struct CustomSlice<T> {
     data: *T
     len: usize
 }
@@ -199,7 +214,9 @@ t[0] = 99                     // s[1] now 99 too
 u := s[2..]; v := s[..3]      // sub-slicing
 ```
 
-**Addressability:** Variables are addressable (`&var` → `*T`). Rvalues (literals, temporaries) are not — bind to a variable first. Exception: `&Struct` and `&[]slice` are heap-allocation syntax, not address-of.
+**Strings:** `str` — GC-backed fat pointer.
+
+**Addressability:** Variables are addressable (`&var` → `*T`). Rvalues (literals, temporaries) are not — bind to a variable first. Exception: `&Struct` are heap-allocation syntax, not address-of.
 
 ```rsg
 x := 42
@@ -208,7 +225,6 @@ px := &x                    // OK: *i32
 
 root := &Node { value = 0 } // heap allocation → *Node
 process(&Point { x = 1.0, y = 2.0 })
-slice_header := &[]i32{1, 2, 3}
 ```
 
 **Pointer types:**
@@ -303,16 +319,23 @@ When `panic` fires: execution stops, defers run LIFO. If a defer calls `recover(
 ```rsg
 fn safe_call() -> ?str {
     var result: ?str = None
+    
     defer {
+        // Only place where recover() is allowed
         if Some(msg) := recover() {
-            result = Some(msg)
+            println("Caught panic: {msg}")
+            result = Some(msg)          // Convert panic → controlled return
+            result                      // or return Some(msg)
         }
     }
-    panic("went wrong")  // stops here → defer runs → returns result
-    result                // unreachable
+    
+    println("About to panic...")
+    panic("went wrong")                 // Triggers defer above
+    result                              // Unreachable
 }
 
-msg := safe_call()  // Some("went wrong")
+// Usage:
+msg := safe_call()                      // → Some("went wrong")
 ```
 
 ### Assert
@@ -340,6 +363,9 @@ Value types. Embedding promotes fields/methods; override by redefining.
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
+}
+
+ext Point {
     fn sum(p) = p.x + p.y                                    // value receiver
     fn set_position(mut *point, target: Point) {             // mut pointer
         point.x = target.x; point.y = target.y
@@ -349,6 +375,9 @@ struct Point {
 struct Point3D {
     Point              // embedding
     z: f64 = 0.0
+}
+
+ext Point3D {
     fn set_position(mut *p, target: Point3D) {               // override
         p.Point.set_position(x = target.x, y = target.y)
         p.z = target.z
@@ -366,8 +395,12 @@ enum Msg {
     Quit,
     Move { x: i32, y: i32 },
     Write(str),
+}
+
+ext Msg {
     fn get_str(mut *p) { ... }
 }
+
 any := Msg::Write("any")
 
 enum Color { Red, Green, Blue }
@@ -475,7 +508,6 @@ ext<T> []T {
     fn push(mut *s, item: T) { ... }
 }
 ([]i32{1, 2, 3}).len()           // OK: temporary slice copy
-(&[]i32{1, 2, 3}).push(4)        // OK
 nums := []i32{1, 2, 3}
 nums.push(4)         // OK: explicit mutable reference
 ```
@@ -583,7 +615,7 @@ ext Token {
 struct Node<T> { value: T; next: ?Node<T> }
 
 struct ArrayWrapper<T, comptime N: usize> { data: [N]T }
-wrapper := ArrayWrapper<i32, 5> { data: [1, 2, 3, 4, 5] }
+wrapper := { data = [1, 2, 3, 4, 5] } // infer ArrayWrapper<i32, 5>
 ```
 
 ### `where` Clauses
@@ -662,6 +694,40 @@ ext Postgres impl DataSource {
 Generics:
 
 ```rsg
+pact Mapper {
+    type Input
+    type Output
+    fn map(*self, value: Self::Input) -> Self::Output
+}
+
+struct Container<T, F> {
+    data: T
+    func: F
+}
+
+ext<T, F> Container<T, F> {
+    fn new(data: T, func: F) -> Self {
+        Self { data, func }
+    }
+
+    fn get_data(*self) -> *T {
+        &self.data
+    }
+}
+
+ext<T, F, I, O> Container<T, F> impl Mapper
+where
+    F: Fn(*T) -> O,
+    I: Into<T>,
+{
+    type Input = I
+    type Output = O
+
+    fn map(*self, value: Self::Input) -> Self::Output {
+        t_val := value.into();
+        (self.func)(&t_val)
+    }
+}
 ```
 
 ### Constraints & Projection
@@ -709,8 +775,8 @@ enum Message<T: Response> {
 Qualified paths disambiguate when multiple pacts define the same associated type name:
 
 ```rsg
-trait Reader { type Item }
-trait Writer { type Item }
+pact Reader { type Item }
+pact Writer { type Item }
 
 struct Pipe<T: Reader + Writer> {
     read: <T as Reader>::Item,
@@ -794,7 +860,7 @@ set_name(mut user = &myUser, name = "Bob")
 ```rsg
 fn sum(values: ..i32) -> i32 {
     total := 0
-    for values |v| total += v
+    for values |v| { total += v }
     total
 }
 
@@ -848,11 +914,11 @@ result := loop {
 
 while condition { do_work() }
 
-for values |v| println(v)
-for values |v, i| ...
-for 0..10 |i| ...
-for start..end |i| ...            // variable bounds
-for 0..n * 2 |i| ...              // computed bounds
+for values |v| { println(v) }
+for values |v, i| { ... }
+for 0..10 |i| { ... }
+for start..end |i| { ... }            // variable bounds
+for 0..n * 2 |i| { ... }              // computed bounds
 ```
 
 Empty range (`N..N`) → zero iterations. `continue` supported in `loop`, `while`, `for`.
@@ -897,10 +963,10 @@ mod utils
 
 fn main() {
     // Absolute path
-    _ := src::db::models::User // or db::models:User
+    _ := src::db::models::User
 }
 
-use src::db::models::User // or db::models:User
+use src::db::models::User
 User
 
 // src/db.rsg
@@ -908,7 +974,7 @@ mod models
 mod queries
 ```
 
-`pub` applies to `fn`, `struct`, `struct` fields, `enum`, `enum` functions, `type`, `var`, `pact`, `pact` fields, `ext` functions.
+`pub` applies to `fn`, `struct`, `struct` fields, `enum`, `type`, `var`, `pact`, `ext` functions.
 
 ```rsg
 use std
@@ -927,12 +993,15 @@ pub fn add(a: i32, b: i32) = a + b
 
 pub struct User {
     pub name: str
-    age: u32          // module-internal only
+    age: u32                  // module-internal only
 }
 
-pact User {
-    fn internal_helper(*u) // module-internal only
-    pub fn public_api(*u)
+pub pact PublicMethod {
+    fn helper(*u)
+}
+
+pact InternalMethod {         // module-internal only
+    fn helper(*u)
 }
 ```
 
@@ -1085,7 +1154,7 @@ ext Email impl Display {
     fn to_string(*self) -> str { self.0 }
 }
 
-email := Email::parse("alice@example.com")!
+email := Email.parse("alice@example.com")!
 // var e: Email = "not-an-email"   // ERROR: type mismatch
 ```
 
@@ -1104,7 +1173,7 @@ ext<T> NonEmpty<T> {
     fn items(*self) -> []T { self.0 }
 }
 
-names := NonEmpty::from_slice([]str{"Alice", "Bob"})!
+names := NonEmpty.from_slice([]str{"Alice", "Bob"})!
 println(names.first())   // "Alice"
 ```
 

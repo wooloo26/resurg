@@ -192,40 +192,60 @@ Higher-order programming and code organization.
 - [x] `where`
 - [x] Associated Types
 
-## v0.9.5 — Break Changes
+## v0.9.5 — Fix Bugs
 
-## v0.9.5 — Before Ecosystem
+- [ ] `str` is fat pointer
+- [ ] Support 1-element and 0-element (`()`/`unit`) tuple
+- [ ] Semicolon/Separator Rules
 
-- [ ] `pub` applies to `struct` fields, `enum` functions, `pact` fields, `ext` functions.
+## v0.9.6 — Break Changes
+
+- [ ] Rewrite `pact`, `struct`, `enum`
+- [ ] Rewrite Associated Types
+- [ ] Rewrite `pub`
+
+## v0.9.7 — Break Changes
+
+- [ ] Rewrite `use`
+- [ ] Rewrite slice
+- [ ] Rewrite `defer`
+
+## v0.9.8 — Newtype
+
 - [ ] Newtype
-- [ ] Refactor slice
+
+## v0.9.9 — Before Ecosystem
+
 - [ ] Variadic Arguments
 - [ ] Documentation Comments
 - [ ] Module resolution (file system)
 
-## v0.9.6 — Ecosystem & Runtime
+## v0.9.10 — Prelude
 
 - [ ] Prelude (`println` , `panic`, `recover`, `assert`, `Option`, `Result`, etc.), No longer hardcode
-- [ ] Comprehensive standard library (`std/io`, …)
-- [ ] `panic(message)` builtin (immediate abort, `noreturn`; defers run before return)
-- [ ] `recover()` builtin (catch panic inside `defer`, returns `?str`; function returns from defer, not from panic site)
+- [ ] `panic(message)`
+- [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`
 
-## v1.0.0 — Stable Release
+## v0.9.11 — Standard Library
+
+- [ ] Comprehensive standard library (`std/io`, …)
+
+## v1.0 — Stable Release
 
 Language completeness, tooling, and ecosystem.
 
 - [ ] Language server (LSP) for editor support
 - [ ] Compiler diagnostics (clear error messages with source spans)
 
-## v1.0.1 — Core Tooling
+## v1.1 — Core Tooling
 
 - [ ] Formatter (`rsg-fmt`)
 - [ ] Linter (`rsg-lint` / static analysis)
 - [ ] Test framework (`test` blocks or attribute)
 - [ ] Unified devtool (`rsg` CLI: build/run/test/lint/fmt integration)
 
-## Future — Post-1.0
+## Future — Post-1.1
 
 ### Core Language
 
