@@ -192,6 +192,8 @@ Higher-order programming and code organization.
 - [x] `where`
 - [x] Associated Types
 
+## v0.9.5 — Break Changes
+
 ## v0.9.5 — Before Ecosystem
 
 - [ ] `pub` applies to `struct` fields, `enum` functions, `pact` fields, `ext` functions.
@@ -252,4 +254,4 @@ Language completeness, tooling, and ecosystem.
 
 ### Types
 
-- [ ] Template Literal Types
+- [ ] Generic Associated Types

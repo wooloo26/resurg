@@ -411,19 +411,29 @@ match msg {
 
 ### Pacts
 
-Require fields/methods, provide defaults. Explicit conformance: `struct Foo: Pact1 + Pact2`.
+Pacts define behavioral contracts through methods only. Explicit conformance: `struct Foo: Pact1 + Pact2`.
 
 ```rsg
-pact A { Ord; Display }       // or: pact A = Ord + Display
+pact A = Ord + Display
 
 pact Animal {
-    name: str
-    fn get_name(animal) = animal.name
-    fn set_name(mut *animal, name: str) { animal.name = name }
+    fn get_name(*animal) -> str
+    fn set_name(mut *animal, name: str)
+    
+    fn greet(*animal) -> str {
+        "Hello, I'm {animal.get_name()}"
+    }
 }
 
-struct Dog: Animal + Printable {
-    fn to_string(dog) = "Dog({dog.name})"
+struct Dog {
+    name: str
+}
+
+ext Dog impl Animal {
+    fn get_name(*dog) -> str { dog.name }
+    fn set_name(mut *dog, name: str) { dog.name = name }
+
+    fn to_string(*dog) -> str { "Dog({dog.name})" }
 }
 ```
 
@@ -433,8 +443,8 @@ Extend primitives, `array`, `slice`, `tuple`, `struct`, `enum`, `pact`.
 
 ```rsg
 ext str impl Display {
-    fn last_char(*s) -> char { s[s.len() - 1] }
     fn join(*s, sep: str) -> str { ... }
+    fn last_char(*s) -> char { ... }
 }
 ```
 
@@ -490,30 +500,37 @@ Generic structs, enums, type aliases, and extensions:
 struct Pair<T, U> {
     first: T
     second: U
+}
+
+ext<T, U> Pair<T, U> {
     fn map<V>(…) -> Pair<V, U> { ... }
 }
+ext Pair<i32, i64>  { ... }
+
 Pair<i32, str> { ... } // or infer
 
 enum Either<L, R> {
     Left(L), Right(R)
+}
+
+ext<L, R> Either<L, R>  {
     fn unwrap_left(*e) -> L { ... }
 }
 
+type ListMap = Map<List>
 type Callback<T> = fn(T) -> bool
-type ListBox = Box<List>
-
-ext<T, U> Pair<T, U> { ... }
-ext Pair<i32, i64>  { ... }
 ```
 
 ### Default Generics
 
-Supported on `struct`, `enum`, `pact`, `type` — not `fn`.
+Supported on `struct`, `enum`, `pact`, `type`, `ext` — not `fn`. Trailing Only.
 
 ```rsg
 struct Map<K, V = str> {
     entries: [](K, V)
+}
 
+ext<K, V = str> Map<K, V> {
     fn insert(mut *self, key: K, value: V) { ... }
     fn get(*self, key: K) -> ?V { ... }
 }
@@ -532,21 +549,30 @@ type StringMap<V = str> = Map<str, V>
 
 ### `Self` & `*Self`
 
-`Self` refers to the concrete type inside `struct`, `enum`, `pact`, `ext` blocks.
+`Self` refers to the concrete type inside `pact` and `ext` blocks.
 
 ```rsg
 struct Point {
     x: f64 = 0.0
     y: f64 = 0.0
+}
+
+ext Point {
     fn origin() -> Self { Self { x = 0.0, y = 0.0 } }
     fn translate(p, dx: f64, dy: f64) -> Self { Self { x = p.x + dx, y = p.y + dy } }
     fn reset(mut *self) { self.x = 0.0; self.y = 0.0 }
 }
 
-pact Clonable { fn clone(*self) -> Self }
+pact Clonable { 
+    fn clone(*self) -> Self
+}
 
 enum Token {
-    Number(f64), Ident(str),
+    Number(f64),
+    Ident(str),
+}
+
+ext Token {
     fn dummy() -> Self { Self::Number(0.0) }
 }
 ```
@@ -584,7 +610,7 @@ where In: Parseable, Out: Serializable + Display,
 
 ## 7. Associated Types
 
-Associated types bind type members to `pact`, `struct`, `enum`, and `ext` blocks — eliminating redundant generic parameters while preserving full type-level expressiveness.
+Associated types bind type members to `pact` and `ext` blocks — eliminating redundant generic parameters while preserving full type-level expressiveness.
 
 ### Declaration
 
@@ -613,24 +639,34 @@ ext RangeIter impl Iterator {
 }
 ```
 
-Struct conformance with inline concretization:
+### In `ext`
+
+Extensions concretize pact associated types and can declare local associated types scoped to the extension block:
 
 ```rsg
-struct UnitIter: Iterator {
-    type Item = ()
-    count: usize
-    fn next(mut *self) -> ?() {
-        if self.count > 0 { self.count -= 1; Some(()) }
-        else { None }
-    }
+pact DataSource {
+    type Row: Clone
+    type QueryError: Display
+    fn query(*self, sql: str) -> []Self::Row ! Self::QueryError
 }
 
-for UnitIter { count = 3 } |_| { println("tick") }
+struct Postgres { conn: *Connection }
+
+ext Postgres impl DataSource {
+    type Row = DbRow
+    type QueryError = PgError
+    fn query(*self, sql: str) -> []DbRow ! PgError { ... }
+}
+```
+
+Generics:
+
+```rsg
 ```
 
 ### Constraints & Projection
 
-Associated types are usable anywhere a type is expected: signatures, `where` clauses, type aliases, struct fields.
+Associated types are usable anywhere a type is expected: `fn` signatures, `where` clauses, `type` aliases, `struct` fields, `enum` fields.
 
 ```rsg
 // Signatures
@@ -659,6 +695,13 @@ struct Cache<I: Iterator> {
     buffer: []I::Item
     index: usize
 }
+
+// Enum fields
+enum Message<T: Response> {
+    Text(str),
+    Data(T::Payload),
+    Signal,
+}
 ```
 
 ### Conflict Resolution
@@ -666,12 +709,12 @@ struct Cache<I: Iterator> {
 Qualified paths disambiguate when multiple pacts define the same associated type name:
 
 ```rsg
-pact A { type Value }
-pact B { type Value }
+trait Reader { type Item }
+trait Writer { type Item }
 
-struct Dual: A + B {
-    type A::Value = i32    // qualified assignment
-    type B::Value = str
+struct Pipe<T: Reader + Writer> {
+    read: <T as Reader>::Item,
+    write: <T as Writer>::Item,
 }
 ```
 
@@ -685,23 +728,6 @@ iter := RangeIter { current = 0, end = 2 }
 val := get_next(mut &iter)           // infers I = RangeIter, I::Item = i32
 first := collect(&iter)[0]          // type: i32
 var val: ?str = get_next(mut &iter)  // ERROR: conflicts with I::Item = i32
-```
-
-Inference extends to enums with associated type aliases over generic parameters:
-
-```rsg
-enum ApiResult<T, E = str> {
-    type Value = T
-    type Error = E
-    Ok(T), Err(E)
-}
-
-fn handle(r: ApiResult) -> str {  // T, E inferred from call site
-    match r {
-        ApiResult::Ok(v) => "got: {v}",
-        ApiResult::Err(e) => "error: {e}"
-    }
-}
 ```
 
 ### Integration with `?T` / `T ! E`
@@ -745,101 +771,6 @@ where
 {
     val := p.parse(src)!   // P::Err propagated
     q.parse(val)!          // Q::Err propagated
-}
-```
-
-### In `enum`
-
-Enums support associated type aliases (binding to generic params), bounded abstract types (concretized via `ext`), and direct variant usage:
-
-```rsg
-enum Message<T> {
-    type Payload = T          // alias for generic param
-    Text(str),
-    Data(Payload),            // variant uses associated type
-    Signal,
-    fn extract_data(*self) -> ?Payload {
-        match self {
-            Message::Data(d) => Some(d),
-            _ => None
-        }
-    }
-}
-
-enum Response<Body = str, Err = str> {
-    type BodyType = Body
-    type ErrorType = Err
-    Success(BodyType),
-    Failure(ErrorType),
-    fn is_success(*self) -> bool {
-        match self {
-            Response::Success(_) => true,
-            Response::Failure(_) => false
-        }
-    }
-}
-```
-
-Abstract associated types in enums — bounds without concrete types — are concretized via `ext`:
-
-```rsg
-enum StateMachine {
-    type StateData: Clone
-    type TransitionError: Display
-    Idle,
-    Running(StateData),
-    Error(TransitionError),
-    fn step(mut *self) -> Self ! TransitionError {
-        match self {
-            StateMachine::Idle => {
-                *self = StateMachine::Running(default())
-                Ok(*)
-            }
-            // ...
-        }
-    }
-}
-
-ext StateMachine impl StateMachine {
-    type StateData = Config
-    type TransitionError = StateError
-    fn step(mut *self) -> Self ! StateError { ... }
-}
-```
-
-### In `ext`
-
-Extensions concretize pact associated types and can declare local associated types scoped to the extension block:
-
-```rsg
-pact DataSource {
-    type Row: Clone
-    type QueryError: Display
-    fn query(*self, sql: str) -> []Self::Row ! Self::QueryError
-}
-
-struct Postgres { conn: *Connection }
-
-ext Postgres impl DataSource {
-    type Row = DbRow
-    type QueryError = PgError
-    fn query(*self, sql: str) -> []DbRow ! PgError { ... }
-}
-```
-
-Local associated types (not from any pact):
-
-```rsg
-ext<T> []T {
-    type Accumulator = T  // local to this extension
-
-    fn sum(*self) -> Accumulator
-    where T: Add<Output = T> + Copy + Default
-    {
-        mut result := default()
-        for self |item| result = result + item
-        result
-    }
 }
 ```
 
