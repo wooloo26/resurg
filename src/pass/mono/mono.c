@@ -1,7 +1,6 @@
 #include "rsg/pass/mono/mono.h"
 
 #include "pass/resolve/_sema.h"
-#include "rsg/pass/check/check.h"
 
 /**
  * @file mono.c
@@ -59,7 +58,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         clone->fn_decl.body = ast_clone(sema->arena, orig->fn_decl.body);
 
         // Type-check the cloned fn body using the substitution context
-        sema_check_fn_body(sema, clone);
+        sema->fn_body_checker(sema, clone);
 
         // Append to file decls so lowering/codegen can see it
         BUF_PUSH(inst->file_node->file.decls, clone);
@@ -71,7 +70,8 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
 
 // ── Public API ─────────────────────────────────────────────────────────
 
-bool sema_mono(Sema *sema, ASTNode *file) {
+bool sema_mono(Sema *sema, ASTNode *file, FnBodyChecker checker) {
+    sema->fn_body_checker = checker;
     instantiate_pending_generics(sema, file);
     scope_pop(sema); // global scope (pushed by sema_resolve)
     return sema->err_count == 0;

@@ -1,12 +1,5 @@
-#include <sys/stat.h>
-
 #include "_sema.h"
-#include "pass/lex/lex.h"
-#include "rsg/pass/parse/parse.h"
 #include "rsg/pass/resolve/resolve.h"
-#ifndef S_ISREG
-#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
-#endif
 
 /**
  * @file resolve_main.c
@@ -23,27 +16,6 @@
 #else
 #define PATH_SEP '/'
 #endif
-
-/** Read a file into a NUL-terminated heap buffer. Returns NULL on failure. */
-static char *read_module_file(const char *path) {
-    struct stat st;
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
-        return NULL;
-    }
-    FILE *f = fopen(path, "rb");
-    if (f == NULL) {
-        return NULL;
-    }
-    size_t size = (size_t)st.st_size;
-    char *buf = rsg_calloc(size + 1, 1);
-    size_t n = fread(buf, 1, size, f);
-    fclose(f);
-    if (n != size) {
-        free(buf);
-        return NULL;
-    }
-    return buf;
-}
 
 /** Compute the directory portion of @p file_path (arena-allocated). */
 static const char *dir_of(Arena *arena, const char *file_path) {
@@ -65,29 +37,14 @@ static const char *dir_of(Arena *arena, const char *file_path) {
 }
 
 /**
- * Load a filesystem module: read the file, lex, and parse.
+ * Load a filesystem module via the injected module loader callback.
  * Returns the parsed declarations or NULL on failure.
  */
 ASTNode **load_module_decls(Sema *sema, const char *mod_path) {
-    char *src = read_module_file(mod_path);
-    if (src == NULL) {
+    if (sema->module_loader == NULL) {
         return NULL;
     }
-    Lex *lex = lex_create(src, mod_path, sema->arena);
-    Token *tokens = lex_scan_all(lex);
-    lex_destroy(lex);
-
-    int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, sema->arena, mod_path);
-    ASTNode *file_node = parser_parse(parser);
-    int32_t errs = parser_err_count(parser);
-    parser_destroy(parser);
-    free(src);
-
-    if (errs > 0 || file_node == NULL) {
-        return NULL;
-    }
-    return file_node->file.decls;
+    return sema->module_loader(sema->module_loader_ctx, sema->arena, mod_path);
 }
 
 /** Destroy and reinitialize all hash tables and buffers for a fresh compilation. */
@@ -248,6 +205,11 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
 
 // ── Public API ─────────────────────────────────────────────────────────
 
+void sema_set_module_loader(Sema *sema, ModuleLoader loader, void *ctx) {
+    sema->module_loader = loader;
+    sema->module_loader_ctx = ctx;
+}
+
 Sema *sema_create(Arena *arena) {
     Sema *sema = rsg_malloc(sizeof(*sema));
     sema->arena = arena;
@@ -259,6 +221,9 @@ Sema *sema_create(Arena *arena) {
     sema->self_type_name = NULL;
     sema->current_module = NULL;
     sema->module_search_dir = NULL;
+    sema->module_loader = NULL;
+    sema->module_loader_ctx = NULL;
+    sema->fn_body_checker = NULL;
     sema->closure = (ClosureCtx){0};
     sema->file_node = NULL;
     sema->method_checker = NULL;

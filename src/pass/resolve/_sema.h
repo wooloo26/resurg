@@ -117,6 +117,12 @@ struct PactDef {
 typedef void (*MethodChecker)(struct Sema *sema, ASTNode *method, const char *owner_name,
                               const Type *owner_type);
 
+/** Callback to load module decls from a file path. Returns NULL on failure. */
+typedef ASTNode **(*ModuleLoader)(void *ctx, Arena *arena, const char *mod_path);
+
+/** Callback to type-check a single fn body (used by mono to avoid check dependency). */
+typedef void (*FnBodyChecker)(struct Sema *sema, ASTNode *fn_node);
+
 /** Closure context — saved/restored as a unit when entering nested closures. */
 typedef struct {
     Scope *scope;          // scope of the enclosing Fn/FnMut closure (NULL if none)
@@ -145,6 +151,9 @@ struct Sema {
     const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
     const char *current_module;   // current module prefix (e.g. "math_helper"); NULL for root file
     const char *module_search_dir;    // directory for resolving filesystem modules
+    ModuleLoader module_loader;       // injected callback to load module files
+    void *module_loader_ctx;          // opaque context for the module loader
+    FnBodyChecker fn_body_checker;    // injected callback for mono to type-check cloned fn bodies
     ClosureCtx closure;               // closure capture tracking (check pass)
     ASTNode *file_node;               // root file node (for appending monomorphized fns)
     BuiltinRegistry builtins;         // centralized built-in fn/member registry

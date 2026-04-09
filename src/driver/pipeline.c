@@ -6,6 +6,7 @@
 
 #include "core/common.h"
 #include "pass/lex/lex.h"
+#include "pass/lower/hir_passes.h"
 #include "rsg/driver/pipeline.h"
 #include "rsg/pass/cgen/cgen.h"
 #include "rsg/pass/check/check.h"
@@ -64,6 +65,56 @@ static char *read_src_file(const char *path) {
     return buf;
 }
 
+// ── Module loader callback ─────────────────────────────────────────────
+
+/** Read a module file into a NUL-terminated heap buffer. Returns NULL on failure. */
+static char *read_module_file(const char *path) {
+    struct stat st;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return NULL;
+    }
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return NULL;
+    }
+    size_t size = (size_t)st.st_size;
+    char *buf = rsg_calloc(size + 1, 1);
+    size_t n = fread(buf, 1, size, f);
+    fclose(f);
+    if (n != size) {
+        free(buf);
+        return NULL;
+    }
+    return buf;
+}
+
+/**
+ * Pipeline-provided module loader: lex and parse a module file.
+ * @p ctx is unused (may be NULL).
+ */
+static ASTNode **pipeline_load_module(void *ctx, Arena *arena, const char *mod_path) {
+    (void)ctx;
+    char *src = read_module_file(mod_path);
+    if (src == NULL) {
+        return NULL;
+    }
+    Lex *lex = lex_create(src, mod_path, arena);
+    Token *tokens = lex_scan_all(lex);
+    lex_destroy(lex);
+
+    int32_t count = BUF_LEN(tokens);
+    Parser *parser = parser_create(tokens, count, arena, mod_path);
+    ASTNode *file_node = parser_parse(parser);
+    int32_t errs = parser_err_count(parser);
+    parser_destroy(parser);
+    free(src);
+
+    if (errs > 0 || file_node == NULL) {
+        return NULL;
+    }
+    return file_node->file.decls;
+}
+
 // ── Pipeline stages ────────────────────────────────────────────────────
 
 /** Run the lex and optionally dump tokens.  Returns 0 on success, 1 on err. */
@@ -112,17 +163,22 @@ static ASTNode *stage_parse(const PipelineOptions *options, Token *tokens, int32
 /** Run semantic analysis.  Returns true on success, false on errs. */
 static bool stage_sema(Arena *arena, ASTNode *file_node) {
     Sema *sema = sema_create(arena);
-    bool ok =
-        sema_resolve(sema, file_node) && sema_check(sema, file_node) && sema_mono(sema, file_node);
+    sema_set_module_loader(sema, pipeline_load_module, NULL);
+    bool ok = sema_resolve(sema, file_node) && sema_check(sema, file_node) &&
+              sema_mono(sema, file_node, sema_check_fn_body);
     sema_destroy(sema);
     return ok;
 }
 
-/** Lower the AST to HIR, run HIR passes, and optionally dump.  Returns NULL on early exit. */
+/** Lower the AST to HIR and optionally dump.  Returns NULL on early exit. */
 static HirNode *stage_lower(const PipelineOptions *options, Arena *hir_arena, ASTNode *file_node,
                             Lower **out_lower) {
     *out_lower = lower_create(hir_arena);
     HirNode *hir_root = lower_lower(*out_lower, file_node);
+
+    // Run HIR-to-HIR optimization passes.
+    hir_pass_const_fold(hir_arena, hir_root);
+    hir_pass_escape_analysis(hir_arena, hir_root);
 
     if (options->dump_hir) {
         hir_dump(hir_root, 0);
