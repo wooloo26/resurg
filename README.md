@@ -407,6 +407,8 @@ ext Msg {
 }
 
 any := Msg::Write("any")
+use Msg::*
+any2 := Write("any2")
 
 enum Color { Red, Green, Blue }
 enum Status { Active = 1, Inactive = 0, Pending = 2 }
@@ -1043,6 +1045,12 @@ read(..)
 use std::io::{read as rd}
 rd(..)
 
+use std::io::*
+read(..)
+write(..)
+
+pub use std::io::*
+
 pub fn add(a: i32, b: i32) = a + b
 
 pub struct User {
@@ -1270,6 +1278,21 @@ ext i32 impl TryInto<PositiveInt> {
 
 p: PositiveInt = 42.try_into()!          // OK
 // p2: PositiveInt = (-1).try_into()!    // Err("must be positive")
+```
+
+---
+
+## 13. Macro
+
+### `#[extern("print")]`
+
+```rsg
+// std/builtin/io.rsg
+#[extern("rsg_println_str")]
+pub fn println(s: str)
+
+#[extern("rsg_print_str")]
+pub fn print(s: str)
 ```
 
 ---

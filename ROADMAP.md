@@ -220,18 +220,24 @@ Higher-order programming and code organization.
 - [x] Documentation Comments
 - [x] Module resolution (file system)
 
-## v0.9.10 — Prelude
+## v0.9.10 — Before Prelude
+
+- [ ] Support `pub use any::*`
+- [ ] `#[extern("print")]`
+
+## v0.9.11 — Prelude
 
 - [ ] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
+- [ ] Remove builtin
 - [ ] `panic(message)`
 - [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`
 
-## v0.9.11 — Test Cases
+## v0.9.12 — Test Cases
 
 - [ ] Better Test Cases
 
-## v0.9.12 — Standard Library
+## v0.9.13 — Standard Library
 
 - [ ] Comprehensive standard library (`std/io`, …)
 
