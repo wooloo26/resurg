@@ -8,7 +8,7 @@ fn test_option_wildcard() {
         Some(_) => "has value",
         None => "empty",
     }
-    assert(result == "has value")
+    assert(result == "has value", "")
 }
 
 // ── match on option with binding ──
@@ -19,7 +19,7 @@ fn test_option_binding() {
         Some(v) => v * 2,
         None => 0,
     }
-    assert(result == 14)
+    assert(result == 14, "")
 }
 
 // ── match on result with Ok and Err ──
@@ -30,7 +30,7 @@ fn test_result_ok_binding() {
         Ok(v) => v + 1,
         Err(_) => -1,
     }
-    assert(result == 100)
+    assert(result == 100, "")
 }
 
 fn test_result_err_binding() {
@@ -39,7 +39,7 @@ fn test_result_err_binding() {
         Ok(_) => "",
         Err(e) => e,
     }
-    assert(result == "fail")
+    assert(result == "fail", "")
 }
 
 // ── match guard on option ──
@@ -52,7 +52,7 @@ fn test_option_match_guard() {
         Some(_) => "small",
         None => "none",
     }
-    assert(result == "medium")
+    assert(result == "medium", "")
 }
 
 // ── match guard on result ──
@@ -65,7 +65,7 @@ fn test_result_match_guard() {
         Ok(_) => "zero or negative",
         Err(_) => "error",
     }
-    assert(result == "positive")
+    assert(result == "positive", "")
 }
 
 // ── exhaustive match required ──
@@ -76,7 +76,7 @@ fn test_exhaustive_option() {
         Some(s) => s,
         None => "default",
     }
-    assert(result == "default")
+    assert(result == "default", "")
 }
 
 fn test_exhaustive_result() {
@@ -85,5 +85,5 @@ fn test_exhaustive_result() {
         Ok(v) => v,
         Err(_) => false,
     }
-    assert(result == false)
+    assert(result == false, "")
 }

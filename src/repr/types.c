@@ -28,43 +28,47 @@ enum {
     TF_SIGNED = 1 << 1,
     TF_FLOAT = 1 << 2,
     TF_PRINTABLE = 1 << 3,
+    TF_STR_CONV = 1 << 4, // has rsg_str_from_TYPE runtime conversion
 };
 
 /**
  * Shared metadata table idxed by TypeKind: maps each kind to its
- * Resurg name, C name, singleton ptr, and classification flags.
- * Compound types (TYPE_ARRAY, TYPE_TUPLE) have zero-initialised
+ * Resurg name, C name, runtime suffix, singleton ptr, and classification
+ * flags.  Compound types (TYPE_ARRAY, TYPE_TUPLE) have zero-initialised
  * entries (rsg_name == NULL).
  */
 typedef struct {
     const char *rsg_name;
     const char *c_name;
+    const char *runtime_suffix; // for rsgu_print_TYPE, rsg_str_from_TYPE
     const Type *inst;
     uint8_t flags;
 } TypeInfoEntry;
 
 static const TypeInfoEntry TYPE_INFO[] = {
-    [TYPE_BOOL] = {"bool", "bool", &TYPE_BOOL_INST, TF_PRINTABLE},
-    [TYPE_I8] = {"i8", "int8_t", &TYPE_I8_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_I16] = {"i16", "int16_t", &TYPE_I16_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_I32] = {"i32", "int32_t", &TYPE_I32_INST, TF_INTEGER | TF_SIGNED | TF_PRINTABLE},
-    [TYPE_I64] = {"i64", "int64_t", &TYPE_I64_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_I128] = {"i128", "__int128", &TYPE_I128_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_U8] = {"u8", "uint8_t", &TYPE_U8_INST, TF_INTEGER},
-    [TYPE_U16] = {"u16", "uint16_t", &TYPE_U16_INST, TF_INTEGER},
-    [TYPE_U32] = {"u32", "uint32_t", &TYPE_U32_INST, TF_INTEGER | TF_PRINTABLE},
-    [TYPE_U64] = {"u64", "uint64_t", &TYPE_U64_INST, TF_INTEGER},
-    [TYPE_U128] = {"u128", "unsigned __int128", &TYPE_U128_INST, TF_INTEGER},
-    [TYPE_ISIZE] = {"isize", "intptr_t", &TYPE_ISIZE_INST, TF_INTEGER | TF_SIGNED},
-    [TYPE_USIZE] = {"usize", "size_t", &TYPE_USIZE_INST, TF_INTEGER},
-    [TYPE_F32] = {"f32", "float", &TYPE_F32_INST, TF_FLOAT},
-    [TYPE_F64] = {"f64", "double", &TYPE_F64_INST, TF_FLOAT | TF_PRINTABLE},
-    [TYPE_CHAR] = {"char", "uint32_t", &TYPE_CHAR_INST, TF_PRINTABLE},
-    [TYPE_STR] = {"str", "RsgStr", &TYPE_STR_INST, TF_PRINTABLE},
-    [TYPE_UNIT] = {"unit", "void", &TYPE_UNIT_INST, 0},
-    [TYPE_NEVER] = {"never", "void", &TYPE_NEVER_INST, 0},
-    [TYPE_ERR] = {"<err>", "/* err */", &TYPE_ERR_INST, 0},
-    [TYPE_FN] = {NULL, "RsgFn", NULL, 0},
+    [TYPE_BOOL] = {"bool", "bool", "bool", &TYPE_BOOL_INST, TF_PRINTABLE | TF_STR_CONV},
+    [TYPE_I8] = {"i8", "int8_t", "i8", &TYPE_I8_INST, TF_INTEGER | TF_SIGNED},
+    [TYPE_I16] = {"i16", "int16_t", "i16", &TYPE_I16_INST, TF_INTEGER | TF_SIGNED},
+    [TYPE_I32] = {"i32", "int32_t", "i32", &TYPE_I32_INST,
+                  TF_INTEGER | TF_SIGNED | TF_PRINTABLE | TF_STR_CONV},
+    [TYPE_I64] = {"i64", "int64_t", "i64", &TYPE_I64_INST, TF_INTEGER | TF_SIGNED | TF_STR_CONV},
+    [TYPE_I128] = {"i128", "__int128", "i128", &TYPE_I128_INST, TF_INTEGER | TF_SIGNED},
+    [TYPE_U8] = {"u8", "uint8_t", "u8", &TYPE_U8_INST, TF_INTEGER},
+    [TYPE_U16] = {"u16", "uint16_t", "u16", &TYPE_U16_INST, TF_INTEGER},
+    [TYPE_U32] = {"u32", "uint32_t", "u32", &TYPE_U32_INST,
+                  TF_INTEGER | TF_PRINTABLE | TF_STR_CONV},
+    [TYPE_U64] = {"u64", "uint64_t", "u64", &TYPE_U64_INST, TF_INTEGER | TF_STR_CONV},
+    [TYPE_U128] = {"u128", "unsigned __int128", "u128", &TYPE_U128_INST, TF_INTEGER},
+    [TYPE_ISIZE] = {"isize", "intptr_t", "isize", &TYPE_ISIZE_INST, TF_INTEGER | TF_SIGNED},
+    [TYPE_USIZE] = {"usize", "size_t", "usize", &TYPE_USIZE_INST, TF_INTEGER},
+    [TYPE_F32] = {"f32", "float", "f32", &TYPE_F32_INST, TF_FLOAT | TF_STR_CONV},
+    [TYPE_F64] = {"f64", "double", "f64", &TYPE_F64_INST, TF_FLOAT | TF_PRINTABLE | TF_STR_CONV},
+    [TYPE_CHAR] = {"char", "uint32_t", "char", &TYPE_CHAR_INST, TF_PRINTABLE | TF_STR_CONV},
+    [TYPE_STR] = {"str", "RsgStr", "str", &TYPE_STR_INST, TF_PRINTABLE},
+    [TYPE_UNIT] = {"unit", "void", NULL, &TYPE_UNIT_INST, 0},
+    [TYPE_NEVER] = {"never", "void", NULL, &TYPE_NEVER_INST, 0},
+    [TYPE_ERR] = {"<err>", "/* err */", NULL, &TYPE_ERR_INST, 0},
+    [TYPE_FN] = {NULL, "RsgFn", NULL, NULL, 0},
 };
 
 static const int32_t TYPE_INFO_COUNT = (int32_t)(sizeof(TYPE_INFO) / sizeof(TYPE_INFO[0]));
@@ -254,6 +258,18 @@ bool type_is_float(const Type *type) {
 
 bool type_is_printable(const Type *type) {
     return type != NULL && (type_flags(type->kind) & TF_PRINTABLE);
+}
+
+const char *type_runtime_suffix(const Type *type) {
+    if (type == NULL) {
+        return NULL;
+    }
+    const TypeInfoEntry *info = type_info_lookup(type->kind);
+    return (info != NULL) ? info->runtime_suffix : NULL;
+}
+
+bool type_is_str_convertible(const Type *type) {
+    return type != NULL && (type_flags(type->kind) & TF_STR_CONV);
 }
 
 const Type *type_singleton(TypeKind kind) {

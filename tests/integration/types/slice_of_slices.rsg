@@ -6,20 +6,20 @@ fn test_slice_of_slices_basic() {
     row1 := []i32{1, 2, 3}
     row2 := []i32{4, 5, 6}
     matrix := [][]i32{row1, row2}
-    assert(len(matrix) == 2)
-    assert(len(matrix[0]) == 3)
-    assert(len(matrix[1]) == 3)
-    assert(matrix[0][0] == 1)
-    assert(matrix[0][2] == 3)
-    assert(matrix[1][0] == 4)
-    assert(matrix[1][2] == 6)
+    assert(len(matrix) == 2, "")
+    assert(len(matrix[0]) == 3, "")
+    assert(len(matrix[1]) == 3, "")
+    assert(matrix[0][0] == 1, "")
+    assert(matrix[0][2] == 3, "")
+    assert(matrix[1][0] == 4, "")
+    assert(matrix[1][2] == 6, "")
 }
 
 // ── empty slice of slices ──
 
 fn test_empty_slice_of_slices() {
     matrix := [][]i32{}
-    assert(len(matrix) == 0)
+    assert(len(matrix) == 0, "")
 }
 
 // ── slice of slices with different lengths ──
@@ -29,13 +29,13 @@ fn test_jagged_slices() {
     b := []i32{2, 3}
     c := []i32{4, 5, 6}
     jagged := [][]i32{a, b, c}
-    assert(len(jagged) == 3)
-    assert(len(jagged[0]) == 1)
-    assert(len(jagged[1]) == 2)
-    assert(len(jagged[2]) == 3)
-    assert(jagged[0][0] == 1)
-    assert(jagged[1][1] == 3)
-    assert(jagged[2][2] == 6)
+    assert(len(jagged) == 3, "")
+    assert(len(jagged[0]) == 1, "")
+    assert(len(jagged[1]) == 2, "")
+    assert(len(jagged[2]) == 3, "")
+    assert(jagged[0][0] == 1, "")
+    assert(jagged[1][1] == 3, "")
+    assert(jagged[2][2] == 6, "")
 }
 
 // ── mutation in inner slice ──
@@ -45,5 +45,5 @@ fn test_inner_slice_mutation() {
     row2 := []i32{30, 40}
     matrix := [][]i32{row1, row2}
     matrix[0][1] = 99
-    assert(row1[1] == 99)
+    assert(row1[1] == 99, "")
 }

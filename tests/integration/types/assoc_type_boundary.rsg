@@ -29,22 +29,22 @@ fn test_unit_associated_type() {
     iter := UnitIter { limit = 3 }
 
     match iter.next() {
-        Some(_) => assert(true),
-        None => assert(false),
+        Some(_) => assert(true, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(_) => assert(true),
-        None => assert(false),
+        Some(_) => assert(true, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(_) => assert(true),
-        None => assert(false),
+        Some(_) => assert(true, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
-    assert(iter.count == 3)
+    assert(iter.count == 3, "")
 }
 
 // ── generic function with unit associated type ──
@@ -58,5 +58,5 @@ fn has_items<I: Iterator>(mut iter: *I) -> bool {
 
 fn test_count_unit_iter() {
     iter := UnitIter { limit = 5 }
-    assert(has_items<UnitIter>(mut &iter) == true)
+    assert(has_items<UnitIter>(mut &iter) == true, "")
 }

@@ -12,18 +12,18 @@ fn first<T, U>(a: T, b: U) -> T {
 
 fn test_infer_identity() {
     x := identity(42)
-    assert(x == 42)
+    assert(x == 42, "")
 
     s := identity("hello")
-    assert(s == "hello")
+    assert(s == "hello", "")
 
     b := identity(true)
-    assert(b == true)
+    assert(b == true, "")
 }
 
 fn test_infer_multi_params() {
     a := first(10, "world")
-    assert(a == 10)
+    assert(a == 10, "")
 }
 
 // ── inference on generic struct instantiation ──
@@ -39,9 +39,9 @@ struct Pair<T, U> {
 
 fn test_infer_struct() {
     w := Wrapper { value = 42 }
-    assert(w.value == 42)
+    assert(w.value == 42, "")
 
     p := Pair { first = 1, second = "hello" }
-    assert(p.first == 1)
-    assert(p.second == "hello")
+    assert(p.first == 1, "")
+    assert(p.second == "hello", "")
 }

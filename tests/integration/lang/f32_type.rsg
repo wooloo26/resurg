@@ -6,60 +6,60 @@ fn test_f32_literals() {
     var b: f32 = 3.14
     var c: f32 = -2.5
     var d: f32 = 1.0e5
-    assert(a == 0.0)
-    assert(b == 3.14)
-    assert(c == -2.5)
-    assert(d == 1.0e5)
+    assert(a == 0.0, "")
+    assert(b == 3.14, "")
+    assert(c == -2.5, "")
+    assert(d == 1.0e5, "")
 }
 
 // ── f32 arithmetic ──
 fn test_f32_arithmetic() {
     var a: f32 = 1.5
     var b: f32 = 2.5
-    assert(a + b == 4.0)
-    assert(b - a == 1.0)
-    assert(a * b == 3.75)
-    assert(10.0 / 4.0 == 2.5)
-    assert(a * 2.0 == 3.0)
+    assert(a + b == 4.0, "")
+    assert(b - a == 1.0, "")
+    assert(a * b == 3.75, "")
+    assert(10.0 / 4.0 == 2.5, "")
+    assert(a * 2.0 == 3.0, "")
 }
 
 // ── f32 comparisons ──
 fn test_f32_comparisons() {
     var a: f32 = 1.0
     var b: f32 = 2.0
-    assert(a < b)
-    assert(b > a)
-    assert(a <= a)
-    assert(b >= b)
-    assert(a != b)
-    assert(a == a)
+    assert(a < b, "")
+    assert(b > a, "")
+    assert(a <= a, "")
+    assert(b >= b, "")
+    assert(a != b, "")
+    assert(a == a, "")
 }
 
 // ── f32 negation ──
 fn test_f32_negation() {
     var x: f32 = 5.0
-    assert(-x == -5.0)
+    assert(-x == -5.0, "")
     var y: f32 = -3.0
-    assert(-y == 3.0)
+    assert(-y == 3.0, "")
 }
 
 // ── f32 negative zero ──
 fn test_f32_negative_zero() {
     var nz: f32 = -0.0
-    assert(nz == 0.0)
+    assert(nz == 0.0, "")
 }
 
 // ── f32 underscore separator ──
 fn test_f32_underscore() {
     var big: f32 = 1_000.5
-    assert(big == 1000.5)
+    assert(big == 1000.5, "")
 }
 
 // ── f32 and f64 are distinct types ──
 fn test_f32_in_function() {
-    assert(half(10.0) == 5.0)
-    assert(half(0.0) == 0.0)
-    assert(half(-6.0) == -3.0)
+    assert(half(10.0) == 5.0, "")
+    assert(half(0.0) == 0.0, "")
+    assert(half(-6.0) == -3.0, "")
 }
 
 fn half(x: f32) -> f32 {

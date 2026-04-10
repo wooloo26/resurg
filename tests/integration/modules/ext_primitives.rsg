@@ -13,23 +13,23 @@ ext i32 {
 
 fn test_ext_i32_value_receiver() {
     x := 42
-    assert(x.abs() == 42)
+    assert(x.abs() == 42, "")
 
     y := -10
-    assert(y.abs() == 10)
+    assert(y.abs() == 10, "")
 
     z := 0
-    assert(z.abs() == 0)
+    assert(z.abs() == 0, "")
 }
 
 fn test_ext_i32_pointer_receiver() {
     x := 5
-    assert(x.is_positive())
-    assert(x.is_zero() == false)
+    assert(x.is_positive(), "")
+    assert(x.is_zero() == false, "")
 
     y := 0
-    assert(y.is_positive() == false)
-    assert(y.is_zero())
+    assert(y.is_positive() == false, "")
+    assert(y.is_zero(), "")
 }
 
 // ── ext on bool ──
@@ -42,10 +42,10 @@ ext bool {
 
 fn test_ext_bool() {
     t := true
-    assert(t.to_i32() == 1)
+    assert(t.to_i32() == 1, "")
 
     f := false
-    assert(f.to_i32() == 0)
+    assert(f.to_i32() == 0, "")
 }
 
 // ── ext on f64 ──
@@ -60,15 +60,15 @@ ext f64 {
 
 fn test_ext_f64() {
     x := -3.14
-    assert(x.is_negative())
+    assert(x.is_negative(), "")
 
     y := 5.0
-    assert(y.is_negative() == false)
+    assert(y.is_negative() == false, "")
 }
 
 fn test_ext_f64_conversion() {
     x := 3.7
-    assert(x.floor_to_i32() == 3)
+    assert(x.floor_to_i32() == 3, "")
 }
 
 // ── ext on str ──
@@ -85,15 +85,15 @@ ext str {
 
 fn test_ext_str() {
     s := "hello"
-    assert(s.is_hello())
+    assert(s.is_hello(), "")
 
     t := "world"
-    assert(t.is_hello() == false)
+    assert(t.is_hello() == false, "")
 }
 
 fn test_ext_str_returns_str() {
     s := "wow"
-    assert(s.exclaim() == "wow!")
+    assert(s.exclaim() == "wow!", "")
 }
 
 // ── multiple ext blocks on same primitive ──
@@ -104,6 +104,6 @@ ext i32 {
 
 fn test_ext_multiple_blocks_same_primitive() {
     x := 7
-    assert(x.doubled() == 14)
-    assert(x.abs() == 7)
+    assert(x.doubled() == 14, "")
+    assert(x.abs() == 7, "")
 }

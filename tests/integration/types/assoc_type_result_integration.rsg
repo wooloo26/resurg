@@ -35,8 +35,8 @@ fn test_fallible_ok() {
     src := FallibleSource { current = 0, fail_at = -1 }
     result := src.try_get()
     match result {
-        Ok(v) => assert(v == 0),
-        Err(_) => assert(false),
+        Ok(v) => assert(v == 0, ""),
+        Err(_) => assert(false, ""),
     }
 }
 
@@ -44,8 +44,8 @@ fn test_fallible_err() {
     src := FallibleSource { current = 0, fail_at = 0 }
     result := src.try_get()
     match result {
-        Ok(_) => assert(false),
-        Err(e) => assert(e == "fail"),
+        Ok(_) => assert(false, ""),
+        Err(e) => assert(e == "fail", ""),
     }
 }
 
@@ -53,18 +53,18 @@ fn test_fallible_sequence() {
     src := FallibleSource { current = 0, fail_at = 2 }
     r1 := src.try_get()
     match r1 {
-        Ok(v) => assert(v == 0),
-        Err(_) => assert(false),
+        Ok(v) => assert(v == 0, ""),
+        Err(_) => assert(false, ""),
     }
     r2 := src.try_get()
     match r2 {
-        Ok(v) => assert(v == 1),
-        Err(_) => assert(false),
+        Ok(v) => assert(v == 1, ""),
+        Err(_) => assert(false, ""),
     }
     r3 := src.try_get()
     match r3 {
-        Ok(_) => assert(false),
-        Err(e) => assert(e == "fail"),
+        Ok(_) => assert(false, ""),
+        Err(e) => assert(e == "fail", ""),
     }
 }
 
@@ -78,8 +78,8 @@ fn test_generic_fallible_ok() {
     src := FallibleSource { current = 5, fail_at = -1 }
     result := try_first<FallibleSource>(mut &src)
     match result {
-        Ok(v) => assert(v == 5),
-        Err(_) => assert(false),
+        Ok(v) => assert(v == 5, ""),
+        Err(_) => assert(false, ""),
     }
 }
 
@@ -87,7 +87,7 @@ fn test_generic_fallible_err() {
     src := FallibleSource { current = 0, fail_at = 0 }
     result := try_first<FallibleSource>(mut &src)
     match result {
-        Ok(_) => assert(false),
-        Err(e) => assert(e == "fail"),
+        Ok(_) => assert(false, ""),
+        Err(e) => assert(e == "fail", ""),
     }
 }

@@ -25,9 +25,9 @@ pact Named {
 fn main() {}
 
 // === missing method ===
-// EXPECT-ERROR: missing required method 'to_string' from pact 'Printable'
+// EXPECT-ERROR: missing required method 'to_string' from pact 'Stringable'
 
-pact Printable {
+pact Stringable {
     fn to_string() -> str
 }
 
@@ -35,7 +35,7 @@ struct Foo {
     x: i32 = 0
 }
 
-ext Foo impl Printable {}
+ext Foo impl Stringable {}
 
 fn main() {
     f := Foo {}

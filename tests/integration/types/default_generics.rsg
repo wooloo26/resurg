@@ -9,14 +9,14 @@ struct Container<T, U = str> {
 
 fn test_struct_default_used() {
     c := Container<i32> { item = 42, label = "answer" }
-    assert(c.item == 42)
-    assert(c.label == "answer")
+    assert(c.item == 42, "")
+    assert(c.label == "answer", "")
 }
 
 fn test_struct_default_overridden() {
     c := Container<i32, bool> { item = 42, label = true }
-    assert(c.item == 42)
-    assert(c.label == true)
+    assert(c.item == 42, "")
+    assert(c.label == true, "")
 }
 
 // ── struct with all defaults ──
@@ -28,20 +28,20 @@ struct Config<K = str, V = str> {
 
 fn test_struct_all_defaults() {
     c := Config { key = "host", value = "localhost" }
-    assert(c.key == "host")
-    assert(c.value == "localhost")
+    assert(c.key == "host", "")
+    assert(c.value == "localhost", "")
 }
 
 fn test_struct_partial_override() {
     c := Config<i32> { key = 1, value = "one" }
-    assert(c.key == 1)
-    assert(c.value == "one")
+    assert(c.key == 1, "")
+    assert(c.value == "one", "")
 }
 
 fn test_struct_full_override() {
     c := Config<i32, bool> { key = 1, value = true }
-    assert(c.key == 1)
-    assert(c.value == true)
+    assert(c.key == 1, "")
+    assert(c.value == true, "")
 }
 
 // ── enum with default ──
@@ -54,24 +54,24 @@ enum Result2<T, E = str> {
 fn test_enum_default_used() {
     r := Result2<i32>::Ok(42)
     match r {
-        Ok(v) => assert(v == 42),
-        Err(_) => assert(false),
+        Ok(v) => assert(v == 42, ""),
+        Err(_) => assert(false, ""),
     }
 }
 
 fn test_enum_default_error() {
     r := Result2<i32>::Err("oops")
     match r {
-        Ok(_) => assert(false),
-        Err(e) => assert(e == "oops"),
+        Ok(_) => assert(false, ""),
+        Err(e) => assert(e == "oops", ""),
     }
 }
 
 fn test_enum_default_overridden() {
     r := Result2<i32, i32>::Err(404)
     match r {
-        Ok(_) => assert(false),
-        Err(e) => assert(e == 404),
+        Ok(_) => assert(false, ""),
+        Err(e) => assert(e == 404, ""),
     }
 }
 
@@ -81,14 +81,14 @@ type StringMap<V = str> = Container<str, V>
 
 fn test_type_alias_default() {
     m := StringMap { item = "key", label = "val" }
-    assert(m.item == "key")
-    assert(m.label == "val")
+    assert(m.item == "key", "")
+    assert(m.label == "val", "")
 }
 
 fn test_type_alias_override() {
     m := StringMap<i32> { item = "key", label = 100 }
-    assert(m.item == "key")
-    assert(m.label == 100)
+    assert(m.item == "key", "")
+    assert(m.label == 100, "")
 }
 
 // ── pact with default ──
@@ -108,5 +108,5 @@ ext IntToStr impl Converter {
 fn test_pact_default() {
     c := IntToStr {}
     result := c.convert(42)
-    assert(result == "converted")
+    assert(result == "converted", "")
 }

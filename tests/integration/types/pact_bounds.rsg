@@ -55,11 +55,11 @@ ext Cat impl Display + HasAge {
 fn test_single_bound() {
     d := Dog { dog_name = "Dog" }
     s := show<Dog>(d)
-    assert(s == "Dog")
+    assert(s == "Dog", "")
 }
 
 fn test_multiple_bounds() {
     c := Cat { cat_name = "Cat", cat_age = 5 }
     s := describe<Cat>(c)
-    assert(s == "Cat")
+    assert(s == "Cat", "")
 }

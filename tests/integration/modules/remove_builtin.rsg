@@ -17,8 +17,8 @@ fn test_print_no_builtin() {
 // ── assert works (now via declare, not builtin) ──
 
 fn test_assert_no_builtin() {
-    assert(true)
-    assert(1 == 1)
+    assert(true, "")
+    assert(1 == 1, "")
     assert(1 + 2 == 3, "1 + 2 should equal 3")
 }
 
@@ -26,17 +26,17 @@ fn test_assert_no_builtin() {
 
 fn test_len_slice_no_builtin() {
     s := []i32{10, 20, 30}
-    assert(len(s) == 3)
+    assert(len(s) == 3, "")
 }
 
 fn test_len_str_no_builtin() {
     s := "hello"
-    assert(len(s) == 5)
+    assert(len(s) == 5, "")
 }
 
 fn test_len_empty_no_builtin() {
-    assert(len([]i32{}) == 0)
-    assert(len("") == 0)
+    assert(len([]i32{}) == 0, "")
+    assert(len("") == 0, "")
 }
 
 // ── len on pointer-to-slice (auto-deref still works) ──
@@ -44,14 +44,14 @@ fn test_len_empty_no_builtin() {
 fn test_len_ptr_slice() {
     s := []i32{1, 2, 3, 4}
     p := &s
-    assert(len(p) == 4)
+    assert(len(p) == 4, "")
 }
 
 // ── all four previously-builtin functions in a single test ──
 
 fn test_all_former_builtins_together() {
     data := []i32{5, 10, 15}
-    assert(len(data) == 3)
+    assert(len(data) == 3, "")
     println("{len(data)}")
     assert(data[0] == 5, "first element should be 5")
 }

@@ -31,6 +31,6 @@ fn test_print_str() {
 // ── assert accepts bool (with optional msg) ──
 
 fn test_assert_forms() {
-    assert(true)
+    assert(true, "")
     assert(1 == 1, "one equals one")
 }

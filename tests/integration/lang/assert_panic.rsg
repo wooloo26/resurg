@@ -3,7 +3,7 @@
 // EXPECT-STDOUT: caught assert with msg: x must be positive
 // EXPECT-STDOUT: assert passes normally
 
-// ── assert(false) triggers panic, catchable via recover ──
+// ── assert(false, "assertion failed") triggers panic, catchable via recover ──
 
 fn catch_assert_fail() -> ?str {
     var result: ?str = None
@@ -14,7 +14,7 @@ fn catch_assert_fail() -> ?str {
         }
     }
 
-    assert(false)
+    assert(false, "assertion failed")
     result
 }
 
@@ -47,11 +47,11 @@ fn test_assert_panics_with_message() {
     }
 }
 
-// ── assert(true) does not panic ──
+// ── assert(true, "") does not panic ──
 
 fn test_assert_passes() {
-    assert(true)
-    assert(1 + 1 == 2)
+    assert(true, "")
+    assert(1 + 1 == 2, "")
     assert(1 + 1 == 2, "basic math")
     println("assert passes normally")
 }

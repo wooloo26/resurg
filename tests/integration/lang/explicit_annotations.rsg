@@ -14,67 +14,67 @@ fn test_annotated_integers() {
     var j: u128 = 10
     var k: isize = -1
     var l: usize = 0
-    assert(a == 1)
-    assert(b == 2)
-    assert(c == 3)
-    assert(d == 4)
-    assert(e == 5)
-    assert(f == 6)
-    assert(g == 7)
-    assert(h == 8)
-    assert(i == 9)
-    assert(j == 10)
-    assert(k == -1)
-    assert(l == 0)
+    assert(a == 1, "")
+    assert(b == 2, "")
+    assert(c == 3, "")
+    assert(d == 4, "")
+    assert(e == 5, "")
+    assert(f == 6, "")
+    assert(g == 7, "")
+    assert(h == 8, "")
+    assert(i == 9, "")
+    assert(j == 10, "")
+    assert(k == -1, "")
+    assert(l == 0, "")
 }
 
 // ── var with float types ──
 fn test_annotated_floats() {
     var a: f32 = 1.5
     var b: f64 = 2.5
-    assert(a == 1.5)
-    assert(b == 2.5)
+    assert(a == 1.5, "")
+    assert(b == 2.5, "")
 }
 
 // ── var with char ──
 fn test_annotated_char() {
     var c: char = 'A'
-    assert(c == 'A')
+    assert(c == 'A', "")
 }
 
 // ── var with bool ──
 fn test_annotated_bool() {
     var flag: bool = true
-    assert(flag == true)
+    assert(flag == true, "")
 }
 
 // ── var with str ──
 fn test_annotated_str() {
     var msg: str = "hello"
-    assert(msg == "hello")
+    assert(msg == "hello", "")
 }
 
 // ── var with array type annotation ──
 fn test_annotated_array() {
     var arr: [3]i32 = [1, 2, 3]
-    assert(arr[0] == 1)
-    assert(arr[1] == 2)
-    assert(arr[2] == 3)
+    assert(arr[0] == 1, "")
+    assert(arr[1] == 2, "")
+    assert(arr[2] == 3, "")
 }
 
 // ── var with tuple type annotation ──
 fn test_annotated_tuple() {
     var t: (i32, bool) = (42, true)
-    assert(t.0 == 42)
-    assert(t.1 == true)
+    assert(t.0 == 42, "")
+    assert(t.1 == true, "")
 }
 
 // ── typed literal syntax ──
 fn test_typed_literal() {
     x := i64(100)
-    assert(x == 100)
+    assert(x == 100, "")
     y := f32(3.14)
-    assert(y == 3.14)
+    assert(y == 3.14, "")
 }
 
 // ── function return type annotations ──
@@ -84,8 +84,8 @@ fn identity_f32(x: f32) -> f32 { x }
 fn identity_char(x: char) -> char { x }
 
 fn test_function_annotations() {
-    assert(identity_i8(42) == 42)
-    assert(identity_u64(999) == 999)
-    assert(identity_f32(1.5) == 1.5)
-    assert(identity_char('Z') == 'Z')
+    assert(identity_i8(42) == 42, "")
+    assert(identity_u64(999) == 999, "")
+    assert(identity_f32(1.5) == 1.5, "")
+    assert(identity_char('Z') == 'Z', "")
 }

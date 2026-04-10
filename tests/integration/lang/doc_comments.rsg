@@ -6,7 +6,7 @@
 fn add(a: i32, b: i32) -> i32 { a + b }
 
 fn test_doc_comment_fn() {
-    assert(add(1, 2) == 3)
+    assert(add(1, 2) == 3, "")
 }
 
 // ── multi-line doc comment with @param and @return ──
@@ -21,9 +21,9 @@ fn gcd(a: i32, b: i32) -> i32 {
 }
 
 fn test_doc_comment_multiline_fn() {
-    assert(gcd(12, 8) == 4)
-    assert(gcd(7, 1) == 1)
-    assert(gcd(100, 25) == 25)
+    assert(gcd(12, 8) == 4, "")
+    assert(gcd(7, 1) == 1, "")
+    assert(gcd(100, 25) == 25, "")
 }
 
 // ── doc comment on struct ──
@@ -38,8 +38,8 @@ struct Point {
 
 fn test_doc_comment_struct() {
     p := Point { x = 1.0, y = 2.0 }
-    assert(p.x == 1.0)
-    assert(p.y == 2.0)
+    assert(p.x == 1.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── doc comment on extension method ──
@@ -52,7 +52,7 @@ ext Point {
 
 fn test_doc_comment_ext() {
     p := Point { x = 3.0, y = 4.0 }
-    assert(p.sum() == 7.0)
+    assert(p.sum() == 7.0, "")
 }
 
 // ── doc comment on enum ──
@@ -68,8 +68,8 @@ enum Shape {
 fn test_doc_comment_enum() {
     c := Shape::Circle(5.0)
     match c {
-        Circle(r) => assert(r == 5.0),
-        _ => assert(false),
+        Circle(r) => assert(r == 5.0, ""),
+        _ => assert(false, ""),
     }
 }
 
@@ -92,7 +92,7 @@ ext Widget impl Describable {
 
 fn test_doc_comment_pact() {
     w := Widget { name = "button" }
-    assert(w.describe() == "button")
+    assert(w.describe() == "button", "")
 }
 
 // ── doc comment on type alias ──
@@ -102,8 +102,8 @@ type Handler = fn(i32) -> bool
 
 fn test_doc_comment_type_alias() {
     var h: Handler = |x| x > 0
-    assert(h(1) == true)
-    assert(h(-1) == false)
+    assert(h(1) == true, "")
+    assert(h(-1) == false, "")
 }
 
 // ── doc comment with code block ──
@@ -113,12 +113,12 @@ fn test_doc_comment_type_alias() {
 /// Example:
 /// ```
 /// result := double(5)
-/// assert(result == 10)
+/// assert(result == 10, "")
 /// ```
 fn double(x: i32) -> i32 { x * 2 }
 
 fn test_doc_comment_code_block() {
-    assert(double(5) == 10)
+    assert(double(5) == 10, "")
 }
 
 // ── doc comment before variable (local) ──
@@ -126,7 +126,7 @@ fn test_doc_comment_code_block() {
 fn test_doc_comment_variable() {
     /// The maximum value.
     max_val := 100
-    assert(max_val == 100)
+    assert(max_val == 100, "")
 }
 
 // ── multiple consecutive doc comment lines ──
@@ -137,7 +137,7 @@ fn test_doc_comment_variable() {
 fn triple(x: i32) -> i32 { x * 3 }
 
 fn test_doc_comment_multi_consecutive() {
-    assert(triple(4) == 12)
+    assert(triple(4) == 12, "")
 }
 
 // ── doc comment with special characters ──
@@ -147,6 +147,6 @@ fn test_doc_comment_multi_consecutive() {
 fn is_even(n: i32) -> bool { n % 2 == 0 }
 
 fn test_doc_comment_special_chars() {
-    assert(is_even(4) == true)
-    assert(is_even(3) == false)
+    assert(is_even(4) == true, "")
+    assert(is_even(3) == false, "")
 }

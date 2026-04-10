@@ -6,22 +6,22 @@ fn greet(name: str, greeting: str) -> str { "{greeting}, {name}!" }
 
 fn test_named_basic() {
     result := add(a = 1, b = 2)
-    assert(result == 3)
+    assert(result == 3, "")
 }
 
 fn test_named_reorder() {
     result := add(b = 10, a = 5)
-    assert(result == 15)
+    assert(result == 15, "")
 }
 
 fn test_named_strings() {
     msg := greet(name = "Alice", greeting = "Hello")
-    assert(msg == "Hello, Alice!")
+    assert(msg == "Hello, Alice!", "")
 }
 
 fn test_named_strings_reorder() {
     msg := greet(greeting = "Hi", name = "Bob")
-    assert(msg == "Hi, Bob!")
+    assert(msg == "Hi, Bob!", "")
 }
 
 struct Calculator {
@@ -35,17 +35,17 @@ ext Calculator {
 fn test_named_on_method() {
     c := Calculator {}
     c.add_values(x = 10, y = 20)
-    assert(c.result == 30)
+    assert(c.result == 30, "")
 }
 
 fn test_named_on_method_reorder() {
     c := Calculator {}
     c.add_values(y = 20, x = 10)
-    assert(c.result == 30)
+    assert(c.result == 30, "")
 }
 
 fn test_named_expressions() {
     x := 5
     result := add(a = x * 2, b = x + 1)
-    assert(result == 16)
+    assert(result == 16, "")
 }

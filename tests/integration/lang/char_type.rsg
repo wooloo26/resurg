@@ -6,28 +6,28 @@ fn test_char_literals() {
     var b: char = 'z'
     var c: char = '0'
     var d: char = ' '
-    assert(a == 'A')
-    assert(b == 'z')
-    assert(c == '0')
-    assert(d == ' ')
+    assert(a == 'A', "")
+    assert(b == 'z', "")
+    assert(c == '0', "")
+    assert(d == ' ', "")
 }
 
 // ── char comparisons ──
 fn test_char_comparisons() {
     var a: char = 'A'
     var b: char = 'B'
-    assert(a < b)
-    assert(b > a)
-    assert(a <= a)
-    assert(b >= b)
-    assert(a != b)
-    assert(a == a)
+    assert(a < b, "")
+    assert(b > a, "")
+    assert(a <= a, "")
+    assert(b >= b, "")
+    assert(a != b, "")
+    assert(a == a, "")
 }
 
 // ── char inference ──
 fn test_char_inference() {
     c := 'x'
-    assert(c == 'x')
+    assert(c == 'x', "")
 }
 
 // ── special characters ──
@@ -37,11 +37,11 @@ fn test_char_special() {
     backslash := '\\'
     single_quote := '\''
     null_char := '\0'
-    assert(newline == '\n')
-    assert(tab == '\t')
-    assert(backslash == '\\')
-    assert(single_quote == '\'')
-    assert(null_char == '\0')
+    assert(newline == '\n', "")
+    assert(tab == '\t', "")
+    assert(backslash == '\\', "")
+    assert(single_quote == '\'', "")
+    assert(null_char == '\0', "")
 }
 
 // ── char in function parameter ──
@@ -54,13 +54,13 @@ fn is_digit(c: char) -> bool {
 }
 
 fn test_char_functions() {
-    assert(is_upper('A') == true)
-    assert(is_upper('Z') == true)
-    assert(is_upper('a') == false)
-    assert(is_upper('0') == false)
-    assert(is_digit('0') == true)
-    assert(is_digit('9') == true)
-    assert(is_digit('a') == false)
+    assert(is_upper('A') == true, "")
+    assert(is_upper('Z') == true, "")
+    assert(is_upper('a') == false, "")
+    assert(is_upper('0') == false, "")
+    assert(is_digit('0') == true, "")
+    assert(is_digit('9') == true, "")
+    assert(is_digit('a') == false, "")
 }
 
 // ── char equality across variables ──
@@ -68,6 +68,6 @@ fn test_char_equality() {
     var a: char = 'Q'
     var b: char = 'Q'
     var c: char = 'R'
-    assert(a == b)
-    assert(a != c)
+    assert(a == b, "")
+    assert(a != c, "")
 }

@@ -5,9 +5,9 @@
 fn test_array_to_slice_basic() {
     arr := [5]i32{1, 2, 3, 4, 5}
     s := arr[..]
-    assert(len(s) == 5)
-    assert(s[0] == 1)
-    assert(s[4] == 5)
+    assert(len(s) == 5, "")
+    assert(s[0] == 1, "")
+    assert(s[4] == 5, "")
 }
 
 // ── array to slice with explicit type ──
@@ -15,10 +15,10 @@ fn test_array_to_slice_basic() {
 fn test_array_to_slice_typed() {
     arr := [3]i32{10, 20, 30}
     var s: []i32 = arr[..]
-    assert(len(s) == 3)
-    assert(s[0] == 10)
-    assert(s[1] == 20)
-    assert(s[2] == 30)
+    assert(len(s) == 3, "")
+    assert(s[0] == 10, "")
+    assert(s[1] == 20, "")
+    assert(s[2] == 30, "")
 }
 
 // ── array to slice copies into GC storage ──
@@ -27,8 +27,8 @@ fn test_array_to_slice_copies() {
     arr := [3]i32{1, 2, 3}
     s := arr[..]
     s[0] = 99
-    assert(arr[0] == 1)
-    assert(s[0] == 99)
+    assert(arr[0] == 1, "")
+    assert(s[0] == 99, "")
 }
 
 // ── array to slice of bools ──
@@ -36,9 +36,9 @@ fn test_array_to_slice_copies() {
 fn test_array_to_slice_bool() {
     arr := [2]bool{true, false}
     s := arr[..]
-    assert(len(s) == 2)
-    assert(s[0] == true)
-    assert(s[1] == false)
+    assert(len(s) == 2, "")
+    assert(s[0] == true, "")
+    assert(s[1] == false, "")
 }
 
 // ── array to slice of strings ──
@@ -46,9 +46,9 @@ fn test_array_to_slice_bool() {
 fn test_array_to_slice_str() {
     arr := [3]str{"a", "b", "c"}
     s := arr[..]
-    assert(len(s) == 3)
-    assert(s[0] == "a")
-    assert(s[2] == "c")
+    assert(len(s) == 3, "")
+    assert(s[0] == "a", "")
+    assert(s[2] == "c", "")
 }
 
 // ── single element array to slice ──
@@ -56,6 +56,6 @@ fn test_array_to_slice_str() {
 fn test_single_element_array_to_slice() {
     arr := [1]i32{42}
     s := arr[..]
-    assert(len(s) == 1)
-    assert(s[0] == 42)
+    assert(len(s) == 1, "")
+    assert(s[0] == 42, "")
 }

@@ -24,8 +24,8 @@ fn test_heap_alloc_survives() {
         tmp := &Point { x = 0.0, y = 0.0 }
     }
     // p must still be alive
-    assert(p.x == 1.0)
-    assert(p.y == 2.0)
+    assert(p.x == 1.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── multiple live roots survive ──
@@ -37,12 +37,12 @@ fn test_multiple_roots_survive() {
     for 0..500 |i| {
         tmp := &Point {}
     }
-    assert(a.x == 10.0)
-    assert(a.y == 20.0)
-    assert(b.x == 30.0)
-    assert(b.y == 40.0)
-    assert(c.value == 99)
-    assert(c.label == "hello")
+    assert(a.x == 10.0, "")
+    assert(a.y == 20.0, "")
+    assert(b.x == 30.0, "")
+    assert(b.y == 40.0, "")
+    assert(c.value == 99, "")
+    assert(c.label == "hello", "")
 }
 
 // ── pointer aliasing remains valid after GC pressure ──
@@ -54,8 +54,8 @@ fn test_aliasing_survives_gc() {
         tmp := &Point {}
     }
     b.x = 99.0
-    assert(a.x == 99.0)
-    assert(b.x == 99.0)
+    assert(a.x == 99.0, "")
+    assert(b.x == 99.0, "")
 }
 
 // ── pointer returned from function survives GC pressure ──
@@ -69,8 +69,8 @@ fn test_returned_pointer_survives() {
     for 0..500 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(p.x == 7.0)
-    assert(p.y == 8.0)
+    assert(p.x == 7.0, "")
+    assert(p.y == 8.0, "")
 }
 
 // ── nested struct pointers survive GC ──
@@ -82,10 +82,10 @@ fn test_nested_pointers_survive() {
     for 0..500 |i| {
         tmp := &Point {}
     }
-    assert(pair.left.x == 1.0)
-    assert(pair.left.y == 2.0)
-    assert(pair.right.x == 3.0)
-    assert(pair.right.y == 4.0)
+    assert(pair.left.x == 1.0, "")
+    assert(pair.left.y == 2.0, "")
+    assert(pair.right.x == 3.0, "")
+    assert(pair.right.y == 4.0, "")
 }
 
 // ── heap-allocated strings managed by GC ──
@@ -95,8 +95,8 @@ fn test_string_fields_survive_gc() {
     for 0..500 |i| {
         tmp := &Node { value = 0, label = "garbage" }
     }
-    assert(n.value == 42)
-    assert(n.label == "world")
+    assert(n.value == 42, "")
+    assert(n.label == "world", "")
 }
 
 // ── mutation through pointer after GC pressure ──
@@ -111,7 +111,7 @@ fn test_mutation_after_gc() {
         tmp := &Point {}
     }
     set_x(mut p, 123.0)
-    assert(p.x == 123.0)
+    assert(p.x == 123.0, "")
 }
 
 // ── heavy allocation in loop with retained references ──
@@ -121,9 +121,9 @@ fn test_retained_across_loop() {
     for 0..1000 |i| {
         tmp := &Point { x = 0.0, y = 0.0 }
         // p remains valid throughout
-        assert(p.x == 1.0)
+        assert(p.x == 1.0, "")
     }
-    assert(p.y == 1.0)
+    assert(p.y == 1.0, "")
 }
 
 // ── value copy semantics preserved under GC ──
@@ -136,6 +136,6 @@ fn test_value_copy_independent() {
         tmp := &Point {}
     }
     p.x = 99.0
-    assert(x == 10.0)
-    assert(p.x == 99.0)
+    assert(x == 10.0, "")
+    assert(p.x == 99.0, "")
 }

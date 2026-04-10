@@ -278,12 +278,30 @@ static HirNode *lower_expr_stmt(Lower *low, const ASTNode *ast) {
 static void preregister_type_methods(Lower *low, const char *type_name, ASTNode *const *methods) {
     for (int32_t j = 0; j < BUF_LEN(methods); j++) {
         const ASTNode *method = methods[j];
-        if (method->fn_decl.is_declare) {
-            continue; // Declare methods have no body — lowerer handles them as intrinsics
-        }
         const char *method_name = method->fn_decl.name;
         const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INST;
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
+
+        if (method->fn_decl.is_declare) {
+            // Intrinsic methods (e.g. .len()) are expanded inline during lowering.
+            const char *bare = strrchr(method_name, '.');
+            bare = (bare != NULL) ? bare + 1 : method_name;
+            if (intrinsic_lookup(bare) != INTRINSIC_NONE) {
+                continue;
+            }
+            // Register non-intrinsic declare methods with default mangling
+            // so normal call lowering can resolve their symbol.
+            const char *mangled =
+                arena_sprintf(low->hir_arena, "rsgu_%s_%s",
+                              lower_mangle_name(low->hir_arena, type_name), method_name);
+            HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
+            HirSym *sym = lower_make_sym(low, &sym_spec);
+            sym->mangled_name = mangled;
+            sym->is_ptr_recv = method->fn_decl.is_ptr_recv;
+            lower_scope_define(low, key, sym);
+            continue;
+        }
+
         const char *mangled =
             arena_sprintf(low->hir_arena, "rsgu_%s_%s",
                           lower_mangle_name(low->hir_arena, type_name), method_name);
@@ -318,7 +336,26 @@ static HirNode *lower_module(Lower *low, const ASTNode *ast);
 /** Pre-register a single decl (fn/struct/enum/ext/module). */
 static void preregister_single_decl(Lower *low, const ASTNode *decl) {
     if (decl->kind == NODE_FN_DECL) {
-        if (decl->fn_decl.is_declare || BUF_LEN(decl->fn_decl.type_params) > 0) {
+        if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+            return;
+        }
+        if (decl->fn_decl.is_declare) {
+            // Register declare fns with default "rsgu_" mangling.
+            // Intrinsic builtins (print, assert, etc.) are still expanded by the lower
+            // pass, but non-intrinsic declare fns fall through to normal call lowering
+            // and need a correctly mangled symbol in scope.
+            const char *bare = strrchr(decl->fn_decl.name, '.');
+            bare = (bare != NULL) ? bare + 1 : decl->fn_decl.name;
+            IntrinsicKind ik = intrinsic_lookup(bare);
+            if (ik == INTRINSIC_NONE) {
+                const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
+                HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
+                HirSym *sym = lower_make_sym(low, &fn_spec);
+                sym->mangled_name =
+                    arena_sprintf(low->hir_arena, "rsgu_%s",
+                                  lower_mangle_name(low->hir_arena, decl->fn_decl.name));
+                lower_scope_define(low, decl->fn_decl.name, sym);
+            }
             return;
         }
         const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;

@@ -12,12 +12,12 @@ type StrPair = Pair<str, str>
 
 fn test_int_pair_alias() {
     p := IntPair { first = 1, second = 2 }
-    assert(p.first == 1)
-    assert(p.second == 2)
+    assert(p.first == 1, "")
+    assert(p.second == 2, "")
 }
 
 fn test_str_pair_alias() {
     p := StrPair { first = "a", second = "b" }
-    assert(p.first == "a")
-    assert(p.second == "b")
+    assert(p.first == "a", "")
+    assert(p.second == "b", "")
 }

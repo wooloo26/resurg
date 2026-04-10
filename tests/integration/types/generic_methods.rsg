@@ -19,8 +19,8 @@ ext<T, U> Pair<T, U> {
 
 fn test_pair_methods() {
     p := Pair<i32, str> { first = 42, second = "hello" }
-    assert(p.get_first() == 42)
-    assert(p.get_second() == "hello")
+    assert(p.get_first() == 42, "")
+    assert(p.get_second() == "hello", "")
 }
 
 // ── non-generic struct with value receiver using generic params ──
@@ -37,8 +37,8 @@ ext<T> Box<T> {
 
 fn test_box_unwrap() {
     b := Box<i32> { value = 99 }
-    assert(b.unwrap() == 99)
+    assert(b.unwrap() == 99, "")
 
     s := Box<str> { value = "test" }
-    assert(s.unwrap() == "test")
+    assert(s.unwrap() == "test", "")
 }

@@ -5,19 +5,19 @@
 // ═══════════════════════════════════════
 
 fn test_mul_before_add() {
-    assert(2 + 3 * 4 == 14)      // not 20
-    assert(10 - 2 * 3 == 4)      // not 24
-    assert(1 + 2 * 3 + 4 == 11)
+    assert(2 + 3 * 4 == 14, "")      // not 20
+    assert(10 - 2 * 3 == 4, "")      // not 24
+    assert(1 + 2 * 3 + 4 == 11, "")
 }
 
 fn test_div_before_sub() {
-    assert(10 - 6 / 2 == 7)      // not 2
-    assert(20 / 4 + 3 == 8)
+    assert(10 - 6 / 2 == 7, "")      // not 2
+    assert(20 / 4 + 3 == 8, "")
 }
 
 fn test_mod_before_add() {
-    assert(2 + 10 % 3 == 3)      // not 2
-    assert(10 % 3 + 5 == 6)
+    assert(2 + 10 % 3 == 3, "")      // not 2
+    assert(10 % 3 + 5 == 6, "")
 }
 
 // ═══════════════════════════════════════
@@ -25,10 +25,10 @@ fn test_mod_before_add() {
 // ═══════════════════════════════════════
 
 fn test_parens_override() {
-    assert((2 + 3) * 4 == 20)
-    assert(2 * (3 + 4) == 14)
-    assert((10 - 2) * 3 == 24)
-    assert(10 / (2 + 3) == 2)
+    assert((2 + 3) * 4 == 20, "")
+    assert(2 * (3 + 4) == 14, "")
+    assert((10 - 2) * 3 == 24, "")
+    assert(10 / (2 + 3) == 2, "")
 }
 
 // ═══════════════════════════════════════
@@ -36,12 +36,12 @@ fn test_parens_override() {
 // ═══════════════════════════════════════
 
 fn test_comparison_after_arithmetic() {
-    assert(2 + 3 > 4)              // (2+3) > 4
-    assert(10 - 5 == 5)            // (10-5) == 5
-    assert(2 * 3 >= 6)             // (2*3) >= 6
-    assert(10 / 2 <= 5)            // (10/2) <= 5
-    assert(7 % 3 != 0)             // (7%3) != 0
-    assert(3 * 2 < 7)              // (3*2) < 7
+    assert(2 + 3 > 4, "")              // (2+3) > 4
+    assert(10 - 5 == 5, "")            // (10-5) == 5
+    assert(2 * 3 >= 6, "")             // (2*3) >= 6
+    assert(10 / 2 <= 5, "")            // (10/2) <= 5
+    assert(7 % 3 != 0, "")             // (7%3) != 0
+    assert(3 * 2 < 7, "")              // (3*2) < 7
 }
 
 // ═══════════════════════════════════════
@@ -50,13 +50,13 @@ fn test_comparison_after_arithmetic() {
 
 fn test_and_before_or() {
     // true || false && false  =>  true || (false && false)  =>  true
-    assert((true || false && false) == true)
+    assert((true || false && false) == true, "")
     // false || true && true  =>  false || (true && true)  =>  true
-    assert((false || true && true) == true)
+    assert((false || true && true) == true, "")
     // false && true || true  =>  (false && true) || true  =>  true
-    assert((false && true || true) == true)
+    assert((false && true || true) == true, "")
     // false && false || false  =>  (false && false) || false  =>  false
-    assert((false && false || false) == false)
+    assert((false && false || false) == false, "")
 }
 
 // ═══════════════════════════════════════
@@ -64,9 +64,9 @@ fn test_and_before_or() {
 // ═══════════════════════════════════════
 
 fn test_not_before_and() {
-    assert((!false && true) == true)
-    assert((!true && true) == false)
-    assert((!false || false) == true)
+    assert((!false && true) == true, "")
+    assert((!true && true) == false, "")
+    assert((!false || false) == true, "")
 }
 
 // ═══════════════════════════════════════
@@ -74,9 +74,9 @@ fn test_not_before_and() {
 // ═══════════════════════════════════════
 
 fn test_unary_minus_precedence() {
-    assert(-3 + 5 == 2)           // (-3) + 5
-    assert(-3 * 2 == -6)          // (-3) * 2
-    assert(5 + -3 == 2)
+    assert(-3 + 5 == 2, "")           // (-3) + 5
+    assert(-3 * 2 == -6, "")          // (-3) * 2
+    assert(5 + -3 == 2, "")
 }
 
 // ═══════════════════════════════════════
@@ -87,9 +87,9 @@ fn test_comparison_binary() {
     a := 1
     b := 2
     c := 3
-    assert(a < b)
-    assert(b < c)
-    assert(a < b && b < c)
+    assert(a < b, "")
+    assert(b < c, "")
+    assert(a < b && b < c, "")
 }
 
 // ═══════════════════════════════════════
@@ -98,7 +98,7 @@ fn test_comparison_binary() {
 
 fn test_mixed_precedence() {
     // 1 + 2 * 3 - 4 / 2 + 5 % 3 == 1 + 6 - 2 + 2 == 7
-    assert(1 + 2 * 3 - 4 / 2 + 5 % 3 == 7)
+    assert(1 + 2 * 3 - 4 / 2 + 5 % 3 == 7, "")
 }
 
 fn test_complex_logical() {
@@ -106,15 +106,15 @@ fn test_complex_logical() {
     b := 20
     c := 30
     // (a < b) && (b < c) || (a == c)  =>  true && true || false  =>  true
-    assert((a < b && b < c || a == c) == true)
+    assert((a < b && b < c || a == c) == true, "")
     // (a > b) || (b < c) && (c > a)  =>  false || (true && true)  =>  true
-    assert((a > b || b < c && c > a) == true)
+    assert((a > b || b < c && c > a) == true, "")
 }
 
 fn test_nested_parens() {
-    assert(((2 + 3) * (4 - 1)) == 15)
-    assert((((1 + 1) * 2) + 3) == 7)
-    assert((10 / (2 + 3)) * 4 == 8)
+    assert(((2 + 3) * (4 - 1)) == 15, "")
+    assert((((1 + 1) * 2) + 3) == 7, "")
+    assert((10 / (2 + 3)) * 4 == 8, "")
 }
 
 // ═══════════════════════════════════════
@@ -123,8 +123,8 @@ fn test_nested_parens() {
 
 fn test_equality_precedence() {
     // == and != bind looser than <, >, <=, >=
-    assert((1 < 2) == true)
-    assert((2 > 1) == true)
-    assert((1 <= 1) != false)
-    assert((2 >= 3) == false)
+    assert((1 < 2) == true, "")
+    assert((2 > 1) == true, "")
+    assert((1 <= 1) != false, "")
+    assert((2 >= 3) == false, "")
 }

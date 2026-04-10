@@ -16,10 +16,10 @@ ext Point {
 
 fn test_struct_fields_with_ext_methods() {
     p := Point { x = 3.0, y = 4.0 }
-    assert(p.sum() == 7.0)
+    assert(p.sum() == 7.0, "")
     q := p.translate(1.0, 2.0)
-    assert(q.x == 4.0)
-    assert(q.y == 6.0)
+    assert(q.x == 4.0, "")
+    assert(q.y == 6.0, "")
 }
 
 // ── struct with embedding, methods via ext ──
@@ -35,8 +35,8 @@ ext Point3D {
 
 fn test_embedding_with_ext() {
     p := Point3D { x = 1.0, y = 2.0, z = 3.0 }
-    assert(p.sum3d() == 6.0)
-    assert(p.sum() == 3.0)
+    assert(p.sum3d() == 6.0, "")
+    assert(p.sum() == 3.0, "")
 }
 
 // ── struct with mut pointer receiver in ext ──
@@ -52,11 +52,11 @@ ext Counter {
 
 fn test_mut_pointer_ext() {
     c := Counter {}
-    assert(c.get() == 0)
+    assert(c.get() == 0, "")
     c.increment()
-    assert(c.get() == 1)
+    assert(c.get() == 1, "")
     c.increment()
-    assert(c.get() == 2)
+    assert(c.get() == 2, "")
 }
 
 // ── struct with default values ──
@@ -69,7 +69,7 @@ struct Config {
 
 fn test_struct_defaults() {
     cfg := Config {}
-    assert(cfg.host == "localhost")
-    assert(cfg.port == 8080)
-    assert(cfg.debug == false)
+    assert(cfg.host == "localhost", "")
+    assert(cfg.port == 8080, "")
+    assert(cfg.debug == false, "")
 }

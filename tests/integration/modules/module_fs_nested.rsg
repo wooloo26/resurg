@@ -10,19 +10,19 @@ use self::shapes::rect::perimeter
 fn test_nested_module_circle() {
     a := area(5.0)
     // area = pi * r * r ≈ 78.54
-    assert(a > 78.0)
-    assert(a < 79.0)
+    assert(a > 78.0, "")
+    assert(a < 79.0, "")
 }
 
 fn test_nested_module_rect() {
     p := perimeter(3.0, 4.0)
-    assert(p == 14.0)
+    assert(p == 14.0, "")
 }
 
 // ── fully qualified nested path ──
 
 fn test_nested_module_qualified() {
     a := shapes::circle::area(1.0)
-    assert(a > 3.1)
-    assert(a < 3.2)
+    assert(a > 3.1, "")
+    assert(a < 3.2, "")
 }

@@ -34,20 +34,20 @@ ext RangeIter impl Iterator {
 fn test_ext_impl_basic() {
     iter := RangeIter { current = 0, end = 3 }
     match iter.next() {
-        Some(v) => assert(v == 0),
-        None => assert(false),
+        Some(v) => assert(v == 0, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(v) => assert(v == 1),
-        None => assert(false),
+        Some(v) => assert(v == 1, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(v) => assert(v == 2),
-        None => assert(false),
+        Some(v) => assert(v == 2, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -60,8 +60,8 @@ fn get_next<I: Iterator>(mut iter: *I) -> ?I::Item {
 fn test_ext_impl_generic_fn() {
     iter := RangeIter { current = 10, end = 12 }
     match get_next<RangeIter>(mut &iter) {
-        Some(v) => assert(v == 10),
-        None => assert(false),
+        Some(v) => assert(v == 10, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -87,7 +87,7 @@ ext SimpleAcc impl Accumulator {
 
 fn test_ext_impl_defaults_inherited() {
     acc := SimpleAcc {}
-    assert(acc.accumulate(5) == false)
-    assert(acc.accumulate(6) == true)
-    assert(acc.total == 11)
+    assert(acc.accumulate(5) == false, "")
+    assert(acc.accumulate(6) == true, "")
+    assert(acc.total == 11, "")
 }

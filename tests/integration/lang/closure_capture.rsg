@@ -9,7 +9,7 @@ fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
 fn test_capture_local() {
     offset := 10
     result := apply(|x| x + offset, 5)
-    assert(result == 15)
+    assert(result == 15, "")
 }
 
 // ── capture multiple variables ──
@@ -22,7 +22,7 @@ fn test_capture_multiple() {
     a := 2
     b := 3
     result := apply2(|x| x * a + b, 4)
-    assert(result == 11)
+    assert(result == 11, "")
 }
 
 // ── capture function parameter ──
@@ -33,8 +33,8 @@ fn make_adder(n: i32) -> fn(i32) -> i32 {
 
 fn test_capture_param() {
     add5 := make_adder(5)
-    assert(add5(10) == 15)
-    assert(add5(0) == 5)
+    assert(add5(10) == 15, "")
+    assert(add5(0) == 5, "")
 }
 
 // ── capture in nested scope ──
@@ -45,7 +45,7 @@ fn test_capture_nested_scope() {
         inner := 10
         |x: i32| -> i32 { x + outer + inner }
     }
-    assert(f(1) == 111)
+    assert(f(1) == 111, "")
 }
 
 // ── captured variable is snapshot, not reference (value capture) ──
@@ -55,7 +55,7 @@ fn test_capture_snapshot() {
     f := |y: i32| -> i32 { y + x }
     x = 20
     // closure captured x=10 at definition time
-    assert(f(5) == 15)
+    assert(f(5) == 15, "")
 }
 
 // ── capture bool ──
@@ -65,8 +65,8 @@ fn test_capture_bool() {
     check := |x: i32| -> bool {
         if flag { x > 0 } else { x < 0 }
     }
-    assert(check(5) == true)
-    assert(check(-5) == false)
+    assert(check(5) == true, "")
+    assert(check(-5) == false, "")
 }
 
 // ── capture string ──
@@ -78,5 +78,5 @@ fn run_str(f: Fn() -> str) -> str {
 fn test_capture_str() {
     greeting := "hello"
     f := || greeting
-    assert(run_str(f) == "hello")
+    assert(run_str(f) == "hello", "")
 }

@@ -5,24 +5,24 @@
 fn test_default_none_i32() {
     var x: ?i32
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
 fn test_default_none_str() {
     var x: ?str
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
 fn test_default_none_bool() {
     var x: ?bool
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -31,13 +31,13 @@ fn test_default_none_bool() {
 fn test_reassign_none_to_some() {
     var x: ?i32
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
     x = Some(42)
     match x {
-        Some(v) => assert(v == 42),
-        None => assert(false),
+        Some(v) => assert(v == 42, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -46,12 +46,12 @@ fn test_reassign_none_to_some() {
 fn test_reassign_some_to_none() {
     var x: ?i32 = Some(10)
     match x {
-        Some(v) => assert(v == 10),
-        None => assert(false),
+        Some(v) => assert(v == 10, ""),
+        None => assert(false, ""),
     }
     x = None
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }

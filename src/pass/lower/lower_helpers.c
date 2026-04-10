@@ -105,6 +105,7 @@ HirNode *lower_make_builtin_call(Lower *low, const BuiltinCallSpec *spec) {
     HirNode *node = hir_new(low->hir_arena, HIR_CALL, spec->return_type, spec->loc);
     node->call.callee = callee;
     node->call.args = spec->args;
+    node->call.intrinsic = spec->intrinsic;
     return node;
 }
 

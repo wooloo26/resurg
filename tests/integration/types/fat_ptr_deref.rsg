@@ -5,9 +5,9 @@
 fn test_slice_ptr_index() {
     s := []i32{10, 20, 30}
     p := &s
-    assert(p[0] == 10)
-    assert(p[1] == 20)
-    assert(p[2] == 30)
+    assert(p[0] == 10, "")
+    assert(p[1] == 20, "")
+    assert(p[2] == 30, "")
 }
 
 // ── len through *[]T ──
@@ -15,7 +15,7 @@ fn test_slice_ptr_index() {
 fn test_slice_ptr_len() {
     s := []i32{1, 2, 3, 4}
     p := &s
-    assert(len(p) == 4)
+    assert(len(p) == 4, "")
 }
 
 // ── slice expr through *[]T ──
@@ -24,10 +24,10 @@ fn test_slice_ptr_slice_expr() {
     s := []i32{10, 20, 30, 40, 50}
     p := &s
     sub := p[1..4]
-    assert(len(sub) == 3)
-    assert(sub[0] == 20)
-    assert(sub[1] == 30)
-    assert(sub[2] == 40)
+    assert(len(sub) == 3, "")
+    assert(sub[0] == 20, "")
+    assert(sub[1] == 30, "")
+    assert(sub[2] == 40, "")
 }
 
 // ── mutate element through *[]T ──
@@ -39,7 +39,7 @@ fn set_first(mut s: *[]i32, val: i32) {
 fn test_slice_ptr_mutate() {
     s := []i32{0, 0, 0}
     set_first(mut &s, 99)
-    assert(s[0] == 99)
+    assert(s[0] == 99, "")
 }
 
 // ── len through *str ──
@@ -47,7 +47,7 @@ fn test_slice_ptr_mutate() {
 fn test_str_ptr_len() {
     s := "hello"
     p := &s
-    assert(len(p) == 5)
+    assert(len(p) == 5, "")
 }
 
 // ── reassign through *[]T combined with auto-deref ──
@@ -61,7 +61,7 @@ fn swap_and_read(mut s: *[]i32) -> i32 {
 fn test_mixed_deref() {
     s := []i32{1, 2, 3}
     old := swap_and_read(mut &s)
-    assert(old == 1)
-    assert(len(s) == 2)
-    assert(s[0] == 100)
+    assert(old == 1, "")
+    assert(len(s) == 2, "")
+    assert(s[0] == 100, "")
 }

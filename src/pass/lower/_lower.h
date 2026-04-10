@@ -1,6 +1,7 @@
 #ifndef RSG__LOWER_H
 #define RSG__LOWER_H
 
+#include "core/intrinsic.h"
 #include "lower.h"
 #include "repr/ast.h"
 
@@ -72,6 +73,7 @@ typedef struct {
     const Type *return_type;
     HirNode **args;
     SrcLoc loc;
+    IntrinsicKind intrinsic; // propagated to HIR_CALL
 } BuiltinCallSpec;
 
 /** Grouped params identifying an enum variant for lowering. */

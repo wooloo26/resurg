@@ -9,19 +9,19 @@
 
 fn test_prelude_dot_len_str() {
     s := "hello"
-    assert(s.len() == 5)
-    assert("".len() == 0)
+    assert(s.len() == 5, "")
+    assert("".len() == 0, "")
 }
 
 fn test_prelude_dot_len_slice() {
     s := []i32{1, 2, 3}
-    assert(s.len() == 3)
-    assert(([]i32{}).len() == 0)
+    assert(s.len() == 3, "")
+    assert(([]i32{}).len() == 0, "")
 }
 
 fn test_prelude_dot_len_array() {
     arr := [3]i32{1, 2, 3}
-    assert(arr.len() == 3)
+    assert(arr.len() == 3, "")
 }
 
 // ── pub fn works inside ext block (within same module scope) ──
@@ -36,6 +36,6 @@ ext Counter {
 
 fn test_pub_fn_in_ext_block() {
     c := Counter { value = 42 }
-    assert(c.get_value() == 42)
+    assert(c.get_value() == 42, "")
     println("pub declare ext works")
 }

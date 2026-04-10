@@ -1,4 +1,6 @@
+#include "core/intrinsic.h"
 #include "helpers.h"
+#include "repr/types.h"
 
 // ── Per-node expr emitters ───────────────────────────────────────
 
@@ -75,43 +77,22 @@ static const char *emit_binary_expr(CGen *cgen, const HirNode *node) {
     return arena_sprintf(cgen->arena, "(%s %s %s)", left, bin_op, right);
 }
 
-/** Return true if the callee is the rsg_assert runtime fn. */
-static bool is_rsg_assert_call(const HirNode *node) {
-    if (node->call.callee->kind != HIR_VAR_REF) {
-        return false;
-    }
-    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_assert") == 0;
-}
-
-/** Return true if the callee is the rsg_panic runtime fn. */
-static bool is_rsg_panic_call(const HirNode *node) {
-    if (node->call.callee->kind != HIR_VAR_REF) {
-        return false;
-    }
-    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_panic") == 0;
-}
-
-/** Return true if the callee is the rsg_recover runtime fn. */
-static bool is_rsg_recover_call(const HirNode *node) {
-    if (node->call.callee->kind != HIR_VAR_REF) {
-        return false;
-    }
-    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_recover") == 0;
-}
-
-static bool is_rsg_slice_concat_call(const HirNode *node) {
-    if (node->call.callee->kind != HIR_VAR_REF) {
-        return false;
-    }
-    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_slice_concat") == 0;
+/**
+ * Emit print/println(arg) → rsgu_print[ln]_TYPE(arg).
+ *
+ * Type dispatch to the runtime fn happens here (C-backend specific).
+ */
+static const char *emit_print_call(CGen *cgen, const HirNode *node, bool newline) {
+    const HirNode *arg = node->call.args[0];
+    const char *arg_expr = emit_expr(cgen, arg);
+    const char *type_suffix = type_runtime_suffix(arg->type);
+    return arena_sprintf(cgen->arena, "rsgu_print%s_%s(%s)", newline ? "ln" : "", type_suffix,
+                         arg_expr);
 }
 
 /**
  * Emit rsg_assert(cond, msg, file, line).
- * Lower has already expanded assert() into rsg_assert() with four args.
- * The msg (arg 1) is either a str lit (emit as C str), a unit
- * lit (emit NULL), or a str expr (emit .data).
- * The file (arg 2) is always a str lit emitted as a C str.
+ * If the message node is HIR_UNIT_LIT (absent), emits NULL.
  */
 static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
     const char *cond = emit_expr(cgen, node->call.args[0]);
@@ -121,8 +102,12 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
     if (msg_node->kind == HIR_UNIT_LIT) {
         msg = "NULL";
     } else if (msg_node->kind == HIR_STR_LIT) {
-        msg = arena_sprintf(cgen->arena, "\"%s\"",
-                            c_str_escape(cgen, msg_node->str_lit.value, msg_node->str_lit.len));
+        if (msg_node->str_lit.len == 0) {
+            msg = "NULL";
+        } else {
+            msg = arena_sprintf(cgen->arena, "\"%s\"",
+                                c_str_escape(cgen, msg_node->str_lit.value, msg_node->str_lit.len));
+        }
     } else {
         const char *msg_expr = emit_expr(cgen, msg_node);
         msg = arena_sprintf(cgen->arena, "%s.data", msg_expr);
@@ -135,11 +120,11 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
 
     const char *line = emit_expr(cgen, node->call.args[3]);
 
-    return arena_sprintf(cgen->arena, "rsg_assert(%s, %s, %s, %s)", cond, msg, file, line);
+    return arena_sprintf(cgen->arena, RSG_FN_ASSERT "(%s, %s, %s, %s)", cond, msg, file, line);
 }
 
 /**
- * Emit rsg_panic(msg).
+ * Emit rsgu_panic(msg).
  * The single arg is a str expression; extract .data for the C call.
  */
 static const char *emit_rsg_panic_call(CGen *cgen, const HirNode *node) {
@@ -152,18 +137,18 @@ static const char *emit_rsg_panic_call(CGen *cgen, const HirNode *node) {
         const char *msg_expr = emit_expr(cgen, msg_node);
         msg = arena_sprintf(cgen->arena, "%s.data", msg_expr);
     }
-    return arena_sprintf(cgen->arena, "rsg_panic(%s)", msg);
+    return arena_sprintf(cgen->arena, RSG_FN_PANIC "(%s)", msg);
 }
 
 /**
- * Emit rsg_recover() → ?str.
- * Calls the C rsg_recover(), then builds an Option<str> from the result.
+ * Emit rsgu_recover() → ?str.
+ * Calls the C rsgu_recover(), then builds an Option<str> from the result.
  */
 static const char *emit_rsg_recover_call(CGen *cgen, const HirNode *node) {
     const char *opt_type = c_type_for(cgen, node->type);
     const char *tmp_raw = next_temp(cgen);
     const char *tmp_opt = next_temp(cgen);
-    emit_line(cgen, "const char *%s = rsg_recover();", tmp_raw);
+    emit_line(cgen, "const char *%s = " RSG_FN_RECOVER "();", tmp_raw);
     emit_line(cgen, "%s %s;", opt_type, tmp_opt);
     emit_line(cgen, "if (%s != NULL) {", tmp_raw);
     cgen->indent++;
@@ -179,24 +164,37 @@ static const char *emit_rsg_recover_call(CGen *cgen, const HirNode *node) {
     return tmp_opt;
 }
 
-static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
-    if (is_rsg_assert_call(node)) {
-        return emit_rsg_assert_call(cgen, node);
-    }
-    if (is_rsg_panic_call(node)) {
-        return emit_rsg_panic_call(cgen, node);
-    }
-    if (is_rsg_recover_call(node)) {
-        return emit_rsg_recover_call(cgen, node);
-    }
+// ── Intrinsic emit dispatch table ─────────────────────────────────
 
-    // rsg_slice_concat(a, b) → rsg_slice_concat(a, b, sizeof(ElemType))
-    if (is_rsg_slice_concat_call(node)) {
-        const char *a = emit_expr(cgen, node->call.args[0]);
-        const char *b = emit_expr(cgen, node->call.args[1]);
-        const Type *elem_type = node->type->slice.elem;
-        const char *elem_c = c_type_for(cgen, elem_type);
-        return arena_sprintf(cgen->arena, "rsg_slice_concat(%s, %s, sizeof(%s))", a, b, elem_c);
+typedef const char *(*IntrinsicEmitFn)(CGen *cgen, const HirNode *node);
+
+static const char *emit_print_wrapper(CGen *cgen, const HirNode *node) {
+    return emit_print_call(cgen, node, false);
+}
+
+static const char *emit_println_wrapper(CGen *cgen, const HirNode *node) {
+    return emit_print_call(cgen, node, true);
+}
+
+static const char *emit_slice_concat_call(CGen *cgen, const HirNode *node) {
+    const char *a = emit_expr(cgen, node->call.args[0]);
+    const char *b = emit_expr(cgen, node->call.args[1]);
+    const Type *elem_type = node->type->slice.elem;
+    const char *elem_c = c_type_for(cgen, elem_type);
+    return arena_sprintf(cgen->arena, RSG_FN_SLICE_CONCAT "(%s, %s, sizeof(%s))", a, b, elem_c);
+}
+
+static const IntrinsicEmitFn INTRINSIC_EMIT[INTRINSIC_KIND_COUNT] = {
+    [INTRINSIC_PRINT] = emit_print_wrapper,      [INTRINSIC_PRINTLN] = emit_println_wrapper,
+    [INTRINSIC_ASSERT] = emit_rsg_assert_call,   [INTRINSIC_PANIC] = emit_rsg_panic_call,
+    [INTRINSIC_RECOVER] = emit_rsg_recover_call, [INTRINSIC_SLICE_CONCAT] = emit_slice_concat_call,
+};
+
+static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
+    // Dispatch intrinsics via table lookup.
+    IntrinsicKind ik = node->call.intrinsic;
+    if (ik != INTRINSIC_NONE && INTRINSIC_EMIT[ik] != NULL) {
+        return INTRINSIC_EMIT[ik](cgen, node);
     }
 
     // Indirect call through fn-typed variable: ((Ret(*)(void*,P1,...))f.fn)(f.env, args)
@@ -306,7 +304,7 @@ static const char *emit_if_expr(CGen *cgen, const HirNode *node) {
     }
 
     const Type *type = node->type;
-    if (type == NULL || type->kind == TYPE_UNIT) {
+    if (type == NULL || type->kind == TYPE_UNIT || type->kind == TYPE_NEVER) {
         emit_if(cgen, node, NULL, false);
         return "(void)0";
     }
@@ -573,7 +571,7 @@ static const char *emit_match_expr(CGen *cgen, const HirNode *node) {
     emit_stmt(cgen, node->match_expr.operand);
 
     const char *result = NULL;
-    if (type != NULL && type->kind != TYPE_UNIT) {
+    if (type != NULL && type->kind != TYPE_UNIT && type->kind != TYPE_NEVER) {
         result = next_temp(cgen);
         emit_line(cgen, "%s %s;", c_type_for(cgen, type), result);
     }

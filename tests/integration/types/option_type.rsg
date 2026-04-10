@@ -5,24 +5,24 @@
 fn test_option_some_i32() {
     var x: ?i32 = Some(42)
     match x {
-        Some(v) => assert(v == 42),
-        None => assert(false),
+        Some(v) => assert(v == 42, ""),
+        None => assert(false, ""),
     }
 }
 
 fn test_option_some_str() {
     var x: ?str = Some("hello")
     match x {
-        Some(v) => assert(v == "hello"),
-        None => assert(false),
+        Some(v) => assert(v == "hello", ""),
+        None => assert(false, ""),
     }
 }
 
 fn test_option_some_bool() {
     var x: ?bool = Some(true)
     match x {
-        Some(v) => assert(v == true),
-        None => assert(false),
+        Some(v) => assert(v == true, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -31,16 +31,16 @@ fn test_option_some_bool() {
 fn test_option_none() {
     var x: ?i32 = None
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
 fn test_option_none_str() {
     var x: ?str = None
     match x {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -49,8 +49,8 @@ fn test_option_none_str() {
 fn test_option_inferred_some() {
     x := Some(42)
     match x {
-        Some(v) => assert(v == 42),
-        None => assert(false),
+        Some(v) => assert(v == 42, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -63,14 +63,14 @@ fn find_user(id: u64) -> ?str {
 fn test_function_returning_option() {
     result := find_user(1)
     match result {
-        Some(name) => assert(name == "Alice"),
-        None => assert(false),
+        Some(name) => assert(name == "Alice", ""),
+        None => assert(false, ""),
     }
 
     result2 := find_user(99)
     match result2 {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -81,11 +81,11 @@ fn test_nested_option() {
     match x {
         Some(inner) => {
             match inner {
-                Some(v) => assert(v == 42),
-                None => assert(false),
+                Some(v) => assert(v == 42, ""),
+                None => assert(false, ""),
             }
         },
-        None => assert(false),
+        None => assert(false, ""),
     }
 }
 
@@ -101,17 +101,17 @@ fn test_option_pointer() {
     var opt: ?*Point = Some(p)
     match opt {
         Some(ptr) => {
-            assert(ptr.x == 1.0)
-            assert(ptr.y == 2.0)
+            assert(ptr.x == 1.0, "")
+            assert(ptr.y == 2.0, "")
         },
-        None => assert(false),
+        None => assert(false, ""),
     }
 }
 
 fn test_option_pointer_none() {
     var opt: ?*Point = None
     match opt {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }

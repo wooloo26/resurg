@@ -26,5 +26,5 @@ ext MyInt {
 
 fn test_ext_local_assoc_type() {
     n := MyInt { value = 5 }
-    assert(n.double() == 10)
+    assert(n.double() == 10, "")
 }

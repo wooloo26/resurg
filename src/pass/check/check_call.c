@@ -89,26 +89,59 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
 }
 
 /**
+ * Fill in missing args with default values at the call site.
+ * For expression defaults, reuses the default expression AST node.
+ */
+static void fill_default_args(Sema *sema, ASTNode *node, const FnSig *sig) {
+    int32_t arg_count = BUF_LEN(node->call.args);
+    if (arg_count >= sig->param_count || sig->default_kinds == NULL) {
+        return;
+    }
+    for (int32_t i = arg_count; i < sig->param_count; i++) {
+        DefaultKind dk = sig->default_kinds[i];
+        ASTNode *fill = NULL;
+        if (dk == DEFAULT_EXPR) {
+            fill = sig->default_exprs[i];
+            if (fill != NULL) {
+                check_node(sema, fill);
+            }
+        }
+        BUF_PUSH(node->call.args, fill);
+    }
+}
+
+/**
  * Validate arg count against @p sig, promote lit args, and type-check each arg.
  * Handles variadic parameters: when the last param is variadic (..T → []T),
  * remaining call-site args are checked against the element type.
+ * Fills default args when the call provides fewer args than params.
  */
 static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     int32_t arg_count = BUF_LEN(node->call.args);
     int32_t fixed_count = sig->has_variadic ? sig->param_count - 1 : sig->param_count;
+    int32_t min_required = sig->default_kinds != NULL ? sig->required_count : fixed_count;
 
     if (sig->has_variadic) {
-        // Variadic: need at least the fixed args
-        if (arg_count < fixed_count) {
-            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", fixed_count, arg_count);
+        // Variadic: need at least the fixed args (minus any with defaults)
+        if (arg_count < min_required) {
+            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", min_required, arg_count);
             return;
         }
     } else {
-        if (arg_count != sig->param_count) {
-            SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
+        if (arg_count < min_required) {
+            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", min_required, arg_count);
+            return;
+        }
+        if (arg_count > sig->param_count) {
+            SEMA_ERR(sema, node->loc, "expected at most %d args, got %d", sig->param_count,
+                     arg_count);
             return;
         }
     }
+
+    // Fill in missing args with defaults before type-checking
+    fill_default_args(sema, node, sig);
+    arg_count = BUF_LEN(node->call.args);
 
     // Check fixed (non-variadic) args
     for (int32_t i = 0; i < fixed_count && i < arg_count; i++) {
@@ -624,10 +657,15 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
     FnSig *sig = rsg_malloc(sizeof(*sig));
     sig->name = mangled;
     sig->param_count = BUF_LEN(orig->fn_decl.params);
+    sig->required_count = sig->param_count;
     sig->param_types = NULL;
     sig->param_names = NULL;
     sig->is_pub = false;
+    sig->is_ptr_recv = false;
+    sig->is_declare = orig->fn_decl.is_declare;
     sig->has_variadic = false;
+    sig->default_kinds = NULL;
+    sig->default_exprs = NULL;
     for (int32_t i = 0; i < sig->param_count; i++) {
         ASTNode *param = orig->fn_decl.params[i];
         const Type *pt = resolve_ast_type(sema, &param->param.type);
@@ -647,11 +685,15 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
     sema_reset_type_params(sema);
 
     hash_table_insert(&sema->fn_table, mangled, sig);
-    GenericInst inst = {.generic = gdef,
-                        .mangled_name = mangled,
-                        .type_args = resolved_args,
-                        .file_node = sema->file_node};
-    BUF_PUSH(sema->pending_insts, inst);
+
+    // Declare fns have no body to clone/check — skip deferred instantiation.
+    if (!orig->fn_decl.is_declare) {
+        GenericInst inst = {.generic = gdef,
+                            .mangled_name = mangled,
+                            .type_args = resolved_args,
+                            .file_node = sema->file_node};
+        BUF_PUSH(sema->pending_insts, inst);
+    }
 
     node->call.callee->id.name = mangled;
     return resolve_call(sema, node, sig);
@@ -684,13 +726,48 @@ static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *
     if (existing != NULL) {
         sema_reset_type_params(sema);
         node->call.callee->id.name = mangled;
+        node->call.type_args = NULL;
         return resolve_call(sema, node, existing);
     }
 
-    return emit_generic_fn_inst(sema, node, gdef, resolved_args, mangled);
+    const Type *result = emit_generic_fn_inst(sema, node, gdef, resolved_args, mangled);
+    node->call.type_args = NULL;
+    return result;
 }
 
 // ── Generic type inference ────────────────────────────────────────
+
+/** Convert a resolved Type back to an ASTType for synthetic type arg construction. */
+static ASTType type_to_ast_type(Arena *arena, const Type *type) {
+    ASTType ast = {0};
+    if (type == NULL) {
+        ast.kind = AST_TYPE_NAME;
+        ast.name = "<err>";
+        return ast;
+    }
+    switch (type->kind) {
+    case TYPE_SLICE:
+        ast.kind = AST_TYPE_SLICE;
+        ast.slice_elem = arena_alloc(arena, sizeof(ASTType));
+        *ast.slice_elem = type_to_ast_type(arena, type->slice.elem);
+        return ast;
+    case TYPE_ARRAY:
+        ast.kind = AST_TYPE_ARRAY;
+        ast.array_elem = arena_alloc(arena, sizeof(ASTType));
+        *ast.array_elem = type_to_ast_type(arena, type->array.elem);
+        ast.array_size = type->array.size;
+        return ast;
+    case TYPE_PTR:
+        ast.kind = AST_TYPE_PTR;
+        ast.ptr_elem = arena_alloc(arena, sizeof(ASTType));
+        *ast.ptr_elem = type_to_ast_type(arena, type->ptr.pointee);
+        return ast;
+    default:
+        ast.kind = AST_TYPE_NAME;
+        ast.name = type_name(arena, type);
+        return ast;
+    }
+}
 
 /** Try to infer type args from call args: identity(42) → identity<i32>(42). */
 static const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
@@ -733,9 +810,7 @@ static const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_
     // Build synthetic type_args and recurse
     ASTType *synth_args = NULL;
     for (int32_t i = 0; i < num_params; i++) {
-        ASTType arg = {0};
-        arg.kind = AST_TYPE_NAME;
-        arg.name = type_name(sema->arena, inferred[i]);
+        ASTType arg = type_to_ast_type(sema->arena, inferred[i]);
         BUF_PUSH(synth_args, arg);
     }
     node->call.type_args = synth_args;
@@ -973,16 +1048,6 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     }
 
     check_call_args(sema, node, fn_name);
-
-    // Declare fns (intrinsics): return the declared type, skip arg validation.
-    // The lowerer handles polymorphic dispatch and arg expansion for builtins.
-    if (fn_name != NULL) {
-        FnSig *dsig = sema_lookup_fn(sema, fn_name);
-        if (dsig != NULL && dsig->is_declare) {
-            node->type = dsig->return_type;
-            return dsig->return_type;
-        }
-    }
 
     // Generic call: fn_name<Type, ...>(args)
     if (fn_name != NULL && BUF_LEN(node->call.type_args) > 0) {

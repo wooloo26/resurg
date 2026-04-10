@@ -2,41 +2,20 @@
 
 // ── Str interpolation lower ──────────────────────────────────────
 
-/** Return the rsg_str_from_* fn name for @p type, or NULL. */
-static const char *lookup_str_conversion(const Type *type) {
-    if (type == NULL) {
-        return NULL;
-    }
-    static const struct {
-        TypeKind kind;
-        const char *name;
-    } conversions[] = {
-        {TYPE_I32, "rsg_str_from_i32"},   {TYPE_U32, "rsg_str_from_u32"},
-        {TYPE_I64, "rsg_str_from_i64"},   {TYPE_U64, "rsg_str_from_u64"},
-        {TYPE_F32, "rsg_str_from_f32"},   {TYPE_F64, "rsg_str_from_f64"},
-        {TYPE_BOOL, "rsg_str_from_bool"}, {TYPE_CHAR, "rsg_str_from_char"},
-    };
-    for (size_t i = 0; i < sizeof(conversions) / sizeof(conversions[0]); i++) {
-        if (type->kind == conversions[i].kind) {
-            return conversions[i].name;
-        }
-    }
-    return NULL;
-}
-
 /** Lower a str part to a TYPE_STR HirNode. */
 static HirNode *lower_str_part(Lower *low, const ASTNode *part) {
     HirNode *lowered = lower_expr(low, part);
     if (lowered->type != NULL && lowered->type->kind == TYPE_STR) {
         return lowered;
     }
-    // Wrap in rsg_str_from_TYPE call
-    const char *builtin = lookup_str_conversion(lowered->type);
-    if (builtin != NULL) {
+    // Wrap in rsg_str_from_TYPE call (type must have TF_STR_CONV flag)
+    const char *suffix = type_runtime_suffix(lowered->type);
+    if (suffix != NULL && type_is_str_convertible(lowered->type)) {
+        const char *fn = arena_sprintf(low->hir_arena, RSG_FN_STR_FROM "%s", suffix);
         HirNode **args = NULL;
         BUF_PUSH(args, lowered);
         return lower_make_builtin_call(
-            low, &(BuiltinCallSpec){builtin, &TYPE_STR_INST, args, part->loc});
+            low, &(BuiltinCallSpec){fn, &TYPE_STR_INST, args, part->loc, INTRINSIC_NONE});
     }
     return lowered;
 }
@@ -65,7 +44,7 @@ static HirNode *chain_str_concat(Lower *low, HirNode **parts, int32_t count, Src
         BUF_PUSH(args, result);
         BUF_PUSH(args, parts[i]);
         result = lower_make_builtin_call(
-            low, &(BuiltinCallSpec){"rsg_str_concat", &TYPE_STR_INST, args, loc});
+            low, &(BuiltinCallSpec){RSG_FN_STR_CONCAT, &TYPE_STR_INST, args, loc, INTRINSIC_NONE});
     }
     return result;
 }

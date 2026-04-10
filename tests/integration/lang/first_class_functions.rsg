@@ -10,7 +10,7 @@ fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
 
 fn test_pass_fn_as_arg() {
     result := apply(square, 5)
-    assert(result == 25)
+    assert(result == 25, "")
 }
 
 // ── return function from function ──
@@ -24,10 +24,10 @@ fn pick_op(inc: bool) -> fn(i32) -> i32 {
 
 fn test_return_fn() {
     f := pick_op(true)
-    assert(f(10) == 11)
+    assert(f(10) == 11, "")
 
     g := pick_op(false)
-    assert(g(10) == 9)
+    assert(g(10) == 9, "")
 }
 
 // ── store function in variable ──
@@ -36,7 +36,7 @@ fn triple(x: i32) -> i32 = x * 3
 
 fn test_store_fn_in_var() {
     var f: fn(i32) -> i32 = triple
-    assert(f(4) == 12)
+    assert(f(4) == 12, "")
 }
 
 // ── store function in struct field ──
@@ -47,7 +47,7 @@ struct Callback {
 
 fn test_fn_in_struct() {
     cb := Callback { action = square }
-    assert(cb.action(6) == 36)
+    assert(cb.action(6) == 36, "")
 }
 
 // ── store function in array ──
@@ -56,9 +56,9 @@ fn negate(x: i32) -> i32 = 0 - x
 
 fn test_fn_in_array() {
     ops := [3]fn(i32) -> i32{increment, square, negate}
-    assert(ops[0](5) == 6)
-    assert(ops[1](5) == 25)
-    assert(ops[2](5) == -5)
+    assert(ops[0](5) == 6, "")
+    assert(ops[1](5) == 25, "")
+    assert(ops[2](5) == -5, "")
 }
 
 // ── higher-order: function that takes and returns functions ──
@@ -71,7 +71,7 @@ fn compose(f: fn(i32) -> i32, g: fn(i32) -> i32) -> fn(i32) -> i32 {
 fn test_higher_order() {
     f := compose(increment, square)
     // compose returns the first function
-    assert(f(4) == 5)
+    assert(f(4) == 5, "")
 }
 
 // ── function equality: same function reference ──
@@ -79,5 +79,5 @@ fn test_higher_order() {
 fn test_fn_call_through_alias() {
     f := square
     g := square
-    assert(f(3) == g(3))
+    assert(f(3) == g(3), "")
 }

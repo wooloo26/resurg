@@ -39,8 +39,8 @@ fn first<I: Iterator>(mut iter: *I) -> ?I::Item {
 fn test_projection_return() {
     iter := IntIter { current = 5, end = 8 }
     match first<IntIter>(mut &iter) {
-        Some(v) => assert(v == 5),
-        None => assert(false),
+        Some(v) => assert(v == 5, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -85,8 +85,8 @@ where I: Iterator, I::Item: Clone,
 fn test_projection_where_bound() {
     iter := CloneIter { current = 0, end = 2 }
     match clone_first<CloneIter>(mut &iter) {
-        Some(v) => assert(v.value == 0),
-        None => assert(false),
+        Some(v) => assert(v.value == 0, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -101,8 +101,8 @@ fn get_first<I: Iterator>(mut iter: *I) -> FirstOf<I> {
 fn test_projection_type_alias() {
     iter := IntIter { current = 10, end = 12 }
     match get_first<IntIter>(mut &iter) {
-        Some(v) => assert(v == 10),
-        None => assert(false),
+        Some(v) => assert(v == 10, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -116,8 +116,8 @@ struct Cache<I: Iterator> {
 fn test_projection_struct_field() {
     c := Cache<IntIter> { last = Some(42) }
     match c.last {
-        Some(v) => assert(v == 42),
-        None => assert(false),
+        Some(v) => assert(v == 42, ""),
+        None => assert(false, ""),
     }
-    assert(c.count == 0)
+    assert(c.count == 0, "")
 }

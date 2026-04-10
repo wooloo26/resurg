@@ -934,6 +934,34 @@ fn bad(values: ..i32, default: i32) -> i32 {
 }
 ```
 
+### Default Parameters
+
+Parameters can have default values using `= expr`. Parameters with defaults must follow required ones.
+
+```rsg
+fn greet(name: str, greeting: str = "Hello") {
+    println("{greeting}, {name}!")
+}
+
+greet("Alice")              // Hello, Alice!
+greet("Bob", "Hi")          // Hi, Bob!
+
+fn connect(host: str, port: i32 = 8080, retries: i32 = 3) -> bool {
+    // ...
+}
+
+connect("localhost")              // port=8080, retries=3
+connect("localhost", 443)         // retries=3
+connect("localhost", 443, 5)
+```
+
+Built-in `assert` uses this feature:
+
+```rsg
+assert(x > 0)                // just a condition
+assert(x > 0, "x must be positive")  // with message
+```
+
 ### Closures
 
 `Fn` (read-only captures), `FnMut` (mutable captures), `fn` is subtype of `Fn`:

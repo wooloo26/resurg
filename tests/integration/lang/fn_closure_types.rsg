@@ -5,8 +5,8 @@
 fn test_fn_readonly_capture() {
     offset := 10
     var cb: Fn(i32) -> i32 = |x| x + offset
-    assert(cb(5) == 15)
-    assert(cb(0) == 10)
+    assert(cb(5) == 15, "")
+    assert(cb(0) == 10, "")
 }
 
 // ── Fn: multiple readonly captures ──
@@ -15,8 +15,8 @@ fn test_fn_multiple_captures() {
     a := 2
     b := 3
     var f: Fn(i32) -> i32 = |x| x * a + b
-    assert(f(4) == 11)
-    assert(f(0) == 3)
+    assert(f(4) == 11, "")
+    assert(f(0) == 3, "")
 }
 
 // ── Fn: captures are snapshot (value capture, not reference) ──
@@ -26,7 +26,7 @@ fn test_fn_capture_snapshot() {
     var f: Fn(i32) -> i32 = |y| y + x
     x = 20
     // closure captured x=10 at definition time
-    assert(f(5) == 15)
+    assert(f(5) == 15, "")
 }
 
 // ── fn is subtyping of Fn: plain function assigned to Fn variable ──
@@ -35,8 +35,8 @@ fn add_one(x: i32) -> i32 = x + 1
 
 fn test_fn_subtype_of_closure_fn() {
     var f: Fn(i32) -> i32 = add_one
-    assert(f(5) == 6)
-    assert(f(0) == 1)
+    assert(f(5) == 6, "")
+    assert(f(0) == 1, "")
 }
 
 // ── fn is subtyping of Fn: pass plain function where Fn param expected ──
@@ -49,7 +49,7 @@ fn double(x: i32) -> i32 = x * 2
 
 fn test_fn_subtype_as_param() {
     result := apply_fn(double, 5)
-    assert(result == 10)
+    assert(result == 10, "")
 }
 
 // ── Fn as parameter: pass closure to function taking Fn ──
@@ -58,14 +58,14 @@ fn test_fn_closure_as_param() {
     offset := 10
     var cb: Fn(i32) -> i32 = |x| x + offset
     result := apply_fn(cb, 5)
-    assert(result == 15)
+    assert(result == 15, "")
 }
 
 // ── Fn with no captures (lambda without captures typed as Fn) ──
 
 fn test_fn_no_captures() {
     var f: Fn(i32) -> i32 = |x| x * 3
-    assert(f(4) == 12)
+    assert(f(4) == 12, "")
 }
 
 // ── Fn returning unit ──
@@ -76,7 +76,7 @@ fn run_fn(f: Fn(i32)) {
 
 fn test_fn_unit_return() {
     var f: Fn(i32) = |x| {
-        assert(x == 42)
+        assert(x == 42, "")
     }
     run_fn(f)
 }
@@ -91,7 +91,7 @@ fn test_fn_multi_param() {
     offset := 1
     var f: Fn(i32, i32) -> i32 = |a, b| a + b + offset
     result := apply2_fn(f, 3, 4)
-    assert(result == 8)
+    assert(result == 8, "")
 }
 
 // ── Fn stored in struct field ──
@@ -103,7 +103,7 @@ struct Handler {
 fn test_fn_in_struct() {
     base := 100
     h := Handler { action = |x| x + base }
-    assert(h.action(5) == 105)
+    assert(h.action(5) == 105, "")
 }
 
 // ── Fn returned from function ──
@@ -114,8 +114,8 @@ fn make_adder_fn(n: i32) -> Fn(i32) -> i32 {
 
 fn test_fn_returned() {
     add5 := make_adder_fn(5)
-    assert(add5(10) == 15)
-    assert(add5(0) == 5)
+    assert(add5(10) == 15, "")
+    assert(add5(0) == 5, "")
 }
 
 // ── FnMut: closure that mutates captured state ──
@@ -126,9 +126,9 @@ fn test_fn_mut_basic() {
         count += 1
         x + count
     }
-    assert(cb(10) == 11) // count=1, 10+1=11
-    assert(cb(10) == 12) // count=2, 10+2=12
-    assert(cb(10) == 13) // count=3, 10+3=13
+    assert(cb(10) == 11, "") // count=1, 10+1=11
+    assert(cb(10) == 12, "") // count=2, 10+2=12
+    assert(cb(10) == 13, "") // count=3, 10+3=13
 }
 
 // ── FnMut: counter pattern ──
@@ -139,9 +139,9 @@ fn test_fn_mut_counter() {
         count += 1
         count
     }
-    assert(inc() == 1)
-    assert(inc() == 2)
-    assert(inc() == 3)
+    assert(inc() == 1, "")
+    assert(inc() == 2, "")
+    assert(inc() == 3, "")
 }
 
 // ── FnMut: accumulator pattern ──
@@ -152,9 +152,9 @@ fn test_fn_mut_accumulator() {
         total += x
         total
     }
-    assert(add(5) == 5)
-    assert(add(3) == 8)
-    assert(add(2) == 10)
+    assert(add(5) == 5, "")
+    assert(add(3) == 8, "")
+    assert(add(2) == 10, "")
 }
 
 // ── FnMut as parameter ──
@@ -170,9 +170,9 @@ fn test_fn_mut_as_param() {
         x + count
     }
     r1 := apply_mut(cb, 10)
-    assert(r1 == 11)
+    assert(r1 == 11, "")
     r2 := apply_mut(cb, 10)
-    assert(r2 == 12)
+    assert(r2 == 12, "")
 }
 
 // ── FnMut with multiple captures ──
@@ -184,8 +184,8 @@ fn test_fn_mut_multiple_captures() {
         count += 1
         x * multiplier + count
     }
-    assert(cb(5) == 11) // 5*2+1=11
-    assert(cb(5) == 12) // 5*2+2=12
+    assert(cb(5) == 11, "") // 5*2+1=11
+    assert(cb(5) == 12, "") // 5*2+2=12
 }
 
 // ── FnMut returned from function ──
@@ -200,9 +200,9 @@ fn make_counter() -> FnMut() -> i32 {
 
 fn test_fn_mut_returned() {
     counter := make_counter()
-    assert(counter() == 1)
-    assert(counter() == 2)
-    assert(counter() == 3)
+    assert(counter() == 1, "")
+    assert(counter() == 2, "")
+    assert(counter() == 3, "")
 }
 
 // ── Auto-inference: readonly capture inferred as Fn ──
@@ -210,8 +210,8 @@ fn test_fn_mut_returned() {
 fn test_infer_fn_readonly() {
     offset := 10
     cb := |x: i32| x + offset
-    assert(cb(5) == 15)
-    assert(cb(0) == 10)
+    assert(cb(5) == 15, "")
+    assert(cb(0) == 10, "")
 }
 
 // ── Auto-inference: mutable capture inferred as FnMut ──
@@ -222,17 +222,17 @@ fn test_infer_fn_mut() {
         count += 1
         x + count
     }
-    assert(cb(10) == 11)
-    assert(cb(10) == 12)
-    assert(cb(10) == 13)
+    assert(cb(10) == 11, "")
+    assert(cb(10) == 12, "")
+    assert(cb(10) == 13, "")
 }
 
 // ── Auto-inference: no captures stays fn ──
 
 fn test_infer_fn_plain() {
     cb := |x: i32| x * 2
-    assert(cb(5) == 10)
-    assert(cb(0) == 0)
+    assert(cb(5) == 10, "")
+    assert(cb(0) == 0, "")
 }
 
 // ── Auto-inference: inferred Fn is assignable to Fn parameter ──
@@ -241,7 +241,7 @@ fn test_infer_fn_as_param() {
     offset := 5
     cb := |x: i32| x + offset
     result := apply_fn(cb, 10)
-    assert(result == 15)
+    assert(result == 15, "")
 }
 
 // ── Auto-inference: inferred FnMut is assignable to FnMut parameter ──
@@ -253,9 +253,9 @@ fn test_infer_fn_mut_as_param() {
         x + count
     }
     r1 := apply_mut(cb, 10)
-    assert(r1 == 11)
+    assert(r1 == 11, "")
     r2 := apply_mut(cb, 10)
-    assert(r2 == 12)
+    assert(r2 == 12, "")
 }
 
 // ── Auto-inference: multiple readonly captures ──
@@ -264,8 +264,8 @@ fn test_infer_fn_multiple_captures() {
     a := 2
     b := 3
     f := |x: i32| x * a + b
-    assert(f(4) == 11)
-    assert(f(0) == 3)
+    assert(f(4) == 11, "")
+    assert(f(0) == 3, "")
 }
 
 // ── Auto-inference: FnMut counter pattern ──
@@ -276,7 +276,7 @@ fn test_infer_fn_mut_counter() {
         count += 1
         count
     }
-    assert(inc() == 1)
-    assert(inc() == 2)
-    assert(inc() == 3)
+    assert(inc() == 1, "")
+    assert(inc() == 2, "")
+    assert(inc() == 3, "")
 }

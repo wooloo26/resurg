@@ -597,11 +597,14 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     // Parameters
     parser_expect(parser, TOKEN_LEFT_PAREN);
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        bool seen_default = false;
         do {
             SrcLoc param_loc = parser_current_loc(parser);
             ASTNode *param = ast_new(parser->arena, NODE_PARAM, param_loc);
             param->param.is_mut = parser_match(parser, TOKEN_MUT);
             param->param.is_variadic = false;
+            param->param.default_kind = DEFAULT_NONE;
+            param->param.default_value = NULL;
             param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
             parser_expect(parser, TOKEN_COLON);
             // Detect variadic: `name: ..T`
@@ -609,6 +612,15 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
                 param->param.is_variadic = true;
             }
             param->param.type = parser_parse_type(parser);
+            // Optional default value: `= expr`
+            if (parser_match(parser, TOKEN_EQUAL)) {
+                param->param.default_kind = DEFAULT_EXPR;
+                param->param.default_value = parser_parse_expr(parser);
+                seen_default = true;
+            } else if (seen_default && !param->param.is_variadic) {
+                rsg_err(param_loc, "parameter '%s' without default follows parameter with default",
+                        param->param.name);
+            }
             BUF_PUSH(node->fn_decl.params, param);
         } while (parser_match(parser, TOKEN_COMMA));
     }

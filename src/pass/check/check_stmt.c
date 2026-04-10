@@ -248,7 +248,8 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
             sig_key = arena_sprintf(sema->arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
         }
         FnSig *sig = sema_lookup_fn(sema, sig_key);
-        if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
+        if (sig != NULL && sig->return_type->kind == TYPE_UNIT &&
+            resolved_return->kind != TYPE_NEVER) {
             sig->return_type = resolved_return;
         }
     }

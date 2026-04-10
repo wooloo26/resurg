@@ -15,7 +15,7 @@ mod m {
 }
 
 fn test_use_super() {
-    assert(m::child::call_parent() == 100)
+    assert(m::child::call_parent() == 100, "")
 }
 
 // ── super::super:: through two levels ──
@@ -35,7 +35,7 @@ mod top {
 }
 
 fn test_super_super() {
-    assert(top::mid::bottom::deep_call() == 42)
+    assert(top::mid::bottom::deep_call() == 42, "")
 }
 
 // ── self:: explicit reference at file scope ──
@@ -46,7 +46,7 @@ mod helper {
 
 fn test_self_path() {
     result := self::helper::add(10, 20)
-    assert(result == 30)
+    assert(result == 30, "")
 }
 
 // ── direct super:: call (not via use) ──
@@ -62,7 +62,7 @@ mod direct {
 }
 
 fn test_direct_super_call() {
-    assert(direct::sub::call_via_super() == 77)
+    assert(direct::sub::call_via_super() == 77, "")
 }
 
 // ── use super:: with multiple items ──
@@ -82,5 +82,5 @@ mod multi {
 }
 
 fn test_use_super_multiple() {
-    assert(multi::inner::sum() == 3)
+    assert(multi::inner::sum() == 3, "")
 }

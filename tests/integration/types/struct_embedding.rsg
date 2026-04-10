@@ -17,21 +17,21 @@ struct Extended {
 
 fn test_field_promotion() {
     e := Extended { x = 1, y = 2, z = 3 }
-    assert(e.x == 1)
-    assert(e.y == 2)
-    assert(e.z == 3)
+    assert(e.x == 1, "")
+    assert(e.y == 2, "")
+    assert(e.z == 3, "")
 }
 
 fn test_method_promotion() {
     e := Extended { x = 3, y = 4, z = 5 }
-    assert(e.sum() == 7)
+    assert(e.sum() == 7, "")
 }
 
 fn test_explicit_embed_access() {
     e := Extended { x = 10, y = 20, z = 30 }
-    assert(e.Base.x == 10)
-    assert(e.Base.y == 20)
-    assert(e.Base.sum() == 30)
+    assert(e.Base.x == 10, "")
+    assert(e.Base.y == 20, "")
+    assert(e.Base.sum() == 30, "")
 }
 
 struct Overrider {
@@ -44,18 +44,18 @@ ext Overrider {
 
 fn test_method_override() {
     o := Overrider { x = 3, y = 4 }
-    assert(o.sum() == 107)
-    assert(o.Base.sum() == 7)
+    assert(o.sum() == 107, "")
+    assert(o.Base.sum() == 7, "")
 }
 
 fn test_non_overridden_promotion() {
     o := Overrider { x = 1, y = 2 }
-    assert(o.label() == "base")
+    assert(o.label() == "base", "")
 }
 
 fn test_embed_field_assign() {
     e := Extended { x = 0, y = 0, z = 0 }
     e.x = 10
-    assert(e.x == 10)
-    assert(e.Base.x == 10)
+    assert(e.x == 10, "")
+    assert(e.Base.x == 10, "")
 }

@@ -1,0 +1,178 @@
+// Default function parameter values
+
+// ── basic default: single trailing default ──
+
+fn greet(name: str, greeting: str = "Hello") -> str {
+    "{greeting}, {name}!"
+}
+
+fn test_default_used() {
+    msg := greet("Alice")
+    assert(msg == "Hello, Alice!", "")
+}
+
+fn test_default_overridden() {
+    msg := greet("Bob", "Hi")
+    assert(msg == "Hi, Bob!", "")
+}
+
+// ── multiple defaults ──
+
+fn make_point(x: i32 = 0, y: i32 = 0, z: i32 = 0) -> (i32, i32, i32) {
+    (x, y, z)
+}
+
+fn test_all_defaults_used() {
+    p := make_point()
+    assert(p.0 == 0, "")
+    assert(p.1 == 0, "")
+    assert(p.2 == 0, "")
+}
+
+fn test_partial_defaults_one() {
+    p := make_point(1)
+    assert(p.0 == 1, "")
+    assert(p.1 == 0, "")
+    assert(p.2 == 0, "")
+}
+
+fn test_partial_defaults_two() {
+    p := make_point(1, 2)
+    assert(p.0 == 1, "")
+    assert(p.1 == 2, "")
+    assert(p.2 == 0, "")
+}
+
+fn test_all_defaults_overridden() {
+    p := make_point(1, 2, 3)
+    assert(p.0 == 1, "")
+    assert(p.1 == 2, "")
+    assert(p.2 == 3, "")
+}
+
+// ── required before defaults ──
+
+fn tag(prefix: str, value: i32, suffix: str = "!") -> str {
+    "{prefix}{value}{suffix}"
+}
+
+fn test_required_before_default() {
+    assert(tag("x=", 42) == "x=42!", "")
+    assert(tag("y=", 7, ".") == "y=7.", "")
+}
+
+// ── expression default ──
+
+fn area(w: i32, h: i32 = 10 * 2) -> i32 {
+    w * h
+}
+
+fn test_expression_default() {
+    assert(area(5) == 100, "")
+    assert(area(5, 3) == 15, "")
+}
+
+// ── bool default ──
+
+fn greet_loud(name: str, loud: bool = false) -> str {
+    if loud { "HELLO {name}" } else { "hello {name}" }
+}
+
+fn test_bool_default() {
+    assert(greet_loud("Ada") == "hello Ada", "")
+    assert(greet_loud("Ada", true) == "HELLO Ada", "")
+}
+
+// ── char default ──
+
+fn wrap(text: str, delim: char = '"') -> str {
+    "{delim}{text}{delim}"
+}
+
+fn test_char_default() {
+    assert(wrap("hi") == "\"hi\"", "")
+    assert(wrap("hi", '\'') == "'hi'", "")
+}
+
+// ── f64 default ──
+
+fn scale(value: f64, factor: f64 = 1.0) -> f64 {
+    value * factor
+}
+
+fn test_f64_default() {
+    assert(scale(5.0) == 5.0, "")
+    assert(scale(5.0, 2.0) == 10.0, "")
+}
+
+// ── defaults with named arguments ──
+
+fn rgb(r: i32 = 0, g: i32 = 0, b: i32 = 0) -> (i32, i32, i32) {
+    (r, g, b)
+}
+
+fn test_named_with_defaults() {
+    c := rgb(b = 255)
+    assert(c.0 == 0, "")
+    assert(c.1 == 0, "")
+    assert(c.2 == 255, "")
+}
+
+fn test_named_with_partial_override() {
+    c := rgb(r = 128, b = 64)
+    assert(c.0 == 128, "")
+    assert(c.1 == 0, "")
+    assert(c.2 == 64, "")
+}
+
+fn test_named_all_overridden() {
+    c := rgb(g = 10, r = 20, b = 30)
+    assert(c.0 == 20, "")
+    assert(c.1 == 10, "")
+    assert(c.2 == 30, "")
+}
+
+// ── expression body with default ──
+
+fn add_offset(x: i32, offset: i32 = 1) = x + offset
+
+fn test_expr_body_default() {
+    assert(add_offset(10) == 11, "")
+    assert(add_offset(10, 5) == 15, "")
+}
+
+// ── recursive with default ──
+
+fn repeat_str(s: str, n: i32 = 1) -> str {
+    if n <= 0 { "" }
+    else if n == 1 { s }
+    else { "{s}{repeat_str(s, n - 1)}" }
+}
+
+fn test_recursive_default() {
+    assert(repeat_str("a") == "a", "")
+    assert(repeat_str("ab", 3) == "ababab", "")
+}
+
+// ── string default ──
+
+fn label(text: str, tag: str = "info") -> str {
+    "[{tag}] {text}"
+}
+
+fn test_string_default() {
+    assert(label("done") == "[info] done", "")
+    assert(label("fail", "error") == "[error] fail", "")
+}
+
+// ── defaults interacting with type inference ──
+
+fn pair(a: i32, b: i32 = 0) -> (i32, i32) {
+    (a, b)
+}
+
+fn test_default_tuple_result() {
+    p := pair(5)
+    assert(p.0 == 5, "")
+    assert(p.1 == 0, "")
+}

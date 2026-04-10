@@ -10,21 +10,21 @@ use self::string_helper::greet
 
 fn test_module_fs_basic_import() {
     result := add(10, 20)
-    assert(result == 30)
+    assert(result == 30, "")
 }
 
 // ── fully qualified path access ──
 
 fn test_module_fs_qualified_path() {
     result := math_helper::multiply(3, 4)
-    assert(result == 12)
+    assert(result == 12, "")
 }
 
 // ── import function from string_helper module ──
 
 fn test_module_fs_string_helper() {
     msg := greet("world")
-    assert(msg == "hello, world")
+    assert(msg == "hello, world", "")
 }
 
 // ── pub struct from file module ──
@@ -33,8 +33,8 @@ use self::math_helper::Point
 
 fn test_module_fs_struct_import() {
     p := Point { x = 1.0, y = 2.0 }
-    assert(p.x == 1.0)
-    assert(p.y == 2.0)
+    assert(p.x == 1.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── pub enum from file module ──
@@ -44,7 +44,7 @@ use self::math_helper::Op
 fn test_module_fs_enum_import() {
     op := Op::Add
     match op {
-        Add => assert(true),
-        _ => assert(false),
+        Add => assert(true, ""),
+        _ => assert(false, ""),
     }
 }

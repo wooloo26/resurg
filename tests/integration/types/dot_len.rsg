@@ -5,55 +5,55 @@
 
 fn test_str_len() {
     s := "hello"
-    assert(s.len() == 5)
+    assert(s.len() == 5, "")
 }
 
 // ── .len() on empty str ──
 
 fn test_str_empty_len() {
     s := ""
-    assert(s.len() == 0)
+    assert(s.len() == 0, "")
 }
 
 // ── .len() on str literal (rvalue) ──
 
 fn test_str_literal_len() {
-    assert("world".len() == 5)
-    assert("".len() == 0)
-    assert("a".len() == 1)
+    assert("world".len() == 5, "")
+    assert("".len() == 0, "")
+    assert("a".len() == 1, "")
 }
 
 // ── .len() on slice variable ──
 
 fn test_slice_len() {
     s := []i32{10, 20, 30}
-    assert(s.len() == 3)
+    assert(s.len() == 3, "")
 }
 
 // ── .len() on empty slice ──
 
 fn test_slice_empty_len() {
     s := []i32{}
-    assert(s.len() == 0)
+    assert(s.len() == 0, "")
 }
 
 // ── .len() on slice literal (rvalue) ──
 
 fn test_slice_literal_len() {
-    assert(([]i32{1, 2, 3, 4}).len() == 4)
+    assert(([]i32{1, 2, 3, 4}).len() == 4, "")
 }
 
 // ── .len() on array variable ──
 
 fn test_array_len() {
     arr := [3]i32{1, 2, 3}
-    assert(arr.len() == 3)
+    assert(arr.len() == 3, "")
 }
 
 // ── .len() on array literal (rvalue) ──
 
 fn test_array_literal_len() {
-    assert(([5]i32{1, 2, 3, 4, 5}).len() == 5)
+    assert(([5]i32{1, 2, 3, 4, 5}).len() == 5, "")
 }
 
 // ── .len() on pointer-to-slice (auto-deref) ──
@@ -61,7 +61,7 @@ fn test_array_literal_len() {
 fn test_ptr_slice_len() {
     s := []i32{1, 2, 3, 4}
     p := &s
-    assert(p.len() == 4)
+    assert(p.len() == 4, "")
 }
 
 // ── .len() on pointer-to-str (auto-deref) ──
@@ -69,7 +69,7 @@ fn test_ptr_slice_len() {
 fn test_ptr_str_len() {
     s := "hello"
     p := &s
-    assert(p.len() == 5)
+    assert(p.len() == 5, "")
 }
 
 // ── .len() on sub-slice ──
@@ -77,7 +77,7 @@ fn test_ptr_str_len() {
 fn test_sub_slice_len() {
     s := []i32{1, 2, 3, 4, 5}
     t := s[1..4]
-    assert(t.len() == 3)
+    assert(t.len() == 3, "")
 }
 
 // ── .len() in expressions ──
@@ -85,14 +85,14 @@ fn test_sub_slice_len() {
 fn test_len_in_expr() {
     s := []i32{10, 20, 30}
     total := s.len() + 1
-    assert(total == 4)
+    assert(total == 4, "")
 }
 
 // ── .len() on string with escapes ──
 
 fn test_str_escape_len() {
     s := "a\nb"
-    assert(s.len() == 3)
+    assert(s.len() == 3, "")
 }
 
 // ── .len() combined with assert message ──

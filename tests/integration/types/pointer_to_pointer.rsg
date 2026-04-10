@@ -9,7 +9,7 @@ struct Node {
 fn test_address_of_primitive() {
     x := 42
     px := &x
-    assert(*px == 42)
+    assert(*px == 42, "")
 }
 
 // ── dereference write ──
@@ -18,7 +18,7 @@ fn test_deref_write() {
     x := 42
     px := &x
     *px = 100
-    assert(x == 100)
+    assert(x == 100, "")
 }
 
 // ── pointer-to-pointer reassign ──
@@ -30,5 +30,5 @@ fn set_node(pp: **Node) {
 fn test_pointer_to_pointer() {
     var ptr: *Node = &Node { value = 0 }
     set_node(&ptr)
-    assert(ptr.value == 99)
+    assert(ptr.value == 99, "")
 }

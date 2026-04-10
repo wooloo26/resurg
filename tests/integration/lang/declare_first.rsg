@@ -5,7 +5,7 @@
 fn test_declare_first_simple() {
     var x: i32
     x = 42
-    assert(x == 42)
+    assert(x == 42, "")
 }
 
 // ── declare first with conditional assignment ──
@@ -17,7 +17,7 @@ fn test_declare_first_conditional() {
     } else {
         result = "no"
     }
-    assert(result == "yes")
+    assert(result == "yes", "")
 }
 
 fn test_declare_first_conditional_else() {
@@ -27,7 +27,7 @@ fn test_declare_first_conditional_else() {
     } else {
         result = "no"
     }
-    assert(result == "no")
+    assert(result == "no", "")
 }
 
 // ── declare first then use in loop ──
@@ -38,5 +38,5 @@ fn test_declare_first_loop() {
     for 0..5 |i| {
         total = total + i
     }
-    assert(total == 10)
+    assert(total == 10, "")
 }

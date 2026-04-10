@@ -52,20 +52,20 @@ ext Pet impl HasName {
 
 fn test_swap() {
     result := swap<i32, str>(42, "world")
-    assert(result.0 == "world")
-    assert(result.1 == 42)
+    assert(result.0 == "world", "")
+    assert(result.1 == 42, "")
 }
 
 fn test_triple() {
     result := triple<i32, bool, char>(1, true, 'x')
-    assert(result.0 == 1)
-    assert(result.1 == true)
-    assert(result.2 == 'x')
+    assert(result.0 == 1, "")
+    assert(result.1 == true, "")
+    assert(result.2 == 'x', "")
 }
 
 fn test_mixed_bounds() {
     t := Tag { label = "animal" }
     p := Pet { pet_name = "Rex" }
     s := show_named<Tag, Pet>(t, p)
-    assert(s == "Rex")
+    assert(s == "Rex", "")
 }

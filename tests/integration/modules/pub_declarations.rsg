@@ -9,8 +9,8 @@ pub struct PublicPoint {
 
 fn test_pub_struct() {
     p := PublicPoint { x = 1.0, y = 2.0 }
-    assert(p.x == 1.0)
-    assert(p.y == 2.0)
+    assert(p.x == 1.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── pub enum ──
@@ -24,8 +24,8 @@ pub enum PublicColor {
 fn test_pub_enum() {
     c := PublicColor::Red
     match c {
-        Red => assert(true),
-        _ => assert(false),
+        Red => assert(true, ""),
+        _ => assert(false, ""),
     }
 }
 
@@ -35,7 +35,7 @@ pub type ID = u64
 
 fn test_pub_type_alias() {
     var id: ID = u64(123)
-    assert(id == u64(123))
+    assert(id == u64(123), "")
 }
 
 // ── pub pact ──
@@ -52,7 +52,7 @@ ext Validator impl Checkable {
 
 fn test_pub_pact() {
     v := Validator {}
-    assert(v.check())
+    assert(v.check(), "")
 }
 
 // ── pub fn (already supported, verify still works) ──
@@ -60,7 +60,7 @@ fn test_pub_pact() {
 pub fn public_add(a: i32, b: i32) -> i32 = a + b
 
 fn test_pub_fn() {
-    assert(public_add(2, 3) == 5)
+    assert(public_add(2, 3) == 5, "")
 }
 
 // ── non-pub declarations (private by default) ──
@@ -79,14 +79,14 @@ pact PrivatePact {
 
 fn test_private_declarations_within_module() {
     s := PrivateStruct { value = 42 }
-    assert(s.value == 42)
+    assert(s.value == 42, "")
 
     e := PrivateEnum::X
     match e {
-        X => assert(true),
-        _ => assert(false),
+        X => assert(true, ""),
+        _ => assert(false, ""),
     }
 
     var a: PrivateAlias = 10
-    assert(a == 10)
+    assert(a == 10, "")
 }

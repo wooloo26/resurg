@@ -2,6 +2,7 @@
 #define RSG_HIR_H
 
 #include "core/common.h"
+#include "core/intrinsic.h"
 #include "core/token.h"
 #include "repr/types.h"
 
@@ -284,7 +285,8 @@ struct HirNode {
         // HIR_CALL
         struct {
             HirNode *callee;
-            HirNode **args; /* buf */
+            HirNode **args;          /* buf */
+            IntrinsicKind intrinsic; // INTRINSIC_NONE for regular calls
         } call;
 
         // HIR_TYPE_CONVERSION

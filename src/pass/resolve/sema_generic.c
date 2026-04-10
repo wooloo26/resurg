@@ -17,6 +17,7 @@ bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name) 
     if (pact == NULL) {
         return false;
     }
+
     // TODO: extend to support TYPE_ENUM once enums can conform to pacts
     if (type == NULL || type->kind != TYPE_STRUCT) {
         return false;
@@ -76,7 +77,11 @@ static int32_t append_mangled_type(char *buf, int32_t len, int32_t cap, const ch
             len += snprintf(buf + len, (size_t)(cap - len), "ptr_");
             break;
         case '[':
+            buf[len++] = 'L';
+            break;
         case ']':
+            buf[len++] = 'R';
+            break;
         case '(':
         case ')':
         case ',':

@@ -8,9 +8,9 @@ fn early_return_value(x: i32) -> i32 {
 }
 
 fn test_return_with_value() {
-    assert(early_return_value(5) == 10)
-    assert(early_return_value(0) == 0)
-    assert(early_return_value(-1) == 0)
+    assert(early_return_value(5) == 10, "")
+    assert(early_return_value(0) == 0, "")
+    assert(early_return_value(-1) == 0, "")
 }
 
 // ── void return stops execution ──
@@ -24,7 +24,7 @@ fn stops_execution(mut p: *i32) {
 fn test_return_void() {
     x := 0
     stops_execution(mut &x)
-    assert(x == 1)
+    assert(x == 1, "")
 }
 
 // ── return in nested if ──
@@ -40,9 +40,9 @@ fn classify(x: i32) -> str {
 }
 
 fn test_return_nested_if() {
-    assert(classify(10) == "positive")
-    assert(classify(-5) == "negative")
-    assert(classify(0) == "zero")
+    assert(classify(10) == "positive", "")
+    assert(classify(-5) == "negative", "")
+    assert(classify(0) == "zero", "")
 }
 
 // ── return in loop ──
@@ -56,8 +56,8 @@ fn find_first_multiple(n: i32, target: i32) -> i32 {
 }
 
 fn test_return_in_loop() {
-    assert(find_first_multiple(7, 50) == 56)
-    assert(find_first_multiple(3, 10) == 12)
+    assert(find_first_multiple(7, 50) == 56, "")
+    assert(find_first_multiple(3, 10) == 12, "")
 }
 
 // ── return unit explicitly ──
@@ -68,5 +68,5 @@ fn return_unit() {
 
 fn test_return_unit() {
     return_unit()
-    assert(true)
+    assert(true, "")
 }

@@ -71,8 +71,8 @@ fn only_i32<I: Iterator<Item = i32>>(mut iter: *I) -> ?i32 {
 fn test_constraint_concrete() {
     iter := IntIter { current = 0, end = 3 }
     match only_i32<IntIter>(mut &iter) {
-        Some(v) => assert(v == 0),
-        None => assert(false),
+        Some(v) => assert(v == 0, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -91,5 +91,5 @@ fn same_item<I: Iterator, J: Iterator<Item = I::Item>>(mut i: *I, mut j: *J) -> 
 fn test_same_item_constraint() {
     a := IntIter { current = 0, end = 1 }
     b := IntIter { current = 10, end = 11 }
-    assert(same_item<IntIter, IntIter>(mut &a, mut &b) == true)
+    assert(same_item<IntIter, IntIter>(mut &a, mut &b) == true, "")
 }

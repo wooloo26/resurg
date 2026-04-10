@@ -137,7 +137,7 @@ static HirNode *lower_elem_comparison(Lower *low, HirNode *left_elem, HirNode *r
         BUF_PUSH(args, left_elem);
         BUF_PUSH(args, right_elem);
         HirNode *cmp = lower_make_builtin_call(
-            low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, loc});
+            low, &(BuiltinCallSpec){RSG_FN_STR_EQUAL, &TYPE_BOOL_INST, args, loc, INTRINSIC_NONE});
         if (elem_op != TOKEN_EQUAL_EQUAL) {
             cmp = lower_bool_negate(low, cmp, loc);
         }
@@ -251,7 +251,7 @@ static HirNode *lower_str_equality(Lower *low, const EqualitySpec *eq) {
     BUF_PUSH(args, eq->left);
     BUF_PUSH(args, eq->right);
     HirNode *call = lower_make_builtin_call(
-        low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, eq->loc});
+        low, &(BuiltinCallSpec){RSG_FN_STR_EQUAL, &TYPE_BOOL_INST, args, eq->loc, INTRINSIC_NONE});
     if (eq->op == TOKEN_BANG_EQUAL) {
         return lower_bool_negate(low, call, eq->loc);
     }
@@ -291,67 +291,18 @@ static HirNode *lower_binary(Lower *low, const ASTNode *ast) {
     return node;
 }
 
-/** Return true if the callee AST node resolves to the builtin "assert". */
-static bool is_assert_callee(const ASTNode *callee) {
+/** Classify a callee AST node as a compiler intrinsic (or INTRINSIC_NONE). */
+static IntrinsicKind classify_callee(const ASTNode *callee) {
     if (callee->kind != NODE_ID) {
-        return false;
+        return INTRINSIC_NONE;
     }
-    return strcmp(callee->id.name, "assert") == 0;
-}
-
-/** Return true if the callee AST node resolves to the builtin "panic". */
-static bool is_panic_callee(const ASTNode *callee) {
-    if (callee->kind != NODE_ID) {
-        return false;
-    }
-    return strcmp(callee->id.name, "panic") == 0;
-}
-
-/** Return true if the callee AST node resolves to the builtin "recover". */
-static bool is_recover_callee(const ASTNode *callee) {
-    if (callee->kind != NODE_ID) {
-        return false;
-    }
-    return strcmp(callee->id.name, "recover") == 0;
-}
-
-/** Return true if the callee AST node resolves to the builtin "len". */
-static bool is_len_callee(const ASTNode *callee) {
-    if (callee->kind != NODE_ID) {
-        return false;
-    }
-    return strcmp(callee->id.name, "len") == 0;
-}
-
-/** Match callee against "print" or "println"; set @p out_newline on match. */
-static bool match_print_callee(const ASTNode *callee, bool *out_newline) {
-    if (callee->kind != NODE_ID) {
-        return false;
-    }
-    if (strcmp(callee->id.name, "println") == 0) {
-        *out_newline = true;
-        return true;
-    }
-    if (strcmp(callee->id.name, "print") == 0) {
-        *out_newline = false;
-        return true;
-    }
-    return false;
-}
-
-/** Compose the rsg_print[ln]_* fn name for @p type, derived from type_name(). */
-static const char *compose_print_fn_name(Arena *arena, const Type *type, bool newline) {
-    if (!type_is_printable(type)) {
-        return NULL;
-    }
-    const char *name = type_name(arena, type);
-    return arena_sprintf(arena, "rsg_print%s_%s", newline ? "ln" : "", name);
+    return intrinsic_lookup(callee->id.name);
 }
 
 /**
- * Expand print/println(arg) → rsg_print[ln]_TYPE(arg).
+ * Lower print/println(arg) → HIR_CALL with INTRINSIC_PRINT/PRINTLN tag.
  *
- * Dispatches to the type-specific runtime fn based on the arg type.
+ * Type dispatch to the backend-specific runtime fn is deferred to emit.
  */
 static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
     SrcLoc loc = ast->loc;
@@ -361,23 +312,23 @@ static HirNode *lower_print_call(Lower *low, const ASTNode *ast, bool newline) {
     }
 
     HirNode *arg = lower_expr(low, ast->call.args[0]);
-    const char *fn_name = compose_print_fn_name(low->hir_arena, arg->type, newline);
-    if (fn_name == NULL) {
+    if (!type_is_printable(arg->type)) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
     }
 
+    IntrinsicKind kind = newline ? INTRINSIC_PRINTLN : INTRINSIC_PRINT;
+    const char *fn_name = newline ? "println" : "print";
     HirNode **args = NULL;
     BUF_PUSH(args, arg);
-    return lower_make_builtin_call(low, &(BuiltinCallSpec){fn_name, &TYPE_UNIT_INST, args, loc});
+    return lower_make_builtin_call(low,
+                                   &(BuiltinCallSpec){fn_name, &TYPE_UNIT_INST, args, loc, kind});
 }
 
 /**
- * Expand assert(cond, msg?) → rsg_assert(cond, msg_or_null, file, line).
+ * Expand assert(cond [, msg]) → rsg_assert(cond, msg, file, line).
  *
- * When the msg is a str lit, pass its raw value directly as a
- * HIR_STR_LIT so codegen can emit a plain C str.  For non-lit
- * str exprs, lower wraps them unchanged — codegen extracts
- * `.data` from the emitted rsg_str.
+ * The msg argument defaults to NULL sentinel when absent.
+ * Source location (file, line) is always injected from the call site.
  */
 static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
     int32_t arg_count = BUF_LEN(ast->call.args);
@@ -394,7 +345,7 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
 
     // Message (NULL when absent; str lit kept as lit, expr passed through)
     HirNode *msg;
-    if (arg_count > 1) {
+    if (arg_count > 1 && ast->call.args[1] != NULL) {
         msg = lower_expr(low, ast->call.args[1]);
     } else {
         // Pass NULL sentinel — codegen emits "NULL" for this
@@ -416,12 +367,12 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
     BUF_PUSH(args, file_node);
     BUF_PUSH(args, line_node);
 
-    return lower_make_builtin_call(low,
-                                   &(BuiltinCallSpec){"rsg_assert", &TYPE_UNIT_INST, args, loc});
+    return lower_make_builtin_call(
+        low, &(BuiltinCallSpec){RSG_FN_ASSERT, &TYPE_UNIT_INST, args, loc, INTRINSIC_ASSERT});
 }
 
 /**
- * Expand panic(msg) → rsg_panic(msg).
+ * Expand panic(msg) → rsgu_panic(msg).
  *
  * Extracts the raw C string from the RsgStr argument.
  */
@@ -432,12 +383,12 @@ static HirNode *lower_panic_call(Lower *low, const ASTNode *ast) {
     HirNode **args = NULL;
     BUF_PUSH(args, msg);
 
-    return lower_make_builtin_call(low,
-                                   &(BuiltinCallSpec){"rsg_panic", &TYPE_NEVER_INST, args, loc});
+    return lower_make_builtin_call(
+        low, &(BuiltinCallSpec){RSG_FN_PANIC, &TYPE_NEVER_INST, args, loc, INTRINSIC_PANIC});
 }
 
 /**
- * Expand recover() → rsg_recover() with option wrapping.
+ * Expand recover() → rsgu_recover() with option wrapping.
  *
  * The runtime function returns const char* (NULL = no panic).
  * Codegen handles the conversion to ?str.
@@ -446,7 +397,8 @@ static HirNode *lower_recover_call(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
     HirNode **args = NULL;
 
-    return lower_make_builtin_call(low, &(BuiltinCallSpec){"rsg_recover", ast->type, args, loc});
+    return lower_make_builtin_call(
+        low, &(BuiltinCallSpec){RSG_FN_RECOVER, ast->type, args, loc, INTRINSIC_RECOVER});
 }
 
 /**
@@ -474,8 +426,8 @@ static HirNode *lower_len_call(Lower *low, const ASTNode *ast) {
     if (arg->type != NULL && arg->type->kind == TYPE_PTR) {
         via_ptr = true;
     }
-    return lower_make_field_access(low,
-                                   &(FieldAccessSpec){arg, "len", &TYPE_I32_INST, via_ptr, loc});
+    return lower_make_field_access(
+        low, &(FieldAccessSpec){arg, RSG_FIELD_LEN, &TYPE_I32_INST, via_ptr, loc});
 }
 
 /** Lower a buf of AST expr nodes into a buf of HIR nodes. */
@@ -596,7 +548,7 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
     // Built-in .len() method on str, []T, [N]T
     if (obj_type != NULL) {
         const char *mname = member_ast->member.member;
-        if (strcmp(mname, "len") == 0 &&
+        if (strcmp(mname, RSG_FIELD_LEN) == 0 &&
             (obj_type->kind == TYPE_SLICE || obj_type->kind == TYPE_STR ||
              obj_type->kind == TYPE_ARRAY)) {
             SrcLoc loc = ast->loc;
@@ -611,8 +563,8 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
                     low, &(IntLitSpec){(uint64_t)size, &TYPE_I32_INST, TYPE_I32, loc});
             }
             bool vp = (arg->type != NULL && arg->type->kind == TYPE_PTR);
-            return lower_make_field_access(low,
-                                           &(FieldAccessSpec){arg, "len", &TYPE_I32_INST, vp, loc});
+            return lower_make_field_access(
+                low, &(FieldAccessSpec){arg, RSG_FIELD_LEN, &TYPE_I32_INST, vp, loc});
         }
     }
 
@@ -702,32 +654,36 @@ static HirNode *lower_variadic_args(Lower *low, const ASTNode *ast, int32_t star
         HirNode **args = NULL;
         BUF_PUSH(args, result);
         BUF_PUSH(args, segments[i]);
-        result = lower_make_builtin_call(
-            low, &(BuiltinCallSpec){"rsg_slice_concat", slice_type, args, loc});
+        result =
+            lower_make_builtin_call(low, &(BuiltinCallSpec){RSG_FN_SLICE_CONCAT, slice_type, args,
+                                                            loc, INTRINSIC_SLICE_CONCAT});
     }
     return result;
 }
 
+// ── Intrinsic lower dispatch table ────────────────────────────────
+
+typedef HirNode *(*IntrinsicLowerFn)(Lower *low, const ASTNode *ast);
+
+static HirNode *lower_print_wrapper(Lower *low, const ASTNode *ast) {
+    return lower_print_call(low, ast, false);
+}
+
+static HirNode *lower_println_wrapper(Lower *low, const ASTNode *ast) {
+    return lower_print_call(low, ast, true);
+}
+
+static const IntrinsicLowerFn INTRINSIC_LOWER[INTRINSIC_KIND_COUNT] = {
+    [INTRINSIC_PRINT] = lower_print_wrapper,  [INTRINSIC_PRINTLN] = lower_println_wrapper,
+    [INTRINSIC_ASSERT] = lower_assert_call,   [INTRINSIC_PANIC] = lower_panic_call,
+    [INTRINSIC_RECOVER] = lower_recover_call, [INTRINSIC_LEN] = lower_len_call,
+};
+
 static HirNode *lower_call(Lower *low, const ASTNode *ast) {
-    if (is_assert_callee(ast->call.callee)) {
-        return lower_assert_call(low, ast);
-    }
-
-    if (is_panic_callee(ast->call.callee)) {
-        return lower_panic_call(low, ast);
-    }
-
-    if (is_recover_callee(ast->call.callee)) {
-        return lower_recover_call(low, ast);
-    }
-
-    if (is_len_callee(ast->call.callee)) {
-        return lower_len_call(low, ast);
-    }
-
-    bool newline = false;
-    if (match_print_callee(ast->call.callee, &newline)) {
-        return lower_print_call(low, ast, newline);
+    // Dispatch compiler intrinsics via table lookup.
+    IntrinsicKind intrinsic = classify_callee(ast->call.callee);
+    if (intrinsic != INTRINSIC_NONE && INTRINSIC_LOWER[intrinsic] != NULL) {
+        return INTRINSIC_LOWER[intrinsic](low, ast);
     }
 
     if (ast->call.callee->kind == NODE_MEMBER) {

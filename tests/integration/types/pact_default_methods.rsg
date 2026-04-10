@@ -20,8 +20,8 @@ ext Box impl Labeled {
 
 fn test_default_method_used() {
     b := Box { name = "Fragile", size = 10 }
-    assert(b.label() == "Fragile")
-    assert(b.display() == "label")
+    assert(b.label() == "Fragile", "")
+    assert(b.display() == "label", "")
 }
 
 // ── override default method ──
@@ -53,12 +53,12 @@ ext SimpleItem impl Describable {
 
 fn test_override_default() {
     p := Product { title = "Widget", price = 9.99 }
-    assert(p.describe() == "Widget costs 9.99")
+    assert(p.describe() == "Widget costs 9.99", "")
 }
 
 fn test_use_default() {
     s := SimpleItem { tag = "Thing" }
-    assert(s.describe() == "unknown")
+    assert(s.describe() == "unknown", "")
 }
 
 // ── default method with mutation ──
@@ -89,11 +89,11 @@ ext Tally impl Counter {
 
 fn test_default_mutating_method() {
     t := Tally { name = "votes" }
-    assert(t.count == 0)
+    assert(t.count == 0, "")
     t.increment()
-    assert(t.count == 1)
+    assert(t.count == 1, "")
     t.increment()
-    assert(t.count == 2)
+    assert(t.count == 2, "")
 }
 
 // ── pact with default method that has extra params ──
@@ -115,7 +115,7 @@ ext Dog impl Animal {
 
 fn test_method_with_params() {
     d := Dog { name = "Rex", breed = "Labrador" }
-    assert(d.get_name() == "Rex")
+    assert(d.get_name() == "Rex", "")
     d.set_name(new_name = "Buddy")
-    assert(d.get_name() == "Buddy")
+    assert(d.get_name() == "Buddy", "")
 }

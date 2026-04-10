@@ -25,24 +25,24 @@ fn apply<T>(x: T) -> T {
 
 fn test_identity() {
     x := identity<i32>(42)
-    assert(x == 42)
+    assert(x == 42, "")
 
     s := identity<str>("hello")
-    assert(s == "hello")
+    assert(s == "hello", "")
 
     b := identity<bool>(true)
-    assert(b == true)
+    assert(b == true, "")
 }
 
 fn test_multi_type_params() {
     a := first<i32, str>(10, "world")
-    assert(a == 10)
+    assert(a == 10, "")
 
     b := second<i32, str>(10, "world")
-    assert(b == "world")
+    assert(b == "world", "")
 }
 
 fn test_apply() {
     r := apply<i32>(99)
-    assert(r == 99)
+    assert(r == 99, "")
 }

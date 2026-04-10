@@ -11,8 +11,8 @@ mod outer {
 }
 
 fn test_basic_nested_access() {
-    assert(outer::value() == 42)
-    assert(outer::inner::greet() == "hello from inner")
+    assert(outer::value() == 42, "")
+    assert(outer::inner::greet() == "hello from inner", "")
 }
 
 // -- three levels deep --
@@ -30,9 +30,9 @@ mod a {
 }
 
 fn test_deep_nesting() {
-    assert(a::a_val() == 1)
-    assert(a::b::b_val() == 2)
-    assert(a::b::c::c_val() == 3)
+    assert(a::a_val() == 1, "")
+    assert(a::b::b_val() == 2, "")
+    assert(a::b::c::c_val() == 3, "")
 }
 
 // -- private by default in nested modules --
@@ -48,8 +48,8 @@ mod secret {
 }
 
 fn test_visibility_in_nested() {
-    assert(secret::visible() == 99)
-    assert(secret::nested::also_visible() == 88)
+    assert(secret::visible() == 99, "")
+    assert(secret::nested::also_visible() == 88, "")
 }
 
 // -- pub enum in nested mod --
@@ -68,7 +68,7 @@ mod enums {
 fn test_enum_in_nested_module() {
     s := enums::status::make_active()
     match s {
-        Active => assert(true),
-        Inactive => assert(false),
+        Active => assert(true, ""),
+        Inactive => assert(false, ""),
     }
 }

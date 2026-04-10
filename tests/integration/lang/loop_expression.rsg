@@ -8,7 +8,7 @@ fn test_loop_break_value() {
         counter = counter + 1
         if counter == 10 { break counter * 2 }
     }
-    assert(result == 20)
+    assert(result == 20, "")
 }
 
 // ── loop expression returning string ──
@@ -19,7 +19,7 @@ fn test_loop_break_string() {
         i = i + 1
         if i == 3 { break "found" }
     }
-    assert(result == "found")
+    assert(result == "found", "")
 }
 
 // ── loop expression returning bool ──
@@ -30,7 +30,7 @@ fn test_loop_break_bool() {
         x = x + 1
         if x >= 5 { break true }
     }
-    assert(result == true)
+    assert(result == true, "")
 }
 
 // ── loop expression with computation ──
@@ -44,5 +44,5 @@ fn test_loop_expression_fibonacci() {
         b = next
         if b > 100 { break b }
     }
-    assert(result == 144)
+    assert(result == 144, "")
 }

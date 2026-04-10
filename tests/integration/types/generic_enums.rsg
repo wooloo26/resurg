@@ -10,16 +10,16 @@ enum Either<L, R> {
 fn test_either_left() {
     e := Either<i32, str>::Left(42)
     match e {
-        Left(v) => assert(v == 42),
-        Right(_) => assert(false),
+        Left(v) => assert(v == 42, ""),
+        Right(_) => assert(false, ""),
     }
 }
 
 fn test_either_right() {
     e := Either<i32, str>::Right("hello")
     match e {
-        Left(_) => assert(false),
-        Right(v) => assert(v == "hello"),
+        Left(_) => assert(false, ""),
+        Right(v) => assert(v == "hello", ""),
     }
 }
 
@@ -33,16 +33,16 @@ enum Maybe<T> {
 fn test_maybe_nothing() {
     m := Maybe<i32>::Nothing
     match m {
-        Nothing => assert(true),
-        Just(_) => assert(false),
+        Nothing => assert(true, ""),
+        Just(_) => assert(false, ""),
     }
 }
 
 fn test_maybe_just() {
     m := Maybe<str>::Just("world")
     match m {
-        Nothing => assert(false),
-        Just(v) => assert(v == "world"),
+        Nothing => assert(false, ""),
+        Just(v) => assert(v == "world", ""),
     }
 }
 
@@ -56,18 +56,18 @@ enum Entry<K, V> {
 fn test_entry_empty() {
     e := Entry<str, i32>::Empty
     match e {
-        Empty => assert(true),
-        Occupied { key, value } => assert(false),
+        Empty => assert(true, ""),
+        Occupied { key, value } => assert(false, ""),
     }
 }
 
 fn test_entry_occupied() {
     e := Entry<str, i32>::Occupied { key = "age", value = 30 }
     match e {
-        Empty => assert(false),
+        Empty => assert(false, ""),
         Occupied { key, value } => {
-            assert(key == "age")
-            assert(value == 30)
+            assert(key == "age", "")
+            assert(value == 30, "")
         },
     }
 }
@@ -78,11 +78,11 @@ fn test_multiple_instantiations() {
     a := Either<i32, i32>::Left(1)
     b := Either<str, bool>::Right(true)
     match a {
-        Left(v) => assert(v == 1),
-        Right(_) => assert(false),
+        Left(v) => assert(v == 1, ""),
+        Right(_) => assert(false, ""),
     }
     match b {
-        Left(_) => assert(false),
-        Right(v) => assert(v == true),
+        Left(_) => assert(false, ""),
+        Right(v) => assert(v == true, ""),
     }
 }

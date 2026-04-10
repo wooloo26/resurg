@@ -25,20 +25,20 @@ ext Msg {
 
 fn test_enum_method_call() {
     q := Msg::Quit
-    assert(q.is_quit())
-    assert(q.describe() == "quit")
+    assert(q.is_quit(), "")
+    assert(q.describe() == "quit", "")
 }
 
 fn test_enum_method_on_tuple() {
     w := Msg::Write("hello")
-    assert(w.is_quit() == false)
-    assert(w.describe() == "hello")
+    assert(w.is_quit() == false, "")
+    assert(w.describe() == "hello", "")
 }
 
 fn test_enum_method_on_struct_variant() {
     m := Msg::Move { x = 10, y = 20 }
-    assert(m.is_quit() == false)
-    assert(m.describe() == "move")
+    assert(m.is_quit() == false, "")
+    assert(m.describe() == "move", "")
 }
 
 // ── mut pointer receiver in ext ──
@@ -66,11 +66,11 @@ ext Toggle {
 
 fn test_enum_mut_ext() {
     t := Toggle::On
-    assert(t.is_on())
+    assert(t.is_on(), "")
     t.flip()
-    assert(t.is_on() == false)
+    assert(t.is_on() == false, "")
     t.flip()
-    assert(t.is_on())
+    assert(t.is_on(), "")
 }
 
 // ── enum with explicit discriminants ──
@@ -83,5 +83,5 @@ enum Status {
 
 fn test_enum_discriminants() {
     s := Status::Active
-    assert(true)
+    assert(true, "")
 }

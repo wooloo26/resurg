@@ -14,14 +14,14 @@ fn fizzbuzz(n: i32) -> str {
 }
 
 fn test_fizzbuzz() {
-    assert(fizzbuzz(1) == "1")
-    assert(fizzbuzz(3) == "Fizz")
-    assert(fizzbuzz(5) == "Buzz")
-    assert(fizzbuzz(15) == "FizzBuzz")
-    assert(fizzbuzz(30) == "FizzBuzz")
-    assert(fizzbuzz(7) == "7")
-    assert(fizzbuzz(9) == "Fizz")
-    assert(fizzbuzz(10) == "Buzz")
+    assert(fizzbuzz(1) == "1", "")
+    assert(fizzbuzz(3) == "Fizz", "")
+    assert(fizzbuzz(5) == "Buzz", "")
+    assert(fizzbuzz(15) == "FizzBuzz", "")
+    assert(fizzbuzz(30) == "FizzBuzz", "")
+    assert(fizzbuzz(7) == "7", "")
+    assert(fizzbuzz(9) == "Fizz", "")
+    assert(fizzbuzz(10) == "Buzz", "")
 }
 
 // ── Fibonacci ──
@@ -44,14 +44,14 @@ fn fib(n: i32) -> i32 {
 }
 
 fn test_fibonacci() {
-    assert(fib(0) == 0)
-    assert(fib(1) == 1)
-    assert(fib(2) == 1)
-    assert(fib(3) == 2)
-    assert(fib(4) == 3)
-    assert(fib(5) == 5)
-    assert(fib(10) == 55)
-    assert(fib(20) == 6765)
+    assert(fib(0) == 0, "")
+    assert(fib(1) == 1, "")
+    assert(fib(2) == 1, "")
+    assert(fib(3) == 2, "")
+    assert(fib(4) == 3, "")
+    assert(fib(5) == 5, "")
+    assert(fib(10) == 55, "")
+    assert(fib(20) == 6765, "")
 }
 
 // ── Power ──
@@ -64,12 +64,12 @@ fn power(base: i32, exp: i32) -> i32 {
 }
 
 fn test_power() {
-    assert(power(2, 0) == 1)
-    assert(power(2, 1) == 2)
-    assert(power(2, 10) == 1024)
-    assert(power(3, 3) == 27)
-    assert(power(5, 4) == 625)
-    assert(power(1, 100) == 1)
+    assert(power(2, 0) == 1, "")
+    assert(power(2, 1) == 2, "")
+    assert(power(2, 10) == 1024, "")
+    assert(power(3, 3) == 27, "")
+    assert(power(5, 4) == 625, "")
+    assert(power(1, 100) == 1, "")
 }
 
 // ── GCD ──
@@ -86,11 +86,11 @@ fn gcd(a: i32, b: i32) -> i32 {
 }
 
 fn test_gcd() {
-    assert(gcd(12, 8) == 4)
-    assert(gcd(100, 75) == 25)
-    assert(gcd(17, 13) == 1)
-    assert(gcd(0, 5) == 5)
-    assert(gcd(7, 7) == 7)
+    assert(gcd(12, 8) == 4, "")
+    assert(gcd(100, 75) == 25, "")
+    assert(gcd(17, 13) == 1, "")
+    assert(gcd(0, 5) == 5, "")
+    assert(gcd(7, 7) == 7, "")
 }
 
 // ── Is prime ──
@@ -112,14 +112,14 @@ fn is_prime(n: i32) -> bool {
 }
 
 fn test_is_prime() {
-    assert(is_prime(0) == false)
-    assert(is_prime(1) == false)
-    assert(is_prime(2) == true)
-    assert(is_prime(3) == true)
-    assert(is_prime(4) == false)
-    assert(is_prime(17) == true)
-    assert(is_prime(25) == false)
-    assert(is_prime(97) == true)
+    assert(is_prime(0) == false, "")
+    assert(is_prime(1) == false, "")
+    assert(is_prime(2) == true, "")
+    assert(is_prime(3) == true, "")
+    assert(is_prime(4) == false, "")
+    assert(is_prime(17) == true, "")
+    assert(is_prime(25) == false, "")
+    assert(is_prime(97) == true, "")
 }
 
 // ── Combining string interpolation + loop + if ──
@@ -130,12 +130,12 @@ fn classify(n: i32) -> str {
 }
 
 fn test_classify() {
-    assert(classify(42) == "positive")
-    assert(classify(-7) == "negative")
-    assert(classify(0) == "zero") // build a summary with interpolation
+    assert(classify(42) == "positive", "")
+    assert(classify(-7) == "negative", "")
+    assert(classify(0) == "zero", "") // build a summary with interpolation
     val := 99
     summary := "{val} is {classify(val)}"
-    assert(summary == "99 is positive")
+    assert(summary == "99 is positive", "")
 }
 
 // ── Sum of digits ──
@@ -151,10 +151,10 @@ fn sum_digits(n: i32) -> i32 {
 }
 
 fn test_sum_digits() {
-    assert(sum_digits(123) == 6)
-    assert(sum_digits(9999) == 36)
-    assert(sum_digits(100) == 1)
-    assert(sum_digits(0) == 0)
+    assert(sum_digits(123) == 6, "")
+    assert(sum_digits(9999) == 36, "")
+    assert(sum_digits(100) == 1, "")
+    assert(sum_digits(0) == 0, "")
 }
 
 // ── Collatz steps ──
@@ -174,10 +174,10 @@ fn collatz_steps(n: i32) -> i32 {
 }
 
 fn test_collatz() {
-    assert(collatz_steps(1) == 0)
-    assert(collatz_steps(2) == 1)
-    assert(collatz_steps(6) == 8)
-    assert(collatz_steps(27) == 111)
+    assert(collatz_steps(1) == 0, "")
+    assert(collatz_steps(2) == 1, "")
+    assert(collatz_steps(6) == 8, "")
+    assert(collatz_steps(27) == 111, "")
 }
 
 // ── Recursive countdown to string ──
@@ -187,9 +187,9 @@ fn countdown(n: i32) -> str {
 }
 
 fn test_recursive_string() {
-    assert(countdown(0) == "done")
-    assert(countdown(1) == "1 done")
-    assert(countdown(3) == "3 2 1 done")
+    assert(countdown(0) == "done", "")
+    assert(countdown(1) == "1 done", "")
+    assert(countdown(3) == "3 2 1 done", "")
 }
 
 // ── for + if + interpolation: build comma-separated list ──
@@ -206,9 +206,9 @@ fn range_list(n: i32) -> str {
 }
 
 fn test_range_list() {
-    assert(range_list(0) == "")
-    assert(range_list(1) == "0")
-    assert(range_list(4) == "0, 1, 2, 3")
+    assert(range_list(0) == "", "")
+    assert(range_list(1) == "0", "")
+    assert(range_list(4) == "0, 1, 2, 3", "")
 }
 
 // ── Absolute difference using functions + if/else ──
@@ -218,9 +218,9 @@ fn abs_diff(a: i32, b: i32) -> i32 {
 }
 
 fn test_abs_diff() {
-    assert(abs_diff(10, 3) == 7)
-    assert(abs_diff(3, 10) == 7)
-    assert(abs_diff(5, 5) == 0)
+    assert(abs_diff(10, 3) == 7, "")
+    assert(abs_diff(3, 10) == 7, "")
+    assert(abs_diff(5, 5) == 0, "")
 }
 
 // ── Nested loop multiplication table sum ──
@@ -236,8 +236,8 @@ fn mul_table_sum(n: i32) -> i32 {
 
 fn test_mul_table_sum() {
     // 1*1 = 1
-    assert(mul_table_sum(2) == 1) // 1*1 + 1*2 + 2*1 + 2*2 = 1+2+2+4 = 9
-    assert(mul_table_sum(3) == 9)
+    assert(mul_table_sum(2) == 1, "") // 1*1 + 1*2 + 2*1 + 2*2 = 1+2+2+4 = 9
+    assert(mul_table_sum(3) == 9, "")
 }
 
 // ── f64 integration: distance formula (manual sqrt via Newton's method) ──
@@ -251,11 +251,11 @@ fn sqrt_approx(x: f64) -> f64 {
 
 fn test_sqrt_approx() {
     r := sqrt_approx(4.0)
-    assert(r > 1.99)
-    assert(r < 2.01)
+    assert(r > 1.99, "")
+    assert(r < 2.01, "")
     r2 := sqrt_approx(9.0)
-    assert(r2 > 2.99)
-    assert(r2 < 3.01)
+    assert(r2 > 2.99, "")
+    assert(r2 < 3.01, "")
 }
 
 // ── pub + private + loop + for combined ──
@@ -270,7 +270,7 @@ pub fn count_primes_below(limit: i32) -> i32 {
 }
 
 fn test_count_primes() {
-    assert(count_primes_below(2) == 0)
-    assert(count_primes_below(10) == 4) // 2, 3, 5, 7
-    assert(count_primes_below(20) == 8) // 2,3,5,7,11,13,17,19
+    assert(count_primes_below(2) == 0, "")
+    assert(count_primes_below(10) == 4, "") // 2, 3, 5, 7
+    assert(count_primes_below(20) == 8, "") // 2,3,5,7,11,13,17,19
 }

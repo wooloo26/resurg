@@ -24,6 +24,6 @@ fn get_a_value<T: A>(t: T) -> i32 {
 
 fn test_conflict_resolution() {
     d := Dual { a_val = 42, b_val = "hello" }
-    assert(d.a_val == 42)
-    assert(d.b_val == "hello")
+    assert(d.a_val == 42, "")
+    assert(d.b_val == "hello", "")
 }

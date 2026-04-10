@@ -8,7 +8,7 @@ fn test_for_slice_value() {
     for s |v| {
         sum = sum + v
     }
-    assert(sum == 60)
+    assert(sum == 60, "")
 }
 
 // ── for over slice with value and index ──
@@ -21,8 +21,8 @@ fn test_for_slice_value_index() {
         count = count + 1
         idx_sum = idx_sum + i
     }
-    assert(count == 3)
-    assert(idx_sum == 3)
+    assert(count == 3, "")
+    assert(idx_sum == 3, "")
 }
 
 // ── for over empty slice ──
@@ -33,7 +33,7 @@ fn test_for_empty_slice() {
     for s |v| {
         count = count + 1
     }
-    assert(count == 0)
+    assert(count == 0, "")
 }
 
 // ── for over slice index used for access ──
@@ -44,7 +44,7 @@ fn test_for_slice_index_access() {
     for s |v, i| {
         sum = sum + v * (i + 1)
     }
-    assert(sum == 5 * 1 + 10 * 2 + 15 * 3 + 20 * 4)
+    assert(sum == 5 * 1 + 10 * 2 + 15 * 3 + 20 * 4, "")
 }
 
 // ── for over single element slice ──
@@ -55,7 +55,7 @@ fn test_for_single_element() {
     for s |v| {
         total = total + v
     }
-    assert(total == 42)
+    assert(total == 42, "")
 }
 
 // ── for over slice with break ──
@@ -67,7 +67,7 @@ fn test_for_slice_break() {
         if v == 4 { break }
         sum = sum + v
     }
-    assert(sum == 6)
+    assert(sum == 6, "")
 }
 
 // ── for over slice with continue ──
@@ -79,7 +79,7 @@ fn test_for_slice_continue() {
         if v % 2 == 0 { continue }
         sum = sum + v
     }
-    assert(sum == 9)
+    assert(sum == 9, "")
 }
 
 // ── for over sub-slice ──
@@ -91,7 +91,7 @@ fn test_for_sub_slice() {
     for t |v| {
         sum = sum + v
     }
-    assert(sum == 90)
+    assert(sum == 90, "")
 }
 
 // ── nested for over slices ──
@@ -106,5 +106,5 @@ fn test_nested_for_slices() {
             total = total + v
         }
     }
-    assert(total == 10)
+    assert(total == 10, "")
 }

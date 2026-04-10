@@ -1,1 +1,4 @@
-// std/io.rsg — standard I/O library (reserved for future use)
+// std/io.rsg — standard I/O library
+//
+// Core I/O primitives (print, println) are provided by std/builtin.rsg.
+// This module is reserved for extended I/O operations (file I/O, etc.).

@@ -26,8 +26,8 @@ fn test_chaining_some() {
     user := get_user(1)
     city := user?.address?.city
     match city {
-        Some(c) => assert(c == "Paris"),
-        None => assert(false),
+        Some(c) => assert(c == "Paris", ""),
+        None => assert(false, ""),
     }
 }
 
@@ -35,8 +35,8 @@ fn test_chaining_none_middle() {
     user := get_user(2)
     city := user?.address?.city
     match city {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -44,8 +44,8 @@ fn test_chaining_none_root() {
     user := get_user(99)
     city := user?.address?.city
     match city {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -55,8 +55,8 @@ fn test_single_chaining() {
     user := get_user(1)
     name := user?.name
     match name {
-        Some(n) => assert(n == "Alice"),
-        None => assert(false),
+        Some(n) => assert(n == "Alice", ""),
+        None => assert(false, ""),
     }
 }
 
@@ -64,7 +64,7 @@ fn test_single_chaining_none() {
     user := get_user(99)
     name := user?.name
     match name {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }

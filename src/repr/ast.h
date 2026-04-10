@@ -208,6 +208,12 @@ typedef enum {
     NODE_CLOSURE,            // |params| body
 } NodeKind;
 
+/** Kind of default value for a function parameter. */
+typedef enum {
+    DEFAULT_NONE, // no default value
+    DEFAULT_EXPR, // arbitrary expression (stored in default_value)
+} DefaultKind;
+
 /** Sub-kind for NODE_LIT - indicates which payload field is active. */
 typedef enum {
     LIT_BOOL,
@@ -283,8 +289,10 @@ struct ASTNode {
         struct {
             const char *name;
             ASTType type;
-            bool is_mut;      // true for `mut name: *T`
-            bool is_variadic; // true for `name: ..T`
+            bool is_mut;              // true for `mut name: *T`
+            bool is_variadic;         // true for `name: ..T`
+            DefaultKind default_kind; // DEFAULT_NONE if no default
+            ASTNode *default_value;   // non-NULL for DEFAULT_EXPR
         } param;
 
         // NODE_VAR_DECL

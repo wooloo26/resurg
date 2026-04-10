@@ -10,26 +10,26 @@
 
 fn test_slice_len_i32() {
     s := []i32{10, 20, 30}
-    assert(s.len() == 3)
+    assert(s.len() == 3, "")
 }
 
 fn test_slice_len_str() {
     s := []str{"hello", "world"}
-    assert(s.len() == 2)
+    assert(s.len() == 2, "")
 }
 
 fn test_slice_len_bool() {
     s := []bool{true, false, true, false}
-    assert(s.len() == 4)
+    assert(s.len() == 4, "")
 }
 
 fn test_slice_len_empty() {
     s := []i32{}
-    assert(s.len() == 0)
+    assert(s.len() == 0, "")
 }
 
 fn test_slice_len_rvalue() {
-    assert(([]i32{1, 2, 3}).len() == 3)
+    assert(([]i32{1, 2, 3}).len() == 3, "")
 }
 
 // ── ext<T, comptime N: usize> [N]T: declare fn len ──
@@ -40,21 +40,21 @@ fn test_slice_len_rvalue() {
 
 fn test_array_len_i32() {
     arr := [3]i32{1, 2, 3}
-    assert(arr.len() == 3)
+    assert(arr.len() == 3, "")
 }
 
 fn test_array_len_str() {
     arr := [2]str{"a", "b"}
-    assert(arr.len() == 2)
+    assert(arr.len() == 2, "")
 }
 
 fn test_array_len_bool() {
     arr := [5]bool{true, false, true, false, true}
-    assert(arr.len() == 5)
+    assert(arr.len() == 5, "")
 }
 
 fn test_array_len_rvalue() {
-    assert(([4]i32{1, 2, 3, 4}).len() == 4)
+    assert(([4]i32{1, 2, 3, 4}).len() == 4, "")
 }
 
 // ── user-defined generic ext on slices ──
@@ -70,17 +70,17 @@ ext<T> []T {
 
 fn test_slice_user_method_i32() {
     s := []i32{1, 2, 3}
-    assert(s.is_empty() == false)
+    assert(s.is_empty() == false, "")
 }
 
 fn test_slice_user_method_i32_empty() {
     s := []i32{}
-    assert(s.is_empty() == true)
+    assert(s.is_empty() == true, "")
 }
 
 fn test_slice_user_method_str() {
     s := []str{"hello"}
-    assert(s.is_empty() == false)
+    assert(s.is_empty() == false, "")
 }
 
 // ── user-defined generic ext on arrays ──
@@ -96,12 +96,12 @@ ext<T, comptime N: usize> [N]T {
 
 fn test_array_user_method_i32() {
     arr := [3]i32{1, 2, 3}
-    assert(arr.is_empty() == false)
+    assert(arr.is_empty() == false, "")
 }
 
 fn test_array_user_method_str() {
     arr := [2]str{"a", "b"}
-    assert(arr.is_empty() == false)
+    assert(arr.is_empty() == false, "")
 }
 
 // ── multiple instantiations across different element types ──
@@ -110,26 +110,26 @@ fn test_multiple_slice_instantiations() {
     a := []i32{1, 2}
     b := []str{"x", "y", "z"}
     c := []bool{true}
-    assert(a.len() == 2)
-    assert(b.len() == 3)
-    assert(c.len() == 1)
+    assert(a.len() == 2, "")
+    assert(b.len() == 3, "")
+    assert(c.len() == 1, "")
 
-    assert(a.is_empty() == false)
-    assert(b.is_empty() == false)
-    assert(c.is_empty() == false)
+    assert(a.is_empty() == false, "")
+    assert(b.is_empty() == false, "")
+    assert(c.is_empty() == false, "")
 }
 
 fn test_multiple_array_instantiations() {
     a := [2]i32{1, 2}
     b := [3]str{"x", "y", "z"}
     c := [1]bool{true}
-    assert(a.len() == 2)
-    assert(b.len() == 3)
-    assert(c.len() == 1)
+    assert(a.len() == 2, "")
+    assert(b.len() == 3, "")
+    assert(c.len() == 1, "")
 
-    assert(a.is_empty() == false)
-    assert(b.is_empty() == false)
-    assert(c.is_empty() == false)
+    assert(a.is_empty() == false, "")
+    assert(b.is_empty() == false, "")
+    assert(c.is_empty() == false, "")
 }
 
 // ── .len() in expressions ──
@@ -137,11 +137,11 @@ fn test_multiple_array_instantiations() {
 fn test_len_in_expression() {
     s := []i32{10, 20, 30}
     total := s.len() + 1
-    assert(total == 4)
+    assert(total == 4, "")
 
     arr := [3]i32{1, 2, 3}
     sum := arr.len() * 2
-    assert(sum == 6)
+    assert(sum == 6, "")
 }
 
 // ── pointer to slice auto-deref ──
@@ -149,7 +149,7 @@ fn test_len_in_expression() {
 fn test_ptr_slice_len() {
     s := []i32{1, 2, 3, 4}
     p := &s
-    assert(p.len() == 4)
+    assert(p.len() == 4, "")
 }
 
 // ── sub-slice retains len ──
@@ -157,7 +157,7 @@ fn test_ptr_slice_len() {
 fn test_sub_slice_len() {
     s := []i32{1, 2, 3, 4, 5}
     t := s[1..4]
-    assert(t.len() == 3)
+    assert(t.len() == 3, "")
 }
 
 fn test_final() {

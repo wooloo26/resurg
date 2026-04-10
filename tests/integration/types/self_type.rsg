@@ -24,22 +24,22 @@ ext Point {
 
 fn test_struct_self_static_constructor() {
     p := Point::origin()
-    assert(p.x == 0.0)
-    assert(p.y == 0.0)
+    assert(p.x == 0.0, "")
+    assert(p.y == 0.0, "")
 }
 
 fn test_struct_self_return_type() {
     p := Point { x = 1.0, y = 2.0 }
     q := p.translate(3.0, 4.0)
-    assert(q.x == 4.0)
-    assert(q.y == 6.0)
+    assert(q.x == 4.0, "")
+    assert(q.y == 6.0, "")
 }
 
 fn test_struct_self_mut_pointer_receiver() {
     p := Point { x = 5.0, y = 10.0 }
     p.reset()
-    assert(p.x == 0.0)
-    assert(p.y == 0.0)
+    assert(p.x == 0.0, "")
+    assert(p.y == 0.0, "")
 }
 
 // ── Self in enum ext: static constructor ──
@@ -58,8 +58,8 @@ ext Token {
 fn test_enum_self_static_constructor() {
     t := Token::dummy()
     match t {
-        Number(v) => assert(v == 0.0),
-        Ident(_) => assert(false),
+        Number(v) => assert(v == 0.0, ""),
+        Ident(_) => assert(false, ""),
     }
 }
 
@@ -84,9 +84,9 @@ ext Color impl Clonable {
 fn test_pact_self_return_type() {
     c := Color { r = 255, g = 128, b = 0 }
     d := c.clone()
-    assert(d.r == 255)
-    assert(d.g == 128)
-    assert(d.b == 0)
+    assert(d.r == 255, "")
+    assert(d.g == 128, "")
+    assert(d.b == 0, "")
 }
 
 // ── Self in ext: return type ──
@@ -107,13 +107,13 @@ ext Counter {
 
 fn test_ext_self_static_constructor() {
     c := Counter::new(10)
-    assert(c.value == 10)
+    assert(c.value == 10, "")
 }
 
 fn test_ext_self_return_type() {
     c := Counter { value = 5 }
     d := c.incremented()
-    assert(d.value == 6)
+    assert(d.value == 6, "")
 }
 
 // ── *Self pointer receiver ──
@@ -136,5 +136,5 @@ fn test_self_pointer_receiver() {
     a := Accumulator { total = 0 }
     a.add(10)
     a.add(20)
-    assert(a.get_total() == 30)
+    assert(a.get_total() == 30, "")
 }

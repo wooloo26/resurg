@@ -1,8 +1,8 @@
 // std/prelude.rsg — optional prelude (auto-imported unless --no-prelude)
 //
-// Core types (Option, Result) and intrinsics (print, println, assert,
-// len, panic, recover) are provided by std/builtin.rsg, which is
-// always injected regardless of prelude settings.
+// Core types (Option, Result) and primitives (assert, len, panic,
+// recover, print, println) are provided by std/builtin.rsg, which
+// is always injected.
 //
 // This file is reserved for additional standard-library re-exports
 // and user-customizable convenience imports.

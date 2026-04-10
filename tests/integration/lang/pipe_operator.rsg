@@ -8,7 +8,7 @@ fn double(x: i32) -> i32 = x * 2
 
 fn test_pipe_basic() {
     result := 5 |> double
-    assert(result == 10)
+    assert(result == 10, "")
 }
 
 // ── chained pipes: a |> f |> g ──
@@ -17,7 +17,7 @@ fn increment(x: i32) -> i32 = x + 1
 
 fn test_pipe_chained() {
     result := 5 |> double |> increment
-    assert(result == 11)
+    assert(result == 11, "")
 }
 
 // ── pipe with multi-arg function (first-arg forwarding) ──
@@ -26,7 +26,7 @@ fn add(a: i32, b: i32) -> i32 = a + b
 
 fn test_pipe_multi_arg() {
     result := 5 |> add(10)
-    assert(result == 15)
+    assert(result == 15, "")
 }
 
 // ── pipe with closure ──
@@ -35,7 +35,7 @@ fn test_pipe_with_closure() {
     result := 10 |> |x| x * 3
     // EXPECT-STDOUT uses println below
     println(result)
-    assert(result == 30)
+    assert(result == 30, "")
 }
 
 // ── long pipe chain ──
@@ -46,7 +46,7 @@ fn negate(x: i32) -> i32 = 0 - x
 fn test_pipe_long_chain() {
     result := 3 |> double |> negate
     println(result)
-    assert(result == -6)
+    assert(result == -6, "")
 }
 
 // ── pipe preserves left-to-right evaluation ──
@@ -54,12 +54,12 @@ fn test_pipe_long_chain() {
 fn test_pipe_left_to_right() {
     // 2 |> double |> increment → increment(double(2)) → 5
     result := 2 |> double |> increment
-    assert(result == 5)
+    assert(result == 5, "")
 }
 
 // ── pipe with expression on left side ──
 
 fn test_pipe_expr_lhs() {
     result := (3 + 2) |> double
-    assert(result == 10)
+    assert(result == 10, "")
 }

@@ -1,8 +1,12 @@
 // std/builtin.rsg — always-injected core definitions
 //
 // This file is unconditionally prepended by the compiler.
-// It defines the core types and intrinsic function signatures
+// It defines the core types and compiler-primitive function signatures
 // that every Resurg program depends on.
+//
+// Primitives are low-level operations that require compiler support
+// (type dispatch, source-location injection, etc.).  User-facing
+// libraries in std/ are written in rsg and may call these primitives.
 
 // ── Core ADTs ──────────────────────────────────────────────────
 // ?T  is syntax sugar for Option<T>
@@ -18,15 +22,13 @@ pub enum Result<T, E> {
     Err(E),
 }
 
-// ── I/O intrinsics ─────────────────────────────────────────────
+// ── Compiler primitives ───────────────────────────────────────
+// The compiler auto-mangles these names; the runtime adapts.
 
-pub declare fn print(value: str)
-pub declare fn println(value: str)
-
-// ── Runtime intrinsics ─────────────────────────────────────────
-
-pub declare fn assert(cond: bool)
-pub declare fn len(value: str) -> i32
+pub declare fn print<T>(value: T)
+pub declare fn println<T>(value: T)
+pub declare fn assert(cond: bool, msg: str = "")
+pub declare fn len<T>(value: T) -> i32
 pub declare fn panic(msg: str) -> never
 pub declare fn recover() -> ?str
 

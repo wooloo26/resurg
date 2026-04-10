@@ -8,48 +8,48 @@ fn test_i8() {
     var a: i8 = 0
     var b: i8 = 127
     var c: i8 = -128
-    assert(a == 0)
-    assert(b == 127)
-    assert(c == -128)
-    assert(b + c == -1)
+    assert(a == 0, "")
+    assert(b == 127, "")
+    assert(c == -128, "")
+    assert(b + c == -1, "")
 }
 
 fn test_i16() {
     var a: i16 = 0
     var b: i16 = 32_767
     var c: i16 = -32_768
-    assert(a == 0)
-    assert(b == 32_767)
-    assert(c == -32_768)
-    assert(b + c == -1)
+    assert(a == 0, "")
+    assert(b == 32_767, "")
+    assert(c == -32_768, "")
+    assert(b + c == -1, "")
 }
 
 fn test_i32() {
     var a: i32 = 0
     var b: i32 = 2_147_483_647
     var c: i32 = -2_147_483_648
-    assert(a == 0)
-    assert(b == 2_147_483_647)
-    assert(c == -2_147_483_648)
+    assert(a == 0, "")
+    assert(b == 2_147_483_647, "")
+    assert(c == -2_147_483_648, "")
 }
 
 fn test_i64() {
     var a: i64 = 0
     var b: i64 = 9_223_372_036_854_775_807
     var c: i64 = -9_223_372_036_854_775_808
-    assert(a == 0)
-    assert(b == 9_223_372_036_854_775_807)
-    assert(c == -9_223_372_036_854_775_808)
+    assert(a == 0, "")
+    assert(b == 9_223_372_036_854_775_807, "")
+    assert(c == -9_223_372_036_854_775_808, "")
 }
 
 fn test_i128() {
     var a: i128 = 0
     var b: i128 = 1_000_000_000_000
     var c: i128 = -1_000_000_000_000
-    assert(a == 0)
-    assert(b + c == 0)
-    assert(b > 0)
-    assert(c < 0)
+    assert(a == 0, "")
+    assert(b + c == 0, "")
+    assert(b > 0, "")
+    assert(c < 0, "")
 }
 
 // ═══════════════════════════════════════
@@ -59,38 +59,38 @@ fn test_i128() {
 fn test_u8() {
     var a: u8 = 0
     var b: u8 = 255
-    assert(a == 0)
-    assert(b == 255)
-    assert(b - a == 255)
+    assert(a == 0, "")
+    assert(b == 255, "")
+    assert(b - a == 255, "")
 }
 
 fn test_u16() {
     var a: u16 = 0
     var b: u16 = 65_535
-    assert(a == 0)
-    assert(b == 65_535)
+    assert(a == 0, "")
+    assert(b == 65_535, "")
 }
 
 fn test_u32() {
     var a: u32 = 0
     var b: u32 = 4_294_967_295
-    assert(a == 0)
-    assert(b == 4_294_967_295)
+    assert(a == 0, "")
+    assert(b == 4_294_967_295, "")
 }
 
 fn test_u64() {
     var a: u64 = 0
     var b: u64 = 18_446_744_073_709_551_615
-    assert(a == 0)
-    assert(b == 18_446_744_073_709_551_615)
+    assert(a == 0, "")
+    assert(b == 18_446_744_073_709_551_615, "")
 }
 
 fn test_u128() {
     var a: u128 = 0
     var b: u128 = 1_000_000_000_000
-    assert(a == 0)
-    assert(b == 1_000_000_000_000)
-    assert(b > a)
+    assert(a == 0, "")
+    assert(b == 1_000_000_000_000, "")
+    assert(b > a, "")
 }
 
 // ═══════════════════════════════════════
@@ -101,18 +101,18 @@ fn test_isize() {
     var a: isize = 0
     var b: isize = 100
     var c: isize = -100
-    assert(a == 0)
-    assert(b == 100)
-    assert(c == -100)
-    assert(b + c == 0)
+    assert(a == 0, "")
+    assert(b == 100, "")
+    assert(c == -100, "")
+    assert(b + c == 0, "")
 }
 
 fn test_usize() {
     var a: usize = 0
     var b: usize = 100
-    assert(a == 0)
-    assert(b == 100)
-    assert(b - a == 100)
+    assert(a == 0, "")
+    assert(b == 100, "")
+    assert(b - a == 100, "")
 }
 
 // ═══════════════════════════════════════
@@ -122,29 +122,29 @@ fn test_usize() {
 fn test_i8_arithmetic() {
     var a: i8 = 10
     var b: i8 = 3
-    assert(a + b == 13)
-    assert(a - b == 7)
-    assert(a * b == 30)
-    assert(a / b == 3)
-    assert(a % b == 1)
+    assert(a + b == 13, "")
+    assert(a - b == 7, "")
+    assert(a * b == 30, "")
+    assert(a / b == 3, "")
+    assert(a % b == 1, "")
 }
 
 fn test_u16_arithmetic() {
     var a: u16 = 1000
     var b: u16 = 300
-    assert(a + b == 1300)
-    assert(a - b == 700)
-    assert(a * b == 300_000)
-    assert(a / b == 3)
-    assert(a % b == 100)
+    assert(a + b == 1300, "")
+    assert(a - b == 700, "")
+    assert(a * b == 300_000, "")
+    assert(a / b == 3, "")
+    assert(a % b == 100, "")
 }
 
 fn test_i64_arithmetic() {
     var a: i64 = 1_000_000_000
     var b: i64 = 2_000_000_000
-    assert(a + b == 3_000_000_000)
-    assert(b - a == 1_000_000_000)
-    assert(a * 2 == b)
+    assert(a + b == 3_000_000_000, "")
+    assert(b - a == 1_000_000_000, "")
+    assert(a * 2 == b, "")
 }
 
 // ═══════════════════════════════════════
@@ -154,19 +154,19 @@ fn test_i64_arithmetic() {
 fn test_i8_comparisons() {
     var a: i8 = -10
     var b: i8 = 10
-    assert(a < b)
-    assert(b > a)
-    assert(a <= a)
-    assert(b >= b)
-    assert(a != b)
-    assert(a == a)
+    assert(a < b, "")
+    assert(b > a, "")
+    assert(a <= a, "")
+    assert(b >= b, "")
+    assert(a != b, "")
+    assert(a == a, "")
 }
 
 fn test_usize_comparisons() {
     var a: usize = 0
     var b: usize = 42
-    assert(a < b)
-    assert(b > a)
-    assert(a <= b)
-    assert(b >= a)
+    assert(a < b, "")
+    assert(b > a, "")
+    assert(a <= b, "")
+    assert(b >= a, "")
 }

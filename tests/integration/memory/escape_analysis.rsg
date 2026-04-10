@@ -14,7 +14,7 @@ struct Container {
 fn test_local_read() {
     x := 42
     px := &x
-    assert(*px == 42)
+    assert(*px == 42, "")
 }
 
 // ── non-escaping: local address-of for write ──
@@ -23,8 +23,8 @@ fn test_local_write() {
     x := 10
     px := &x
     *px = 20
-    assert(x == 20)
-    assert(*px == 20)
+    assert(x == 20, "")
+    assert(*px == 20, "")
 }
 
 // ── non-escaping: address-of struct variable ──
@@ -32,8 +32,8 @@ fn test_local_write() {
 fn test_local_struct_read() {
     p := Point { x = 3.0, y = 4.0 }
     pp := &p
-    assert(pp.x == 3.0)
-    assert(pp.y == 4.0)
+    assert(pp.x == 3.0, "")
+    assert(pp.y == 4.0, "")
 }
 
 // ── non-escaping: mut &x passed to function ──
@@ -45,7 +45,7 @@ fn set_int(mut p: *i32, val: i32) {
 fn test_mut_arg_non_escaping() {
     x := 0
     set_int(mut &x, 42)
-    assert(x == 42)
+    assert(x == 42, "")
 }
 
 // ── non-escaping: mut &struct passed to function ──
@@ -57,8 +57,8 @@ fn set_point_x(mut p: *Point, val: f64) {
 fn test_mut_struct_arg_non_escaping() {
     p := Point { x = 0.0, y = 2.0 }
     set_point_x(mut &p, 10.0)
-    assert(p.x == 10.0)
-    assert(p.y == 2.0)
+    assert(p.x == 10.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── non-escaping: address-of in loop body ──
@@ -67,7 +67,7 @@ fn test_address_of_in_loop() {
     for 0..5 |i| {
         val := i * 10
         pv := &val
-        assert(*pv == i * 10)
+        assert(*pv == i * 10, "")
     }
 }
 
@@ -80,7 +80,7 @@ fn make_int_ptr(v: i32) -> *i32 {
 
 fn test_escape_return_primitive() {
     p := make_int_ptr(42)
-    assert(*p == 42)
+    assert(*p == 42, "")
 }
 
 // ── escaping: return &struct from function ──
@@ -92,8 +92,8 @@ fn make_point_ptr(x: f64, y: f64) -> *Point {
 
 fn test_escape_return_struct() {
     p := make_point_ptr(5.0, 6.0)
-    assert(p.x == 5.0)
-    assert(p.y == 6.0)
+    assert(p.x == 5.0, "")
+    assert(p.y == 6.0, "")
 }
 
 // ── escaping: indirect return via variable binding ──
@@ -106,7 +106,7 @@ fn indirect_escape(v: i32) -> *i32 {
 
 fn test_escape_indirect() {
     p := indirect_escape(77)
-    assert(*p == 77)
+    assert(*p == 77, "")
 }
 
 // ── escaping: return address-of parameter ──
@@ -117,7 +117,7 @@ fn param_escape(v: i32) -> *i32 {
 
 fn test_escape_param() {
     p := param_escape(55)
-    assert(*p == 55)
+    assert(*p == 55, "")
 }
 
 // ── escaping: returned pointer survives GC pressure ──
@@ -127,7 +127,7 @@ fn test_escape_gc_survival() {
     for 0..500 |i| {
         tmp := make_int_ptr(i)
     }
-    assert(*p == 42)
+    assert(*p == 42, "")
 }
 
 // ── escaping: multiple returned pointers are independent ──
@@ -135,8 +135,8 @@ fn test_escape_gc_survival() {
 fn test_escape_independence() {
     a := make_int_ptr(10)
     b := make_int_ptr(20)
-    assert(*a == 10)
-    assert(*b == 20)
+    assert(*a == 10, "")
+    assert(*b == 20, "")
 }
 
 // ── escaping: returned struct pointer retains field values ──
@@ -146,8 +146,8 @@ fn test_escape_struct_fields() {
     for 0..500 |i| {
         tmp := make_point_ptr(0.0, 0.0)
     }
-    assert(p.x == 7.0)
-    assert(p.y == 8.0)
+    assert(p.x == 7.0, "")
+    assert(p.y == 8.0, "")
 }
 
 // ── non-escaping: coexists with heap alloc in same function ──
@@ -156,10 +156,10 @@ fn test_mixed_local_and_heap() {
     x := 42
     px := &x
     *px = 100
-    assert(x == 100)
+    assert(x == 100, "")
 
     p := &Point { x = 3.0, y = 4.0 }
-    assert(p.x == 3.0)
+    assert(p.x == 3.0, "")
 }
 
 // ── escaping: nested function returns escaped pointer ──
@@ -172,8 +172,8 @@ fn make_container_ptr(v: i32) -> *Container {
 fn test_escape_nested_calls() {
     a := make_container_ptr(100)
     b := make_container_ptr(200)
-    assert(a.value == 100)
-    assert(b.value == 200)
+    assert(a.value == 100, "")
+    assert(b.value == 200, "")
 }
 
 // ── escaping: address-of in conditional branch ──
@@ -191,6 +191,6 @@ fn conditional_escape(flag: bool, a: i32, b: i32) -> *i32 {
 fn test_escape_conditional() {
     p1 := conditional_escape(true, 10, 20)
     p2 := conditional_escape(false, 10, 20)
-    assert(*p1 == 10)
-    assert(*p2 == 20)
+    assert(*p1 == 10, "")
+    assert(*p2 == 20, "")
 }

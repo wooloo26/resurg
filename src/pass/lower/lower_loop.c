@@ -327,7 +327,7 @@ static HirNode *lower_for_slice(Lower *low, const ASTNode *ast) {
     // var _end = _s.len
     HirNode *len_access =
         lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, slice_sym, loc),
-                                                        "len", iter_type, false, loc});
+                                                        RSG_FIELD_LEN, iter_type, false, loc});
 
     const char *end_name = lower_make_temp_name(low);
     HirSymSpec end_spec = {HIR_SYM_VAR, end_name, iter_type, false, loc};

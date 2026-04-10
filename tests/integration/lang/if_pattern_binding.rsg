@@ -10,10 +10,10 @@ fn find_value(key: str) -> ?i32 {
 fn test_if_let_some() {
     found := false
     if Some(v) := find_value("x") {
-        assert(v == 42)
+        assert(v == 42, "")
         found = true
     }
-    assert(found == true)
+    assert(found == true, "")
 }
 
 fn test_if_let_none() {
@@ -24,8 +24,8 @@ fn test_if_let_none() {
     } else {
         missed = true
     }
-    assert(found == false)
-    assert(missed == true)
+    assert(found == false, "")
+    assert(missed == true, "")
 }
 
 // ── if-let with Ok/Err ──
@@ -38,10 +38,10 @@ fn parse_integer(s: str) -> i32 ! str {
 fn test_if_let_ok() {
     found := false
     if Ok(value) := parse_integer("42") {
-        assert(value == 42)
+        assert(value == 42, "")
         found = true
     }
-    assert(found == true)
+    assert(found == true, "")
 }
 
 fn test_if_let_ok_miss() {
@@ -52,8 +52,8 @@ fn test_if_let_ok_miss() {
     } else {
         missed = true
     }
-    assert(found == false)
-    assert(missed == true)
+    assert(found == false, "")
+    assert(missed == true, "")
 }
 
 // ── if-let used as expression guard ──
@@ -62,10 +62,10 @@ fn test_if_let_guard() {
     result := find_value("x")
     found := false
     if Some(v) := result {
-        assert(v == 42)
+        assert(v == 42, "")
         found = true
     }
-    assert(found == true)
+    assert(found == true, "")
 }
 
 fn test_if_let_guard_miss() {
@@ -74,5 +74,5 @@ fn test_if_let_guard_miss() {
     if Some(_) := result {
         found = true
     }
-    assert(found == false)
+    assert(found == false, "")
 }

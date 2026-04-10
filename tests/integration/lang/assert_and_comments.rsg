@@ -6,9 +6,9 @@
 
 // ── assert without message ──
 fn test_assert_true() {
-    assert(true)
-    assert(1 == 1)
-    assert(1 + 1 == 2)
+    assert(true, "")
+    assert(1 == 1, "")
+    assert(1 + 1 == 2, "")
 }
 
 // ── assert with message ──
@@ -40,32 +40,32 @@ fn test_assert_function_result() {
 
 // ── assert with bool logic ──
 fn test_assert_bool_logic() {
-    assert(true && true)
-    assert(true || false)
-    assert(!(false && true))
-    assert(!(false || false))
+    assert(true && true, "")
+    assert(true || false, "")
+    assert(!(false && true), "")
+    assert(!(false || false), "")
 }
 
 // ── comments do not affect execution ──
 fn test_comments_are_ignored() {
     x := 5 // this is an inline comment
     // x = 10   <-- this line is commented out
-    assert(x == 5) // should still be 5
+    assert(x == 5, "") // should still be 5
 }
 
 // ── assert with f64 values ──
 fn test_assert_f64() {
     pi := 3.14
-    assert(pi == 3.14)
+    assert(pi == 3.14, "")
     assert(pi > 3.0, "pi should be > 3")
     assert(pi < 4.0, "pi should be < 4")
-    assert(1.5 + 1.5 == 3.0)
+    assert(1.5 + 1.5 == 3.0, "")
 }
 
 // ── assert with u32 values ──
 fn test_assert_u32() {
     var x: u32 = 100
-    assert(x == 100)
+    assert(x == 100, "")
     assert(x > 50, "x should be > 50")
     assert(x != 0, "x should not be zero")
 }
@@ -73,7 +73,7 @@ fn test_assert_u32() {
 // ── assert with str values ──
 fn test_assert_str() {
     s := "hello"
-    assert(s == "hello")
+    assert(s == "hello", "")
     assert(s != "world", "s should not be world")
     assert(s != "", "s should not be empty")
 }
@@ -85,13 +85,13 @@ fn test_comments_between_statements() {
     // comment between declarations
     b := 2
     // comment before assert
-    assert(a + b == 3) // comment at the end
+    assert(a + b == 3, "") // comment at the end
 }
 
 // ── assert with negated conditions ──
 fn test_assert_negation() {
-    assert(!false)
+    assert(!false, "")
     assert(!false, "negating false should be true")
-    assert(!(1 == 2))
+    assert(!(1 == 2), "")
     assert(!(1 > 2), "1 is not greater than 2")
 }

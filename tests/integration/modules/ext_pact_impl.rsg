@@ -22,7 +22,7 @@ ext Widget impl Describable {
 
 fn test_ext_pact_basic() {
     w := Widget { name = "button" }
-    assert(w.describe() == "button")
+    assert(w.describe() == "button", "")
 }
 
 // ── ext impl with multiple methods (pact requires + extra) ──
@@ -49,8 +49,8 @@ ext Item impl Displayable {
 
 fn test_ext_pact_multiple_methods() {
     it := Item { id = 42, label = "test" }
-    assert(it.display() == "test(42)")
-    assert(it.short_display() == "test")
+    assert(it.display() == "test(42)", "")
+    assert(it.short_display() == "test", "")
 }
 
 // ── ext impl for enum ──
@@ -73,7 +73,7 @@ ext Color impl Describable {
 
 fn test_ext_pact_on_enum() {
     c := Color::Green
-    assert(c.describe() == "green")
+    assert(c.describe() == "green", "")
 }
 
 // ── ext impl pact with non-pact extra methods ──
@@ -86,6 +86,6 @@ ext Widget {
 
 fn test_ext_with_extra_non_pact_methods() {
     w := Widget { name = "extra" }
-    assert(w.upper_name() == "extra")
-    assert(w.describe() == "extra")
+    assert(w.upper_name() == "extra", "")
+    assert(w.describe() == "extra", "")
 }

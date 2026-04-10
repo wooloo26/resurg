@@ -10,8 +10,8 @@ mod config {
 // ── public items are accessible ──
 
 fn test_public_fn_access() {
-    assert(config::get_max() == 100)
-    assert(config::get_computed() == 42)
+    assert(config::get_max() == 100, "")
+    assert(config::get_computed() == 42, "")
 }
 
 // ── use imported public item ──
@@ -19,7 +19,7 @@ fn test_public_fn_access() {
 use config::{get_max}
 
 fn test_use_imported() {
-    assert(get_max() == 100)
+    assert(get_max() == 100, "")
 }
 
 // ── use with alias ──
@@ -27,5 +27,5 @@ fn test_use_imported() {
 use config::{get_computed as compute}
 
 fn test_use_alias() {
-    assert(compute() == 42)
+    assert(compute() == 42, "")
 }

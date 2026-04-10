@@ -12,8 +12,8 @@ mod math {
 use math::*
 
 fn test_wildcard_import_functions() {
-    assert(add(2, 3) == 5)
-    assert(multiply(4, 5) == 20)
+    assert(add(2, 3) == 5, "")
+    assert(multiply(4, 5) == 20, "")
     println("wildcard works")
 }
 
@@ -40,14 +40,14 @@ use shapes::*
 fn test_wildcard_import_types() {
     c := Circle { radius = 5.0 }
     a := area(c)
-    assert(a > 78.0)
-    assert(a < 79.0)
+    assert(a > 78.0, "")
+    assert(a < 79.0, "")
 }
 
 fn test_wildcard_import_enum() {
     color := Color::Red
     match color {
-        Red => assert(true),
-        _ => assert(false),
+        Red => assert(true, ""),
+        _ => assert(false, ""),
     }
 }

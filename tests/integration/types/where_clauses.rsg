@@ -44,7 +44,7 @@ fn test_where_function() {
     a := MyInt { value = 10 }
     b := MyInt { value = 20 }
     result := max_val<MyInt>(a, b)
-    assert(result.value == 20)
+    assert(result.value == 20, "")
 }
 
 // ── where clause with multiple bounds ──
@@ -60,7 +60,7 @@ fn test_where_multiple_bounds() {
     a := MyInt { value = 5 }
     b := MyInt { value = 15 }
     s := show_max<MyInt>(a, b)
-    assert(s == "MyInt")
+    assert(s == "MyInt", "")
 }
 
 // ── where clause with multiple type params ──
@@ -87,7 +87,7 @@ fn test_where_multi_type_params() {
     a := MyInt { value = 1 }
     b := MyStr { data = "hello" }
     result := pick_and_show<MyInt, MyStr>(a, b)
-    assert(result == "MyInt")
+    assert(result == "MyInt", "")
 }
 
 // ── where clause on struct ──
@@ -101,8 +101,8 @@ where T: Ord,
 
 fn test_where_struct() {
     p := SortedPair<MyInt> { first = MyInt { value = 1 }, second = MyInt { value = 2 } }
-    assert(p.first.value == 1)
-    assert(p.second.value == 2)
+    assert(p.first.value == 1, "")
+    assert(p.second.value == 2, "")
 }
 
 // ── where clause on pact ──
@@ -125,5 +125,5 @@ fn test_where_pact() {
     t := IdentityTransform {}
     input := MyInt { value = 99 }
     output := t.transform(input)
-    assert(output.value == 99)
+    assert(output.value == 99, "")
 }

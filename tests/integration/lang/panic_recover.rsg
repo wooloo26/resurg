@@ -52,8 +52,8 @@ fn no_panic() -> ?str {
 fn test_recover_no_panic() {
     r := no_panic()
     match r {
-        None => assert(true),
-        _ => assert(false),
+        None => assert(true, ""),
+        _ => assert(false, ""),
     }
 }
 
@@ -79,9 +79,9 @@ fn defer_order() -> ?str {
 fn test_defer_lifo_with_panic() {
     r := defer_order()
     if Some(_) := r {
-        assert(true)
+        assert(true, "")
     } else {
-        assert(false)
+        assert(false, "")
     }
 }
 
@@ -108,9 +108,9 @@ fn outer_catch() -> ?str {
 fn test_nested_panic() {
     r := outer_catch()
     if Some(_) := r {
-        assert(true)
+        assert(true, "")
     } else {
-        assert(false)
+        assert(false, "")
     }
 }
 

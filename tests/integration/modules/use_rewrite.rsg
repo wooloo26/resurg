@@ -4,9 +4,9 @@
 
 fn test_qualified_access() {
     result := math::add(2, 3)
-    assert(result == 5)
+    assert(result == 5, "")
     product := math::multiply(4, 5)
-    assert(product == 20)
+    assert(product == 20, "")
 }
 
 // ── single selective import with :: ──
@@ -20,7 +20,7 @@ mod math {
 use math::{add}
 
 fn test_use_single_import() {
-    assert(add(2, 3) == 5)
+    assert(add(2, 3) == 5, "")
 }
 
 // ── multiple selective imports with :: ──
@@ -28,8 +28,8 @@ fn test_use_single_import() {
 use math::{multiply, subtract}
 
 fn test_use_multiple_imports() {
-    assert(multiply(4, 5) == 20)
-    assert(subtract(10, 3) == 7)
+    assert(multiply(4, 5) == 20, "")
+    assert(subtract(10, 3) == 7, "")
 }
 
 // ── alias import with :: ──
@@ -37,7 +37,7 @@ fn test_use_multiple_imports() {
 use math::{add as sum}
 
 fn test_use_alias() {
-    assert(sum(10, 20) == 30)
+    assert(sum(10, 20) == 30, "")
 }
 
 // ── mixed alias and plain imports ──
@@ -51,9 +51,9 @@ mod utils {
 use utils::{double, triple as t, negate}
 
 fn test_use_mixed_alias() {
-    assert(double(5) == 10)
-    assert(t(5) == 15)
-    assert(negate(5) == -5)
+    assert(double(5) == 10, "")
+    assert(t(5) == 15, "")
+    assert(negate(5) == -5, "")
 }
 
 // ── single path import (no braces) ──
@@ -65,7 +65,7 @@ mod ops {
 use ops::square
 
 fn test_use_path_import() {
-    assert(square(7) == 49)
+    assert(square(7) == 49, "")
 }
 
 // ── nested module path with :: selective ──
@@ -80,8 +80,8 @@ mod outer {
 use outer::inner::{greet, farewell}
 
 fn test_use_nested_module_path() {
-    assert(greet() == "hello")
-    assert(farewell() == "bye")
+    assert(greet() == "hello", "")
+    assert(farewell() == "bye", "")
 }
 
 // ── super:: import inside nested module ──
@@ -99,7 +99,7 @@ mod parent {
 }
 
 fn test_use_super_import() {
-    assert(parent::child::call_parent() == 100)
+    assert(parent::child::call_parent() == 100, "")
 }
 
 // ── super::super:: import through two levels ──
@@ -119,7 +119,7 @@ mod top {
 }
 
 fn test_use_super_super() {
-    assert(top::mid::bottom::deep_call() == 42)
+    assert(top::mid::bottom::deep_call() == 42, "")
 }
 
 // ── nested path single import ──
@@ -127,5 +127,5 @@ fn test_use_super_super() {
 use outer::inner::greet as hi
 
 fn test_use_nested_path_single() {
-    assert(hi() == "hello")
+    assert(hi() == "hello", "")
 }

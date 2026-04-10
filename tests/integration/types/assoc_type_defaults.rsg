@@ -55,12 +55,12 @@ ext RangeIter impl Iterator {
 
 fn test_default_index_inherited() {
     iter := RangeIter { current = 0, end = 3 }
-    assert(iter.current_index() == 0)
+    assert(iter.current_index() == 0, "")
     match iter.next() {
-        Some(v) => assert(v.value == 0),
-        None => assert(false),
+        Some(v) => assert(v.value == 0, ""),
+        None => assert(false, ""),
     }
-    assert(iter.current_index() == 1)
+    assert(iter.current_index() == 1, "")
 }
 
 // ── struct that overrides default with another Clone type ──
@@ -97,12 +97,12 @@ ext WrappedIter impl Iterator {
 
 fn test_default_overridden() {
     iter := WrappedIter {}
-    assert(iter.current_index() == 0)
+    assert(iter.current_index() == 0, "")
     match iter.next() {
-        Some(s) => assert(s.data == "item"),
-        None => assert(false),
+        Some(s) => assert(s.data == "item", ""),
+        None => assert(false, ""),
     }
-    assert(iter.current_index() == 1)
+    assert(iter.current_index() == 1, "")
 }
 
 // ── struct inheriting all defaults (no bounds) ──
@@ -127,7 +127,7 @@ ext SimpleAcc impl Accumulator {
 
 fn test_all_defaults_inherited() {
     acc := SimpleAcc {}
-    assert(acc.accumulate(5) == false)
-    assert(acc.accumulate(6) == true)
-    assert(acc.total == 11)
+    assert(acc.accumulate(5) == false, "")
+    assert(acc.accumulate(6) == true, "")
+    assert(acc.total == 11, "")
 }

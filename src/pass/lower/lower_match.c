@@ -22,7 +22,8 @@ HirNode *lower_pattern_cond(Lower *low, const ASTPattern *pattern, const Pattern
             BUF_PUSH(args, operand->ref);
             BUF_PUSH(args, lit);
             return lower_make_builtin_call(
-                low, &(BuiltinCallSpec){"rsg_str_equal", &TYPE_BOOL_INST, args, loc});
+                low,
+                &(BuiltinCallSpec){RSG_FN_STR_EQUAL, &TYPE_BOOL_INST, args, loc, INTRINSIC_NONE});
         }
         HirNode *cmp = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
         cmp->binary.op = TOKEN_EQUAL_EQUAL;

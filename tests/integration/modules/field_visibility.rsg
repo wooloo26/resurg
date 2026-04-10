@@ -10,16 +10,16 @@ use self::field_vis_mod::read_secret
 
 fn test_pub_field_access() {
     c := make_config()
-    assert(c.name == "test")
-    assert(c.enabled == true)
+    assert(c.name == "test", "")
+    assert(c.enabled == true, "")
 }
 
 // ── construct with pub fields only, private gets default ──
 
 fn test_pub_field_construction() {
     c := Config { name = "custom", enabled = false }
-    assert(c.name == "custom")
-    assert(c.enabled == false)
+    assert(c.name == "custom", "")
+    assert(c.enabled == false, "")
 }
 
 // ── access private field via module-internal accessor ──
@@ -27,7 +27,7 @@ fn test_pub_field_construction() {
 fn test_private_field_via_accessor() {
     c := make_config()
     s := read_secret(c)
-    assert(s == 99)
+    assert(s == 99, "")
 }
 
 // ── EXPECT-STDOUT: ──

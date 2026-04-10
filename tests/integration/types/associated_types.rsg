@@ -36,24 +36,24 @@ ext RangeIter impl Iterator {
 
 fn test_range_iter_basic() {
     iter := RangeIter { current = 0, end = 3 }
-    assert(iter.has_next())
+    assert(iter.has_next(), "")
 
     match iter.next() {
-        Some(v) => assert(v == 0),
-        None => assert(false),
+        Some(v) => assert(v == 0, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(v) => assert(v == 1),
-        None => assert(false),
+        Some(v) => assert(v == 1, ""),
+        None => assert(false, ""),
     }
     match iter.next() {
-        Some(v) => assert(v == 2),
-        None => assert(false),
+        Some(v) => assert(v == 2, ""),
+        None => assert(false, ""),
     }
-    assert(iter.has_next() == false)
+    assert(iter.has_next() == false, "")
     match iter.next() {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -66,16 +66,16 @@ fn get_next<I: Iterator>(mut iter: *I) -> ?I::Item {
 fn test_get_next() {
     iter := RangeIter { current = 0, end = 2 }
     match get_next<RangeIter>(mut &iter) {
-        Some(v) => assert(v == 0),
-        None => assert(false),
+        Some(v) => assert(v == 0, ""),
+        None => assert(false, ""),
     }
     match get_next<RangeIter>(mut &iter) {
-        Some(v) => assert(v == 1),
-        None => assert(false),
+        Some(v) => assert(v == 1, ""),
+        None => assert(false, ""),
     }
     match get_next<RangeIter>(mut &iter) {
-        Some(_) => assert(false),
-        None => assert(true),
+        Some(_) => assert(false, ""),
+        None => assert(true, ""),
     }
 }
 
@@ -106,12 +106,12 @@ ext Counter impl Iterator {
 fn test_self_assoc_type() {
     c := Counter {}
     match c.next() {
-        Some(v) => assert(v == 0),
-        None => assert(false),
+        Some(v) => assert(v == 0, ""),
+        None => assert(false, ""),
     }
     match c.next() {
-        Some(v) => assert(v == 1),
-        None => assert(false),
+        Some(v) => assert(v == 1, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -158,10 +158,10 @@ ext MyList impl Collection {
 
 fn test_collection_associated_types() {
     list := MyList { a = MyItem { value = 10 }, b = MyItem { value = 20 } }
-    assert(list.count() == 2)
+    assert(list.count() == 2, "")
     match list.first() {
-        Some(item) => assert(item.value == 10),
-        None => assert(false),
+        Some(item) => assert(item.value == 10, ""),
+        None => assert(false, ""),
     }
 }
 
@@ -189,5 +189,5 @@ ext SimpleGraph impl Graph {
 
 fn test_graph_associated_types() {
     g := SimpleGraph { count = 5 }
-    assert(g.node_count() == 5)
+    assert(g.node_count() == 5, "")
 }

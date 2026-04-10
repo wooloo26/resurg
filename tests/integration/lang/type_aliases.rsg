@@ -5,7 +5,7 @@ type ID = u64
 
 fn test_alias_basic() {
     var x: ID = 42
-    assert(x == 42)
+    assert(x == 42, "")
 }
 
 // ── alias for signed integer ──
@@ -13,9 +13,9 @@ type Score = i32
 
 fn test_alias_signed() {
     var s: Score = -100
-    assert(s == -100)
+    assert(s == -100, "")
     s = s + 200
-    assert(s == 100)
+    assert(s == 100, "")
 }
 
 // ── alias for floating point ──
@@ -23,7 +23,7 @@ type Meters = f64
 
 fn test_alias_float() {
     var distance: Meters = 3.14
-    assert(distance == 3.14)
+    assert(distance == 3.14, "")
 }
 
 // ── alias for bool ──
@@ -31,9 +31,9 @@ type Flag = bool
 
 fn test_alias_bool() {
     var active: Flag = true
-    assert(active == true)
+    assert(active == true, "")
     active = false
-    assert(active == false)
+    assert(active == false, "")
 }
 
 // ── alias for str ──
@@ -41,7 +41,7 @@ type Name = str
 
 fn test_alias_str() {
     var name: Name = "Alice"
-    assert(name == "Alice")
+    assert(name == "Alice", "")
 }
 
 // ── alias used in function signatures ──
@@ -54,8 +54,8 @@ fn is_adult(age: Age) -> bool {
 fn test_alias_in_function() {
     var a: Age = 25
     var b: Age = 10
-    assert(is_adult(a) == true)
-    assert(is_adult(b) == false)
+    assert(is_adult(a) == true, "")
+    assert(is_adult(b) == false, "")
 }
 
 // ── alias for small integer ──
@@ -63,9 +63,9 @@ type Byte = u8
 
 fn test_alias_u8() {
     var b: Byte = 255
-    assert(b == 255)
+    assert(b == 255, "")
     var c: Byte = 0
-    assert(c == 0)
+    assert(c == 0, "")
 }
 
 // ── alias is interchangeable with underlying type ──
@@ -79,7 +79,7 @@ fn test_alias_interchangeable() {
     var x: Count = 10
     var y: i32 = 20
     // alias and underlying type should be interchangeable
-    assert(add_counts(x, y) == 30)
+    assert(add_counts(x, y) == 30, "")
 }
 
 // ── alias for platform-sized types ──
@@ -87,9 +87,9 @@ type Index = usize
 
 fn test_alias_usize() {
     var idx: Index = 0
-    assert(idx == 0)
+    assert(idx == 0, "")
     idx = 99
-    assert(idx == 99)
+    assert(idx == 99, "")
 }
 
 // ── multiple aliases ──
@@ -103,5 +103,5 @@ fn area(w: Width, h: Height) -> u32 {
 fn test_multiple_aliases() {
     var w: Width = 10
     var h: Height = 20
-    assert(area(w, h) == 200)
+    assert(area(w, h) == 200, "")
 }

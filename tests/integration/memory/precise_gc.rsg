@@ -27,8 +27,8 @@ fn test_escaped_root_survives() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(p.x == 1.0)
-    assert(p.y == 2.0)
+    assert(p.x == 1.0, "")
+    assert(p.y == 2.0, "")
 }
 
 // ── multiple roots from different call frames ──
@@ -45,12 +45,12 @@ fn test_multi_frame_roots() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(a.x == 10.0)
-    assert(a.y == 20.0)
-    assert(b.value == 42)
-    assert(b.label == "hello")
-    assert(c.x == 30.0)
-    assert(c.y == 40.0)
+    assert(a.x == 10.0, "")
+    assert(a.y == 20.0, "")
+    assert(b.value == 42, "")
+    assert(b.label == "hello", "")
+    assert(c.x == 30.0, "")
+    assert(c.y == 40.0, "")
 }
 
 // ── interior pointers: struct fields pointing to GC objects ──
@@ -62,10 +62,10 @@ fn test_interior_pointers_traced() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(pair.left.x == 1.0)
-    assert(pair.left.y == 2.0)
-    assert(pair.right.x == 3.0)
-    assert(pair.right.y == 4.0)
+    assert(pair.left.x == 1.0, "")
+    assert(pair.left.y == 2.0, "")
+    assert(pair.right.x == 3.0, "")
+    assert(pair.right.y == 4.0, "")
 }
 
 // ── transitive reachability: nested struct pointers ──
@@ -79,10 +79,10 @@ fn test_transitive_reachability() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(p1.left.x == 1.0)
-    assert(p1.right.y == 4.0)
-    assert(p2.left.x == 5.0)
-    assert(p2.right.x == 1.0)
+    assert(p1.left.x == 1.0, "")
+    assert(p1.right.y == 4.0, "")
+    assert(p2.left.x == 5.0, "")
+    assert(p2.right.x == 1.0, "")
 }
 
 // ── dead objects are collected: only live roots survive ──
@@ -99,8 +99,8 @@ fn test_dead_objects_collected() {
     // allocating more should not cause unbounded growth
     live := make_point(99.0, 88.0)
     allocate_garbage(500)
-    assert(live.x == 99.0)
-    assert(live.y == 88.0)
+    assert(live.x == 99.0, "")
+    assert(live.y == 88.0, "")
 }
 
 // ── pointer aliasing: both aliases keep object alive ──
@@ -112,8 +112,8 @@ fn test_aliased_roots() {
         tmp := make_point(0.0, 0.0)
     }
     q.x = 77.0
-    assert(p.x == 77.0)
-    assert(q.x == 77.0)
+    assert(p.x == 77.0, "")
+    assert(q.x == 77.0, "")
 }
 
 // ── pointer from conditional branch survives ──
@@ -132,10 +132,10 @@ fn test_conditional_root() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(a.x == 1.0)
-    assert(a.y == 2.0)
-    assert(b.x == 3.0)
-    assert(b.y == 4.0)
+    assert(a.x == 1.0, "")
+    assert(a.y == 2.0, "")
+    assert(b.x == 3.0, "")
+    assert(b.y == 4.0, "")
 }
 
 // ── mutation through pointer after GC pressure ──
@@ -147,8 +147,8 @@ fn test_mutation_after_collection() {
     }
     p.x = 123.0
     p.y = 456.0
-    assert(p.x == 123.0)
-    assert(p.y == 456.0)
+    assert(p.x == 123.0, "")
+    assert(p.y == 456.0, "")
 }
 
 // ── string fields in heap objects survive GC ──
@@ -158,8 +158,8 @@ fn test_string_fields_survive() {
     for 0..1000 |i| {
         tmp := make_node(0, "garbage")
     }
-    assert(n.value == 1)
-    assert(n.label == "precise")
+    assert(n.value == 1, "")
+    assert(n.label == "precise", "")
 }
 
 // ── multiple independent allocations in sequence ──
@@ -173,9 +173,9 @@ fn test_sequential_allocations() {
     for 0..1000 |i| {
         tmp := make_point(0.0, 0.0)
     }
-    assert(p1.x == 1.0)
-    assert(p2.x == 2.0)
-    assert(p3.x == 3.0)
-    assert(p4.x == 4.0)
-    assert(p5.x == 5.0)
+    assert(p1.x == 1.0, "")
+    assert(p2.x == 2.0, "")
+    assert(p3.x == 3.0, "")
+    assert(p4.x == 4.0, "")
+    assert(p5.x == 5.0, "")
 }

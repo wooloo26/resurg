@@ -6,7 +6,7 @@ fn test_shared_mutation() {
     s := []i32{1, 2, 3, 4, 5}
     t := s[1..4]
     t[0] = 99
-    assert(s[1] == 99)
+    assert(s[1] == 99, "")
 }
 
 // ── mutation through original visible in sub-slice ──
@@ -15,7 +15,7 @@ fn test_shared_mutation_reverse() {
     s := []i32{10, 20, 30, 40, 50}
     t := s[2..]
     s[3] = 999
-    assert(t[1] == 999)
+    assert(t[1] == 999, "")
 }
 
 // ── two sub-slices share storage ──
@@ -25,8 +25,8 @@ fn test_two_sub_slices_share() {
     a := s[0..3]
     b := s[1..4]
     a[2] = 77
-    assert(b[1] == 77)
-    assert(s[2] == 77)
+    assert(b[1] == 77, "")
+    assert(s[2] == 77, "")
 }
 
 // ── array-to-slice creates independent copy ──
@@ -35,7 +35,7 @@ fn test_array_to_slice_independent() {
     arr := [3]i32{1, 2, 3}
     s := arr[..]
     s[0] = 42
-    assert(arr[0] == 1)
+    assert(arr[0] == 1, "")
 }
 
 // ── chained sub-slice shares storage ──
@@ -45,6 +45,6 @@ fn test_chained_sub_slice_shares() {
     t := s[1..5]
     u := t[1..3]
     u[0] = 888
-    assert(s[2] == 888)
-    assert(t[1] == 888)
+    assert(s[2] == 888, "")
+    assert(t[1] == 888, "")
 }

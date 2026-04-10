@@ -29,12 +29,12 @@ ext Direction {
 
 fn test_ext_enum_value_receiver() {
     n := Direction::North
-    assert(n.is_vertical())
-    assert(n.is_horizontal() == false)
+    assert(n.is_vertical(), "")
+    assert(n.is_horizontal() == false, "")
 
     e := Direction::East
-    assert(e.is_horizontal())
-    assert(e.is_vertical() == false)
+    assert(e.is_horizontal(), "")
+    assert(e.is_vertical() == false, "")
 }
 
 // ── ADT enum with tuple and struct variants ──
@@ -62,11 +62,11 @@ ext Shape {
 
 fn test_ext_adt_enum() {
     c := Shape::Circle(2.0)
-    assert(c.describe() == "circle")
+    assert(c.describe() == "circle", "")
 
     r := Shape::Rect { w = 3.0, h = 4.0 }
-    assert(r.area() == 12.0)
-    assert(r.describe() == "rectangle")
+    assert(r.area() == 12.0, "")
+    assert(r.describe() == "rectangle", "")
 }
 
 // ── ext on enum with pointer receiver ──
@@ -82,10 +82,10 @@ ext Shape {
 
 fn test_ext_enum_pointer_receiver() {
     c := Shape::Circle(1.0)
-    assert(c.is_circle())
+    assert(c.is_circle(), "")
 
     r := Shape::Rect { w = 1.0, h = 1.0 }
-    assert(r.is_circle() == false)
+    assert(r.is_circle() == false, "")
 }
 
 // ── ext methods on enum (no inline methods) ──
@@ -113,10 +113,10 @@ ext Status {
 
 fn test_ext_enum_methods() {
     a := Status::Active
-    assert(a.is_active())
-    assert(a.is_inactive() == false)
+    assert(a.is_active(), "")
+    assert(a.is_inactive() == false, "")
 
     i := Status::Inactive
-    assert(i.is_active() == false)
-    assert(i.is_inactive())
+    assert(i.is_active() == false, "")
+    assert(i.is_inactive(), "")
 }
