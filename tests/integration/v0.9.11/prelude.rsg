@@ -1,0 +1,87 @@
+// v0.9.11 — prelude: built-in functions available without import
+// EXPECT-STDOUT: prelude println works
+// EXPECT-STDOUT: 42
+
+// ── println available without import ──
+
+fn test_prelude_println() {
+    println("prelude println works")
+}
+
+// ── print available without import ──
+
+fn test_prelude_print() {
+    println("{42}")
+}
+
+// ── assert available without import ──
+
+fn test_prelude_assert() {
+    assert(true)
+    assert(1 + 1 == 2)
+    assert(1 + 1 == 2, "math works")
+}
+
+// ── len available without import ──
+
+fn test_prelude_len() {
+    s := []i32{1, 2, 3}
+    assert(len(s) == 3)
+    assert(len("hello") == 5)
+    assert(len("") == 0)
+}
+
+// ── panic available without import ──
+
+fn test_prelude_panic() {
+    var caught: ?str = None
+
+    defer {
+        if Some(msg) := recover() {
+            caught = Some(msg)
+        }
+    }
+
+    panic("prelude panic")
+}
+
+// ── recover available without import (tested via panic test above) ──
+
+// ── Option (Some/None) available without import ──
+
+fn test_prelude_option() {
+    var x: ?i32 = Some(42)
+    var y: ?i32 = None
+
+    if Some(v) := x {
+        assert(v == 42)
+    } else {
+        assert(false)
+    }
+
+    match y {
+        None => assert(true),
+        _ => assert(false),
+    }
+}
+
+// ── Result (Ok/Err) available without import ──
+
+fn safe_div(a: f64, b: f64) -> f64 ! str {
+    if b == 0.0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn test_prelude_result() {
+    r := safe_div(10.0, 2.0)
+    match r {
+        Ok(v) => assert(v == 5.0),
+        Err(_) => assert(false),
+    }
+
+    r2 := safe_div(1.0, 0.0)
+    match r2 {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "division by zero"),
+    }
+}

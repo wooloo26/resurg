@@ -23,6 +23,12 @@
 /** Maximum src file size accepted by the pipeline (64 MiB). */
 #define MAX_SRC_SIZE (64L * 1024 * 1024)
 
+#ifdef _WIN32
+#define PATH_SEP '\\'
+#else
+#define PATH_SEP '/'
+#endif
+
 struct Pipeline {
     Arena *arena;
     Arena *hir_arena;
@@ -117,6 +123,138 @@ static ASTNode **pipeline_load_module(void *ctx, Arena *arena, const char *mod_p
 
 // ── Pipeline stages ────────────────────────────────────────────────────
 
+/** Extract the directory portion of @p file_path into @p arena. */
+static const char *pipeline_dir_of(Arena *arena, const char *file_path) {
+    const char *last_sep = strrchr(file_path, '/');
+#ifdef _WIN32
+    const char *last_bsep = strrchr(file_path, '\\');
+    if (last_bsep != NULL && (last_sep == NULL || last_bsep > last_sep)) {
+        last_sep = last_bsep;
+    }
+#endif
+    if (last_sep == NULL) {
+        return arena_strdup(arena, ".");
+    }
+    size_t len = (size_t)(last_sep - file_path);
+    char *dir = arena_alloc(arena, len + 1);
+    memcpy(dir, file_path, len);
+    dir[len] = '\0';
+    return dir;
+}
+
+/** Return true if @p path names an existing regular file. */
+static bool file_exists(const char *path) {
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+/**
+ * Discover the std library directory.
+ *
+ * Search order (first hit wins):
+ *   1. Explicit --std-path=<dir>
+ *   2. RSG_STD_PATH environment variable
+ *   3. <exe_dir>/../std/  (development layout)
+ *   4. <exe_dir>/../lib/rsg/std/  (installed layout)
+ *
+ * Returns NULL when no std directory is found.
+ */
+static const char *find_std_path(Arena *arena, const PipelineOptions *options) {
+    // 1. Explicit --std-path=<dir>
+    if (options->std_path != NULL) {
+        return options->std_path;
+    }
+
+    // 2. RSG_STD_PATH environment variable
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    const char *env = getenv("RSG_STD_PATH");
+    if (env != NULL && env[0] != '\0') {
+        return env;
+    }
+
+    // 3 & 4. Relative to the compiler executable
+    if (options->argv0 != NULL) {
+        const char *exe_dir = pipeline_dir_of(arena, options->argv0);
+
+        // Development layout: <exe_dir>/../std/
+        const char *dev = arena_sprintf(arena, "%s%c..%cstd", exe_dir, PATH_SEP, PATH_SEP);
+        const char *probe = arena_sprintf(arena, "%s%cprelude.rsg", dev, PATH_SEP);
+        if (file_exists(probe)) {
+            return dev;
+        }
+
+        // Installed layout: <exe_dir>/../lib/rsg/std/
+        const char *inst = arena_sprintf(arena, "%s%c..%clib%crsg%cstd", exe_dir, PATH_SEP,
+                                         PATH_SEP, PATH_SEP, PATH_SEP);
+        probe = arena_sprintf(arena, "%s%cprelude.rsg", inst, PATH_SEP);
+        if (file_exists(probe)) {
+            return inst;
+        }
+    }
+
+    return NULL;
+}
+
+/**
+ * Parse std/prelude.rsg and prepend its declarations to the user's file AST.
+ *
+ * Returns the discovered std directory path (for module resolution fallback),
+ * or NULL when prelude injection is disabled or unavailable.
+ */
+static const char *inject_prelude(Arena *arena, const PipelineOptions *options,
+                                  ASTNode *file_node) {
+    if (options->no_prelude) {
+        return NULL;
+    }
+
+    const char *std_dir = find_std_path(arena, options);
+    if (std_dir == NULL) {
+        return NULL;
+    }
+
+    const char *prelude_path = arena_sprintf(arena, "%s%cprelude.rsg", std_dir, PATH_SEP);
+    char *prelude_src = read_module_file(prelude_path);
+    if (prelude_src == NULL) {
+        return std_dir;
+    }
+
+    Lex *lex = lex_create(prelude_src, prelude_path, arena);
+    Token *tokens = lex_scan_all(lex);
+    lex_destroy(lex);
+
+    int32_t count = BUF_LEN(tokens);
+    Parser *parser = parser_create(tokens, count, arena, prelude_path);
+    ASTNode *prelude_file = parser_parse(parser);
+    int32_t errs = parser_err_count(parser);
+    parser_destroy(parser);
+    free(prelude_src);
+
+    if (errs > 0 || prelude_file == NULL) {
+        return std_dir;
+    }
+
+    // Prepend prelude declarations before the user's declarations.
+    int32_t prelude_count = BUF_LEN(prelude_file->file.decls);
+    if (prelude_count == 0) {
+        return std_dir;
+    }
+
+    int32_t user_count = BUF_LEN(file_node->file.decls);
+    ASTNode **merged = NULL;
+    for (int32_t i = 0; i < prelude_count; i++) {
+        BUF_PUSH(merged, prelude_file->file.decls[i]);
+    }
+    for (int32_t i = 0; i < user_count; i++) {
+        BUF_PUSH(merged, file_node->file.decls[i]);
+    }
+
+    // Replace the file's decl buf with the merged list.
+    BUF_FREE(file_node->file.decls);
+    file_node->file.decls = merged;
+
+    return std_dir;
+}
+
 /** Run the lex and optionally dump tokens.  Returns 0 on success, 1 on err. */
 static int stage_lex(const PipelineOptions *options, const char *src, Arena *arena,
                      Token **out_tokens) {
@@ -161,9 +299,12 @@ static ASTNode *stage_parse(const PipelineOptions *options, Token *tokens, int32
 }
 
 /** Run semantic analysis.  Returns true on success, false on errs. */
-static bool stage_sema(Arena *arena, ASTNode *file_node) {
+static bool stage_sema(Arena *arena, ASTNode *file_node, const char *std_search_dir) {
     Sema *sema = sema_create(arena);
     sema_set_module_loader(sema, pipeline_load_module, NULL);
+    if (std_search_dir != NULL) {
+        sema_set_std_search_dir(sema, std_search_dir);
+    }
     bool ok = sema_resolve(sema, file_node) && sema_check(sema, file_node) &&
               sema_mono(sema, file_node, sema_check_fn_body);
     sema_destroy(sema);
@@ -239,8 +380,11 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
         goto cleanup;
     }
 
+    // Stage 2.5: Prelude injection (parse std/prelude.rsg and prepend to file AST).
+    const char *std_dir = inject_prelude(pipeline->arena, options, file_node);
+
     // Stage 3: Semantic analysis (resolve → check → mono).
-    if (!stage_sema(pipeline->arena, file_node)) {
+    if (!stage_sema(pipeline->arena, file_node, std_dir)) {
         status = 1;
         goto cleanup;
     }

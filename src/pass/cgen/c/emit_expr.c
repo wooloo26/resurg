@@ -83,6 +83,22 @@ static bool is_rsg_assert_call(const HirNode *node) {
     return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_assert") == 0;
 }
 
+/** Return true if the callee is the rsg_panic runtime fn. */
+static bool is_rsg_panic_call(const HirNode *node) {
+    if (node->call.callee->kind != HIR_VAR_REF) {
+        return false;
+    }
+    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_panic") == 0;
+}
+
+/** Return true if the callee is the rsg_recover runtime fn. */
+static bool is_rsg_recover_call(const HirNode *node) {
+    if (node->call.callee->kind != HIR_VAR_REF) {
+        return false;
+    }
+    return strcmp(hir_sym_name(node->call.callee->var_ref.sym), "rsg_recover") == 0;
+}
+
 static bool is_rsg_slice_concat_call(const HirNode *node) {
     if (node->call.callee->kind != HIR_VAR_REF) {
         return false;
@@ -122,9 +138,56 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
     return arena_sprintf(cgen->arena, "rsg_assert(%s, %s, %s, %s)", cond, msg, file, line);
 }
 
+/**
+ * Emit rsg_panic(msg).
+ * The single arg is a str expression; extract .data for the C call.
+ */
+static const char *emit_rsg_panic_call(CGen *cgen, const HirNode *node) {
+    const HirNode *msg_node = node->call.args[0];
+    const char *msg;
+    if (msg_node->kind == HIR_STR_LIT) {
+        msg = arena_sprintf(cgen->arena, "\"%s\"",
+                            c_str_escape(cgen, msg_node->str_lit.value, msg_node->str_lit.len));
+    } else {
+        const char *msg_expr = emit_expr(cgen, msg_node);
+        msg = arena_sprintf(cgen->arena, "%s.data", msg_expr);
+    }
+    return arena_sprintf(cgen->arena, "rsg_panic(%s)", msg);
+}
+
+/**
+ * Emit rsg_recover() → ?str.
+ * Calls the C rsg_recover(), then builds an Option<str> from the result.
+ */
+static const char *emit_rsg_recover_call(CGen *cgen, const HirNode *node) {
+    const char *opt_type = c_type_for(cgen, node->type);
+    const char *tmp_raw = next_temp(cgen);
+    const char *tmp_opt = next_temp(cgen);
+    emit_line(cgen, "const char *%s = rsg_recover();", tmp_raw);
+    emit_line(cgen, "%s %s;", opt_type, tmp_opt);
+    emit_line(cgen, "if (%s != NULL) {", tmp_raw);
+    cgen->indent++;
+    emit_line(cgen, "%s._tag = 1;", tmp_opt);
+    emit_line(cgen, "%s._data.Some._0 = rsg_str_new(%s, (int32_t)strlen(%s));", tmp_opt, tmp_raw,
+              tmp_raw);
+    cgen->indent--;
+    emit_line(cgen, "} else {");
+    cgen->indent++;
+    emit_line(cgen, "%s._tag = 0;", tmp_opt);
+    cgen->indent--;
+    emit_line(cgen, "}");
+    return tmp_opt;
+}
+
 static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
     if (is_rsg_assert_call(node)) {
         return emit_rsg_assert_call(cgen, node);
+    }
+    if (is_rsg_panic_call(node)) {
+        return emit_rsg_panic_call(cgen, node);
+    }
+    if (is_rsg_recover_call(node)) {
+        return emit_rsg_recover_call(cgen, node);
     }
 
     // rsg_slice_concat(a, b) → rsg_slice_concat(a, b, sizeof(ElemType))

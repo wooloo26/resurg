@@ -53,9 +53,18 @@ static int32_t count_defers(const HirNode *node) {
     }
 }
 
-/** Emit defer bodies in LIFO order, guarded by their activation flags. */
-static void emit_deferred_cleanup(CGen *cgen, const Type *return_type) {
+/**
+ * Emit defer bodies in LIFO order, guarded by their activation flags.
+ * When @p has_panic_frame is true, adds panic frame pop + repanic logic.
+ * When @p panic_result_expr is non-NULL, re-reads the result expr after panic
+ * recovery (defers may have modified the return variable).
+ */
+static void emit_deferred_cleanup(CGen *cgen, const Type *return_type, bool has_panic_frame,
+                                  const char *panic_result_expr) {
     emit_line(cgen, "_rsg_cleanup:;");
+    if (has_panic_frame) {
+        emit_line(cgen, "rsg_panic_pop();");
+    }
     for (int32_t i = BUF_LEN(cgen->defer_bodies) - 1; i >= 0; i--) {
         const HirNode *defer_node = cgen->defer_bodies[i];
         if (defer_node->defer_stmt.body != NULL) {
@@ -66,7 +75,15 @@ static void emit_deferred_cleanup(CGen *cgen, const Type *return_type) {
             emit_line(cgen, "}");
         }
     }
-    if (return_type != NULL && return_type->kind != TYPE_UNIT) {
+    if (has_panic_frame) {
+        emit_line(cgen, "if (_rsg_panicked && rsg_is_panicking()) { rsg_repanic(); }");
+    }
+    if (return_type != NULL && return_type->kind != TYPE_UNIT && return_type->kind != TYPE_NEVER) {
+        // After panic recovery, defers may have modified the return variable.
+        // Re-read the trailing result expression to pick up those changes.
+        if (has_panic_frame && panic_result_expr != NULL) {
+            emit_line(cgen, "if (_rsg_panicked) { _rsg_result = %s; }", panic_result_expr);
+        }
         emit_line(cgen, "return _rsg_result;");
     }
 }
@@ -101,7 +118,8 @@ static void emit_discard_result(CGen *cgen, const HirNode *result_node) {
 static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
     const HirNode *body = fn_node->fn_decl.body;
     const Type *return_type = fn_node->fn_decl.return_type;
-    bool is_unit = return_type == NULL || return_type->kind == TYPE_UNIT;
+    bool is_unit =
+        return_type == NULL || return_type->kind == TYPE_UNIT || return_type->kind == TYPE_NEVER;
     bool is_main = strcmp(fn_node->fn_decl.name, "main") == 0;
     bool has_defers = tree_has_defers(body);
 
@@ -117,13 +135,29 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
         emit_line(cgen, "%s _rsg_result;", c_type_for(cgen, return_type));
     }
 
-    // Emit boolean activation flags for every defer in this function
+    // Emit volatile boolean activation flags for every defer in this function
     if (has_defers) {
         int32_t defer_count = count_defers(body);
         for (int32_t i = 0; i < defer_count; i++) {
-            emit_line(cgen, "bool _rsg_defer_%d = false;", i);
+            emit_line(cgen, "volatile bool _rsg_defer_%d = false;", i);
         }
     }
+
+    // Push a panic frame so defers run on panic (setjmp/longjmp)
+    if (has_defers) {
+        emit_line(cgen, "RsgPanicFrame _rsg_panic_frame;");
+        emit_line(cgen, "rsg_panic_push(&_rsg_panic_frame);");
+        emit_line(cgen, "volatile bool _rsg_panicked = false;");
+        emit_line(cgen, "if (setjmp(_rsg_panic_frame.env) != 0) {");
+        cgen->indent++;
+        emit_line(cgen, "_rsg_panicked = true;");
+        emit_line(cgen, "goto _rsg_cleanup;");
+        cgen->indent--;
+        emit_line(cgen, "}");
+    }
+
+    // Track trailing result expr for panic recovery re-read
+    const char *panic_result_expr = NULL;
 
     if (body != NULL && body->kind == HIR_BLOCK) {
         // Block body with optional trailing result
@@ -134,7 +168,11 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
             if (result_node->kind == HIR_ASSIGN) {
                 emit_stmt(cgen, result_node);
             } else if (!is_unit && !is_main) {
-                emit_return_or_defer(cgen, emit_expr(cgen, result_node), has_defers);
+                const char *result_c = emit_expr(cgen, result_node);
+                if (has_defers) {
+                    panic_result_expr = result_c;
+                }
+                emit_return_or_defer(cgen, result_c, has_defers);
             } else {
                 emit_discard_result(cgen, result_node);
             }
@@ -142,14 +180,18 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
     } else if (body != NULL) {
         // Expression body (fn foo() = expr)
         if (!is_unit && !is_main) {
-            emit_return_or_defer(cgen, emit_expr(cgen, body), has_defers);
+            const char *result_c = emit_expr(cgen, body);
+            if (has_defers) {
+                panic_result_expr = result_c;
+            }
+            emit_return_or_defer(cgen, result_c, has_defers);
         } else {
             emit_line(cgen, "(void)%s;", emit_expr(cgen, body));
         }
     }
 
     if (has_defers) {
-        emit_deferred_cleanup(cgen, is_unit ? NULL : return_type);
+        emit_deferred_cleanup(cgen, is_unit ? NULL : return_type, has_defers, panic_result_expr);
     }
 
     // Restore defer state

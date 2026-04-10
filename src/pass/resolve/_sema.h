@@ -150,6 +150,7 @@ struct Sema {
     const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
     const char *current_module;   // current module prefix (e.g. "math_helper"); NULL for root file
     const char *module_search_dir;    // directory for resolving filesystem modules
+    const char *std_search_dir;       // fallback directory for std library modules
     ModuleLoader module_loader;       // injected callback to load module files
     void *module_loader_ctx;          // opaque context for the module loader
     FnBodyChecker fn_body_checker;    // injected callback for mono to type-check cloned fn bodies

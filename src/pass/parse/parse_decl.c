@@ -746,33 +746,49 @@ static ASTNode *parse_ext_decl(Parser *parser) {
  *   use outer::inner::{name1, name2}
  *   use outer::inner::name [as alias]
  */
-static ASTNode *parse_use_decl(Parser *parser) {
+static ASTNode *parse_use_decl(Parser *parser, bool is_pub) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_USE);
 
     ASTNode *node = ast_new(parser->arena, NODE_USE_DECL, loc);
     node->use_decl.imported_names = NULL;
     node->use_decl.aliases = NULL;
+    node->use_decl.is_pub = is_pub;
+    node->use_decl.is_wildcard = false;
 
     // Collect path segments separated by ::
     const char **segments = NULL;
     BUF_PUSH(segments, parser_expect(parser, TOKEN_ID)->lexeme);
 
     bool selective = false;
+    bool wildcard = false;
     while (parser_match(parser, TOKEN_COLON_COLON)) {
         if (parser_check(parser, TOKEN_LEFT_BRACE)) {
             selective = true;
+            break;
+        }
+        if (parser_check(parser, TOKEN_STAR)) {
+            parser_advance(parser); // consume '*'
+            wildcard = true;
             break;
         }
         BUF_PUSH(segments, parser_expect(parser, TOKEN_ID)->lexeme);
     }
 
     // Require at least one :: (e.g., use module::name or use module::{...})
-    if (BUF_LEN(segments) < 2 && !selective) {
+    if (BUF_LEN(segments) < 2 && !selective && !wildcard) {
         rsg_err(loc, "expected '::' after module name in use declaration");
     }
 
-    if (selective) {
+    if (wildcard) {
+        // Wildcard import: use path::*
+        const char *path = segments[0];
+        for (int32_t i = 1; i < BUF_LEN(segments); i++) {
+            path = arena_sprintf(parser->arena, "%s::%s", path, segments[i]);
+        }
+        node->use_decl.module_path = path;
+        node->use_decl.is_wildcard = true;
+    } else if (selective) {
         // Selective import: use path::{name1, name2 as alias, ...}
         // Build module path from all segments
         const char *path = segments[0];
@@ -890,7 +906,7 @@ ASTNode *parser_parse_decl(Parser *parser) {
 
     // use
     if (parser_check(parser, TOKEN_USE)) {
-        return parse_use_decl(parser);
+        return parse_use_decl(parser, false);
     }
 
     // struct
@@ -969,8 +985,11 @@ ASTNode *parser_parse_decl(Parser *parser) {
         if (parser_check(parser, TOKEN_MODULE)) {
             return parse_module_decl(parser, true);
         }
+        if (parser_check(parser, TOKEN_USE)) {
+            return parse_use_decl(parser, true);
+        }
         rsg_err(parser_current_loc(parser),
-                "expected 'fn', 'struct', 'enum', 'pact', 'type', or 'mod' after 'pub'");
+                "expected 'fn', 'struct', 'enum', 'pact', 'type', 'mod', or 'use' after 'pub'");
         return NULL;
     }
 

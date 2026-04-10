@@ -160,12 +160,13 @@ bool rsg_str_equal(RsgStr left, RsgStr right) {
 void rsg_assert(bool cond, const char *msg, const char *file, int32_t line) {
     if (!cond) {
         if (msg != NULL) {
-            fprintf(stderr, "assertion failed at %s:%d: %s\n", file, line, msg);
+            rsg_panic(msg);
         } else {
-            fprintf(stderr, "assertion failed at %s:%d\n", file, line);
+            // Build "assertion failed at file:line"
+            char buf[512];
+            snprintf(buf, sizeof(buf), "assertion failed at %s:%d", file, line);
+            rsg_panic(buf);
         }
-        // NOLINTNEXTLINE(concurrency-mt-unsafe)
-        exit(1);
     }
 }
 
@@ -510,4 +511,64 @@ RsgSlice rsg_slice_concat(RsgSlice a, RsgSlice b, size_t elem_size) {
         memcpy((char *)data + (size_t)a.len * elem_size, b.data, (size_t)b.len * elem_size);
     }
     return (RsgSlice){.data = data, .len = total};
+}
+
+// ── Panic / Recover ───────────────────────────────────────────────────
+
+static RsgPanicFrame *g_rsg_panic_stack = NULL;
+static char *g_rsg_panic_msg = NULL;
+static bool g_rsg_panicking = false;
+
+void rsg_panic_push(RsgPanicFrame *frame) {
+    frame->prev = g_rsg_panic_stack;
+    g_rsg_panic_stack = frame;
+}
+
+void rsg_panic_pop(void) {
+    if (g_rsg_panic_stack != NULL) {
+        g_rsg_panic_stack = g_rsg_panic_stack->prev;
+    }
+}
+
+void rsg_panic(const char *msg) {
+    free(g_rsg_panic_msg);
+    g_rsg_panic_msg = NULL;
+    if (msg != NULL) {
+        size_t len = strlen(msg);
+        g_rsg_panic_msg = (char *)malloc(len + 1);
+        if (g_rsg_panic_msg != NULL) {
+            memcpy(g_rsg_panic_msg, msg, len + 1);
+        }
+    }
+    g_rsg_panicking = true;
+
+    if (g_rsg_panic_stack != NULL) {
+        longjmp(g_rsg_panic_stack->env, 1);
+    }
+
+    // No recovery frame — print and exit
+    fprintf(stderr, "panic: %s\n", msg != NULL ? msg : "(nil)");
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    exit(1);
+}
+
+const char *rsg_recover(void) {
+    if (!g_rsg_panicking) {
+        return NULL;
+    }
+    g_rsg_panicking = false;
+    return g_rsg_panic_msg;
+}
+
+bool rsg_is_panicking(void) {
+    return g_rsg_panicking;
+}
+
+void rsg_repanic(void) {
+    if (g_rsg_panic_stack != NULL) {
+        longjmp(g_rsg_panic_stack->env, 1);
+    }
+    fprintf(stderr, "panic: %s\n", g_rsg_panic_msg != NULL ? g_rsg_panic_msg : "(nil)");
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
+    exit(1);
 }

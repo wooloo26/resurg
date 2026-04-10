@@ -10,25 +10,9 @@
 
 // ── Initialization ────────────────────────────────────────────────
 
-/** Register a single built-in function. */
-static void register_fn(BuiltinRegistry *reg, const char *name, const Type *return_type,
-                        BuiltinFnKind kind) {
-    BuiltinFn *fn = rsg_malloc(sizeof(*fn));
-    fn->name = name;
-    fn->return_type = return_type;
-    fn->kind = kind;
-    hash_table_insert(&reg->fn_table, name, fn);
-}
-
 void builtin_registry_init(BuiltinRegistry *reg) {
     hash_table_init(&reg->fn_table, NULL);
     hash_table_init(&reg->member_table, NULL);
-
-    // Built-in functions
-    register_fn(reg, "print", &TYPE_UNIT_INST, BUILTIN_PRINT);
-    register_fn(reg, "println", &TYPE_UNIT_INST, BUILTIN_PRINTLN);
-    register_fn(reg, "assert", &TYPE_UNIT_INST, BUILTIN_ASSERT);
-    register_fn(reg, "len", &TYPE_I32_INST, BUILTIN_LEN);
 }
 
 void builtin_registry_destroy(BuiltinRegistry *reg) {

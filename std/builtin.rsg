@@ -1,0 +1,4 @@
+// std/builtin.rsg — core built-in module declarations
+
+pub mod io
+pub mod ops

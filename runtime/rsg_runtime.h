@@ -8,6 +8,7 @@
  * Provides: immutable ref-counted strs, str interpolation
  * helpers, assert, and typed I/O fns.
  */
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -161,5 +162,37 @@ typedef struct {
     void (*fn)(void);
     void *env;
 } RsgFn;
+
+// ── Panic / Recover ───────────────────────────────────────────────────
+
+/** Recovery frame pushed by each function with defers. */
+typedef struct RsgPanicFrame {
+    jmp_buf env;
+    struct RsgPanicFrame *prev;
+} RsgPanicFrame;
+
+/** Push a recovery frame onto the panic stack. */
+void rsg_panic_push(RsgPanicFrame *frame);
+
+/** Pop the top recovery frame from the panic stack. */
+void rsg_panic_pop(void);
+
+/**
+ * Trigger a panic with @p msg.  Unwinds to the nearest recovery
+ * frame via longjmp, or prints to stderr and exits if none.
+ */
+void rsg_panic(const char *msg);
+
+/**
+ * In a defer body, catch an active panic and return its message.
+ * Returns NULL if no panic is active.  Clears the panic state.
+ */
+const char *rsg_recover(void);
+
+/** Return true if a panic is currently active (not yet recovered). */
+bool rsg_is_panicking(void);
+
+/** Re-trigger the current panic (propagate to parent frame or exit). */
+void rsg_repanic(void);
 
 #endif // RSG_RUNTIME_H

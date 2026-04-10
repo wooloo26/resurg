@@ -1,0 +1,50 @@
+// v0.9.11 — pub use: re-export imports from a module
+// EXPECT-STDOUT: pub use works
+// EXPECT-STDOUT: selective pub use works
+
+// ── pub use with wildcard re-exports all pub items ──
+
+mod inner {
+    pub fn helper() -> i32 = 42
+    pub fn double(x: i32) -> i32 = x * 2
+
+    pub struct Config {
+        pub value: i32 = 0
+    }
+}
+
+mod facade {
+    pub use super::inner::*
+}
+
+use facade::*
+
+fn test_pub_use_wildcard_reexport_fn() {
+    assert(helper() == 42)
+    assert(double(5) == 10)
+    println("pub use works")
+}
+
+fn test_pub_use_wildcard_reexport_struct() {
+    c := Config { value = 99 }
+    assert(c.value == 99)
+}
+
+// ── pub use with selective imports ──
+
+mod math_ops {
+    pub fn add(a: i32, b: i32) -> i32 = a + b
+    pub fn sub(a: i32, b: i32) -> i32 = a - b
+}
+
+mod math_facade {
+    pub use super::math_ops::{add, sub}
+}
+
+use math_facade::{add, sub}
+
+fn test_pub_use_selective_reexport() {
+    assert(add(10, 20) == 30)
+    assert(sub(10, 3) == 7)
+    println("selective pub use works")
+}

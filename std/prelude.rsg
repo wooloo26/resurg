@@ -1,0 +1,8 @@
+// std/prelude.rsg — compiler auto-imported prelude
+//
+// Types: Option<T>, Result<T, E> and variants (Some, None, Ok, Err)
+// are injected directly by the compiler and available everywhere.
+
+mod builtin
+pub use builtin::io::{print, println}
+pub use builtin::ops::{assert, len, panic, recover}

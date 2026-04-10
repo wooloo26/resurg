@@ -1,0 +1,6 @@
+// TEST: runtime_error
+// EXPECT-ERROR: panic: boom
+
+fn main() {
+    panic("boom")
+}

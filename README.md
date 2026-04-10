@@ -1300,15 +1300,15 @@ pub declare fn println(s: str)
 pub declare fn assert(cond: bool, msg: ?str)
 
 ext str {
-    declare fn len(s)
+    pub declare fn len(s)
 }
 
 ext<T> []T {
-    declare fn len(s)
+    pub declare fn len(s)
 }
 
 ext<T, comptime N: usize> [N]T {
-    declare fn len(s)
+    pub declare fn len(s)
 }
 ```
 

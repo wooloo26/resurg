@@ -11,11 +11,13 @@ static noreturn void usage(void) {
     fprintf(stderr, "Usage: resurg <input.rsg> [options]\n"
                     "\n"
                     "Options:\n"
-                    "  -o <file>     Output C file (default: stdout)\n"
-                    "  --dump-tokens Print token stream and exit\n"
-                    "  --dump-ast    Print AST and exit\n"
-                    "  --dump-hir     Print HIR and exit\n"
-                    "  --help        Show this msg\n");
+                    "  -o <file>       Output C file (default: stdout)\n"
+                    "  --std-path=DIR  Path to std library directory\n"
+                    "  --no-prelude    Disable automatic prelude injection\n"
+                    "  --dump-tokens   Print token stream and exit\n"
+                    "  --dump-ast      Print AST and exit\n"
+                    "  --dump-hir      Print HIR and exit\n"
+                    "  --help          Show this msg\n");
     // NOLINTNEXTLINE(concurrency-mt-unsafe)
     exit(1);
 }
@@ -26,6 +28,7 @@ static noreturn void usage(void) {
  */
 static PipelineOptions parse_cli_args(int argc, char *argv[]) {
     PipelineOptions options = {0};
+    options.argv0 = argv[0];
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage();
@@ -35,6 +38,10 @@ static PipelineOptions parse_cli_args(int argc, char *argv[]) {
             options.dump_ast = true;
         } else if (strcmp(argv[i], "--dump-hir") == 0) {
             options.dump_hir = true;
+        } else if (strcmp(argv[i], "--no-prelude") == 0) {
+            options.no_prelude = true;
+        } else if (strncmp(argv[i], "--std-path=", 11) == 0) {
+            options.std_path = argv[i] + 11;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (++i >= argc) {
                 fprintf(stderr, "err: -o requires an arg\n");

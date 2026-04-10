@@ -990,6 +990,28 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         if (strcmp(fn_name, "assert") == 0) {
             return &TYPE_UNIT_INST;
         }
+        if (strcmp(fn_name, "panic") == 0) {
+            if (BUF_LEN(node->call.args) != 1) {
+                SEMA_ERR(sema, node->loc, "'panic' expects exactly 1 argument");
+                return &TYPE_NEVER_INST;
+            }
+            return &TYPE_NEVER_INST;
+        }
+        if (strcmp(fn_name, "recover") == 0) {
+            if (BUF_LEN(node->call.args) != 0) {
+                SEMA_ERR(sema, node->loc, "'recover' takes no arguments");
+                return &TYPE_ERR_INST;
+            }
+            // Return ?str — instantiate Option<str> via the type resolver
+            ASTType str_ast = {.kind = AST_TYPE_NAME, .name = "str", .type_args = NULL};
+            ASTType opt_ast = {.kind = AST_TYPE_OPTION, .option_elem = &str_ast};
+            const Type *opt_str = resolve_ast_type(sema, &opt_ast);
+            if (opt_str != NULL && opt_str->kind != TYPE_ERR) {
+                node->type = opt_str;
+                return opt_str;
+            }
+            return &TYPE_ERR_INST;
+        }
     }
 
     // Generic call: fn_name<Type, ...>(args)

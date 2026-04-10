@@ -549,6 +549,8 @@ struct ASTNode {
             const char *module_path;     // module name
             const char **imported_names; /* buf - names to import */
             const char **aliases;        /* buf - aliases (NULL = use name) */
+            bool is_pub;                 // pub use (re-export)
+            bool is_wildcard;            // use module::*
         } use_decl;
 
         // NODE_RETURN

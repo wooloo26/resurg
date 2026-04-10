@@ -111,16 +111,28 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
             const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->module_search_dir,
                                                  PATH_SEP, decl->module.name);
             ASTNode **decls = load_module_decls(sema, mod_path);
+
+            // Fallback: try std library directory
+            const char *base_dir = sema->module_search_dir;
+            if (decls == NULL && sema->std_search_dir != NULL) {
+                mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->std_search_dir, PATH_SEP,
+                                         decl->module.name);
+                decls = load_module_decls(sema, mod_path);
+                if (decls != NULL) {
+                    base_dir = sema->std_search_dir;
+                }
+            }
+
             if (decls == NULL) {
-                SEMA_ERR(sema, decl->loc, "cannot find module file '%s'", mod_path);
+                SEMA_ERR(sema, decl->loc, "cannot find module file '%s.rsg'", decl->module.name);
                 continue;
             }
             decl->module.decls = decls;
 
-            // Child modules of this file search in <search_dir>/<name>/
+            // Child modules of this file search in <base_dir>/<name>/
             const char *prev_dir = sema->module_search_dir;
             sema->module_search_dir =
-                arena_sprintf(sema->arena, "%s%c%s", prev_dir, PATH_SEP, decl->module.name);
+                arena_sprintf(sema->arena, "%s%c%s", base_dir, PATH_SEP, decl->module.name);
             register_module_decl(sema, decl);
             sema->module_search_dir = prev_dir;
             continue;
@@ -208,6 +220,10 @@ void sema_set_module_loader(Sema *sema, ModuleLoader loader, void *ctx) {
     sema->module_loader_ctx = ctx;
 }
 
+void sema_set_std_search_dir(Sema *sema, const char *dir) {
+    sema->std_search_dir = dir;
+}
+
 Sema *sema_create(Arena *arena) {
     Sema *sema = rsg_malloc(sizeof(*sema));
     sema->arena = arena;
@@ -219,6 +235,7 @@ Sema *sema_create(Arena *arena) {
     sema->self_type_name = NULL;
     sema->current_module = NULL;
     sema->module_search_dir = NULL;
+    sema->std_search_dir = NULL;
     sema->module_loader = NULL;
     sema->module_loader_ctx = NULL;
     sema->fn_body_checker = NULL;
@@ -264,11 +281,13 @@ bool sema_resolve(Sema *sema, ASTNode *file) {
     sema_destroy_and_reinit_tables(sema);
     sema->file_node = file;
 
-    // Derive module search directory from the first decl's source location
-    if (BUF_LEN(file->file.decls) > 0 && file->file.decls[0]->loc.file != NULL) {
-        sema->module_search_dir = extract_dir_path(sema->arena, file->file.decls[0]->loc.file);
-    } else if (file->loc.file != NULL) {
+    // Derive module search directory from the file's source location.
+    // Use the file node's own loc first — this ensures that prelude declarations
+    // prepended from a different directory don't shift the search path.
+    if (file->loc.file != NULL) {
         sema->module_search_dir = extract_dir_path(sema->arena, file->loc.file);
+    } else if (BUF_LEN(file->file.decls) > 0 && file->file.decls[0]->loc.file != NULL) {
+        sema->module_search_dir = extract_dir_path(sema->arena, file->file.decls[0]->loc.file);
     }
 
     scope_push(sema, false); // global scope

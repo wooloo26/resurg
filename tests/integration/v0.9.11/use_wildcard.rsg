@@ -1,0 +1,53 @@
+// v0.9.11 — use wildcard: import all pub members with use module::*
+// EXPECT-STDOUT: wildcard works
+
+// ── inline module with pub exports ──
+
+mod math {
+    pub fn add(a: i32, b: i32) -> i32 = a + b
+    pub fn multiply(a: i32, b: i32) -> i32 = a * b
+    fn secret() -> i32 = 999
+}
+
+use math::*
+
+fn test_wildcard_import_functions() {
+    assert(add(2, 3) == 5)
+    assert(multiply(4, 5) == 20)
+    println("wildcard works")
+}
+
+// ── wildcard imports structs and enums ──
+
+mod shapes {
+    pub struct Circle {
+        pub radius: f64 = 0.0
+    }
+
+    pub enum Color {
+        Red,
+        Green,
+        Blue,
+    }
+
+    pub fn area(c: Circle) -> f64 {
+        3.14159265358979 * c.radius * c.radius
+    }
+}
+
+use shapes::*
+
+fn test_wildcard_import_types() {
+    c := Circle { radius = 5.0 }
+    a := area(c)
+    assert(a > 78.0)
+    assert(a < 79.0)
+}
+
+fn test_wildcard_import_enum() {
+    color := Color::Red
+    match color {
+        Red => assert(true),
+        _ => assert(false),
+    }
+}

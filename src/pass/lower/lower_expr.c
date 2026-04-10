@@ -299,6 +299,22 @@ static bool is_assert_callee(const ASTNode *callee) {
     return strcmp(callee->id.name, "assert") == 0;
 }
 
+/** Return true if the callee AST node resolves to the builtin "panic". */
+static bool is_panic_callee(const ASTNode *callee) {
+    if (callee->kind != NODE_ID) {
+        return false;
+    }
+    return strcmp(callee->id.name, "panic") == 0;
+}
+
+/** Return true if the callee AST node resolves to the builtin "recover". */
+static bool is_recover_callee(const ASTNode *callee) {
+    if (callee->kind != NODE_ID) {
+        return false;
+    }
+    return strcmp(callee->id.name, "recover") == 0;
+}
+
 /** Return true if the callee AST node resolves to the builtin "len". */
 static bool is_len_callee(const ASTNode *callee) {
     if (callee->kind != NODE_ID) {
@@ -402,6 +418,35 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
 
     return lower_make_builtin_call(low,
                                    &(BuiltinCallSpec){"rsg_assert", &TYPE_UNIT_INST, args, loc});
+}
+
+/**
+ * Expand panic(msg) → rsg_panic(msg).
+ *
+ * Extracts the raw C string from the RsgStr argument.
+ */
+static HirNode *lower_panic_call(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    HirNode *msg = lower_expr(low, ast->call.args[0]);
+
+    HirNode **args = NULL;
+    BUF_PUSH(args, msg);
+
+    return lower_make_builtin_call(low,
+                                   &(BuiltinCallSpec){"rsg_panic", &TYPE_NEVER_INST, args, loc});
+}
+
+/**
+ * Expand recover() → rsg_recover() with option wrapping.
+ *
+ * The runtime function returns const char* (NULL = no panic).
+ * Codegen handles the conversion to ?str.
+ */
+static HirNode *lower_recover_call(Lower *low, const ASTNode *ast) {
+    SrcLoc loc = ast->loc;
+    HirNode **args = NULL;
+
+    return lower_make_builtin_call(low, &(BuiltinCallSpec){"rsg_recover", ast->type, args, loc});
 }
 
 /**
@@ -643,6 +688,14 @@ static HirNode *lower_variadic_args(Lower *low, const ASTNode *ast, int32_t star
 static HirNode *lower_call(Lower *low, const ASTNode *ast) {
     if (is_assert_callee(ast->call.callee)) {
         return lower_assert_call(low, ast);
+    }
+
+    if (is_panic_callee(ast->call.callee)) {
+        return lower_panic_call(low, ast);
+    }
+
+    if (is_recover_callee(ast->call.callee)) {
+        return lower_recover_call(low, ast);
     }
 
     if (is_len_callee(ast->call.callee)) {

@@ -344,6 +344,29 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
     }
     if (decl->kind == NODE_USE_DECL) {
         const char *mod_path = decl->use_decl.module_path;
+
+        // Wildcard import: scan all scope entries with "mod_path." prefix
+        if (decl->use_decl.is_wildcard) {
+            const char *prefix_dot = arena_sprintf(low->hir_arena, "%s.", mod_path);
+            size_t prefix_len = strlen(prefix_dot);
+            for (LoweringScope *sc = low->scope; sc != NULL; sc = sc->parent) {
+                for (int32_t i = 0; i < sc->table.capacity; i++) {
+                    HashEntry *e = &sc->table.entries[i];
+                    if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+                        continue;
+                    }
+                    if (strncmp(e->key, prefix_dot, prefix_len) == 0) {
+                        const char *bare = e->key + prefix_len;
+                        if (strchr(bare, '.') != NULL) {
+                            continue;
+                        }
+                        HirSym *sym = (HirSym *)e->value;
+                        lower_scope_define(low, bare, sym);
+                    }
+                }
+            }
+        }
+
         for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {
             const char *name = decl->use_decl.imported_names[i];
             const char *alias =

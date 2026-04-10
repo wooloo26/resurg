@@ -22,6 +22,8 @@ Sema *sema_create(Arena *arena);
 void sema_destroy(Sema *sema);
 /** Inject a module loader callback used during resolve to load filesystem modules. */
 void sema_set_module_loader(Sema *sema, ModuleLoader loader, void *ctx);
+/** Set the fallback directory for resolving std library modules. */
+void sema_set_std_search_dir(Sema *sema, const char *dir);
 /**
  * Resolve pass: push global scope and register all declarations in @p file.
  * Returns true when no errs were found.

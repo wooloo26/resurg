@@ -747,14 +747,26 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
                 const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg",
                                                      sema->module_search_dir, PATH_SEP, orig_name);
                 ASTNode **decls = load_module_decls(sema, mod_path);
+
+                // Fallback: try std library directory
+                const char *base_dir = sema->module_search_dir;
+                if (decls == NULL && sema->std_search_dir != NULL) {
+                    mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->std_search_dir,
+                                             PATH_SEP, orig_name);
+                    decls = load_module_decls(sema, mod_path);
+                    if (decls != NULL) {
+                        base_dir = sema->std_search_dir;
+                    }
+                }
+
                 if (decls == NULL) {
-                    SEMA_ERR(sema, inner->loc, "cannot find module file '%s'", mod_path);
+                    SEMA_ERR(sema, inner->loc, "cannot find module file '%s.rsg'", orig_name);
                 } else {
                     inner->module.decls = decls;
                     // Update search dir for grandchild modules
                     const char *prev_dir = sema->module_search_dir;
                     sema->module_search_dir =
-                        arena_sprintf(sema->arena, "%s%c%s", prev_dir, PATH_SEP, orig_name);
+                        arena_sprintf(sema->arena, "%s%c%s", base_dir, PATH_SEP, orig_name);
                     register_module_decl(sema, inner);
                     sema->module_search_dir = prev_dir;
                     continue;
@@ -832,7 +844,7 @@ static const char *resolve_super_path(Sema *sema, const char *path, SrcLoc loc) 
         return NULL;
     }
     // Walk up one level for each 'super' segment (separated by '::')
-    // The path is "super" or "super::super" etc.
+    // The path is "super" or "super::super" etc., optionally followed by "::rest"
     const char *remaining = path;
     char *cur = arena_sprintf(sema->arena, "%s", current);
     while (remaining != NULL) {
@@ -845,14 +857,119 @@ static const char *resolve_super_path(Sema *sema, const char *path, SrcLoc loc) 
                 *last_dot = '\0';
             } else {
                 // Already at top level — super goes to file scope
-                return "";
+                cur[0] = '\0';
             }
         } else {
             break;
         }
         remaining = (sep != NULL) ? sep + 2 : NULL;
     }
+    // Append any remaining non-super segments (e.g., "math_ops" from "super::math_ops")
+    if (remaining != NULL && remaining[0] != '\0') {
+        if (cur[0] != '\0') {
+            return arena_sprintf(sema->arena, "%s.%s", cur, remaining);
+        }
+        return remaining;
+    }
     return cur;
+}
+
+/**
+ * Wildcard import: iterate all pub symbols whose qualified key starts
+ * with "mod_name." and import them under their bare name.
+ * When @p reexport_prefix is non-NULL (pub use inside a module),
+ * also register under "reexport_prefix.bare" as a pub re-export.
+ */
+static void register_wildcard_use(Sema *sema, const char *mod_name, const char *reexport_prefix) {
+    size_t prefix_len = strlen(mod_name);
+    const char *prefix_dot = arena_sprintf(sema->arena, "%s.", mod_name);
+    size_t prefix_dot_len = prefix_len + 1;
+
+    // Scan fn_table
+    for (int32_t i = 0; i < sema->fn_table.capacity; i++) {
+        HashEntry *e = &sema->fn_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            // Skip sub-module qualified names (contain another '.')
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            FnSig *sig = (FnSig *)e->value;
+            if (sig->is_pub) {
+                hash_table_insert(&sema->fn_table, bare, sig);
+                if (reexport_prefix != NULL) {
+                    const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
+                    hash_table_insert(&sema->fn_table, rekey, sig);
+                }
+            }
+        }
+    }
+
+    // Scan struct_table
+    for (int32_t i = 0; i < sema->struct_table.capacity; i++) {
+        HashEntry *e = &sema->struct_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            StructDef *sdef = (StructDef *)e->value;
+            hash_table_insert(&sema->struct_table, bare, sdef);
+            scope_define(sema, &(SymDef){bare, sdef->type, true, SYM_TYPE});
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
+                hash_table_insert(&sema->struct_table, rekey, sdef);
+                scope_define(sema, &(SymDef){rekey, sdef->type, true, SYM_TYPE});
+            }
+        }
+    }
+
+    // Scan enum_table
+    for (int32_t i = 0; i < sema->enum_table.capacity; i++) {
+        HashEntry *e = &sema->enum_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            EnumDef *edef = (EnumDef *)e->value;
+            hash_table_insert(&sema->enum_table, bare, edef);
+            scope_define(sema, &(SymDef){bare, edef->type, true, SYM_TYPE});
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
+                hash_table_insert(&sema->enum_table, rekey, edef);
+                scope_define(sema, &(SymDef){rekey, edef->type, true, SYM_TYPE});
+            }
+        }
+    }
+
+    // Scan type_alias_table
+    for (int32_t i = 0; i < sema->type_alias_table.capacity; i++) {
+        HashEntry *e = &sema->type_alias_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            hash_table_insert(&sema->type_alias_table, bare, e->value);
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
+                hash_table_insert(&sema->type_alias_table, rekey, e->value);
+            }
+        }
+    }
 }
 
 void register_use_decl(Sema *sema, ASTNode *decl) {
@@ -892,6 +1009,18 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         decl->use_decl.module_path = normalized;
     }
 
+    // Determine re-export prefix for pub use inside a module
+    const char *reexport_prefix = NULL;
+    if (decl->use_decl.is_pub && sema->current_scope->module_name != NULL) {
+        reexport_prefix = sema->current_scope->module_name;
+    }
+
+    // Wildcard import: use module::*
+    if (decl->use_decl.is_wildcard) {
+        register_wildcard_use(sema, mod_name, reexport_prefix);
+        return;
+    }
+
     for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {
         const char *name = decl->use_decl.imported_names[i];
         const char *alias = decl->use_decl.aliases[i];
@@ -911,6 +1040,10 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
                 continue;
             }
             hash_table_insert(&sema->fn_table, alias, sig);
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->fn_table, rekey, sig);
+            }
             continue;
         }
 
@@ -919,6 +1052,11 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         if (sdef != NULL) {
             hash_table_insert(&sema->struct_table, alias, sdef);
             scope_define(sema, &(SymDef){alias, sdef->type, true, SYM_TYPE});
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->struct_table, rekey, sdef);
+                scope_define(sema, &(SymDef){rekey, sdef->type, true, SYM_TYPE});
+            }
             continue;
         }
 
@@ -927,6 +1065,11 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         if (edef != NULL) {
             hash_table_insert(&sema->enum_table, alias, edef);
             scope_define(sema, &(SymDef){alias, edef->type, true, SYM_TYPE});
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->enum_table, rekey, edef);
+                scope_define(sema, &(SymDef){rekey, edef->type, true, SYM_TYPE});
+            }
             continue;
         }
 
@@ -934,6 +1077,10 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
         const Type *talias = sema_lookup_type_alias(sema, qualified);
         if (talias != NULL) {
             hash_table_insert(&sema->type_alias_table, alias, (void *)talias);
+            if (reexport_prefix != NULL) {
+                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->type_alias_table, rekey, (void *)talias);
+            }
             continue;
         }
 
