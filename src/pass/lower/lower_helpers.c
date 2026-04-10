@@ -116,3 +116,16 @@ HirNode *lower_make_field_access(Lower *low, const FieldAccessSpec *spec) {
     node->struct_field_access.via_ptr = spec->via_ptr;
     return node;
 }
+
+const char *lower_mangle_name(Arena *arena, const char *name) {
+    char *buf = arena_alloc(arena, strlen(name) + 1);
+    for (size_t i = 0; name[i] != '\0'; i++) {
+        char c = name[i];
+        buf[i] = (char)((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == '_'
+                            ? c
+                            : '_');
+    }
+    buf[strlen(name)] = '\0';
+    return buf;
+}

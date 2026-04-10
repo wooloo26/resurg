@@ -29,6 +29,7 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
     sig->is_pub = is_pub;
     sig->is_declare = decl->fn_decl.is_declare;
     sig->has_variadic = false;
+    sig->intrinsic = intrinsic_lookup(decl->fn_decl.name);
     sig->default_kinds = NULL;
     sig->default_exprs = NULL;
 
@@ -41,7 +42,7 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
         }
         // Variadic param: ..T → []T (slice type)
         if (param->param.is_variadic) {
-            pt = type_create_slice(sema->arena, pt);
+            pt = type_create_slice(sema->base.arena, pt);
             sig->has_variadic = true;
         }
         BUF_PUSH(sig->param_types, pt);
@@ -80,10 +81,10 @@ void register_method_sig(Sema *sema, const char *type_name, ASTNode *method,
                            .decl = method};
     BUF_PUSH(*methods, mi);
 
-    const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, mi.name);
+    const char *method_key = arena_sprintf(sema->base.arena, "%s.%s", type_name, mi.name);
     FnSig *sig = build_fn_sig(sema, method, false);
     sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-    hash_table_insert(&sema->db.fn_table, method_key, sig);
+    hash_table_insert(&sema->base.db.fn_table, method_key, sig);
 }
 
 // ── Registration ───────────────────────────────────────────────────
@@ -103,12 +104,12 @@ void register_fn_sig(Sema *sema, ASTNode *decl) {
         gdef->decl = decl;
         gdef->type_params = decl->fn_decl.type_params;
         gdef->type_param_count = BUF_LEN(decl->fn_decl.type_params);
-        hash_table_insert(&sema->generics.fn, decl->fn_decl.name, gdef);
+        hash_table_insert(&sema->base.generics.fn, decl->fn_decl.name, gdef);
         return;
     }
 
     FnSig *sig = build_fn_sig(sema, decl, decl->fn_decl.is_pub);
-    hash_table_insert(&sema->db.fn_table, decl->fn_decl.name, sig);
+    hash_table_insert(&sema->base.db.fn_table, decl->fn_decl.name, sig);
 
     scope_define(sema,
                  &(SymDef){decl->fn_decl.name, sig->return_type, decl->fn_decl.is_pub, SYM_FN});

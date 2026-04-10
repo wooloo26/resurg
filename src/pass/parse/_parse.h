@@ -17,9 +17,10 @@ struct Parser {
     int32_t pos;
     int32_t count;
     int32_t err_count;
-    Arena *arena;       // AST alloc arena
-    const char *file;   // src filename for diagnostics
-    bool no_struct_lit; // suppress struct-lit parsing in if/while conditions
+    Arena *arena;            // AST alloc arena
+    const char *file;        // src filename for diagnostics
+    bool no_struct_lit;      // suppress struct-lit parsing in if/while conditions
+    const char *pending_doc; // accumulated doc comment text for next decl (arena-owned)
 };
 
 /** Report a parse err and bump the parser's err counter. */
@@ -50,6 +51,10 @@ bool parser_match(Parser *parser, TokenKind kind);
 const Token *parser_expect(Parser *parser, TokenKind kind);
 /** Skip consecutive newline tokens. */
 void parser_skip_newlines(Parser *parser);
+/** Skip newlines and collect doc comments into parser->pending_doc. */
+void parser_skip_newlines_collect_docs(Parser *parser);
+/** Consume and return the pending doc comment, resetting it to NULL. */
+const char *parser_take_doc(Parser *parser);
 /** Return the src loc of the current token. */
 SrcLoc parser_current_loc(const Parser *parser);
 /** Peek one token ahead without consuming. */

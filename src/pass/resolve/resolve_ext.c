@@ -9,14 +9,14 @@
 
 /** Push ext-declared associated types into @p target_buf and register as type aliases. */
 static void register_ext_assoc_types(Sema *sema, const ASTNode *decl, ASTAssocType **target_buf) {
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
-        BUF_PUSH(*target_buf, decl->ext_decl.assoc_types[i]);
-        if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
+    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl->assoc_types); i++) {
+        BUF_PUSH(*target_buf, decl->ext_decl->assoc_types[i]);
+        if (decl->ext_decl->assoc_types[i].concrete_type != NULL) {
             const Type *at_type =
-                resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
+                resolve_ast_type(sema, decl->ext_decl->assoc_types[i].concrete_type);
             if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->db.type_alias_table, decl->ext_decl.assoc_types[i].name,
-                                  (void *)at_type);
+                hash_table_insert(&sema->base.db.type_alias_table,
+                                  decl->ext_decl->assoc_types[i].name, (void *)at_type);
             }
         }
     }
@@ -25,8 +25,8 @@ static void register_ext_assoc_types(Sema *sema, const ASTNode *decl, ASTAssocTy
 /** Register ext methods into the fn table and append to @p methods buf. */
 static void register_ext_methods(Sema *sema, const char *target_name, const ASTNode *decl,
                                  StructMethodInfo **methods) {
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        ASTNode *method = decl->ext_decl.methods[i];
+    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl->methods); i++) {
+        ASTNode *method = decl->ext_decl->methods[i];
         method->fn_decl.owner_struct = target_name;
         register_method_sig(sema, target_name, method, methods);
     }
@@ -36,10 +36,11 @@ static void register_ext_methods(Sema *sema, const char *target_name, const ASTN
 static void register_primitive_method(Sema *sema, const char *type_name, ASTNode *method) {
     method->fn_decl.owner_struct = type_name;
 
-    const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, method->fn_decl.name);
+    const char *method_key =
+        arena_sprintf(sema->base.arena, "%s.%s", type_name, method->fn_decl.name);
     FnSig *sig = build_fn_sig(sema, method, false);
     sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-    hash_table_insert(&sema->db.fn_table, method_key, sig);
+    hash_table_insert(&sema->base.db.fn_table, method_key, sig);
 }
 
 /** Check whether a pact method exists for an enum/primitive target. */
@@ -54,7 +55,7 @@ static bool ext_method_exists(const Sema *sema, const char *target_name, const c
         return false;
     }
     // Primitive — check fn_table
-    const char *key = arena_sprintf(sema->arena, "%s.%s", target_name, method_name);
+    const char *key = arena_sprintf(sema->base.arena, "%s.%s", target_name, method_name);
     return sema_lookup_fn(sema, key) != NULL;
 }
 
@@ -92,10 +93,10 @@ static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
         }
     }
     // Reject ext-declared assoc types not present in the pact
-    for (int32_t j = 0; j < BUF_LEN(decl->ext_decl.assoc_types); j++) {
-        const char *at_name = decl->ext_decl.assoc_types[j].name;
-        if (decl->ext_decl.assoc_types[j].pact_qualifier != NULL &&
-            strcmp(decl->ext_decl.assoc_types[j].pact_qualifier, pact_name) != 0) {
+    for (int32_t j = 0; j < BUF_LEN(decl->ext_decl->assoc_types); j++) {
+        const char *at_name = decl->ext_decl->assoc_types[j].name;
+        if (decl->ext_decl->assoc_types[j].pact_qualifier != NULL &&
+            strcmp(decl->ext_decl->assoc_types[j].pact_qualifier, pact_name) != 0) {
             continue;
         }
         bool in_pact = false;
@@ -130,7 +131,7 @@ static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
             if (has_body) {
                 ASTNode *method_ast = pact_methods[i].decl;
                 method_ast->fn_decl.owner_struct = sdef->name;
-                BUF_PUSH(decl->ext_decl.methods, method_ast);
+                BUF_PUSH(decl->ext_decl->methods, method_ast);
                 register_method_sig(sema, sdef->name, method_ast, &sdef->methods);
             } else {
                 SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
@@ -144,15 +145,15 @@ static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
 // ── Public API ─────────────────────────────────────────────────────
 
 void register_ext_decl(Sema *sema, ASTNode *decl) {
-    const char *target_name = decl->ext_decl.target_name;
+    const char *target_name = decl->ext_decl->target_name;
 
     // For generic ext blocks (ext<T,U> Pair<T,U>), store template for later
-    if (BUF_LEN(decl->ext_decl.type_params) > 0) {
+    if (BUF_LEN(decl->ext_decl->type_params) > 0) {
         GenericExtDef *gext = rsg_malloc(sizeof(*gext));
         gext->base.name = target_name;
         gext->base.decl = decl;
-        gext->base.type_params = decl->ext_decl.type_params;
-        gext->base.type_param_count = BUF_LEN(decl->ext_decl.type_params);
+        gext->base.type_params = decl->ext_decl->type_params;
+        gext->base.type_param_count = BUF_LEN(decl->ext_decl->type_params);
         gext->target_name = target_name;
         BUF_PUSH(sema->generic_ext_defs, gext);
         return;
@@ -161,43 +162,41 @@ void register_ext_decl(Sema *sema, ASTNode *decl) {
     // Try to find the target as a struct
     StructDef *sdef = sema_lookup_struct(sema, target_name);
     if (sdef != NULL) {
-        const char *prev_self = sema->infer.self_type_name;
-        sema->infer.self_type_name = target_name;
+        SEMA_INFER_SCOPE(sema, self_type_name, target_name);
         register_ext_assoc_types(sema, decl, &sdef->assoc_types);
         register_ext_methods(sema, target_name, decl, &sdef->methods);
-        sema->infer.self_type_name = prev_self;
+        SEMA_INFER_RESTORE(sema, self_type_name);
         return;
     }
 
     // Try to find the target as an enum
     EnumDef *edef = sema_lookup_enum(sema, target_name);
     if (edef != NULL) {
-        const char *prev_self = sema->infer.self_type_name;
-        sema->infer.self_type_name = target_name;
+        SEMA_INFER_SCOPE(sema, self_type_name, target_name);
         register_ext_assoc_types(sema, decl, &edef->assoc_types);
         register_ext_methods(sema, target_name, decl, &edef->methods);
-        sema->infer.self_type_name = prev_self;
+        SEMA_INFER_RESTORE(sema, self_type_name);
         return;
     }
 
     // Primitive type
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        register_primitive_method(sema, target_name, decl->ext_decl.methods[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl->methods); i++) {
+        register_primitive_method(sema, target_name, decl->ext_decl->methods[i]);
     }
 }
 
 void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
-    if (BUF_LEN(decl->ext_decl.impl_pacts) == 0) {
+    if (BUF_LEN(decl->ext_decl->impl_pacts) == 0) {
         return;
     }
 
-    const char *target_name = decl->ext_decl.target_name;
+    const char *target_name = decl->ext_decl->target_name;
 
     // For struct targets, delegate per-pact enforcement
     StructDef *sdef = sema_lookup_struct(sema, target_name);
     if (sdef != NULL) {
-        for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
-            const char *pact_name = decl->ext_decl.impl_pacts[pi];
+        for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl->impl_pacts); pi++) {
+            const char *pact_name = decl->ext_decl->impl_pacts[pi];
             PactDef *pact = sema_lookup_pact(sema, pact_name);
             if (pact == NULL) {
                 SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
@@ -210,8 +209,8 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
 
     // For enum/primitive targets, check methods exist in fn_table
     EnumDef *edef = sema_lookup_enum(sema, target_name);
-    for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
-        const char *pact_name = decl->ext_decl.impl_pacts[pi];
+    for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl->impl_pacts); pi++) {
+        const char *pact_name = decl->ext_decl->impl_pacts[pi];
         PactDef *pact = sema_lookup_pact(sema, pact_name);
         if (pact == NULL) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);

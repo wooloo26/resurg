@@ -41,7 +41,6 @@ void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_typ
 
 const Type *check_call(Sema *sema, ASTNode *node);
 const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig);
-bool is_lvalue(const ASTNode *node);
 const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_type);
 const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
                                     const char *variant_name);
@@ -93,11 +92,14 @@ const Type *check_ext_decl(Sema *sema, ASTNode *node);
 const Type *check_struct_destructure(Sema *sema, ASTNode *node);
 const Type *check_tuple_destructure(Sema *sema, ASTNode *node);
 
-// ── Shared helpers ─────────────────────────────────────────────────
+// ── Shared helpers (check_helpers.c) ───────────────────────────────
 
+/** Return true if @p node is an addressable lvalue (variable, member, index). */
+bool is_lvalue(const ASTNode *node);
+/** Return true when @p struct_name belongs to a foreign module. */
+bool is_foreign_struct(const Sema *sema, const char *struct_name);
 /** Build a NODE_CALL AST node that calls EnumType.None() on @p enum_type. */
 ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc);
-
 /** Find a promoted field from embedded structs. Returns NULL if not found. */
 const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *field_name);
 

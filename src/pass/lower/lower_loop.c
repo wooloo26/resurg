@@ -128,44 +128,34 @@ HirNode *lower_while(Lower *low, const ASTNode *ast) {
         const char *tmp = lower_make_temp_name(low);
         HirSym *tmp_sym = lower_add_var(low, &(HirSymSpec){HIR_SYM_VAR, tmp, op_type, false, loc});
 
-        HirNode **arm_conds = NULL;
-        HirNode **arm_guards = NULL;
-        HirNode **arm_bodies = NULL;
-        HirNode **arm_bindings = NULL;
+        HirMatchArm *arms = NULL;
 
         PatternOperand operand = {lower_make_var_ref(low, tmp_sym, loc), tmp_sym, op_type};
 
         // Arm 0: pattern match → body
         HirNode *cond = lower_pattern_cond(low, ast->while_loop.pattern, &operand, loc);
-        BUF_PUSH(arm_conds, cond);
-        BUF_PUSH(arm_guards, NULL);
 
         lower_scope_enter(low);
         lower_pattern_bindings(low, ast->while_loop.pattern, op_type);
         HirNode *body = lower_block(low, ast->while_loop.body);
         HirNode *binds = lower_arm_bindings_block(low, ast->while_loop.pattern, &operand, loc);
-        BUF_PUSH(arm_bodies, body);
-        BUF_PUSH(arm_bindings, binds);
+        BUF_PUSH(arms,
+                 ((HirMatchArm){.cond = cond, .guard = NULL, .body = body, .bindings = binds}));
         lower_scope_leave(low);
 
         // Arm 1: wildcard → break
-        BUF_PUSH(arm_conds, NULL);
-        BUF_PUSH(arm_guards, NULL);
         HirNode *break_node = hir_new(low->hir_arena, HIR_BREAK, &TYPE_UNIT_INST, loc);
         HirNode **break_stmts = NULL;
         BUF_PUSH(break_stmts, break_node);
         HirNode *break_block = hir_new(low->hir_arena, HIR_BLOCK, &TYPE_UNIT_INST, loc);
         break_block->block.stmts = break_stmts;
         break_block->block.result = NULL;
-        BUF_PUSH(arm_bodies, break_block);
-        BUF_PUSH(arm_bindings, NULL);
+        BUF_PUSH(arms, ((HirMatchArm){
+                           .cond = NULL, .guard = NULL, .body = break_block, .bindings = NULL}));
 
         HirNode *match = hir_new(low->hir_arena, HIR_MATCH, &TYPE_UNIT_INST, loc);
         match->match_expr.operand = lower_make_var_decl(low, tmp_sym, match_operand);
-        match->match_expr.arm_conds = arm_conds;
-        match->match_expr.arm_guards = arm_guards;
-        match->match_expr.arm_bodies = arm_bodies;
-        match->match_expr.arm_bindings = arm_bindings;
+        match->match_expr.arms = arms;
 
         HirNode **loop_stmts = NULL;
         BUF_PUSH(loop_stmts, match);
@@ -315,6 +305,8 @@ static HirNode *lower_for_slice(Lower *low, const ASTNode *ast) {
     // var _s = iterable
     HirNode *iterable_expr = lower_expr(low, ast->for_loop.iterable);
     const Type *slice_type = iterable_expr->type;
+    assert(slice_type != NULL && slice_type->kind == TYPE_SLICE &&
+           "lower: for-in iterable must be slice type after check");
     const Type *elem_type = (slice_type != NULL && slice_type->kind == TYPE_SLICE)
                                 ? slice_type->slice.elem
                                 : &TYPE_ERR_INST;

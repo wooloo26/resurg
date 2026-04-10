@@ -1,0 +1,12 @@
+// stdlib: prelude module — convenience re-exports
+// EXPECT-STDOUT: prelude test passed
+
+fn main() {
+    // Prelude should re-export Option type
+    var x: ?i32 = Some(42)
+    match x {
+        Some(v) => assert(v == 42, "option unwrap"),
+        None => panic("expected Some"),
+    }
+    println("prelude test passed")
+}

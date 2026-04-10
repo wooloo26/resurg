@@ -107,7 +107,7 @@ const char *build_mangled_name(Sema *sema, const char *base, const Type **type_a
         if (i > 0) {
             len += snprintf(buf + len, (size_t)(cap - len), "_");
         }
-        const char *tname = type_name(sema->arena, type_args[i]);
+        const char *tname = type_name(sema->base.arena, type_args[i]);
         int32_t tname_len = (int32_t)strlen(tname);
         // Grow if needed: current pos + type name + separator + NUL
         if (len + tname_len + 2 >= cap) {
@@ -116,7 +116,7 @@ const char *build_mangled_name(Sema *sema, const char *base, const Type **type_a
         }
         len = append_mangled_type(buf, len, cap, tname);
     }
-    const char *result = arena_sprintf(sema->arena, "%s", buf);
+    const char *result = arena_sprintf(sema->base.arena, "%s", buf);
     free(buf);
     return result;
 }
@@ -141,9 +141,9 @@ void sema_push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolv
                            const Type ***out_saved) {
     const Type **saved = NULL;
     for (int32_t i = 0; i < count; i++) {
-        const Type *old = hash_table_lookup(&sema->generics.type_params, params[i].name);
+        const Type *old = hash_table_lookup(&sema->base.generics.type_params, params[i].name);
         BUF_PUSH(saved, old);
-        hash_table_insert(&sema->generics.type_params, params[i].name, (void *)resolved[i]);
+        hash_table_insert(&sema->base.generics.type_params, params[i].name, (void *)resolved[i]);
     }
     *out_saved = saved;
 }
@@ -152,9 +152,9 @@ void sema_push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolv
 void sema_pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count, const Type **saved) {
     for (int32_t i = 0; i < count; i++) {
         if (saved[i] != NULL) {
-            hash_table_insert(&sema->generics.type_params, params[i].name, (void *)saved[i]);
+            hash_table_insert(&sema->base.generics.type_params, params[i].name, (void *)saved[i]);
         } else {
-            hash_table_remove(&sema->generics.type_params, params[i].name);
+            hash_table_remove(&sema->base.generics.type_params, params[i].name);
         }
     }
     BUF_FREE(saved);
@@ -172,9 +172,9 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
                                .decl = method};
         BUF_PUSH(*out_methods, mi);
 
-        const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
+        const char *method_key = arena_sprintf(sema->base.arena, "%s.%s", mangled, mi.name);
         FnSig *sig = build_fn_sig(sema, method, false);
-        hash_table_insert(&sema->db.fn_table, method_key, sig);
+        hash_table_insert(&sema->base.db.fn_table, method_key, sig);
     }
 }
 
@@ -215,8 +215,8 @@ static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec
 
         // Phase 1: Register all ext method sigs
         ASTNode *ext_decl = gext->base.decl;
-        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl.methods); mi++) {
-            ASTNode *method = ext_decl->ext_decl.methods[mi];
+        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl->methods); mi++) {
+            ASTNode *method = ext_decl->ext_decl->methods[mi];
             StructMethodInfo method_info = {.name = method->fn_decl.name,
                                             .is_mut_recv = method->fn_decl.is_mut_recv,
                                             .is_ptr_recv = method->fn_decl.is_ptr_recv,
@@ -224,21 +224,21 @@ static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec
                                             .decl = method};
             BUF_PUSH(*spec->out_methods, method_info);
             const char *method_key =
-                arena_sprintf(sema->arena, "%s.%s", spec->mangled, method_info.name);
+                arena_sprintf(sema->base.arena, "%s.%s", spec->mangled, method_info.name);
             FnSig *sig = build_fn_sig(sema, method, false);
-            hash_table_insert(&sema->db.fn_table, method_key, sig);
+            hash_table_insert(&sema->base.db.fn_table, method_key, sig);
         }
 
         // Phase 2: Clone and type-check ext method bodies
-        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl.methods); mi++) {
-            ASTNode *method = ext_decl->ext_decl.methods[mi];
-            ASTNode *mclone = ast_clone(sema->arena, method);
+        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl->methods); mi++) {
+            ASTNode *method = ext_decl->ext_decl->methods[mi];
+            ASTNode *mclone = ast_clone(sema->base.arena, method);
             mclone->fn_decl.owner_struct = spec->mangled;
             mclone->fn_decl.type_params = NULL;
             if (spec->is_enum) {
-                BUF_PUSH(spec->synth->enum_decl.methods, mclone);
+                BUF_PUSH(spec->synth->enum_decl->methods, mclone);
             } else {
-                BUF_PUSH(spec->synth->struct_decl.methods, mclone);
+                BUF_PUSH(spec->synth->struct_decl->methods, mclone);
             }
             if (sema->method_checker != NULL) {
                 sema->method_checker(sema, mclone, spec->mangled, spec->owner_type);
@@ -334,20 +334,20 @@ static Type *struct_create_stub(Sema *sema, const char *mangled) {
 
     StructTypeSpec stub_spec = {
         .name = mangled, .fields = NULL, .field_count = 0, .embedded = NULL, .embed_count = 0};
-    Type *fwd_type = type_create_struct(sema->arena, &stub_spec);
+    Type *fwd_type = type_create_struct(sema->base.arena, &stub_spec);
     def->type = fwd_type;
-    hash_table_insert(&sema->db.struct_table, mangled, def);
-    hash_table_insert(&sema->db.type_alias_table, mangled, (void *)fwd_type);
+    hash_table_insert(&sema->base.db.struct_table, mangled, def);
+    hash_table_insert(&sema->base.db.type_alias_table, mangled, (void *)fwd_type);
     return fwd_type;
 }
 
 static StructMethodInfo **struct_resolve_members(Sema *sema, ASTNode *orig, Type *stub,
                                                  const char *mangled) {
     StructDef *def = sema_lookup_struct(sema, mangled);
-    def->is_tuple_struct = orig->struct_decl.is_tuple_struct;
+    def->is_tuple_struct = orig->struct_decl->is_tuple_struct;
 
-    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
-        ASTStructField *ast_field = &orig->struct_decl.fields[i];
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl->fields); i++) {
+        ASTStructField *ast_field = &orig->struct_decl->fields[i];
         const Type *field_type = resolve_ast_type(sema, &ast_field->type);
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
@@ -370,32 +370,32 @@ static StructMethodInfo **struct_resolve_members(Sema *sema, ASTNode *orig, Type
     stub->struct_type.fields = type_fields;
     stub->struct_type.field_count = BUF_LEN(type_fields);
 
-    register_generic_methods(sema, orig->struct_decl.methods, &def->methods, mangled);
+    register_generic_methods(sema, orig->struct_decl->methods, &def->methods, mangled);
     return &def->methods;
 }
 
 static ASTNode *struct_build_synth(Sema *sema, ASTNode *orig, const char *mangled, Type *stub) {
-    ASTNode *synth = ast_new(sema->arena, NODE_STRUCT_DECL, orig->loc);
-    synth->struct_decl.name = mangled;
-    synth->struct_decl.is_tuple_struct = orig->struct_decl.is_tuple_struct;
-    synth->struct_decl.fields = NULL;
-    synth->struct_decl.methods = NULL;
-    synth->struct_decl.embedded = NULL;
-    synth->struct_decl.conformances = NULL;
-    synth->struct_decl.type_params = NULL;
+    ASTNode *synth = ast_new(sema->base.arena, NODE_STRUCT_DECL, orig->loc);
+    synth->struct_decl->name = mangled;
+    synth->struct_decl->is_tuple_struct = orig->struct_decl->is_tuple_struct;
+    synth->struct_decl->fields = NULL;
+    synth->struct_decl->methods = NULL;
+    synth->struct_decl->embedded = NULL;
+    synth->struct_decl->conformances = NULL;
+    synth->struct_decl->type_params = NULL;
 
-    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.fields); i++) {
-        ASTStructField sf = orig->struct_decl.fields[i];
-        BUF_PUSH(synth->struct_decl.fields, sf);
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl->fields); i++) {
+        ASTStructField sf = orig->struct_decl->fields[i];
+        BUF_PUSH(synth->struct_decl->fields, sf);
     }
     synth->type = stub;
 
-    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl.methods); i++) {
-        ASTNode *method = orig->struct_decl.methods[i];
-        ASTNode *clone = ast_clone(sema->arena, method);
+    for (int32_t i = 0; i < BUF_LEN(orig->struct_decl->methods); i++) {
+        ASTNode *method = orig->struct_decl->methods[i];
+        ASTNode *clone = ast_clone(sema->base.arena, method);
         clone->fn_decl.owner_struct = mangled;
         clone->fn_decl.type_params = NULL;
-        BUF_PUSH(synth->struct_decl.methods, clone);
+        BUF_PUSH(synth->struct_decl->methods, clone);
         if (sema->method_checker != NULL) {
             sema->method_checker(sema, clone, mangled, stub);
         }
@@ -411,14 +411,14 @@ static const Type *struct_owner_type(Sema *sema, Type *stub) {
 // ── Enum-specific callbacks ───────────────────────────────────────
 
 static Type *enum_create_stub(Sema *sema, const char *mangled) {
-    Type *fwd_enum = type_create_enum(sema->arena, mangled, NULL, 0);
+    Type *fwd_enum = type_create_enum(sema->base.arena, mangled, NULL, 0);
     EnumDef *def = rsg_malloc(sizeof(*def));
     def->name = mangled;
     def->methods = NULL;
     def->assoc_types = NULL;
     def->type = fwd_enum;
-    hash_table_insert(&sema->db.enum_table, mangled, def);
-    hash_table_insert(&sema->db.type_alias_table, mangled, (void *)fwd_enum);
+    hash_table_insert(&sema->base.db.enum_table, mangled, def);
+    hash_table_insert(&sema->base.db.type_alias_table, mangled, (void *)fwd_enum);
     return fwd_enum;
 }
 
@@ -427,22 +427,22 @@ static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *
     EnumDef *def = sema_lookup_enum(sema, mangled);
 
     // Copy associated types from AST and register as type aliases
-    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.assoc_types); i++) {
-        BUF_PUSH(def->assoc_types, orig->enum_decl.assoc_types[i]);
-        if (orig->enum_decl.assoc_types[i].concrete_type != NULL) {
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl->assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, orig->enum_decl->assoc_types[i]);
+        if (orig->enum_decl->assoc_types[i].concrete_type != NULL) {
             const Type *at_type =
-                resolve_ast_type(sema, orig->enum_decl.assoc_types[i].concrete_type);
+                resolve_ast_type(sema, orig->enum_decl->assoc_types[i].concrete_type);
             if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->db.type_alias_table, orig->enum_decl.assoc_types[i].name,
-                                  (void *)at_type);
+                hash_table_insert(&sema->base.db.type_alias_table,
+                                  orig->enum_decl->assoc_types[i].name, (void *)at_type);
             }
         }
     }
 
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
-    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
-        ASTEnumVariant *av = &orig->enum_decl.variants[i];
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl->variants); i++) {
+        ASTEnumVariant *av = &orig->enum_decl->variants[i];
         EnumVariant variant = {0};
         variant.name = av->name;
 
@@ -454,7 +454,7 @@ static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *
             variant.kind = ENUM_VARIANT_TUPLE;
             variant.tuple_count = BUF_LEN(av->tuple_types);
             variant.tuple_types = (const Type **)arena_alloc_zero(
-                sema->arena, variant.tuple_count * sizeof(const Type *));
+                sema->base.arena, variant.tuple_count * sizeof(const Type *));
             for (int32_t j = 0; j < variant.tuple_count; j++) {
                 variant.tuple_types[j] = resolve_ast_type(sema, &av->tuple_types[j]);
                 if (variant.tuple_types[j] == NULL) {
@@ -467,7 +467,7 @@ static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *
             variant.kind = ENUM_VARIANT_STRUCT;
             variant.field_count = BUF_LEN(av->fields);
             variant.fields =
-                arena_alloc_zero(sema->arena, variant.field_count * sizeof(StructField));
+                arena_alloc_zero(sema->base.arena, variant.field_count * sizeof(StructField));
             for (int32_t j = 0; j < variant.field_count; j++) {
                 variant.fields[j].name = av->fields[j].name;
                 variant.fields[j].type = resolve_ast_type(sema, &av->fields[j].type);
@@ -494,30 +494,30 @@ static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *
     stub->enum_type.variants = variants;
     stub->enum_type.variant_count = BUF_LEN(variants);
 
-    register_generic_methods(sema, orig->enum_decl.methods, &def->methods, mangled);
+    register_generic_methods(sema, orig->enum_decl->methods, &def->methods, mangled);
     return &def->methods;
 }
 
 static ASTNode *enum_build_synth(Sema *sema, ASTNode *orig, const char *mangled, Type *stub) {
-    ASTNode *synth = ast_new(sema->arena, NODE_ENUM_DECL, orig->loc);
-    synth->enum_decl.name = mangled;
-    synth->enum_decl.variants = NULL;
-    synth->enum_decl.methods = NULL;
-    synth->enum_decl.type_params = NULL;
-    synth->enum_decl.assoc_types = NULL;
+    ASTNode *synth = ast_new(sema->base.arena, NODE_ENUM_DECL, orig->loc);
+    synth->enum_decl->name = mangled;
+    synth->enum_decl->variants = NULL;
+    synth->enum_decl->methods = NULL;
+    synth->enum_decl->type_params = NULL;
+    synth->enum_decl->assoc_types = NULL;
 
-    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.variants); i++) {
-        BUF_PUSH(synth->enum_decl.variants, orig->enum_decl.variants[i]);
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl->variants); i++) {
+        BUF_PUSH(synth->enum_decl->variants, orig->enum_decl->variants[i]);
     }
     synth->type = stub;
 
-    const Type *ptr_type = type_create_ptr(sema->arena, stub, false);
-    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl.methods); i++) {
-        ASTNode *method = orig->enum_decl.methods[i];
-        ASTNode *mclone = ast_clone(sema->arena, method);
+    const Type *ptr_type = type_create_ptr(sema->base.arena, stub, false);
+    for (int32_t i = 0; i < BUF_LEN(orig->enum_decl->methods); i++) {
+        ASTNode *method = orig->enum_decl->methods[i];
+        ASTNode *mclone = ast_clone(sema->base.arena, method);
         mclone->fn_decl.owner_struct = mangled;
         mclone->fn_decl.type_params = NULL;
-        BUF_PUSH(synth->enum_decl.methods, mclone);
+        BUF_PUSH(synth->enum_decl->methods, mclone);
         if (sema->method_checker != NULL) {
             sema->method_checker(sema, mclone, mangled, ptr_type);
         }
@@ -526,7 +526,7 @@ static ASTNode *enum_build_synth(Sema *sema, ASTNode *orig, const char *mangled,
 }
 
 static const Type *enum_owner_type(Sema *sema, Type *stub) {
-    return type_create_ptr(sema->arena, stub, false);
+    return type_create_ptr(sema->base.arena, stub, false);
 }
 
 // ── Shared instantiation scaffold ─────────────────────────────────
@@ -641,7 +641,7 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
         } else if (obj_type->kind == TYPE_ARRAY) {
             BUF_PUSH(resolved_args, type_array_elem(obj_type));
             const Type *size_type =
-                type_create_comptime_int(sema->arena, type_array_size(obj_type));
+                type_create_comptime_int(sema->base.arena, type_array_size(obj_type));
             BUF_PUSH(resolved_args, size_type);
         }
 
@@ -652,12 +652,13 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
 
         // Skip templates already instantiated for this concrete type
         ASTNode *ext_decl = gext->base.decl;
-        if (BUF_LEN(ext_decl->ext_decl.methods) > 0) {
-            const char *first_key = arena_sprintf(sema->arena, "%s.%s", concrete_name,
-                                                  ext_decl->ext_decl.methods[0]->fn_decl.name);
+        if (BUF_LEN(ext_decl->ext_decl->methods) > 0) {
+            const char *first_key = arena_sprintf(sema->base.arena, "%s.%s", concrete_name,
+                                                  ext_decl->ext_decl->methods[0]->fn_decl.name);
             if (sema_lookup_fn(sema, first_key) != NULL) {
                 BUF_FREE(resolved_args);
-                const char *key = arena_sprintf(sema->arena, "%s.%s", concrete_name, method_name);
+                const char *key =
+                    arena_sprintf(sema->base.arena, "%s.%s", concrete_name, method_name);
                 FnSig *found = sema_lookup_fn(sema, key);
                 if (found != NULL) {
                     return found;
@@ -672,28 +673,28 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
                               gext->base.type_param_count, &saved);
 
         // Create synthetic non-generic ext decl for lowering
-        ASTNode *synth = ast_new(sema->arena, NODE_EXT_DECL, ext_decl->loc);
-        synth->ext_decl.type_params = NULL;
-        synth->ext_decl.target_name = concrete_name;
-        synth->ext_decl.target_type_args = NULL;
-        synth->ext_decl.impl_pacts = NULL;
-        synth->ext_decl.methods = NULL;
-        synth->ext_decl.assoc_types = NULL;
+        ASTNode *synth = ast_new(sema->base.arena, NODE_EXT_DECL, ext_decl->loc);
+        synth->ext_decl->type_params = NULL;
+        synth->ext_decl->target_name = concrete_name;
+        synth->ext_decl->target_type_args = NULL;
+        synth->ext_decl->impl_pacts = NULL;
+        synth->ext_decl->methods = NULL;
+        synth->ext_decl->assoc_types = NULL;
         synth->type = obj_type;
 
         // Register method sigs and clone method bodies
-        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl.methods); mi++) {
-            ASTNode *method = ext_decl->ext_decl.methods[mi];
+        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl->methods); mi++) {
+            ASTNode *method = ext_decl->ext_decl->methods[mi];
             const char *method_key =
-                arena_sprintf(sema->arena, "%s.%s", concrete_name, method->fn_decl.name);
+                arena_sprintf(sema->base.arena, "%s.%s", concrete_name, method->fn_decl.name);
             FnSig *sig = build_fn_sig(sema, method, false);
             sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-            hash_table_insert(&sema->db.fn_table, method_key, sig);
+            hash_table_insert(&sema->base.db.fn_table, method_key, sig);
 
-            ASTNode *mclone = ast_clone(sema->arena, method);
+            ASTNode *mclone = ast_clone(sema->base.arena, method);
             mclone->fn_decl.owner_struct = concrete_name;
             mclone->fn_decl.type_params = NULL;
-            BUF_PUSH(synth->ext_decl.methods, mclone);
+            BUF_PUSH(synth->ext_decl->methods, mclone);
 
             if (method->fn_decl.body != NULL && sema->method_checker != NULL) {
                 sema->method_checker(sema, mclone, concrete_name, obj_type);
@@ -706,7 +707,7 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
         BUF_PUSH(sema->synthetic_decls, synth);
 
         // Return if the requested method was found in this template
-        const char *key = arena_sprintf(sema->arena, "%s.%s", concrete_name, method_name);
+        const char *key = arena_sprintf(sema->base.arena, "%s.%s", concrete_name, method_name);
         FnSig *found = sema_lookup_fn(sema, key);
         if (found != NULL) {
             return found;

@@ -23,12 +23,32 @@ static void c_target_destroy(CGenTarget *self) {
     free(cgen);
 }
 
+static bool c_target_supports_defer(const CGenTarget *self) {
+    (void)self;
+    return true; // C backend: goto-based cleanup
+}
+
+static bool c_target_supports_gc(const CGenTarget *self) {
+    (void)self;
+    return true;
+}
+
+static const char *c_target_file_extension(const CGenTarget *self) {
+    (void)self;
+    return ".c";
+}
+
 // ── Public API (cgen.h) ────────────────────────────────────────────────
 
 CGenTarget *cgen_create(FILE *output, Arena *arena) {
     CGen *cgen = rsg_malloc(sizeof(*cgen));
+    cgen->base.name = "c17";
     cgen->base.emit = c_target_emit;
     cgen->base.destroy = c_target_destroy;
+    cgen->base.supports_defer = c_target_supports_defer;
+    cgen->base.supports_gc = c_target_supports_gc;
+    cgen->base.file_extension = c_target_file_extension;
+    cgen->abi = runtime_abi_default();
     cgen->output = output;
     cgen->arena = arena;
     cgen->indent = 0;

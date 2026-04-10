@@ -34,7 +34,8 @@ typedef enum {
 
 struct ASTType {
     ASTTypeKind kind;
-    const char *name; // may be NULL (for NAME kind)
+    const char *name;     // may be NULL (for NAME kind)
+    const Type *resolved; // cached resolve result (NULL = not yet resolved)
     SrcLoc loc;
     // AST_TYPE_ARRAY fields
     ASTType *array_elem;         // heap-allocated elem type
@@ -239,6 +240,55 @@ typedef enum {
     LIT_UNIT,
 } LitKind;
 
+// ── Heap-allocated decl data (reduces ASTNode union size) ─────────────
+
+/** Data payload for NODE_STRUCT_DECL (heap-allocated, stored via pointer in union). */
+typedef struct {
+    const char *name;
+    bool is_pub;
+    bool is_tuple_struct;          /* true for `struct Name(T, ...)` */
+    ASTStructField *fields;        /* buf */
+    ASTNode **methods;             /* buf - NODE_FN_DECL */
+    const char **embedded;         /* buf - embedded struct names */
+    const char **conformances;     /* buf - pact names */
+    ASTTypeParam *type_params;     /* buf - generic type params */
+    ASTWhereClause *where_clauses; /* buf - where clause predicates */
+    ASTAssocType *assoc_types;     /* buf - associated type defs */
+} StructDeclData;
+
+/** Data payload for NODE_ENUM_DECL (heap-allocated, stored via pointer in union). */
+typedef struct {
+    const char *name;
+    bool is_pub;
+    ASTEnumVariant *variants;      /* buf */
+    ASTNode **methods;             /* buf - NODE_FN_DECL */
+    ASTTypeParam *type_params;     /* buf - generic type params */
+    ASTWhereClause *where_clauses; /* buf - where clause predicates */
+    ASTAssocType *assoc_types;     /* buf - associated type defs */
+} EnumDeclData;
+
+/** Data payload for NODE_PACT_DECL (heap-allocated, stored via pointer in union). */
+typedef struct {
+    const char *name;
+    bool is_pub;
+    ASTStructField *fields;        /* buf - required fields */
+    ASTNode **methods;             /* buf - required + default methods */
+    const char **super_pacts;      /* buf - constraint alias pact names */
+    ASTTypeParam *type_params;     /* buf - generic type params */
+    ASTWhereClause *where_clauses; /* buf - where clause predicates */
+    ASTAssocType *assoc_types;     /* buf - associated type decls */
+} PactDeclData;
+
+/** Data payload for NODE_EXT_DECL (heap-allocated, stored via pointer in union). */
+typedef struct {
+    const char *target_name;   // type being extended
+    ASTType *target_type_args; /* buf - for ext Pair<i32, str> */
+    ASTTypeParam *type_params; /* buf - for ext<T, U> */
+    const char **impl_pacts;   /* buf - pact names (ext T impl P) */
+    ASTNode **methods;         /* buf - NODE_FN_DECL */
+    ASTAssocType *assoc_types; /* buf - associated type defs */
+} ExtDeclData;
+
 /**
  * AST node - a tagged union covering every syntactic construct.
  * Each variant stores its children in the anonymous union; stretchy-buf
@@ -247,7 +297,8 @@ typedef enum {
 struct ASTNode {
     NodeKind kind;
     SrcLoc loc;
-    const Type *type; // may be NULL
+    const Type *type;        // may be NULL
+    const char *doc_comment; // attached `///` doc comment text, or NULL
 
     union {
         // NODE_MODULE
@@ -448,19 +499,8 @@ struct ASTNode {
             ASTNode *operand;
         } type_conversion;
 
-        // NODE_STRUCT_DECL
-        struct {
-            const char *name;
-            bool is_pub;
-            bool is_tuple_struct;          /* true for `struct Name(T, ...)` */
-            ASTStructField *fields;        /* buf */
-            ASTNode **methods;             /* buf - NODE_FN_DECL */
-            const char **embedded;         /* buf - embedded struct names */
-            const char **conformances;     /* buf - pact names */
-            ASTTypeParam *type_params;     /* buf - generic type params */
-            ASTWhereClause *where_clauses; /* buf - where clause predicates */
-            ASTAssocType *assoc_types;     /* buf - associated type defs */
-        } struct_decl;
+        // NODE_STRUCT_DECL (heap-allocated via StructDeclData*)
+        StructDeclData *struct_decl;
 
         // NODE_STRUCT_LIT
         struct {
@@ -506,16 +546,8 @@ struct ASTNode {
             ASTNode *operand;
         } try_expr;
 
-        // NODE_ENUM_DECL
-        struct {
-            const char *name;
-            bool is_pub;
-            ASTEnumVariant *variants;      /* buf */
-            ASTNode **methods;             /* buf - NODE_FN_DECL */
-            ASTTypeParam *type_params;     /* buf - generic type params */
-            ASTWhereClause *where_clauses; /* buf - where clause predicates */
-            ASTAssocType *assoc_types;     /* buf - associated type defs */
-        } enum_decl;
+        // NODE_ENUM_DECL (heap-allocated via EnumDeclData*)
+        EnumDeclData *enum_decl;
 
         // NODE_MATCH
         struct {
@@ -533,27 +565,11 @@ struct ASTNode {
             ASTType *type_args;       /* buf - explicit generic type args */
         } enum_init;
 
-        // NODE_PACT_DECL
-        struct {
-            const char *name;
-            bool is_pub;
-            ASTStructField *fields;        /* buf - required fields */
-            ASTNode **methods;             /* buf - required + default methods */
-            const char **super_pacts;      /* buf - constraint alias pact names */
-            ASTTypeParam *type_params;     /* buf - generic type params */
-            ASTWhereClause *where_clauses; /* buf - where clause predicates */
-            ASTAssocType *assoc_types;     /* buf - associated type decls */
-        } pact_decl;
+        // NODE_PACT_DECL (heap-allocated via PactDeclData*)
+        PactDeclData *pact_decl;
 
-        // NODE_EXT_DECL
-        struct {
-            const char *target_name;   // type being extended
-            ASTType *target_type_args; /* buf - for ext Pair<i32, str> */
-            ASTTypeParam *type_params; /* buf - for ext<T, U> */
-            const char **impl_pacts;   /* buf - pact names (ext T impl P) */
-            ASTNode **methods;         /* buf - NODE_FN_DECL */
-            ASTAssocType *assoc_types; /* buf - associated type defs */
-        } ext_decl;
+        // NODE_EXT_DECL (heap-allocated via ExtDeclData*)
+        ExtDeclData *ext_decl;
 
         // NODE_USE_DECL
         struct {
@@ -589,9 +605,10 @@ struct ASTNode {
 
         // NODE_CLOSURE
         struct {
-            ASTNode **params;    /* buf - NODE_PARAM */
-            ASTType return_type; // may be AST_TYPE_INFERRED
-            ASTNode *body;       // expr or block
+            ASTNode **params;           /* buf - NODE_PARAM */
+            ASTType return_type;        // may be AST_TYPE_INFERRED
+            ASTNode *body;              // expr or block
+            const char **capture_names; /* buf - set by check pass; NULL before check */
         } closure;
     };
 };

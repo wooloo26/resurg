@@ -43,9 +43,37 @@ const Token *parser_expect(Parser *parser, TokenKind kind) {
 }
 
 void parser_skip_newlines(Parser *parser) {
-    while (parser_check(parser, TOKEN_NEWLINE) || parser_check(parser, TOKEN_SEMICOLON)) {
+    while (parser_check(parser, TOKEN_NEWLINE) || parser_check(parser, TOKEN_SEMICOLON) ||
+           parser_check(parser, TOKEN_DOC_COMMENT)) {
         parser_advance(parser);
     }
+}
+
+void parser_skip_newlines_collect_docs(Parser *parser) {
+    // Reset pending doc — only the most recent contiguous block survives.
+    parser->pending_doc = NULL;
+
+    while (parser_check(parser, TOKEN_NEWLINE) || parser_check(parser, TOKEN_SEMICOLON) ||
+           parser_check(parser, TOKEN_DOC_COMMENT)) {
+        if (parser_check(parser, TOKEN_DOC_COMMENT)) {
+            const Token *tok = parser_current_token(parser);
+            const char *line = arena_strndup(parser->arena, tok->lexeme, (size_t)tok->len);
+            if (parser->pending_doc == NULL) {
+                parser->pending_doc = line;
+            } else {
+                // Concatenate with newline separator.
+                parser->pending_doc =
+                    arena_sprintf(parser->arena, "%s\n%s", parser->pending_doc, line);
+            }
+        }
+        parser_advance(parser);
+    }
+}
+
+const char *parser_take_doc(Parser *parser) {
+    const char *doc = parser->pending_doc;
+    parser->pending_doc = NULL;
+    return doc;
 }
 
 SrcLoc parser_current_loc(const Parser *parser) {
@@ -98,6 +126,7 @@ Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const ch
     parser->arena = arena;
     parser->file = file;
     parser->no_struct_lit = false;
+    parser->pending_doc = NULL;
     return parser;
 }
 
@@ -114,13 +143,15 @@ ASTNode *parser_parse(Parser *parser) {
     ASTNode *file = ast_new(parser->arena, NODE_FILE, loc);
     file->file.decls = NULL;
 
-    parser_skip_newlines(parser);
+    parser_skip_newlines_collect_docs(parser);
     while (!parser_at_end(parser)) {
+        const char *doc = parser_take_doc(parser);
         ASTNode *decl = parser_parse_decl(parser);
         if (decl != NULL) {
+            decl->doc_comment = doc;
             BUF_PUSH(file->file.decls, decl);
         }
-        parser_skip_newlines(parser);
+        parser_skip_newlines_collect_docs(parser);
     }
 
     return file;

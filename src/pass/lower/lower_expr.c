@@ -55,6 +55,7 @@ static HirNode *lower_lit(Lower *low, const ASTNode *ast) {
     case LIT_UNIT:
         return hir_new(low->hir_arena, HIR_UNIT_LIT, type, loc);
     }
+    assert(0 && "lower: unhandled literal kind — check pass should reject");
     return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, loc);
 }
 
@@ -437,6 +438,8 @@ static HirNode *gather_embedded_field_values(Lower *low, const ASTNode *ast,
 
 static HirNode *lower_struct_lit(Lower *low, const ASTNode *ast) {
     const Type *struct_type = ast->type;
+    assert(struct_type != NULL && struct_type->kind == TYPE_STRUCT &&
+           "lower: struct literal must have TYPE_STRUCT after check");
     if (struct_type == NULL || struct_type->kind != TYPE_STRUCT) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, ast->loc);
     }
@@ -516,6 +519,7 @@ static HirNode *lower_optional_chain(Lower *low, const ASTNode *ast) {
     bool via_ptr = inner_type->kind == TYPE_PTR;
     const Type *deref_type = via_ptr ? type_ptr_pointee(inner_type) : inner_type;
     const StructField *sf = type_struct_find_field(deref_type, ast->optional_chain.member);
+    assert(sf != NULL && "lower: optional chain field must be resolved after check");
     const Type *field_type = sf != NULL ? sf->type : &TYPE_ERR_INST;
 
     HirNode *field = lower_make_field_access(

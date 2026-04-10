@@ -144,7 +144,7 @@ const Type *check_match(Sema *sema, ASTNode *node) {
 
     if (operand_type != NULL && operand_type->kind == TYPE_ENUM) {
         int32_t variant_count = type_enum_variant_count(operand_type);
-        variant_covered = arena_alloc_zero(sema->arena, variant_count * sizeof(bool));
+        variant_covered = arena_alloc_zero(sema->base.arena, variant_count * sizeof(bool));
     }
 
     for (int32_t i = 0; i < BUF_LEN(node->match_expr.arms); i++) {

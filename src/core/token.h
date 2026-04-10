@@ -126,16 +126,17 @@ typedef enum {
     TOKEN_INTERPOLATION_END,   // end of interpolation segment
 
     // Special
-    TOKEN_NEWLINE, // significant newline (stmt terminator)
-    TOKEN_EOF,     // end of file
-    TOKEN_ERR,     // lex err
+    TOKEN_NEWLINE,     // significant newline (stmt terminator)
+    TOKEN_DOC_COMMENT, // `///` doc comment line (text after `/// `)
+    TOKEN_EOF,         // end of file
+    TOKEN_ERR,         // lex err
 } TokenKind;
 
 /**
  * A single lexeme with its kind, src text, loc, and optional
  * parsed lit value.
  */
-typedef struct {
+typedef struct Token {
     TokenKind kind;
     const char *lexeme; // points into arena-duped src or interned str
     int32_t len;

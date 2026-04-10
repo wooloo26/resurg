@@ -115,6 +115,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_INTERPOLATION_START] = {"INTERPOLATION_START", 0, 0, 0},
     [TOKEN_INTERPOLATION_END] = {"INTERPOLATION_END", 0, 0, 0},
     [TOKEN_NEWLINE] = {"NEWLINE", 0, 0, 0},
+    [TOKEN_DOC_COMMENT] = {"DOC_COMMENT", 0, 0, 0},
     [TOKEN_EOF] = {"EOF", 0, 0, 0},
     [TOKEN_ERR] = {"ERR", 0, 0, 0},
 };

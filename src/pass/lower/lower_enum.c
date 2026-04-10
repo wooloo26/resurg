@@ -79,6 +79,7 @@ static HirNode *finish_enum_init(Lower *low, const EnumVariantSpec *spec,
 
 HirNode *lower_enum_unit_init(Lower *low, const EnumVariantSpec *spec) {
     EnumInitState state = begin_enum_init(low, spec);
+    assert(state.variant != NULL && "lower: enum unit variant must be resolved after check");
     if (state.variant == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, spec->loc);
     }
@@ -87,6 +88,7 @@ HirNode *lower_enum_unit_init(Lower *low, const EnumVariantSpec *spec) {
 
 HirNode *lower_enum_tuple_init(Lower *low, const EnumVariantSpec *spec, ASTNode **args) {
     EnumInitState state = begin_enum_init(low, spec);
+    assert(state.variant != NULL && "lower: enum tuple variant must be resolved after check");
     if (state.variant == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, spec->loc);
     }
@@ -107,6 +109,7 @@ HirNode *lower_enum_tuple_init(Lower *low, const EnumVariantSpec *spec, ASTNode 
 HirNode *lower_enum_struct_init(Lower *low, const EnumVariantSpec *spec,
                                 const char **ast_field_names, ASTNode **ast_field_values) {
     EnumInitState state = begin_enum_init(low, spec);
+    assert(state.variant != NULL && "lower: enum struct variant must be resolved after check");
     if (state.variant == NULL) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_ERR_INST, spec->loc);
     }

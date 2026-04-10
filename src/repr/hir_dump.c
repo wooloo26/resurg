@@ -166,18 +166,19 @@ static void dump_block(const HirNode *node, int32_t indent) {
 static void dump_match_node(const HirNode *node, int32_t indent) {
     fprintf(stderr, "\n");
     hir_dump(node->match_expr.operand, indent + 1);
-    for (int32_t i = 0; i < BUF_LEN(node->match_expr.arm_bodies); i++) {
+    for (int32_t i = 0; i < BUF_LEN(node->match_expr.arms); i++) {
+        const HirMatchArm *arm = &node->match_expr.arms[i];
         dump_indent(indent + 1);
         fprintf(stderr, "arm %d:\n", i);
-        if (node->match_expr.arm_conds[i] != NULL) {
-            hir_dump(node->match_expr.arm_conds[i], indent + 2);
+        if (arm->cond != NULL) {
+            hir_dump(arm->cond, indent + 2);
         }
-        if (node->match_expr.arm_guards[i] != NULL) {
+        if (arm->guard != NULL) {
             dump_indent(indent + 2);
             fprintf(stderr, "guard:\n");
-            hir_dump(node->match_expr.arm_guards[i], indent + 3);
+            hir_dump(arm->guard, indent + 3);
         }
-        hir_dump(node->match_expr.arm_bodies[i], indent + 2);
+        hir_dump(arm->body, indent + 2);
     }
 }
 

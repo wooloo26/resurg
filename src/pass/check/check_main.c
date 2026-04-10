@@ -8,9 +8,10 @@
 // ── Public API ─────────────────────────────────────────────────────────
 
 bool sema_check(Sema *sema, ASTNode *file) {
+    sema->base.phase = SEMA_PHASE_CHECK;
     sema->method_checker = check_struct_method_body;
     check_node(sema, file);
-    return sema->err_count == 0;
+    return sema->base.err_count == 0;
 }
 
 void sema_check_fn_body(Sema *sema, ASTNode *fn_node) {

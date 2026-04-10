@@ -123,6 +123,13 @@ const char *lower_mangle_name(Arena *arena, const char *name);
 
 /** Lower any AST node (dispatches to decl/stmt/expr handlers). */
 HirNode *lower_node(Lower *low, const ASTNode *ast);
+
+// ── File / module lowering (lower_file.c) ─────────────────────────────
+
+/** Lower a NODE_FILE into a HIR_FILE with pre-registered fn syms. */
+HirNode *lower_file(Lower *low, const ASTNode *ast);
+/** Lower a NODE_MODULE into a HIR_MODULE. */
+HirNode *lower_module(Lower *low, const ASTNode *ast);
 /** Lower an AST expr. */
 HirNode *lower_expr(Lower *low, const ASTNode *ast);
 /** Lower a buf of AST expr nodes into a buf of HIR nodes. */

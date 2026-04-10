@@ -1,6 +1,8 @@
 #ifndef RSG__SEMA_H
 #define RSG__SEMA_H
 
+#include "core/diag.h"
+#include "core/intrinsic.h"
 #include "pass/resolve/_resolve.h"
 
 /**
@@ -34,6 +36,7 @@ struct FnSig {
     bool is_ptr_recv;
     bool is_declare;            // true for declare fns
     bool has_variadic;          // true when last param is variadic (..T)
+    IntrinsicKind intrinsic;    // INTRINSIC_NONE for user fns; set once during resolve
     DefaultKind *default_kinds; /* buf - parallel to param_types; NULL when no defaults */
     ASTNode **default_exprs;    /* buf - parallel to param_types; NULL entries for @file/@line */
 };
@@ -128,10 +131,11 @@ typedef void (*FnBodyChecker)(struct Sema *sema, ASTNode *fn_node);
 
 /** Closure context — saved/restored as a unit when entering nested closures. */
 typedef struct {
-    Scope *scope;          // scope of the enclosing Fn/FnMut closure (NULL if none)
-    FnTypeKind fn_kind;    // fn kind of the enclosing closure (FN_PLAIN when not in closure)
-    bool has_capture;      // true when any variable outside closure scope is referenced
-    bool captures_mutated; // true when a captured variable is mutated (FnMut inference)
+    Scope *scope;               // scope of the enclosing Fn/FnMut closure (NULL if none)
+    FnTypeKind fn_kind;         // fn kind of the enclosing closure (FN_PLAIN when not in closure)
+    bool has_capture;           // true when any variable outside closure scope is referenced
+    bool captures_mutated;      // true when a captured variable is mutated (FnMut inference)
+    const char **capture_names; /* buf - collected captured variable names (deduplicated) */
 } ClosureCtx;
 
 /** Grouped hash tables for generic definitions and active type params. */
@@ -169,28 +173,88 @@ typedef struct TypeInferCtx {
     const char *self_type_name;  // enclosing type name for Self resolution (NULL if not in method)
 } TypeInferCtx;
 
-struct Sema {
+// ── Sema phase tracking ────────────────────────────────────────────
+
+/** Active semantic pass — used for phase-violation assertions in debug builds. */
+typedef enum {
+    SEMA_PHASE_RESOLVE, // name resolution + registration
+    SEMA_PHASE_CHECK,   // type-checking + inference
+    SEMA_PHASE_MONO,    // generic monomorphization
+} SemaPhase;
+
+/**
+ * @brief Shared semantic base — infrastructure used by all sema phases.
+ *
+ * Contains the arena, scope chain, diagnostic collector, and the global
+ * declaration + generic-template tables.  Extracted from the full Sema so
+ * that helpers needing only shared state can accept @c SemaBase* instead
+ * of the full context.  SemaBase is always the first member of Sema,
+ * so casting between @c SemaBase* and @c Sema* is safe (C17 §6.7.2.1¶15).
+ */
+typedef struct SemaBase {
     Arena *arena;
     Scope *current_scope;
     int32_t err_count;
-    MethodChecker method_checker;     // set by check pass; NULL during resolve
-    TypeInferCtx infer;               // per-expression type inference context
-    ModuleCtx module;                 // module-loading context
-    FnBodyChecker fn_body_checker;    // injected callback for mono to type-check cloned fn bodies
-    ClosureCtx closure;               // closure capture tracking (check pass)
-    ASTNode *file_node;               // root file node (for appending monomorphized fns)
-    SemaDB db;                        // global declaration tables
-    GenericTables generics;           // generic template tables + active type params
+    DiagCtx dctx;           // structured diagnostic collector
+    SemaDB db;              // global declaration tables
+    GenericTables generics; // generic template tables + active type params
+    ASTNode *file_node;     // root file node (for appending monomorphized fns)
+    SemaPhase phase;        // current active phase
+} SemaBase;
+
+/**
+ * @brief Full semantic context — SemaBase plus per-phase fields.
+ *
+ * Fields are grouped by phase ownership.  Phase assertions enforce that
+ * pass-specific fields are only accessed by their owning pass in debug
+ * builds.
+ */
+struct Sema {
+    SemaBase base; // MUST be first — enables SemaBase*/Sema* safe casting
+
+    // ── Resolve phase ──────────────────────────────────────
+    ModuleCtx module; // module-loading context
+
+    // ── Check phase ────────────────────────────────────────
+    MethodChecker method_checker; // set by check pass; NULL during resolve
+    TypeInferCtx infer;           // per-expression type inference context
+    ClosureCtx closure;           // closure capture tracking
+
+    // ── Mono phase ─────────────────────────────────────────
+    FnBodyChecker fn_body_checker; // injected callback for mono to type-check cloned fn bodies
+    int32_t mono_depth;            // current monomorphization recursion depth
+
+    // ── Cross-phase (check → mono) ─────────────────────────
     GenericInst *pending_insts;       /* buf - deferred generic instantiations */
     GenericExtDef **generic_ext_defs; /* buf - generic ext templates */
     ASTNode **synthetic_decls;        /* buf - monomorphized struct/enum decls to append */
 };
 
+/** Assert that the sema is in the expected @p p phase (debug builds only). */
+#ifndef NDEBUG
+#define SEMA_ASSERT_PHASE(sema, p) assert((sema)->base.phase == (p) && "sema phase violation")
+#else
+#define SEMA_ASSERT_PHASE(sema, p) ((void)0)
+#endif
+
 /** Report a semantic err and bump the sema's err counter. */
 #define SEMA_ERR(sema, loc, ...)                                                                   \
     do {                                                                                           \
-        rsg_err(loc, __VA_ARGS__);                                                                 \
-        (sema)->err_count++;                                                                       \
+        diag_at(&(sema)->base.dctx, DIAG_ERR, loc, NULL, __VA_ARGS__);                             \
+        (sema)->base.err_count++;                                                                  \
     } while (0)
+
+// ── TypeInferCtx scope guards ──────────────────────────────────────────
+
+/**
+ * Save the current value of a TypeInferCtx field and set a new value.
+ * Must be paired with SEMA_INFER_RESTORE in the same scope.
+ */
+#define SEMA_INFER_SCOPE(sema, field, value)                                                       \
+    const __typeof__((sema)->infer.field) _saved_infer_##field = (sema)->infer.field;              \
+    (sema)->infer.field = (value)
+
+/** Restore a TypeInferCtx field previously saved by SEMA_INFER_SCOPE. */
+#define SEMA_INFER_RESTORE(sema, field) (sema)->infer.field = _saved_infer_##field
 
 #endif // RSG__SEMA_H

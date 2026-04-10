@@ -30,6 +30,53 @@
 #define RSG_FN_PANIC "rsgu_panic"
 #define RSG_FN_RECOVER "rsgu_recover"
 
+// ── Runtime ABI ──────────────────────────────────────────────────
+
+/**
+ * Runtime function name table — maps abstract operations to
+ * target-specific names.
+ *
+ * The C backend uses the default C ABI names; a JS backend would
+ * map to its own namespace (e.g. "rsg.gc.init"); WASM could map
+ * to import names.
+ *
+ * Retrieve the default C ABI via runtime_abi_default().
+ */
+typedef struct {
+    // GC runtime
+    const char *gc_init;    // C: "rsg_gc_init"
+    const char *gc_collect; // C: "rsg_gc_collect"
+
+    // Str operations
+    const char *str_new;    // C: "rsg_str_new"
+    const char *str_concat; // C: "rsg_str_concat"
+    const char *str_equal;  // C: "rsg_str_equal"
+    const char *str_from;   // C: "rsg_str_from_" (prefix for type suffix)
+
+    // Slice operations
+    const char *slice_new;        // C: "rsg_slice_new"
+    const char *slice_from_array; // C: "rsg_slice_from_array"
+    const char *slice_sub;        // C: "rsg_slice_sub"
+    const char *slice_concat;     // C: "rsg_slice_concat"
+
+    // Panic/recover
+    const char *panic;      // C: "rsgu_panic"
+    const char *recover;    // C: "rsgu_recover"
+    const char *assert;     // C: "rsg_assert"
+    const char *panic_push; // C: "rsg_panic_push"
+    const char *panic_pop;  // C: "rsg_panic_pop"
+
+    // I/O (prefix — type suffix is appended)
+    const char *print;   // C: "rsgu_print_" (prefix)
+    const char *println; // C: "rsgu_println_" (prefix)
+
+    // Runtime include / header
+    const char *runtime_header; // C: "rsg_runtime.h"
+} RuntimeABI;
+
+/** Return the default C17 runtime ABI name table. */
+const RuntimeABI *runtime_abi_default(void);
+
 // ── Intrinsic struct field names ──────────────────────────────────
 
 #define RSG_FIELD_LEN "len"

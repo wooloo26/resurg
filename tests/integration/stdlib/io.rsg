@@ -1,0 +1,6 @@
+// stdlib: io — basic I/O via builtins
+// EXPECT-STDOUT: hello world
+
+fn main() {
+    println("hello world")
+}

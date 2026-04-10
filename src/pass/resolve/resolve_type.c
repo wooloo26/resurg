@@ -2,40 +2,65 @@
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
+/** Return the current module prefix, or NULL when at file scope. */
+static const char *sema_module_prefix(const Sema *sema) {
+    if (sema->base.current_scope != NULL && sema->base.current_scope->module_name != NULL) {
+        return sema->base.current_scope->module_name;
+    }
+    return NULL;
+}
+
+/**
+ * Look up @p name in @p table. If not found and a module prefix is active,
+ * retry with the qualified name "module.name".
+ */
+static void *module_fallback_lookup(const Sema *sema, const HashTable *table, const char *name) {
+    void *result = hash_table_lookup(table, name);
+    if (result != NULL) {
+        return result;
+    }
+    const char *mod = sema_module_prefix(sema);
+    if (mod != NULL) {
+        const char *qualified = arena_sprintf(sema->base.arena, "%s.%s", mod, name);
+        result = hash_table_lookup(table, qualified);
+    }
+    return result;
+}
+
 const Type *sema_lookup_type_alias(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->db.type_alias_table, name);
+    return module_fallback_lookup(sema, &sema->base.db.type_alias_table, name);
 }
 
 FnSig *sema_lookup_fn(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->db.fn_table, name);
+    return module_fallback_lookup(sema, &sema->base.db.fn_table, name);
 }
 
 StructDef *sema_lookup_struct(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->db.struct_table, name);
+    return module_fallback_lookup(sema, &sema->base.db.struct_table, name);
 }
 
 EnumDef *sema_lookup_enum(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->db.enum_table, name);
+    return module_fallback_lookup(sema, &sema->base.db.enum_table, name);
 }
 
 PactDef *sema_lookup_pact(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->db.pact_table, name);
+    return module_fallback_lookup(sema, &sema->base.db.pact_table, name);
 }
 
 GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generics.fn, name);
+    return module_fallback_lookup(sema, &sema->base.generics.fn, name);
 }
 
 GenericStructDef *sema_lookup_generic_struct(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generics.structs, name);
+    return module_fallback_lookup(sema, &sema->base.generics.structs, name);
 }
 
 GenericEnumDef *sema_lookup_generic_enum(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generics.enums, name);
+    return module_fallback_lookup(sema, &sema->base.generics.enums, name);
 }
 
 GenericTypeAlias *sema_lookup_generic_type_alias(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->generics.type_alias, name);
+    return module_fallback_lookup(sema, &sema->base.generics.type_alias, name);
 }
 
 // ── Per-kind type resolvers ─────────────────────────────────────────────
@@ -49,7 +74,8 @@ static const Type *resolve_array_type(Sema *sema, const ASTType *ast_type) {
     int32_t size = ast_type->array_size;
     if (ast_type->array_size_name != NULL) {
         // Comptime param: look up the integer value from type_param_table
-        const Type *ct = hash_table_lookup(&sema->generics.type_params, ast_type->array_size_name);
+        const Type *ct =
+            hash_table_lookup(&sema->base.generics.type_params, ast_type->array_size_name);
         if (ct != NULL && ct->kind == TYPE_COMPTIME_INT) {
             size = (int32_t)ct->comptime_int.value;
         } else {
@@ -58,7 +84,7 @@ static const Type *resolve_array_type(Sema *sema, const ASTType *ast_type) {
             return &TYPE_ERR_INST;
         }
     }
-    return type_create_array(sema->arena, elem, size);
+    return type_create_array(sema->base.arena, elem, size);
 }
 
 static const Type *resolve_slice_type(Sema *sema, const ASTType *ast_type) {
@@ -67,7 +93,7 @@ static const Type *resolve_slice_type(Sema *sema, const ASTType *ast_type) {
         SEMA_ERR(sema, ast_type->loc, "slice elem type required");
         return &TYPE_ERR_INST;
     }
-    return type_create_slice(sema->arena, elem);
+    return type_create_slice(sema->base.arena, elem);
 }
 
 static const Type *resolve_tuple_type(Sema *sema, const ASTType *ast_type) {
@@ -79,7 +105,7 @@ static const Type *resolve_tuple_type(Sema *sema, const ASTType *ast_type) {
         }
         BUF_PUSH(elems, elem);
     }
-    return type_create_tuple(sema->arena, elems, BUF_LEN(elems));
+    return type_create_tuple(sema->base.arena, elems, BUF_LEN(elems));
 }
 
 static const Type *resolve_ptr_type(Sema *sema, const ASTType *ast_type) {
@@ -88,7 +114,7 @@ static const Type *resolve_ptr_type(Sema *sema, const ASTType *ast_type) {
         SEMA_ERR(sema, ast_type->loc, "ptr elem type required");
         return &TYPE_ERR_INST;
     }
-    return type_create_ptr(sema->arena, pointee, false);
+    return type_create_ptr(sema->base.arena, pointee, false);
 }
 
 static const Type *resolve_option_type(Sema *sema, const ASTType *ast_type) {
@@ -138,7 +164,7 @@ static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
         ret = &TYPE_UNIT_INST;
     }
     FnTypeSpec fn_spec = {params, BUF_LEN(params), ret, ast_type->fn_kind};
-    return type_create_fn(sema->arena, &fn_spec);
+    return type_create_fn(sema->base.arena, &fn_spec);
 }
 
 /** Resolve a generic type alias instantiation. */
@@ -171,7 +197,8 @@ static const Type *resolve_generic_type_alias(Sema *sema, const ASTType *ast_typ
         if (t == NULL) {
             t = &TYPE_ERR_INST;
         }
-        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+        hash_table_insert(&sema->base.generics.type_params, gta->base.type_params[i].name,
+                          (void *)t);
     }
     // Fill defaults for remaining
     for (int32_t i = got; i < expected; i++) {
@@ -179,12 +206,13 @@ static const Type *resolve_generic_type_alias(Sema *sema, const ASTType *ast_typ
         if (t == NULL) {
             t = &TYPE_ERR_INST;
         }
-        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+        hash_table_insert(&sema->base.generics.type_params, gta->base.type_params[i].name,
+                          (void *)t);
     }
     const Type *result = resolve_ast_type(sema, &gta->alias_type);
     // Clear type param substitutions
     for (int32_t i = 0; i < expected; i++) {
-        hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
+        hash_table_remove(&sema->base.generics.type_params, gta->base.type_params[i].name);
     }
     return result;
 }
@@ -216,17 +244,12 @@ static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
         return type;
     }
     // Check active type param substitutions (for generic body checking)
-    const Type *tp = hash_table_lookup(&sema->generics.type_params, ast_type->name);
+    const Type *tp = hash_table_lookup(&sema->base.generics.type_params, ast_type->name);
     if (tp != NULL) {
         return tp;
     }
-    // Check type aliases
+    // Check type aliases (module-qualified fallback handled by sema_lookup_type_alias)
     const Type *alias = sema_lookup_type_alias(sema, ast_type->name);
-    if (alias == NULL && sema->current_scope != NULL && sema->current_scope->module_name != NULL) {
-        const char *qualified =
-            arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, ast_type->name);
-        alias = sema_lookup_type_alias(sema, qualified);
-    }
     if (alias != NULL) {
         return alias;
     }
@@ -275,7 +298,7 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
     if (strcmp(base_name, "Self") == 0) {
         resolved_name = sema->infer.self_type_name;
     } else {
-        const Type *param_type = hash_table_lookup(&sema->generics.type_params, base_name);
+        const Type *param_type = hash_table_lookup(&sema->base.generics.type_params, base_name);
         if (param_type != NULL && param_type->kind == TYPE_STRUCT) {
             resolved_name = param_type->struct_type.name;
         } else if (param_type != NULL && param_type->kind == TYPE_ENUM) {
@@ -328,7 +351,7 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
 
 /** Resolve compile-time integer value (for comptime generics). */
 static const Type *resolve_comptime_int_type(Sema *sema, const ASTType *ast_type) {
-    return type_create_comptime_int(sema->arena, ast_type->comptime_int_value);
+    return type_create_comptime_int(sema->base.arena, ast_type->comptime_int_value);
 }
 
 typedef const Type *(*TypeResolver)(Sema *, const ASTType *);
@@ -349,11 +372,21 @@ const Type *resolve_ast_type(Sema *sema, const ASTType *ast_type) {
     if (ast_type == NULL || ast_type->kind == AST_TYPE_INFERRED) {
         return NULL;
     }
+    // Return cached result when available and no generic substitutions are active.
+    // Active type_params mean the same ASTType may resolve differently per instantiation.
+    bool can_cache = sema->base.generics.type_params.count == 0;
+    if (can_cache && ast_type->resolved != NULL) {
+        return ast_type->resolved;
+    }
     int32_t kind = (int32_t)ast_type->kind;
     if (kind >= 0 && kind < TYPE_RESOLVER_COUNT) {
         TypeResolver resolver = TYPE_RESOLVERS[kind];
         if (resolver != NULL) {
-            return resolver(sema, ast_type);
+            const Type *result = resolver(sema, ast_type);
+            if (can_cache) {
+                ((ASTType *)ast_type)->resolved = result;
+            }
+            return result;
         }
     }
     return NULL;

@@ -21,7 +21,7 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
         variant.kind = ENUM_VARIANT_TUPLE;
         variant.tuple_count = BUF_LEN(ast_variant->tuple_types);
         variant.tuple_types = (const Type **)arena_alloc_zero(
-            sema->arena, variant.tuple_count * sizeof(const Type *));
+            sema->base.arena, variant.tuple_count * sizeof(const Type *));
         for (int32_t j = 0; j < variant.tuple_count; j++) {
             variant.tuple_types[j] = resolve_ast_type(sema, &ast_variant->tuple_types[j]);
             if (variant.tuple_types[j] == NULL) {
@@ -33,7 +33,8 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
     case VARIANT_STRUCT: {
         variant.kind = ENUM_VARIANT_STRUCT;
         variant.field_count = BUF_LEN(ast_variant->fields);
-        variant.fields = arena_alloc_zero(sema->arena, variant.field_count * sizeof(StructField));
+        variant.fields =
+            arena_alloc_zero(sema->base.arena, variant.field_count * sizeof(StructField));
         for (int32_t j = 0; j < variant.field_count; j++) {
             variant.fields[j].name = ast_variant->fields[j].name;
             variant.fields[j].type = resolve_ast_type(sema, &ast_variant->fields[j].type);
@@ -111,16 +112,16 @@ void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **me
 // ── Registration functions ─────────────────────────────────────────
 
 void register_enum_def(Sema *sema, ASTNode *decl) {
-    const char *enum_name = decl->enum_decl.name;
+    const char *enum_name = decl->enum_decl->name;
 
     // If the enum has type params, store as a generic template instead
-    if (BUF_LEN(decl->enum_decl.type_params) > 0) {
+    if (BUF_LEN(decl->enum_decl->type_params) > 0) {
         GenericEnumDef *gdef = rsg_malloc(sizeof(*gdef));
         gdef->name = enum_name;
         gdef->decl = decl;
-        gdef->type_params = decl->enum_decl.type_params;
-        gdef->type_param_count = BUF_LEN(decl->enum_decl.type_params);
-        hash_table_insert(&sema->generics.enums, enum_name, gdef);
+        gdef->type_params = decl->enum_decl->type_params;
+        gdef->type_param_count = BUF_LEN(decl->enum_decl->type_params);
+        hash_table_insert(&sema->base.generics.enums, enum_name, gdef);
         return;
     }
 
@@ -129,31 +130,31 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    const char *prev_self = sema->infer.self_type_name;
-    sema->infer.self_type_name = enum_name;
+    SEMA_INFER_SCOPE(sema, self_type_name, enum_name);
 
     // Register associated type aliases before variant resolution
     // so that variant types can reference them (e.g., Data(Payload))
-    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.assoc_types); i++) {
-        if (decl->enum_decl.assoc_types[i].concrete_type != NULL) {
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl->assoc_types); i++) {
+        if (decl->enum_decl->assoc_types[i].concrete_type != NULL) {
             const Type *at_type =
-                resolve_ast_type(sema, decl->enum_decl.assoc_types[i].concrete_type);
+                resolve_ast_type(sema, decl->enum_decl->assoc_types[i].concrete_type);
             if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->db.type_alias_table, decl->enum_decl.assoc_types[i].name,
-                                  (void *)at_type);
+                hash_table_insert(&sema->base.db.type_alias_table,
+                                  decl->enum_decl->assoc_types[i].name, (void *)at_type);
             }
         }
     }
 
     EnumVariant *variants = NULL;
     int32_t auto_discriminant = 0;
-    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.variants); i++) {
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl->variants); i++) {
         EnumVariant variant =
-            build_enum_variant(sema, &decl->enum_decl.variants[i], &auto_discriminant);
+            build_enum_variant(sema, &decl->enum_decl->variants[i], &auto_discriminant);
         BUF_PUSH(variants, variant);
     }
 
-    const Type *enum_type = type_create_enum(sema->arena, enum_name, variants, BUF_LEN(variants));
+    const Type *enum_type =
+        type_create_enum(sema->base.arena, enum_name, variants, BUF_LEN(variants));
     decl->type = enum_type;
 
     EnumDef *def = rsg_malloc(sizeof(*def));
@@ -163,32 +164,31 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
     def->type = enum_type;
 
     // Copy associated types from AST
-    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.assoc_types); i++) {
-        BUF_PUSH(def->assoc_types, decl->enum_decl.assoc_types[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl->assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->enum_decl->assoc_types[i]);
     }
 
     // Register type alias early so Self-referencing method sigs can resolve
-    hash_table_insert(&sema->db.enum_table, enum_name, def);
-    hash_table_insert(&sema->db.type_alias_table, enum_name, (void *)enum_type);
+    hash_table_insert(&sema->base.db.enum_table, enum_name, def);
+    hash_table_insert(&sema->base.db.type_alias_table, enum_name, (void *)enum_type);
     scope_define(sema, &(SymDef){enum_name, enum_type, false, SYM_TYPE});
 
-    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.methods); i++) {
-        register_method_sig(sema, enum_name, decl->enum_decl.methods[i], &def->methods);
+    for (int32_t i = 0; i < BUF_LEN(decl->enum_decl->methods); i++) {
+        register_method_sig(sema, enum_name, decl->enum_decl->methods[i], &def->methods);
     }
 
-    sema->infer.self_type_name = prev_self;
+    SEMA_INFER_RESTORE(sema, self_type_name);
 }
 
 void register_pact_def(Sema *sema, ASTNode *decl) {
-    const char *pact_name = decl->pact_decl.name;
+    const char *pact_name = decl->pact_decl->name;
 
     if (sema_lookup_pact(sema, pact_name) != NULL) {
         SEMA_ERR(sema, decl->loc, "duplicate pact def '%s'", pact_name);
         return;
     }
 
-    const char *prev_self = sema->infer.self_type_name;
-    sema->infer.self_type_name = pact_name;
+    SEMA_INFER_SCOPE(sema, self_type_name, pact_name);
 
     PactDef *def = rsg_malloc(sizeof(*def));
     def->name = pact_name;
@@ -198,18 +198,18 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     def->assoc_types = NULL;
 
     // Copy associated types from AST
-    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.assoc_types); i++) {
-        BUF_PUSH(def->assoc_types, decl->pact_decl.assoc_types[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl->assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->pact_decl->assoc_types[i]);
     }
 
     // Copy super pact refs
-    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.super_pacts); i++) {
-        BUF_PUSH(def->super_pacts, decl->pact_decl.super_pacts[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl->super_pacts); i++) {
+        BUF_PUSH(def->super_pacts, decl->pact_decl->super_pacts[i]);
     }
 
     // Register required fields
-    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.fields); i++) {
-        ASTStructField *ast_field = &decl->pact_decl.fields[i];
+    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl->fields); i++) {
+        ASTStructField *ast_field = &decl->pact_decl->fields[i];
         const Type *field_type = resolve_ast_type(sema, &ast_field->type);
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
@@ -220,8 +220,8 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     }
 
     // Register methods
-    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl.methods); i++) {
-        ASTNode *method = decl->pact_decl.methods[i];
+    for (int32_t i = 0; i < BUF_LEN(decl->pact_decl->methods); i++) {
+        ASTNode *method = decl->pact_decl->methods[i];
         StructMethodInfo mi = {.name = method->fn_decl.name,
                                .is_mut_recv = method->fn_decl.is_mut_recv,
                                .is_ptr_recv = method->fn_decl.is_ptr_recv,
@@ -230,8 +230,8 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
         BUF_PUSH(def->methods, mi);
     }
 
-    hash_table_insert(&sema->db.pact_table, pact_name, def);
-    sema->infer.self_type_name = prev_self;
+    hash_table_insert(&sema->base.db.pact_table, pact_name, def);
+    SEMA_INFER_RESTORE(sema, self_type_name);
 }
 
 /** Verify that all pact-required fields are present and type-correct. */
@@ -247,8 +247,9 @@ static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef
                 if (!type_equal(def->fields[j].type, required_fields[i].type)) {
                     SEMA_ERR(sema, decl->loc,
                              "field '%s' has type '%s' but pact '%s' requires type '%s'",
-                             required_fields[i].name, type_name(sema->arena, def->fields[j].type),
-                             pact->name, type_name(sema->arena, required_fields[i].type));
+                             required_fields[i].name,
+                             type_name(sema->base.arena, def->fields[j].type), pact->name,
+                             type_name(sema->base.arena, required_fields[i].type));
                 }
                 found = true;
                 break;
@@ -282,7 +283,7 @@ static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, Pact
             if (has_body) {
                 ASTNode *method_ast = pact_methods[i].decl;
                 method_ast->fn_decl.owner_struct = def->name;
-                BUF_PUSH(decl->struct_decl.methods, method_ast);
+                BUF_PUSH(decl->struct_decl->methods, method_ast);
                 register_method_sig(sema, def->name, method_ast, &def->methods);
             } else {
                 SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
@@ -320,7 +321,7 @@ static void validate_pact_assoc_types(Sema *sema, ASTNode *decl, StructDef *def,
                     .concrete_type = pact->assoc_types[i].concrete_type,
                 };
                 BUF_PUSH(def->assoc_types, defaulted);
-                BUF_PUSH(decl->struct_decl.assoc_types, defaulted);
+                BUF_PUSH(decl->struct_decl->assoc_types, defaulted);
             } else {
                 SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
                          at_name, pact_name);
@@ -376,7 +377,7 @@ void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def,
                 if (!type_satisfies_bound(sema, concrete, bound)) {
                     SEMA_ERR(sema, decl->loc,
                              "associated type '%s' = '%s' does not satisfy bound '%s'", at_name,
-                             type_name(sema->arena, concrete), bound);
+                             type_name(sema->base.arena, concrete), bound);
                 }
             }
             break;
@@ -385,8 +386,8 @@ void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def,
 }
 
 void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
-    for (int32_t ci = 0; ci < BUF_LEN(decl->struct_decl.conformances); ci++) {
-        const char *pact_name = decl->struct_decl.conformances[ci];
+    for (int32_t ci = 0; ci < BUF_LEN(decl->struct_decl->conformances); ci++) {
+        const char *pact_name = decl->struct_decl->conformances[ci];
         PactDef *pact = sema_lookup_pact(sema, pact_name);
         if (pact == NULL) {
             SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);

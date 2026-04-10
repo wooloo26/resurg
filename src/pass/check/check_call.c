@@ -5,24 +5,6 @@
  * @brief Call-expression type checking — direct calls, named args, tuple structs, variants.
  */
 
-// ── Addressability helpers ────────────────────────────────────────
-
-/** Return true if @p node is an addressable lvalue (variable, member, index). */
-bool is_lvalue(const ASTNode *node) {
-    if (node == NULL) {
-        return false;
-    }
-    switch (node->kind) {
-    case NODE_ID:
-    case NODE_MEMBER:
-    case NODE_IDX:
-    case NODE_ADDRESS_OF:
-        return true;
-    default:
-        return false;
-    }
-}
-
 // ── Named-arg helpers ─────────────────────────────────────────────
 
 /** Find the index of a named parameter in @p sig. Returns -1 if not found. */
@@ -152,7 +134,8 @@ static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *
         if (arg_type != NULL && param_type != NULL && !type_assignable(arg_type, param_type) &&
             arg_type->kind != TYPE_ERR && param_type->kind != TYPE_ERR) {
             SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
-                     type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
+                     type_name(sema->base.arena, param_type),
+                     type_name(sema->base.arena, arg_type));
         }
     }
 
@@ -174,7 +157,8 @@ static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *
                 if (arg_type != NULL && !type_assignable(arg_type, slice_type) &&
                     arg_type->kind != TYPE_ERR) {
                     SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
-                             type_name(sema->arena, slice_type), type_name(sema->arena, arg_type));
+                             type_name(sema->base.arena, slice_type),
+                             type_name(sema->base.arena, arg_type));
                 }
             } else {
                 // Individual arg must match element type
@@ -183,7 +167,8 @@ static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *
                 if (arg_type != NULL && !type_assignable(arg_type, elem_type) &&
                     arg_type->kind != TYPE_ERR) {
                     SEMA_ERR(sema, arg->loc, "type mismatch: expected '%s', got '%s'",
-                             type_name(sema->arena, elem_type), type_name(sema->arena, arg_type));
+                             type_name(sema->base.arena, elem_type),
+                             type_name(sema->base.arena, arg_type));
                 }
             }
         }
@@ -210,7 +195,8 @@ const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_type) {
             if (arg_type != NULL && param_type != NULL && !type_assignable(arg_type, param_type) &&
                 arg_type->kind != TYPE_ERR && param_type->kind != TYPE_ERR) {
                 SEMA_ERR(sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
-                         type_name(sema->arena, param_type), type_name(sema->arena, arg_type));
+                         type_name(sema->base.arena, param_type),
+                         type_name(sema->base.arena, arg_type));
             }
         }
     }
@@ -249,8 +235,8 @@ const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_
             if (arg_type != NULL && !type_equal(arg_type, variant->tuple_types[i]) &&
                 arg_type->kind != TYPE_ERR) {
                 SEMA_ERR(sema, node->call.args[i]->loc, "type mismatch: expected '%s', got '%s'",
-                         type_name(sema->arena, variant->tuple_types[i]),
-                         type_name(sema->arena, arg_type));
+                         type_name(sema->base.arena, variant->tuple_types[i]),
+                         type_name(sema->base.arena, arg_type));
             }
         }
     }
@@ -289,16 +275,16 @@ static StructDef *infer_tuple_struct_type_args(Sema *sema, ASTNode *node, const 
             return NULL;
         }
         ASTType ta = {.kind = AST_TYPE_NAME,
-                      .name = type_name(sema->arena, arg_type),
+                      .name = type_name(sema->base.arena, arg_type),
                       .type_args = NULL,
                       .loc = node->loc};
-        hash_table_insert(&sema->generics.type_params, ta.name, (void *)arg_type);
+        hash_table_insert(&sema->base.generics.type_params, ta.name, (void *)arg_type);
         BUF_PUSH(inferred_args, ta);
     }
     GenericInstArgs inst_args = {inferred_args, BUF_LEN(inferred_args), node->loc};
     const char *mangled = instantiate_generic_struct(sema, gdef, &inst_args);
     for (int32_t i = 0; i < BUF_LEN(inferred_args); i++) {
-        hash_table_remove(&sema->generics.type_params, inferred_args[i].name);
+        hash_table_remove(&sema->base.generics.type_params, inferred_args[i].name);
     }
     BUF_FREE(inferred_args);
     if (mangled != NULL) {
@@ -354,10 +340,9 @@ static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char
         const Type *actual = node->call.args[i]->type;
         // Re-check arg with expected type if initial check failed (e.g., bare None)
         if (actual == NULL || actual->kind == TYPE_ERR) {
-            const Type *saved = sema->infer.expected_type;
-            sema->infer.expected_type = expected;
+            SEMA_INFER_SCOPE(sema, expected_type, expected);
             actual = check_node(sema, node->call.args[i]);
-            sema->infer.expected_type = saved;
+            SEMA_INFER_RESTORE(sema, expected_type);
         }
         if (actual == NULL || actual->kind == TYPE_ERR) {
             continue;
@@ -368,8 +353,8 @@ static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char
             if (!type_assignable(expected, actual)) {
                 SEMA_ERR(sema, node->call.args[i]->loc,
                          "type mismatch in tuple struct '%s' field %d: expected '%s', got '%s'",
-                         fn_name, i, type_name(sema->arena, expected),
-                         type_name(sema->arena, actual));
+                         fn_name, i, type_name(sema->base.arena, expected),
+                         type_name(sema->base.arena, actual));
                 return &TYPE_ERR_INST;
             }
         }
@@ -396,8 +381,8 @@ static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char
 /** Rewrite callee to a member access and check as enum variant call. */
 static const Type *rewrite_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
                                         const char *variant_name) {
-    ASTNode *callee_member = ast_new(sema->arena, NODE_MEMBER, node->loc);
-    callee_member->member.object = ast_new(sema->arena, NODE_ID, node->loc);
+    ASTNode *callee_member = ast_new(sema->base.arena, NODE_MEMBER, node->loc);
+    callee_member->member.object = ast_new(sema->base.arena, NODE_ID, node->loc);
     callee_member->member.object->id.name = type_enum_name(enum_type);
     callee_member->member.object->type = enum_type;
     callee_member->member.member = variant_name;
@@ -422,13 +407,13 @@ static const Type *check_bare_variant_call(Sema *sema, ASTNode *node, const char
             return NULL;
         }
         ASTType val_arg = {.kind = AST_TYPE_NAME,
-                           .name = type_name(sema->arena, arg_type),
+                           .name = type_name(sema->base.arena, arg_type),
                            .type_args = NULL,
                            .loc = node->loc};
-        hash_table_insert(&sema->generics.type_params, val_arg.name, (void *)arg_type);
+        hash_table_insert(&sema->base.generics.type_params, val_arg.name, (void *)arg_type);
         GenericInstArgs inst_args = {&val_arg, 1, node->loc};
         const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-        hash_table_remove(&sema->generics.type_params, val_arg.name);
+        hash_table_remove(&sema->base.generics.type_params, val_arg.name);
         if (mangled != NULL) {
             const Type *opt_type = sema_lookup_type_alias(sema, mangled);
             if (opt_type != NULL) {
@@ -472,21 +457,69 @@ static void check_call_args(Sema *sema, ASTNode *node, const char *fn_name) {
         }
     }
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-        const Type *saved = sema->infer.expected_type;
+        const Type *arg_expected = sema->infer.expected_type;
         if (early_sig != NULL && i < early_sig->param_count) {
-            sema->infer.expected_type = early_sig->param_types[i];
+            arg_expected = early_sig->param_types[i];
         } else if (callee_fn_type != NULL && i < callee_fn_type->fn_type.param_count) {
-            sema->infer.expected_type = callee_fn_type->fn_type.params[i];
+            arg_expected = callee_fn_type->fn_type.params[i];
         }
+        SEMA_INFER_SCOPE(sema, expected_type, arg_expected);
         check_node(sema, node->call.args[i]);
-        sema->infer.expected_type = saved;
+        SEMA_INFER_RESTORE(sema, expected_type);
     }
 }
 
-// ── Main call dispatch ────────────────────────────────────────────
+// ── Two-phase call dispatch ───────────────────────────────────────
+
+/** Discriminator for call classification. */
+typedef enum {
+    CALL_CLOSURE,      // |x| expr(args) — inline closure
+    CALL_METHOD,       // obj.method(args) — member dispatch
+    CALL_GENERIC,      // fn<T>(args) or Name<T>(args)
+    CALL_FN,           // named function call
+    CALL_FN_TYPE,      // call through fn-typed variable/field
+    CALL_TUPLE_CTOR,   // TupleStruct(arg, ...)
+    CALL_BARE_VARIANT, // Some(x), Ok(x), Err(x)
+    CALL_EXPR,         // (expr)(args) — general expression callee
+    CALL_UNKNOWN,      // unresolved — will emit an error
+} CallKind;
+
+/** Phase 1: classify the call to determine the dispatch path. */
+static CallKind classify_call(Sema *sema, ASTNode *node, const char *fn_name) {
+    if (node->call.callee->kind == NODE_CLOSURE) {
+        return CALL_CLOSURE;
+    }
+    if (fn_name == NULL) {
+        return CALL_EXPR;
+    }
+    if (BUF_LEN(node->call.type_args) > 0) {
+        return CALL_GENERIC;
+    }
+    if (sema_lookup_fn(sema, fn_name) != NULL) {
+        return CALL_FN;
+    }
+    if (infer_generic_call(sema, node, fn_name) != NULL) {
+        // infer_generic_call already applied the type — return its kind directly.
+        // Re-classify as FN_TYPE so the switch returns node->type.
+        return CALL_FN_TYPE;
+    }
+    Sym *sym = scope_lookup(sema, fn_name);
+    if (sym != NULL && (sym->kind == SYM_FN || (sym->type != NULL && sym->type->kind == TYPE_FN))) {
+        return CALL_FN_TYPE;
+    }
+    if (check_tuple_struct_call(sema, node, fn_name) != NULL) {
+        return CALL_TUPLE_CTOR;
+    }
+    if (sym == NULL && check_bare_variant_call(sema, node, fn_name) != NULL) {
+        return CALL_BARE_VARIANT;
+    }
+    return CALL_UNKNOWN;
+}
 
 const Type *check_call(Sema *sema, ASTNode *node) {
     const char *fn_name = NULL;
+
+    // Early dispatch for member calls and closures.
     if (node->call.callee->kind == NODE_ID) {
         fn_name = node->call.callee->id.name;
     } else if (node->call.callee->kind == NODE_MEMBER) {
@@ -500,9 +533,20 @@ const Type *check_call(Sema *sema, ASTNode *node) {
 
     check_call_args(sema, node, fn_name);
 
-    // Generic call: fn_name<Type, ...>(args)
-    if (fn_name != NULL && BUF_LEN(node->call.type_args) > 0) {
-        // Try tuple struct constructor first for generic types
+    // Phase 1: classify.
+    CallKind kind = classify_call(sema, node, fn_name);
+
+    // Phase 2: dispatch.
+    switch (kind) {
+    case CALL_CLOSURE:
+        return check_inline_closure_call(sema, node);
+
+    case CALL_METHOD:
+        // Already handled above; unreachable here.
+        break;
+
+    case CALL_GENERIC: {
+        // Try tuple struct constructor first for generic types.
         const Type *ts = check_tuple_struct_call(sema, node, fn_name);
         if (ts != NULL) {
             return ts;
@@ -510,30 +554,26 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         return check_generic_fn_call(sema, node, fn_name);
     }
 
-    // Named fn lookup
-    if (fn_name != NULL) {
+    case CALL_FN: {
         FnSig *sig = sema_lookup_fn(sema, fn_name);
-
-        // Module-qualified fallback: try current module prefix
-        if (sig == NULL && sema->current_scope->module_name != NULL) {
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, fn_name);
-            sig = sema_lookup_fn(sema, qualified);
-            if (sig != NULL) {
-                node->call.callee->id.name = qualified;
-            }
+        // If found via module-qualified fallback, rewrite callee name.
+        if (sig != NULL && sema->base.current_scope->module_name != NULL &&
+            hash_table_lookup(&sema->base.db.fn_table, fn_name) == NULL) {
+            const char *qualified = arena_sprintf(sema->base.arena, "%s.%s",
+                                                  sema->base.current_scope->module_name, fn_name);
+            node->call.callee->id.name = qualified;
         }
-
         if (sig != NULL) {
             return resolve_call(sema, node, sig);
         }
+        break;
+    }
 
-        // Try generic type inference
-        const Type *inferred = infer_generic_call(sema, node, fn_name);
-        if (inferred != NULL) {
-            return inferred;
+    case CALL_FN_TYPE: {
+        // infer_generic_call may have already set node->type.
+        if (node->type != NULL && node->type->kind != TYPE_ERR) {
+            return node->type;
         }
-
         Sym *sym = scope_lookup(sema, fn_name);
         if (sym != NULL && sym->kind == SYM_FN) {
             return sym->type;
@@ -541,30 +581,28 @@ const Type *check_call(Sema *sema, ASTNode *node) {
         if (sym != NULL && sym->type != NULL && sym->type->kind == TYPE_FN) {
             return check_fn_type_call(sema, node, sym->type);
         }
-
-        // Tuple struct constructor: Name(value, ...)
-        {
-            const Type *tuple_struct = check_tuple_struct_call(sema, node, fn_name);
-            if (tuple_struct != NULL) {
-                return tuple_struct;
-            }
-        }
-
-        if (sym == NULL) {
-            const Type *variant_result = check_bare_variant_call(sema, node, fn_name);
-            if (variant_result != NULL) {
-                return variant_result;
-            }
-            SEMA_ERR(sema, node->loc, "undefined function '%s'", fn_name);
-        }
+        break;
     }
 
-    // General expression callee: idx, member field, etc.
-    if (fn_name == NULL && node->call.callee->kind != NODE_CLOSURE) {
+    case CALL_TUPLE_CTOR:
+        // Already applied by classify_call via check_tuple_struct_call.
+        return node->type;
+
+    case CALL_BARE_VARIANT:
+        // Already applied by classify_call via check_bare_variant_call.
+        return node->type;
+
+    case CALL_EXPR: {
         const Type *ct = check_node(sema, node->call.callee);
         if (ct != NULL && ct->kind == TYPE_FN) {
             return check_fn_type_call(sema, node, ct);
         }
+        break;
+    }
+
+    case CALL_UNKNOWN:
+        SEMA_ERR(sema, node->loc, "undefined function '%s'", fn_name);
+        break;
     }
 
     return &TYPE_ERR_INST;

@@ -1,0 +1,20 @@
+// stdlib: builtin module — print, println, assert, len
+// EXPECT-STDOUT: builtin test passed
+
+fn main() {
+    // Test basic print/println
+    print("builtin ")
+    println("test passed")
+
+    // Test assert (should not panic)
+    assert(true, "trivial")
+    assert(1 + 1 == 2, "basic arithmetic")
+
+    // Test len on slices
+    s := []i32{1, 2, 3}
+    assert(len(s) == 3, "slice len")
+
+    // Test len on strings
+    greeting := "hello"
+    assert(len(greeting) == 5, "string len")
+}

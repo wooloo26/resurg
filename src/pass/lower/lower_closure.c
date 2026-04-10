@@ -104,24 +104,36 @@ HirNode *lower_closure(Lower *low, const ASTNode *ast) {
     // Generate a unique name for the closure function
     const char *fn_name = arena_sprintf(low->hir_arena, "_rsg_closure_%d", low->closure_counter++);
 
-    // Collect closure param names for capture scanner
     int32_t param_count = BUF_LEN(ast->closure.params);
-    const char **param_names = NULL;
-    for (int32_t i = 0; i < param_count; i++) {
-        BUF_PUSH(param_names, ast->closure.params[i]->param.name);
-    }
 
-    // Scan for captured variables
+    // Resolve captures — prefer the persisted list from check phase, fall back to tree scan.
     const char **capture_names = NULL;
     HirSym **capture_syms = NULL;
-    CaptureCtx cap_ctx = {
-        .param_names = param_names,
-        .param_count = param_count,
-        .low = low,
-        .out_names = &capture_names,
-        .out_syms = &capture_syms,
-    };
-    scan_captures(&cap_ctx, ast->closure.body);
+    if (ast->closure.capture_names != NULL) {
+        // Use capture list persisted by check phase — no tree walk needed.
+        for (int32_t i = 0; i < BUF_LEN(ast->closure.capture_names); i++) {
+            HirSym *sym = lower_scope_lookup(low, ast->closure.capture_names[i]);
+            if (sym != NULL && (sym->kind == HIR_SYM_VAR || sym->kind == HIR_SYM_PARAM)) {
+                BUF_PUSH(capture_names, sym->mangled_name);
+                BUF_PUSH(capture_syms, sym);
+            }
+        }
+    } else {
+        // Fallback: scan the AST body for captures (pre-check-phase closures).
+        const char **param_names = NULL;
+        for (int32_t i = 0; i < param_count; i++) {
+            BUF_PUSH(param_names, ast->closure.params[i]->param.name);
+        }
+        CaptureCtx cap_ctx = {
+            .param_names = param_names,
+            .param_count = param_count,
+            .low = low,
+            .out_names = &capture_names,
+            .out_syms = &capture_syms,
+        };
+        scan_captures(&cap_ctx, ast->closure.body);
+        BUF_FREE(param_names);
+    }
 
     // Lower closure params to HIR_PARAM
     HirNode **hir_params = NULL;
@@ -156,6 +168,5 @@ HirNode *lower_closure(Lower *low, const ASTNode *ast) {
     node->closure.return_type = return_type;
     node->closure.is_fn_mut = (fn_type->fn_type.fn_kind == FN_CLOSURE_MUT);
 
-    BUF_FREE(param_names);
     return node;
 }

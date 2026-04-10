@@ -37,7 +37,7 @@ static bool validate_pact_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
             const char *bound = gdef->type_params[i].bounds[b];
             if (!type_satisfies_bound(sema, resolved_args[i], bound)) {
                 SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
-                         type_name(sema->arena, resolved_args[i]), bound);
+                         type_name(sema->base.arena, resolved_args[i]), bound);
                 return false;
             }
         }
@@ -69,15 +69,16 @@ static bool validate_assoc_constraints(Sema *sema, ASTNode *node, GenericFnDef *
             }
             if (assoc_resolved == NULL || assoc_resolved->kind == TYPE_ERR) {
                 SEMA_ERR(sema, node->loc, "'%s' has no associated type '%s' for pact '%s'",
-                         type_name(sema->arena, resolved_args[i]), ac->assoc_name, ac->pact_name);
+                         type_name(sema->base.arena, resolved_args[i]), ac->assoc_name,
+                         ac->pact_name);
                 return false;
             }
             const Type *expected_type = resolve_ast_type(sema, ac->expected_type);
             if (expected_type != NULL && expected_type->kind != TYPE_ERR &&
                 !type_equal(assoc_resolved, expected_type)) {
                 SEMA_ERR(sema, node->loc, "associated type '%s' is '%s', expected '%s'",
-                         ac->assoc_name, type_name(sema->arena, assoc_resolved),
-                         type_name(sema->arena, expected_type));
+                         ac->assoc_name, type_name(sema->base.arena, assoc_resolved),
+                         type_name(sema->base.arena, expected_type));
                 return false;
             }
         }
@@ -121,7 +122,8 @@ static bool validate_where_clauses(Sema *sema, ASTNode *node, GenericFnDef *gdef
                                 SEMA_ERR(sema, node->loc,
                                          "'%s::%s' = '%s' does not satisfy pact bound '%s'",
                                          wcs[w].type_name, wcs[w].assoc_member,
-                                         type_name(sema->arena, assoc_resolved), wcs[w].bounds[b]);
+                                         type_name(sema->base.arena, assoc_resolved),
+                                         wcs[w].bounds[b]);
                                 return false;
                             }
                         }
@@ -133,7 +135,7 @@ static bool validate_where_clauses(Sema *sema, ASTNode *node, GenericFnDef *gdef
         for (int32_t b = 0; b < BUF_LEN(wcs[w].bounds); b++) {
             if (!type_satisfies_bound(sema, wc_type, wcs[w].bounds[b])) {
                 SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
-                         type_name(sema->arena, wc_type), wcs[w].bounds[b]);
+                         type_name(sema->base.arena, wc_type), wcs[w].bounds[b]);
                 return false;
             }
         }
@@ -175,7 +177,7 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
             pt = &TYPE_ERR_INST;
         }
         if (param->param.is_variadic) {
-            pt = type_create_slice(sema->arena, pt);
+            pt = type_create_slice(sema->base.arena, pt);
             sig->has_variadic = true;
         }
         BUF_PUSH(sig->param_types, pt);
@@ -186,14 +188,14 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
 
     sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
 
-    hash_table_insert(&sema->db.fn_table, mangled, sig);
+    hash_table_insert(&sema->base.db.fn_table, mangled, sig);
 
     // Declare fns have no body to clone/check — skip deferred instantiation.
     if (!orig->fn_decl.is_declare) {
         GenericInst inst = {.generic = gdef,
                             .mangled_name = mangled,
                             .type_args = resolved_args,
-                            .file_node = sema->file_node};
+                            .file_node = sema->base.file_node};
         BUF_PUSH(sema->pending_insts, inst);
     }
 
@@ -287,7 +289,7 @@ const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
     }
 
     const Type **inferred =
-        (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
+        (const Type **)arena_alloc_zero(sema->base.arena, num_params * sizeof(const Type *));
     for (int32_t pi = 0; pi < param_count; pi++) {
         ASTNode *param = orig->fn_decl.params[pi];
         if (param->param.type.kind != AST_TYPE_NAME) {
@@ -313,7 +315,7 @@ const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
     // Build synthetic type_args and recurse
     ASTType *synth_args = NULL;
     for (int32_t i = 0; i < num_params; i++) {
-        ASTType arg = type_to_ast_type(sema->arena, inferred[i]);
+        ASTType arg = type_to_ast_type(sema->base.arena, inferred[i]);
         BUF_PUSH(synth_args, arg);
     }
     node->call.type_args = synth_args;

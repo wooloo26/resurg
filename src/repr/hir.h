@@ -118,6 +118,16 @@ typedef enum {
     HIR_CLOSURE,
 } HirNodeKind;
 
+// ── HirMatchArm ────────────────────────────────────────────────────────
+
+/** A single arm of a match expression — cond, guard, body, and bindings. */
+typedef struct {
+    HirNode *cond;     // pattern condition (NULL for wildcard)
+    HirNode *guard;    // guard expression (NULL if none)
+    HirNode *body;     // arm body expression
+    HirNode *bindings; // binding stmts block (NULL if none)
+} HirMatchArm;
+
 // ── HirNode ─────────────────────────────────────────────────────────────
 
 /**
@@ -369,10 +379,7 @@ struct HirNode {
         // HIR_MATCH
         struct {
             HirNode *operand;
-            HirNode **arm_conds;    /* buf - pattern cond per arm */
-            HirNode **arm_guards;   /* buf - guard expr per arm (NULL if none) */
-            HirNode **arm_bodies;   /* buf - body expr per arm */
-            HirNode **arm_bindings; /* buf - block of binding stmts (NULL if none) */
+            HirMatchArm *arms; /* buf */
         } match_expr;
 
         // HIR_CLOSURE

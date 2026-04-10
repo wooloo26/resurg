@@ -27,7 +27,7 @@ pub enum Result<T, E> {
 
 pub declare fn print<T>(value: T)
 pub declare fn println<T>(value: T)
-pub declare fn assert(cond: bool, msg: str = "")
+pub declare fn assert(cond: bool, msg: str)
 pub declare fn len<T>(value: T) -> i32
 pub declare fn panic(msg: str) -> never
 pub declare fn recover() -> ?str

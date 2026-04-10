@@ -576,10 +576,10 @@ static const char *emit_match_expr(CGen *cgen, const HirNode *node) {
         emit_line(cgen, "%s %s;", c_type_for(cgen, type), result);
     }
 
-    int32_t arm_count = BUF_LEN(node->match_expr.arm_conds);
+    int32_t arm_count = BUF_LEN(node->match_expr.arms);
     bool has_any_guard = false;
     for (int32_t i = 0; i < arm_count; i++) {
-        if (node->match_expr.arm_guards[i] != NULL) {
+        if (node->match_expr.arms[i].guard != NULL) {
             has_any_guard = true;
             break;
         }
@@ -592,13 +592,13 @@ static const char *emit_match_expr(CGen *cgen, const HirNode *node) {
 
     for (int32_t i = 0; i < arm_count; i++) {
         MatchArm arm = {
-            .cond = node->match_expr.arm_conds[i],
-            .body = node->match_expr.arm_bodies[i],
-            .bindings = node->match_expr.arm_bindings[i],
+            .cond = node->match_expr.arms[i].cond,
+            .body = node->match_expr.arms[i].body,
+            .bindings = node->match_expr.arms[i].bindings,
             .result = result,
         };
         if (has_any_guard) {
-            emit_match_arm_guarded(cgen, &arm, node->match_expr.arm_guards[i]);
+            emit_match_arm_guarded(cgen, &arm, node->match_expr.arms[i].guard);
         } else {
             emit_match_arm_simple(cgen, i, &arm);
         }

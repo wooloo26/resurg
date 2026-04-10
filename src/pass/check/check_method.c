@@ -11,7 +11,7 @@
 static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Type *struct_type,
                                             const char *method_name) {
     const char *method_key =
-        arena_sprintf(sema->arena, "%s.%s", struct_type->struct_type.name, method_name);
+        arena_sprintf(sema->base.arena, "%s.%s", struct_type->struct_type.name, method_name);
     FnSig *sig = sema_lookup_fn(sema, method_key);
 
     // If not found directly, check embedded structs for promoted methods
@@ -20,7 +20,7 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
         if (sdef != NULL) {
             for (int32_t ei = 0; ei < BUF_LEN(sdef->embedded); ei++) {
                 const char *embed_key =
-                    arena_sprintf(sema->arena, "%s.%s", sdef->embedded[ei], method_name);
+                    arena_sprintf(sema->base.arena, "%s.%s", sdef->embedded[ei], method_name);
                 sig = sema_lookup_fn(sema, embed_key);
                 if (sig != NULL) {
                     break;
@@ -59,7 +59,7 @@ static const Type *try_module_qualified_call(Sema *sema, ASTNode *node, const Ty
     if (strlen(mod_name) == 0) {
         qualified = method_name;
     } else {
-        qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
+        qualified = arena_sprintf(sema->base.arena, "%s.%s", mod_name, method_name);
     }
 
     // Try as fn call: mod::fn(args)
@@ -152,7 +152,7 @@ const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_nam
         }
         // Enum method call
         const char *method_key =
-            arena_sprintf(sema->arena, "%s.%s", type_enum_name(obj_type), method_name);
+            arena_sprintf(sema->base.arena, "%s.%s", type_enum_name(obj_type), method_name);
         FnSig *sig = sema_lookup_fn(sema, method_key);
         if (sig != NULL) {
             // Reject pointer receiver on rvalue
@@ -182,9 +182,10 @@ const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_nam
 
     // Extension method call on primitive and compound types
     if (obj_type != NULL) {
-        const char *prim_name = type_name(sema->arena, obj_type);
+        const char *prim_name = type_name(sema->base.arena, obj_type);
         if (prim_name != NULL) {
-            const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
+            const char *method_key =
+                arena_sprintf(sema->base.arena, "%s.%s", prim_name, method_name);
             FnSig *sig = sema_lookup_fn(sema, method_key);
 
             // Generic ext instantiation: ext<T> []T or ext<T, comptime N: usize> [N]T
@@ -229,11 +230,10 @@ const Type *check_inline_closure_call(Sema *sema, ASTNode *node) {
         BUF_PUSH(param_types, pt);
     }
     FnTypeSpec fn_spec = {param_types, param_count, NULL, FN_PLAIN};
-    const Type *expected_fn = type_create_fn(sema->arena, &fn_spec);
-    const Type *saved = sema->infer.expected_type;
-    sema->infer.expected_type = expected_fn;
+    const Type *expected_fn = type_create_fn(sema->base.arena, &fn_spec);
+    SEMA_INFER_SCOPE(sema, expected_type, expected_fn);
     const Type *callee_type = check_closure(sema, node->call.callee);
-    sema->infer.expected_type = saved;
+    SEMA_INFER_RESTORE(sema, expected_type);
     node->call.callee->type = callee_type;
     if (callee_type != NULL && callee_type->kind == TYPE_FN) {
         return callee_type->fn_type.return_type;

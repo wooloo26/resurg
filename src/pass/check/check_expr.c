@@ -1,59 +1,5 @@
 #include "_check.h"
 
-// ── Shared helpers ─────────────────────────────────────────────────────
-
-/** Return true when @p struct_name belongs to a foreign module and the
- *  current context is NOT inside an ext block for that type. */
-static bool is_foreign_struct(const Sema *sema, const char *struct_name) {
-    const char *dot = strchr(struct_name, '.');
-    if (dot == NULL) {
-        return false; // same-file struct
-    }
-    if (sema->infer.self_type_name != NULL &&
-        strcmp(sema->infer.self_type_name, struct_name) == 0) {
-        return false; // inside ext block for this type
-    }
-    if (sema->module.current != NULL) {
-        size_t mod_len = strlen(sema->module.current);
-        if (strncmp(struct_name, sema->module.current, mod_len) == 0 &&
-            struct_name[mod_len] == '.') {
-            return false; // same-module struct
-        }
-    }
-    return true;
-}
-
-ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc) {
-    ASTNode *call = ast_new(arena, NODE_CALL, loc);
-    ASTNode *callee = ast_new(arena, NODE_MEMBER, loc);
-    callee->member.object = ast_new(arena, NODE_ID, loc);
-    callee->member.object->id.name = type_enum_name(enum_type);
-    callee->member.object->type = enum_type;
-    callee->member.member = "None";
-    call->call.callee = callee;
-    call->call.args = NULL;
-    call->call.arg_names = NULL;
-    call->call.arg_is_mut = NULL;
-    call->call.type_args = NULL;
-    call->call.variadic_start = -1;
-    call->type = enum_type;
-    return call;
-}
-
-const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *field_name) {
-    for (int32_t ei = 0; ei < BUF_LEN(sdef->embedded); ei++) {
-        StructDef *embed_def = sema_lookup_struct(sema, sdef->embedded[ei]);
-        if (embed_def != NULL) {
-            for (int32_t fi = 0; fi < BUF_LEN(embed_def->fields); fi++) {
-                if (strcmp(embed_def->fields[fi].name, field_name) == 0) {
-                    return embed_def->fields[fi].type;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-
 // ── Expression checkers ────────────────────────────────────────────────
 
 const Type *check_lit(Sema *sema, ASTNode *node) {
@@ -70,9 +16,9 @@ const Type *check_id(Sema *sema, ASTNode *node) {
     Sym *sym = scope_lookup(sema, node->id.name);
 
     // Module-qualified fallback: try current module prefix
-    if (sym == NULL && sema->current_scope->module_name != NULL) {
-        const char *qualified =
-            arena_sprintf(sema->arena, "%s.%s", sema->current_scope->module_name, node->id.name);
+    if (sym == NULL && sema->base.current_scope->module_name != NULL) {
+        const char *qualified = arena_sprintf(sema->base.arena, "%s.%s",
+                                              sema->base.current_scope->module_name, node->id.name);
         sym = scope_lookup(sema, qualified);
         if (sym != NULL) {
             node->id.name = qualified;
@@ -81,23 +27,23 @@ const Type *check_id(Sema *sema, ASTNode *node) {
 
     if (sym == NULL) {
         // Handle 'super' — resolve to parent module
-        if (strcmp(node->id.name, "super") == 0 && sema->current_scope->module_name != NULL) {
-            const char *cur = sema->current_scope->module_name;
+        if (strcmp(node->id.name, "super") == 0 && sema->base.current_scope->module_name != NULL) {
+            const char *cur = sema->base.current_scope->module_name;
             const char *last_dot = strrchr(cur, '.');
             if (last_dot != NULL) {
                 // "a.b" → "a"
                 size_t parent_len = (size_t)(last_dot - cur);
-                char *parent = arena_alloc(sema->arena, parent_len + 1);
+                char *parent = arena_alloc(sema->base.arena, parent_len + 1);
                 memcpy(parent, cur, parent_len);
                 parent[parent_len] = '\0';
-                return type_create_module(sema->arena, parent);
+                return type_create_module(sema->base.arena, parent);
             }
             // Top-level module: super goes to file scope (empty module name)
-            return type_create_module(sema->arena, "");
+            return type_create_module(sema->base.arena, "");
         }
         // Handle 'self' — resolve to file scope
         if (strcmp(node->id.name, "self") == 0) {
-            return type_create_module(sema->arena, "");
+            return type_create_module(sema->base.arena, "");
         }
         // Handle bare `None` — resolve from expected type or fn return type
         if (strcmp(node->id.name, "None") == 0) {
@@ -109,7 +55,7 @@ const Type *check_id(Sema *sema, ASTNode *node) {
                 const EnumVariant *variant = type_enum_find_variant(ctx, "None");
                 if (variant != NULL) {
                     // Rewrite to enum variant call for lowering
-                    ASTNode *none_call = build_none_variant_call(sema->arena, ctx, node->loc);
+                    ASTNode *none_call = build_none_variant_call(sema->base.arena, ctx, node->loc);
                     node->kind = none_call->kind;
                     node->call = none_call->call;
                     node->type = ctx;
@@ -123,7 +69,7 @@ const Type *check_id(Sema *sema, ASTNode *node) {
     // Track captured variable references for Fn/FnMut auto-inference
     if (sema->closure.scope != NULL && sym->kind != SYM_FN && sym->kind != SYM_TYPE) {
         bool found_local = false;
-        for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
+        for (Scope *s = sema->base.current_scope; s != NULL && s != sema->closure.scope->parent;
              s = s->parent) {
             if (hash_table_lookup(&s->table, node->id.name) != NULL) {
                 found_local = true;
@@ -132,6 +78,17 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         }
         if (!found_local) {
             sema->closure.has_capture = true;
+            // Collect captured name (deduplicated) for persistence to AST
+            bool already_recorded = false;
+            for (int32_t ci = 0; ci < BUF_LEN(sema->closure.capture_names); ci++) {
+                if (strcmp(sema->closure.capture_names[ci], node->id.name) == 0) {
+                    already_recorded = true;
+                    break;
+                }
+            }
+            if (!already_recorded) {
+                BUF_PUSH(sema->closure.capture_names, node->id.name);
+            }
         }
     }
     // Function symbols used as values → construct fn type
@@ -139,7 +96,7 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         FnSig *sig = sema_lookup_fn(sema, node->id.name);
         if (sig != NULL) {
             FnTypeSpec fn_spec = {sig->param_types, sig->param_count, sig->return_type, FN_PLAIN};
-            return type_create_fn(sema->arena, &fn_spec);
+            return type_create_fn(sema->base.arena, &fn_spec);
         }
     }
     return sym->type;
@@ -153,7 +110,7 @@ const Type *check_unary(Sema *sema, ASTNode *node) {
     if (node->unary.op == TOKEN_BANG) {
         if (!type_equal(operand, &TYPE_BOOL_INST)) {
             SEMA_ERR(sema, node->loc, "'!' requires 'bool' operand, got '%s'",
-                     type_name(sema->arena, operand));
+                     type_name(sema->base.arena, operand));
             return &TYPE_ERR_INST;
         }
         return &TYPE_BOOL_INST;
@@ -161,7 +118,7 @@ const Type *check_unary(Sema *sema, ASTNode *node) {
     if (node->unary.op == TOKEN_MINUS) {
         if (!type_is_numeric(operand)) {
             SEMA_ERR(sema, node->loc, "'-' requires numeric operand, got '%s'",
-                     type_name(sema->arena, operand));
+                     type_name(sema->base.arena, operand));
             return &TYPE_ERR_INST;
         }
         return operand;
@@ -193,8 +150,8 @@ const Type *check_binary(Sema *sema, ASTNode *node) {
     // Check for type mismatch after promotion
     if (!type_equal(left, right)) {
         if (left->kind != TYPE_ERR && right->kind != TYPE_ERR) {
-            SEMA_ERR(sema, node->loc, "type mismatch: '%s' and '%s'", type_name(sema->arena, left),
-                     type_name(sema->arena, right));
+            SEMA_ERR(sema, node->loc, "type mismatch: '%s' and '%s'",
+                     type_name(sema->base.arena, left), type_name(sema->base.arena, right));
         }
     }
 
@@ -215,7 +172,7 @@ static const Type *check_module_member(Sema *sema, ASTNode *node, const Type *mo
     if (strlen(mod_name) == 0) {
         qualified = member;
     } else {
-        qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, member);
+        qualified = arena_sprintf(sema->base.arena, "%s.%s", mod_name, member);
     }
 
     // Try struct: mod::StructName
@@ -256,7 +213,7 @@ static const Type *check_module_member(Sema *sema, ASTNode *node, const Type *mo
             BUF_PUSH(params, sig->param_types[i]);
         }
         FnTypeSpec fn_spec = {params, sig->param_count, sig->return_type, FN_PLAIN};
-        return type_create_fn(sema->arena, &fn_spec);
+        return type_create_fn(sema->base.arena, &fn_spec);
     }
 
     SEMA_ERR(sema, node->loc, "'%s' not found in module '%s'", member, mod_name);
@@ -271,7 +228,7 @@ static const Type *check_struct_member(Sema *sema, ASTNode *node, const Type *st
     char *end = NULL;
     long idx = strtol(field_name, &end, 10);
     if (end != NULL && *end == '\0' && idx >= 0) {
-        const char *synth_name = arena_sprintf(sema->arena, "_%ld", idx);
+        const char *synth_name = arena_sprintf(sema->base.arena, "_%ld", idx);
         const StructField *sf = type_struct_find_field(struct_type, synth_name);
         if (sf != NULL) {
             node->member.member = synth_name;
@@ -403,13 +360,13 @@ const Type *check_array_lit(Sema *sema, ASTNode *node) {
     if (size == 0) {
         size = BUF_LEN(node->array_lit.elems);
     }
-    return type_create_array(sema->arena, elem_type, size);
+    return type_create_array(sema->base.arena, elem_type, size);
 }
 
 const Type *check_slice_lit(Sema *sema, ASTNode *node) {
     const Type *elem_type =
         check_elem_list(sema, node->slice_lit.elems, &node->slice_lit.elem_type);
-    return type_create_slice(sema->arena, elem_type);
+    return type_create_slice(sema->base.arena, elem_type);
 }
 
 const Type *check_slice_expr(Sema *sema, ASTNode *node) {
@@ -425,10 +382,10 @@ const Type *check_slice_expr(Sema *sema, ASTNode *node) {
         object_type = object_type->ptr.pointee;
     }
     if (object_type != NULL && object_type->kind == TYPE_ARRAY) {
-        return type_create_slice(sema->arena, object_type->array.elem);
+        return type_create_slice(sema->base.arena, object_type->array.elem);
     }
     if (object_type != NULL && object_type->kind == TYPE_SLICE) {
-        return type_create_slice(sema->arena, object_type->slice.elem);
+        return type_create_slice(sema->base.arena, object_type->slice.elem);
     }
     return &TYPE_ERR_INST;
 }
@@ -439,7 +396,7 @@ const Type *check_tuple_lit(Sema *sema, ASTNode *node) {
         const Type *elem = check_node(sema, node->tuple_lit.elems[i]);
         BUF_PUSH(elem_types, elem);
     }
-    const Type *result = type_create_tuple(sema->arena, elem_types, BUF_LEN(elem_types));
+    const Type *result = type_create_tuple(sema->base.arena, elem_types, BUF_LEN(elem_types));
     return result;
 }
 
@@ -451,7 +408,8 @@ void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_typ
         !type_assignable(actual_type, expected_type) && actual_type->kind != TYPE_ERR &&
         expected_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, value_node->loc, "type mismatch: expected '%s', got '%s'",
-                 type_name(sema->arena, expected_type), type_name(sema->arena, actual_type));
+                 type_name(sema->base.arena, expected_type),
+                 type_name(sema->base.arena, actual_type));
     }
 }
 
@@ -472,7 +430,7 @@ static bool struct_lit_has_field(const ASTNode *node, const char *name) {
 static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericStructDef *gdef) {
     int32_t num_params = gdef->type_param_count;
     const Type **inferred_args =
-        (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
+        (const Type **)arena_alloc_zero(sema->base.arena, num_params * sizeof(const Type *));
 
     // Check field values first to get their types
     for (int32_t i = 0; i < BUF_LEN(node->struct_lit.field_values); i++) {
@@ -480,8 +438,8 @@ static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericS
     }
 
     // Match field types against generic params
-    for (int32_t fi = 0; fi < BUF_LEN(gdef->decl->struct_decl.fields); fi++) {
-        ASTStructField *ast_field = &gdef->decl->struct_decl.fields[fi];
+    for (int32_t fi = 0; fi < BUF_LEN(gdef->decl->struct_decl->fields); fi++) {
+        ASTStructField *ast_field = &gdef->decl->struct_decl->fields[fi];
         if (ast_field->type.kind != AST_TYPE_NAME) {
             continue;
         }
@@ -513,7 +471,7 @@ static const char *infer_generic_struct_args(Sema *sema, ASTNode *node, GenericS
     for (int32_t i = 0; i < num_params; i++) {
         ASTType arg = {0};
         arg.kind = AST_TYPE_NAME;
-        arg.name = type_name(sema->arena, inferred_args[i]);
+        arg.name = type_name(sema->base.arena, inferred_args[i]);
         BUF_PUSH(synth_args, arg);
     }
     GenericInstArgs inst_args = {synth_args, num_params, node->loc};
@@ -545,7 +503,8 @@ static StructDef *try_resolve_generic_type_alias(Sema *sema, ASTNode *node, Gene
         if (t == NULL) {
             t = &TYPE_ERR_INST;
         }
-        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+        hash_table_insert(&sema->base.generics.type_params, gta->base.type_params[i].name,
+                          (void *)t);
     }
     // Fill defaults for remaining
     for (int32_t i = got; i < expected; i++) {
@@ -553,11 +512,12 @@ static StructDef *try_resolve_generic_type_alias(Sema *sema, ASTNode *node, Gene
         if (t == NULL) {
             t = &TYPE_ERR_INST;
         }
-        hash_table_insert(&sema->generics.type_params, gta->base.type_params[i].name, (void *)t);
+        hash_table_insert(&sema->base.generics.type_params, gta->base.type_params[i].name,
+                          (void *)t);
     }
     const Type *result = resolve_ast_type(sema, &gta->alias_type);
     for (int32_t i = 0; i < expected; i++) {
-        hash_table_remove(&sema->generics.type_params, gta->base.type_params[i].name);
+        hash_table_remove(&sema->base.generics.type_params, gta->base.type_params[i].name);
     }
     if (result != NULL && result->kind == TYPE_STRUCT) {
         StructDef *sdef = sema_lookup_struct(sema, result->struct_type.name);
@@ -673,12 +633,10 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
         }
 
         // Set expected type before checking (aids closure param inference)
-        const Type *saved_expected = sema->infer.expected_type;
-        if (field_type != NULL) {
-            sema->infer.expected_type = field_type;
-        }
+        SEMA_INFER_SCOPE(sema, expected_type,
+                         field_type != NULL ? field_type : sema->infer.expected_type);
         check_node(sema, fvalue);
-        sema->infer.expected_type = saved_expected;
+        SEMA_INFER_RESTORE(sema, expected_type);
 
         // Validate the field type
         if (field_type != NULL) {
@@ -724,7 +682,7 @@ const Type *check_address_of(Sema *sema, ASTNode *node) {
         SEMA_ERR(sema, node->loc, "cannot take address of rvalue");
         return &TYPE_ERR_INST;
     }
-    return type_create_ptr(sema->arena, inner_type, false);
+    return type_create_ptr(sema->base.arena, inner_type, false);
 }
 
 const Type *check_deref(Sema *sema, ASTNode *node) {
@@ -734,7 +692,7 @@ const Type *check_deref(Sema *sema, ASTNode *node) {
     }
     if (inner_type->kind != TYPE_PTR) {
         SEMA_ERR(sema, node->loc, "cannot deref non-ptr type '%s'",
-                 type_name(sema->arena, inner_type));
+                 type_name(sema->base.arena, inner_type));
         return &TYPE_ERR_INST;
     }
     return inner_type->ptr.pointee;
@@ -776,14 +734,18 @@ const Type *check_closure(Sema *sema, ASTNode *node) {
     ClosureCtx saved_closure = sema->closure;
 
     // Always set up closure scope so capture tracking works
-    sema->closure.scope = sema->current_scope;
+    sema->closure.scope = sema->base.current_scope;
     sema->closure.fn_kind = infer_fn_kind ? FN_CLOSURE_MUT : fn_kind;
+    sema->closure.capture_names = NULL;
     if (infer_fn_kind) {
         sema->closure.has_capture = false;
         sema->closure.captures_mutated = false;
     }
 
     const Type *body_type = check_node(sema, node->closure.body);
+
+    // Persist capture names to AST so the lower pass can reuse them
+    node->closure.capture_names = sema->closure.capture_names;
 
     // Auto-infer fn_kind from capture analysis
     if (infer_fn_kind) {
@@ -803,5 +765,5 @@ const Type *check_closure(Sema *sema, ASTNode *node) {
     }
 
     FnTypeSpec fn_spec = {param_types, param_count, return_type, fn_kind};
-    return type_create_fn(sema->arena, &fn_spec);
+    return type_create_fn(sema->base.arena, &fn_spec);
 }

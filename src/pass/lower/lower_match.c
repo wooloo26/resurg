@@ -213,10 +213,7 @@ HirNode *lower_match(Lower *low, const ASTNode *ast) {
     HirSymSpec match_spec = {HIR_SYM_VAR, match_tmp, operand_type, false, loc};
     HirSym *match_sym = lower_add_var(low, &match_spec);
 
-    HirNode **arm_conds = NULL;
-    HirNode **arm_guards = NULL;
-    HirNode **arm_bodies = NULL;
-    HirNode **arm_bindings = NULL;
+    HirMatchArm *arms = NULL;
 
     for (int32_t i = 0; i < BUF_LEN(ast->match_expr.arms); i++) {
         const ASTMatchArm *arm = &ast->match_expr.arms[i];
@@ -235,24 +232,23 @@ HirNode *lower_match(Lower *low, const ASTNode *ast) {
             lower_scope_leave(low);
         }
 
-        BUF_PUSH(arm_conds, cond);
-        BUF_PUSH(arm_guards, guard);
-
         lower_scope_enter(low);
         lower_pattern_bindings(low, arm->pattern, operand_type);
 
         HirNode *body = lower_expr(low, arm->body);
-        BUF_PUSH(arm_bodies, body);
 
-        BUF_PUSH(arm_bindings, lower_arm_bindings_block(low, arm->pattern, &operand, loc));
+        HirMatchArm hir_arm = {
+            .cond = cond,
+            .guard = guard,
+            .body = body,
+            .bindings = lower_arm_bindings_block(low, arm->pattern, &operand, loc),
+        };
+        BUF_PUSH(arms, hir_arm);
         lower_scope_leave(low);
     }
 
     HirNode *match_node = hir_new(low->hir_arena, HIR_MATCH, ast->type, loc);
     match_node->match_expr.operand = lower_make_var_decl(low, match_sym, operand);
-    match_node->match_expr.arm_conds = arm_conds;
-    match_node->match_expr.arm_guards = arm_guards;
-    match_node->match_expr.arm_bodies = arm_bodies;
-    match_node->match_expr.arm_bindings = arm_bindings;
+    match_node->match_expr.arms = arms;
     return match_node;
 }

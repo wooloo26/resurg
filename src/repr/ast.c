@@ -7,6 +7,23 @@ ASTNode *ast_new(Arena *arena, NodeKind kind, SrcLoc loc) {
     node->kind = kind;
     node->loc = loc;
     node->type = NULL;
+    // Allocate heap-indirect data for large decl variants.
+    switch (kind) {
+    case NODE_STRUCT_DECL:
+        node->struct_decl = arena_alloc_zero(arena, sizeof(StructDeclData));
+        break;
+    case NODE_ENUM_DECL:
+        node->enum_decl = arena_alloc_zero(arena, sizeof(EnumDeclData));
+        break;
+    case NODE_PACT_DECL:
+        node->pact_decl = arena_alloc_zero(arena, sizeof(PactDeclData));
+        break;
+    case NODE_EXT_DECL:
+        node->ext_decl = arena_alloc_zero(arena, sizeof(ExtDeclData));
+        break;
+    default:
+        break;
+    }
     return node;
 }
 
@@ -30,11 +47,13 @@ static const char **clone_str_buf(const char **src_buf) {
     return dst_buf;
 }
 
-/** Clone a stretchy buf of ASTType values (shallow copy of each type). */
+/** Clone a stretchy buf of ASTType values (shallow copy, clear resolved cache). */
 static ASTType *clone_ast_type_buf(ASTType *src_buf) {
     ASTType *dst_buf = NULL;
     for (int32_t i = 0; i < BUF_LEN(src_buf); i++) {
-        BUF_PUSH(dst_buf, src_buf[i]);
+        ASTType cloned = src_buf[i];
+        cloned.resolved = NULL;
+        BUF_PUSH(dst_buf, cloned);
     }
     return dst_buf;
 }
@@ -74,6 +93,7 @@ static void clone_continue(Arena *arena, const ASTNode *src, ASTNode *dst) {
 static void clone_param(Arena *arena, const ASTNode *src, ASTNode *dst) {
     (void)arena;
     dst->param = src->param;
+    dst->param.type.resolved = NULL;
 }
 
 // ── Single-child nodes ───────────────────────────────────────────
@@ -158,6 +178,7 @@ static void clone_while(Arena *arena, const ASTNode *src, ASTNode *dst) {
 
 static void clone_type_conversion(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->type_conversion.target_type = src->type_conversion.target_type;
+    dst->type_conversion.target_type.resolved = NULL;
     dst->type_conversion.operand = ast_clone(arena, src->type_conversion.operand);
 }
 
@@ -178,6 +199,7 @@ static void clone_if(Arena *arena, const ASTNode *src, ASTNode *dst) {
 
 static void clone_var_decl(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->var_decl = src->var_decl;
+    dst->var_decl.type.resolved = NULL;
     dst->var_decl.init = ast_clone(arena, src->var_decl.init);
 }
 
@@ -206,11 +228,13 @@ static void clone_str_interpolation(Arena *arena, const ASTNode *src, ASTNode *d
 
 static void clone_array_lit(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->array_lit = src->array_lit;
+    dst->array_lit.elem_type.resolved = NULL;
     dst->array_lit.elems = clone_node_buf(arena, src->array_lit.elems);
 }
 
 static void clone_slice_lit(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->slice_lit = src->slice_lit;
+    dst->slice_lit.elem_type.resolved = NULL;
     dst->slice_lit.elems = clone_node_buf(arena, src->slice_lit.elems);
 }
 
@@ -247,6 +271,7 @@ static void clone_tuple_destructure(Arena *arena, const ASTNode *src, ASTNode *d
 
 static void clone_closure(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->closure.return_type = src->closure.return_type;
+    dst->closure.return_type.resolved = NULL;
     dst->closure.params = clone_node_buf(arena, src->closure.params);
     dst->closure.body = ast_clone(arena, src->closure.body);
 }
@@ -275,6 +300,7 @@ static void clone_enum_init(Arena *arena, const ASTNode *src, ASTNode *dst) {
 
 static void clone_fn_decl(Arena *arena, const ASTNode *src, ASTNode *dst) {
     dst->fn_decl = src->fn_decl;
+    dst->fn_decl.return_type.resolved = NULL;
     dst->fn_decl.params = clone_node_buf(arena, src->fn_decl.params);
     dst->fn_decl.body = ast_clone(arena, src->fn_decl.body);
 }
@@ -291,6 +317,7 @@ static void clone_module(Arena *arena, const ASTNode *src, ASTNode *dst) {
 static void clone_type_alias(Arena *arena, const ASTNode *src, ASTNode *dst) {
     (void)arena;
     dst->type_alias = src->type_alias;
+    dst->type_alias.alias_type.resolved = NULL;
 }
 
 static void clone_use_decl(Arena *arena, const ASTNode *src, ASTNode *dst) {

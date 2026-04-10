@@ -1,5 +1,7 @@
 #include "rsg/pass/mono/mono.h"
 
+#include <string.h>
+
 #include "pass/resolve/_sema.h"
 
 /**
@@ -10,6 +12,8 @@
  * instantiation, this pass clones the template bodies, type-checks them
  * with concrete substitutions, and appends the specialized decls.
  */
+
+#define MONO_DEPTH_LIMIT 64
 
 // ── Static helpers ─────────────────────────────────────────────────
 
@@ -24,16 +28,40 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         GenericInst *inst = &sema->pending_insts[gi];
         GenericFnDef *gdef = inst->generic;
 
+        // Guard: detect duplicate mangled names (prevents redundant instantiation)
+        bool duplicate = false;
+        for (int32_t prev = 0; prev < gi; prev++) {
+            if (strcmp(sema->pending_insts[prev].mangled_name, inst->mangled_name) == 0) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            continue;
+        }
+
+        // Guard: enforce recursion depth limit for monomorphization
+        if (sema->mono_depth >= MONO_DEPTH_LIMIT) {
+            SEMA_ERR(sema, gdef->decl->loc,
+                     "generic instantiation depth limit (%d) exceeded for '%s'", MONO_DEPTH_LIMIT,
+                     inst->mangled_name);
+            continue;
+        }
+
+        // Snapshot inst fields before fn_body_checker, which may realloc pending_insts
+        const char *mangled_name = inst->mangled_name;
+        const Type **type_args = inst->type_args;
+        ASTNode *file_node = inst->file_node;
+
         // Push type param substitutions (save previous for nested generics)
         const Type **saved = NULL;
-        sema_push_type_params(sema, gdef->type_params, inst->type_args, gdef->type_param_count,
-                              &saved);
+        sema_push_type_params(sema, gdef->type_params, type_args, gdef->type_param_count, &saved);
 
         // Create a cloned fn_decl with the mangled name and concrete types
         ASTNode *orig = gdef->decl;
-        ASTNode *clone = ast_new(sema->arena, NODE_FN_DECL, orig->loc);
+        ASTNode *clone = ast_new(sema->base.arena, NODE_FN_DECL, orig->loc);
         clone->fn_decl.is_pub = false;
-        clone->fn_decl.name = inst->mangled_name;
+        clone->fn_decl.name = mangled_name;
         clone->fn_decl.params = NULL;
         clone->fn_decl.type_params = NULL;
         clone->fn_decl.recv_name = NULL;
@@ -44,7 +72,7 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         // Clone params with substituted types
         for (int32_t pi = 0; pi < BUF_LEN(orig->fn_decl.params); pi++) {
             ASTNode *op = orig->fn_decl.params[pi];
-            ASTNode *np = ast_new(sema->arena, NODE_PARAM, op->loc);
+            ASTNode *np = ast_new(sema->base.arena, NODE_PARAM, op->loc);
             np->param.name = op->param.name;
             np->param.type = op->param.type;
             np->param.is_mut = op->param.is_mut;
@@ -54,13 +82,20 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
 
         // Copy return type (resolve_ast_type will use type_param_table)
         clone->fn_decl.return_type = orig->fn_decl.return_type;
-        clone->fn_decl.body = ast_clone(sema->arena, orig->fn_decl.body);
+        clone->fn_decl.body = ast_clone(sema->base.arena, orig->fn_decl.body);
+
+        // Reset closure context to prevent state leakage between instantiations.
+        // Without this, a previous generic fn's closure state (e.g. captures_mutated)
+        // can pollute subsequent instantiation type-checking.
+        sema->closure = (ClosureCtx){0};
 
         // Type-check the cloned fn body using the substitution context
+        sema->mono_depth++;
         sema->fn_body_checker(sema, clone);
+        sema->mono_depth--;
 
         // Append to file decls so lowering/codegen can see it
-        BUF_PUSH(inst->file_node->file.decls, clone);
+        BUF_PUSH(file_node->file.decls, clone);
 
         // Pop type param substitutions (restore previous values)
         sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
@@ -70,8 +105,9 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
 // ── Public API ─────────────────────────────────────────────────────────
 
 bool sema_mono(Sema *sema, ASTNode *file, FnBodyChecker checker) {
+    sema->base.phase = SEMA_PHASE_MONO;
     sema->fn_body_checker = checker;
     instantiate_pending_generics(sema, file);
     scope_pop(sema); // global scope (pushed by sema_resolve)
-    return sema->err_count == 0;
+    return sema->base.err_count == 0;
 }

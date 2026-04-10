@@ -8,6 +8,7 @@ static void lower_param_list(Lower *low, ASTNode *const *param_asts, int32_t cou
     for (int32_t i = 0; i < count; i++) {
         const ASTNode *param_ast = param_asts[i];
         const char *param_name = param_ast->param.name;
+        assert(param_ast->type != NULL && "lower: param type must be set by check");
         const Type *param_type = param_ast->type != NULL ? param_ast->type : &TYPE_ERR_INST;
 
         HirSymSpec param_spec = {HIR_SYM_PARAM, param_name, param_type, false, param_ast->loc};

@@ -48,17 +48,17 @@ static ASTNode *parse_pact_decl(Parser *parser) {
     parser_expect(parser, TOKEN_PACT);
 
     ASTNode *node = ast_new(parser->arena, NODE_PACT_DECL, loc);
-    node->pact_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
-    node->pact_decl.fields = NULL;
-    node->pact_decl.methods = NULL;
-    node->pact_decl.super_pacts = NULL;
-    node->pact_decl.where_clauses = NULL;
-    node->pact_decl.assoc_types = NULL;
-    node->pact_decl.type_params = parse_type_params(parser);
+    node->pact_decl->name = parser_expect(parser, TOKEN_ID)->lexeme;
+    node->pact_decl->fields = NULL;
+    node->pact_decl->methods = NULL;
+    node->pact_decl->super_pacts = NULL;
+    node->pact_decl->where_clauses = NULL;
+    node->pact_decl->assoc_types = NULL;
+    node->pact_decl->type_params = parse_type_params(parser);
 
     // Optional where clauses
     parser_skip_newlines(parser);
-    node->pact_decl.where_clauses = parse_where_clauses(parser);
+    node->pact_decl->where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
 
@@ -66,7 +66,7 @@ static ASTNode *parse_pact_decl(Parser *parser) {
     if (parser_match(parser, TOKEN_EQUAL)) {
         do {
             const char *pact_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            BUF_PUSH(node->pact_decl.super_pacts, pact_name);
+            BUF_PUSH(node->pact_decl->super_pacts, pact_name);
         } while (parser_match(parser, TOKEN_PLUS));
         return node;
     }
@@ -76,8 +76,8 @@ static ASTNode *parse_pact_decl(Parser *parser) {
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
         if (parser_check(parser, TOKEN_FN)) {
-            ASTNode *method = parse_pact_method(parser, node->pact_decl.name);
-            BUF_PUSH(node->pact_decl.methods, method);
+            ASTNode *method = parse_pact_method(parser, node->pact_decl->name);
+            BUF_PUSH(node->pact_decl->methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Associated type: type Name, type Name: Bound, type Name = Default
             parser_advance(parser); // consume 'type'
@@ -95,7 +95,7 @@ static ASTNode *parse_pact_decl(Parser *parser) {
                 at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
                 *at.concrete_type = parser_parse_type(parser);
             }
-            BUF_PUSH(node->pact_decl.assoc_types, at);
+            BUF_PUSH(node->pact_decl->assoc_types, at);
         } else if (parser_check(parser, TOKEN_ID)) {
             const char *name = parser_advance(parser)->lexeme;
 
@@ -108,7 +108,7 @@ static ASTNode *parse_pact_decl(Parser *parser) {
                 parser_parse_type(parser);
             } else {
                 // Super pact ref (constraint alias brace syntax)
-                BUF_PUSH(node->pact_decl.super_pacts, name);
+                BUF_PUSH(node->pact_decl->super_pacts, name);
                 // Consume optional generic type args: Into<T>
                 if (parser_match(parser, TOKEN_LESS)) {
                     do {
@@ -171,16 +171,16 @@ static ASTNode *parse_enum_decl(Parser *parser) {
     parser_expect(parser, TOKEN_ENUM);
 
     ASTNode *node = ast_new(parser->arena, NODE_ENUM_DECL, loc);
-    node->enum_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
-    node->enum_decl.variants = NULL;
-    node->enum_decl.methods = NULL;
-    node->enum_decl.where_clauses = NULL;
-    node->enum_decl.assoc_types = NULL;
-    node->enum_decl.type_params = parse_type_params(parser);
+    node->enum_decl->name = parser_expect(parser, TOKEN_ID)->lexeme;
+    node->enum_decl->variants = NULL;
+    node->enum_decl->methods = NULL;
+    node->enum_decl->where_clauses = NULL;
+    node->enum_decl->assoc_types = NULL;
+    node->enum_decl->type_params = parse_type_params(parser);
 
     // Optional where clauses
     parser_skip_newlines(parser);
-    node->enum_decl.where_clauses = parse_where_clauses(parser);
+    node->enum_decl->where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
     parser_expect(parser, TOKEN_LEFT_BRACE);
@@ -192,7 +192,7 @@ static ASTNode *parse_enum_decl(Parser *parser) {
             PARSER_ERR(parser, parser_current_loc(parser),
                        "expected enum variant in enum block; "
                        "methods must be defined in ext blocks");
-            parse_method_decl(parser, node->enum_decl.name, false);
+            parse_method_decl(parser, node->enum_decl->name, false);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Reject inline associated types: use ext impl blocks instead
             PARSER_ERR(parser, parser_current_loc(parser),
@@ -225,7 +225,7 @@ static ASTNode *parse_enum_decl(Parser *parser) {
                 variant.discriminant = parser_parse_expr(parser);
             }
 
-            BUF_PUSH(node->enum_decl.variants, variant);
+            BUF_PUSH(node->enum_decl->variants, variant);
         } else {
             PARSER_ERR(parser, parser_current_loc(parser), "expected enum variant");
             parser_advance(parser);
@@ -246,15 +246,15 @@ static ASTNode *parse_struct_decl(Parser *parser) {
     parser_expect(parser, TOKEN_STRUCT);
 
     ASTNode *node = ast_new(parser->arena, NODE_STRUCT_DECL, loc);
-    node->struct_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
-    node->struct_decl.fields = NULL;
-    node->struct_decl.methods = NULL;
-    node->struct_decl.embedded = NULL;
-    node->struct_decl.conformances = NULL;
-    node->struct_decl.where_clauses = NULL;
-    node->struct_decl.assoc_types = NULL;
-    node->struct_decl.is_tuple_struct = false;
-    node->struct_decl.type_params = parse_type_params(parser);
+    node->struct_decl->name = parser_expect(parser, TOKEN_ID)->lexeme;
+    node->struct_decl->fields = NULL;
+    node->struct_decl->methods = NULL;
+    node->struct_decl->embedded = NULL;
+    node->struct_decl->conformances = NULL;
+    node->struct_decl->where_clauses = NULL;
+    node->struct_decl->assoc_types = NULL;
+    node->struct_decl->is_tuple_struct = false;
+    node->struct_decl->type_params = parse_type_params(parser);
 
     // Reject conformance lists: use ext blocks instead
     if (parser_check(parser, TOKEN_COLON)) {
@@ -279,13 +279,13 @@ static ASTNode *parse_struct_decl(Parser *parser) {
 
     // Optional where clauses
     parser_skip_newlines(parser);
-    node->struct_decl.where_clauses = parse_where_clauses(parser);
+    node->struct_decl->where_clauses = parse_where_clauses(parser);
 
     parser_skip_newlines(parser);
 
     // Tuple struct: struct Name(Type, ...)
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
-        node->struct_decl.is_tuple_struct = true;
+        node->struct_decl->is_tuple_struct = true;
         int32_t idx = 0;
         do {
             parser_skip_newlines(parser);
@@ -296,7 +296,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
             field.name = arena_sprintf(parser->arena, "_%d", idx);
             field.type = parser_parse_type(parser);
             field.default_value = NULL;
-            BUF_PUSH(node->struct_decl.fields, field);
+            BUF_PUSH(node->struct_decl->fields, field);
             idx++;
         } while (parser_match(parser, TOKEN_COMMA));
         parser_expect(parser, TOKEN_RIGHT_PAREN);
@@ -312,7 +312,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
             PARSER_ERR(parser, parser_current_loc(parser),
                        "expected field or embedded struct in struct block; "
                        "methods must be defined in ext blocks");
-            parse_method_decl(parser, node->struct_decl.name, false);
+            parse_method_decl(parser, node->struct_decl->name, false);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Reject inline associated types: use ext impl blocks instead
             PARSER_ERR(parser, parser_current_loc(parser),
@@ -340,10 +340,10 @@ static ASTNode *parse_struct_decl(Parser *parser) {
                 if (parser_match(parser, TOKEN_EQUAL)) {
                     field.default_value = parser_parse_expr(parser);
                 }
-                BUF_PUSH(node->struct_decl.fields, field);
+                BUF_PUSH(node->struct_decl->fields, field);
             } else {
                 // Embedded struct: just a type name on its own line
-                BUF_PUSH(node->struct_decl.embedded, name);
+                BUF_PUSH(node->struct_decl->embedded, name);
             }
         } else {
             PARSER_ERR(parser, parser_current_loc(parser), "expected field or embedded struct");
@@ -367,20 +367,20 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     parser_expect(parser, TOKEN_EXT);
 
     ASTNode *node = ast_new(parser->arena, NODE_EXT_DECL, loc);
-    node->ext_decl.type_params = NULL;
-    node->ext_decl.target_name = NULL;
-    node->ext_decl.target_type_args = NULL;
-    node->ext_decl.impl_pacts = NULL;
-    node->ext_decl.methods = NULL;
-    node->ext_decl.assoc_types = NULL;
+    node->ext_decl->type_params = NULL;
+    node->ext_decl->target_name = NULL;
+    node->ext_decl->target_type_args = NULL;
+    node->ext_decl->impl_pacts = NULL;
+    node->ext_decl->methods = NULL;
+    node->ext_decl->assoc_types = NULL;
 
     // Optional type params: ext<T, U>
-    node->ext_decl.type_params = parse_type_params(parser);
+    node->ext_decl->type_params = parse_type_params(parser);
 
     // Target type name (struct, enum, primitive, or compound type)
     if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
         // Compound type: ext<T> []T (slice) or ext<T, comptime N: usize> [N]T (array)
-        if (BUF_LEN(node->ext_decl.type_params) == 0) {
+        if (BUF_LEN(node->ext_decl->type_params) == 0) {
             PARSER_ERR(parser, parser_current_loc(parser),
                        "compound ext blocks require type parameters: "
                        "use 'ext<T> []T' or 'ext<T, comptime N: usize> [N]T'");
@@ -388,11 +388,11 @@ static ASTNode *parse_ext_decl(Parser *parser) {
         parser_advance(parser); // consume '['
         if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
             parser_advance(parser); // consume ']'
-            node->ext_decl.target_name = "[]";
+            node->ext_decl->target_name = "[]";
         } else {
             parser_advance(parser); // consume size placeholder (e.g., '_' or N)
             parser_expect(parser, TOKEN_RIGHT_BRACKET);
-            node->ext_decl.target_name = "[_]";
+            node->ext_decl->target_name = "[_]";
         }
         // Consume element type name (e.g., T in ext<T> []T)
         if (parser_check(parser, TOKEN_ID) ||
@@ -401,7 +401,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
         }
     } else if (parser_check(parser, TOKEN_ID) ||
                token_is_type_keyword(parser_current_token(parser)->kind)) {
-        node->ext_decl.target_name = parser_advance(parser)->lexeme;
+        node->ext_decl->target_name = parser_advance(parser)->lexeme;
     } else {
         PARSER_ERR(parser, parser_current_loc(parser), "expected type name after 'ext'");
         return node;
@@ -412,7 +412,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
         do {
             ASTType *ta = arena_alloc_zero(parser->arena, sizeof(ASTType));
             *ta = parser_parse_type(parser);
-            BUF_PUSH(node->ext_decl.target_type_args, *ta);
+            BUF_PUSH(node->ext_decl->target_type_args, *ta);
         } while (parser_match(parser, TOKEN_COMMA));
         parser_expect(parser, TOKEN_GREATER);
     }
@@ -421,7 +421,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     if (parser_match(parser, TOKEN_IMPL)) {
         do {
             const char *pact_name = parser_expect(parser, TOKEN_ID)->lexeme;
-            BUF_PUSH(node->ext_decl.impl_pacts, pact_name);
+            BUF_PUSH(node->ext_decl->impl_pacts, pact_name);
         } while (parser_match(parser, TOKEN_PLUS));
     }
 
@@ -432,8 +432,8 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
         bool method_is_pub = parser_match(parser, TOKEN_PUB);
         if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE)) {
-            ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name, method_is_pub);
-            BUF_PUSH(node->ext_decl.methods, method);
+            ASTNode *method = parse_method_decl(parser, node->ext_decl->target_name, method_is_pub);
+            BUF_PUSH(node->ext_decl->methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType
             parser_advance(parser); // consume 'type'
@@ -450,7 +450,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
                 at.concrete_type = arena_alloc_zero(parser->arena, sizeof(ASTType));
                 *at.concrete_type = parser_parse_type(parser);
             }
-            BUF_PUSH(node->ext_decl.assoc_types, at);
+            BUF_PUSH(node->ext_decl->assoc_types, at);
         } else {
             PARSER_ERR(parser, parser_current_loc(parser), "expected method in ext block");
             parser_advance(parser);
@@ -686,17 +686,17 @@ ASTNode *parser_parse_decl(Parser *parser) {
         }
         if (parser_check(parser, TOKEN_STRUCT)) {
             ASTNode *node = parse_struct_decl(parser);
-            node->struct_decl.is_pub = true;
+            node->struct_decl->is_pub = true;
             return node;
         }
         if (parser_check(parser, TOKEN_ENUM)) {
             ASTNode *node = parse_enum_decl(parser);
-            node->enum_decl.is_pub = true;
+            node->enum_decl->is_pub = true;
             return node;
         }
         if (parser_check(parser, TOKEN_PACT)) {
             ASTNode *node = parse_pact_decl(parser);
-            node->pact_decl.is_pub = true;
+            node->pact_decl->is_pub = true;
             return node;
         }
         if (parser_check(parser, TOKEN_TYPE)) {

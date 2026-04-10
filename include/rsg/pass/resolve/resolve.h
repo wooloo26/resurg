@@ -12,6 +12,8 @@
  * Must run before the check and mono passes.
  */
 typedef struct Sema Sema;
+typedef struct SemaBase SemaBase;
+typedef struct DiagCtx DiagCtx;
 
 /** Callback to load module decls from a file path. Returns NULL on failure. */
 typedef ASTNode **(*ModuleLoader)(void *ctx, Arena *arena, const char *mod_path);
@@ -20,6 +22,8 @@ typedef ASTNode **(*ModuleLoader)(void *ctx, Arena *arena, const char *mod_path)
 Sema *sema_create(Arena *arena);
 /** Destroy the context (does not free the arena). */
 void sema_destroy(Sema *sema);
+/** Return a pointer to the sema's diagnostic context. */
+DiagCtx *sema_diag_ctx(Sema *sema);
 /** Inject a module loader callback used during resolve to load filesystem modules. */
 void sema_set_module_loader(Sema *sema, ModuleLoader loader, void *ctx);
 /** Set the fallback directory for resolving std library modules. */

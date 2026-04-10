@@ -157,9 +157,9 @@ static void dump_tuple_lit_node(const ASTNode *node, int32_t level) {
 }
 
 static void dump_struct_decl_node(const ASTNode *node, int32_t level) {
-    fprintf(stderr, "StructDecl(%s)\n", node->struct_decl.name);
-    for (int32_t i = 0; i < BUF_LEN(node->struct_decl.methods); i++) {
-        ast_dump(node->struct_decl.methods[i], level + 1);
+    fprintf(stderr, "StructDecl(%s)\n", node->struct_decl->name);
+    for (int32_t i = 0; i < BUF_LEN(node->struct_decl->methods); i++) {
+        ast_dump(node->struct_decl->methods[i], level + 1);
     }
 }
 
@@ -171,9 +171,9 @@ static void dump_struct_lit_node(const ASTNode *node, int32_t level) {
 }
 
 static void dump_enum_decl_node(const ASTNode *node, int32_t level) {
-    fprintf(stderr, "EnumDecl(%s)\n", node->enum_decl.name);
-    for (int32_t i = 0; i < BUF_LEN(node->enum_decl.methods); i++) {
-        ast_dump(node->enum_decl.methods[i], level + 1);
+    fprintf(stderr, "EnumDecl(%s)\n", node->enum_decl->name);
+    for (int32_t i = 0; i < BUF_LEN(node->enum_decl->methods); i++) {
+        ast_dump(node->enum_decl->methods[i], level + 1);
     }
 }
 
@@ -328,9 +328,9 @@ void ast_dump(const ASTNode *node, int32_t level) {
         }
         break;
     case NODE_PACT_DECL:
-        fprintf(stderr, "PactDecl(%s)\n", node->pact_decl.name);
-        for (int32_t i = 0; i < BUF_LEN(node->pact_decl.methods); i++) {
-            ast_dump(node->pact_decl.methods[i], level + 1);
+        fprintf(stderr, "PactDecl(%s)\n", node->pact_decl->name);
+        for (int32_t i = 0; i < BUF_LEN(node->pact_decl->methods); i++) {
+            ast_dump(node->pact_decl->methods[i], level + 1);
         }
         break;
     case NODE_WHILE:
@@ -374,9 +374,9 @@ void ast_dump(const ASTNode *node, int32_t level) {
         ast_dump(node->closure.body, level + 1);
         break;
     case NODE_EXT_DECL:
-        fprintf(stderr, "ExtDecl(%s)\n", node->ext_decl.target_name);
-        for (int32_t i = 0; i < BUF_LEN(node->ext_decl.methods); i++) {
-            ast_dump(node->ext_decl.methods[i], level + 1);
+        fprintf(stderr, "ExtDecl(%s)\n", node->ext_decl->target_name);
+        for (int32_t i = 0; i < BUF_LEN(node->ext_decl->methods); i++) {
+            ast_dump(node->ext_decl->methods[i], level + 1);
         }
         break;
     case NODE_USE_DECL:

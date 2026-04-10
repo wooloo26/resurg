@@ -11,15 +11,15 @@
 /** Type-check a single struct method: register recv + params, check body. */
 void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
                               const Type *struct_type) {
-    const char *prev_self = sema->infer.self_type_name;
-    sema->infer.self_type_name = struct_name;
+    SEMA_INFER_SCOPE(sema, self_type_name, struct_name);
     scope_push(sema, false);
 
     // Register recv as a param with struct type
     if (method->fn_decl.recv_name != NULL) {
         const Type *recv_reg_type = struct_type;
         if (method->fn_decl.is_ptr_recv && struct_type->kind != TYPE_PTR) {
-            recv_reg_type = type_create_ptr(sema->arena, struct_type, method->fn_decl.is_mut_recv);
+            recv_reg_type =
+                type_create_ptr(sema->base.arena, struct_type, method->fn_decl.is_mut_recv);
         }
         scope_define(sema, &(SymDef){method->fn_decl.recv_name, recv_reg_type, false, SYM_PARAM});
     }
@@ -33,7 +33,7 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
         }
         // Variadic param: ..T → []T (slice type)
         if (param->param.is_variadic) {
-            pt = type_create_slice(sema->arena, pt);
+            pt = type_create_slice(sema->base.arena, pt);
         }
         param->type = pt;
         scope_define(sema, &(SymDef){param->param.name, pt, false, SYM_PARAM});
@@ -43,17 +43,15 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
     if (method->fn_decl.body != NULL) {
         // Pre-resolve return type for bidirectional inference (Ok/Err/None)
         const Type *pre_return = resolve_ast_type(sema, &method->fn_decl.return_type);
-        const Type *save_fn_return = sema->infer.fn_return_type;
-        const Type *save_expected = sema->infer.expected_type;
-        if (pre_return != NULL) {
-            sema->infer.fn_return_type = pre_return;
-            sema->infer.expected_type = pre_return;
-        }
+        SEMA_INFER_SCOPE(sema, fn_return_type,
+                         pre_return != NULL ? pre_return : sema->infer.fn_return_type);
+        SEMA_INFER_SCOPE(sema, expected_type,
+                         pre_return != NULL ? pre_return : sema->infer.expected_type);
 
         const Type *body_type = check_node(sema, method->fn_decl.body);
 
-        sema->infer.fn_return_type = save_fn_return;
-        sema->infer.expected_type = save_expected;
+        SEMA_INFER_RESTORE(sema, expected_type);
+        SEMA_INFER_RESTORE(sema, fn_return_type);
 
         const Type *return_type = pre_return;
         if (return_type == NULL) {
@@ -63,27 +61,28 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
 
         // Update method sig if return type was inferred
         const char *method_key =
-            arena_sprintf(sema->arena, "%s.%s", struct_name, method->fn_decl.name);
+            arena_sprintf(sema->base.arena, "%s.%s", struct_name, method->fn_decl.name);
         FnSig *sig = sema_lookup_fn(sema, method_key);
         if (sig != NULL && sig->return_type->kind == TYPE_UNIT) {
             sig->return_type = return_type;
         }
     }
     scope_pop(sema);
-    sema->infer.self_type_name = prev_self;
+    SEMA_INFER_RESTORE(sema, self_type_name);
 }
 
 // ── Decl-level checkers ─────────────────────────────────────────────────
 
 const Type *check_enum_decl_body(Sema *sema, ASTNode *node) {
     const Type *result = node->type;
-    EnumDef *edef = sema_lookup_enum(sema, node->enum_decl.name);
+    EnumDef *edef = sema_lookup_enum(sema, node->enum_decl->name);
     if (edef == NULL) {
         return result;
     }
-    const Type *ptr_type = type_create_ptr(sema->arena, edef->type, false);
-    for (int32_t i = 0; i < BUF_LEN(node->enum_decl.methods); i++) {
-        check_struct_method_body(sema, node->enum_decl.methods[i], node->enum_decl.name, ptr_type);
+    const Type *ptr_type = type_create_ptr(sema->base.arena, edef->type, false);
+    for (int32_t i = 0; i < BUF_LEN(node->enum_decl->methods); i++) {
+        check_struct_method_body(sema, node->enum_decl->methods[i], node->enum_decl->name,
+                                 ptr_type);
     }
     return result;
 }
@@ -95,27 +94,26 @@ const Type *check_pact_decl(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_struct_decl(Sema *sema, ASTNode *node) {
-    StructDef *sdef = sema_lookup_struct(sema, node->struct_decl.name);
+    StructDef *sdef = sema_lookup_struct(sema, node->struct_decl->name);
     if (sdef == NULL) {
         return &TYPE_UNIT_INST;
     }
     const Type *result = sdef->type;
 
     // Check method bodies in pass 2
-    for (int32_t i = 0; i < BUF_LEN(node->struct_decl.methods); i++) {
-        check_struct_method_body(sema, node->struct_decl.methods[i], node->struct_decl.name,
+    for (int32_t i = 0; i < BUF_LEN(node->struct_decl->methods); i++) {
+        check_struct_method_body(sema, node->struct_decl->methods[i], node->struct_decl->name,
                                  sdef->type);
     }
 
     // Check default value exprs for fields
-    for (int32_t i = 0; i < BUF_LEN(node->struct_decl.fields); i++) {
-        ASTStructField *f = &node->struct_decl.fields[i];
+    for (int32_t i = 0; i < BUF_LEN(node->struct_decl->fields); i++) {
+        ASTStructField *f = &node->struct_decl->fields[i];
         if (f->default_value != NULL) {
-            const Type *saved = sema->infer.expected_type;
             const Type *field_type = resolve_ast_type(sema, &f->type);
-            sema->infer.expected_type = field_type;
+            SEMA_INFER_SCOPE(sema, expected_type, field_type);
             check_node(sema, f->default_value);
-            sema->infer.expected_type = saved;
+            SEMA_INFER_RESTORE(sema, expected_type);
         }
     }
     return result;
@@ -124,10 +122,10 @@ const Type *check_struct_decl(Sema *sema, ASTNode *node) {
 // ── Ext decl checking ───────────────────────────────────────────────────
 
 const Type *check_ext_decl(Sema *sema, ASTNode *node) {
-    const char *target_name = node->ext_decl.target_name;
+    const char *target_name = node->ext_decl->target_name;
 
     // Skip generic ext templates (checked during monomorphization)
-    if (BUF_LEN(node->ext_decl.type_params) > 0) {
+    if (BUF_LEN(node->ext_decl->type_params) > 0) {
         return &TYPE_UNIT_INST;
     }
 
@@ -143,7 +141,7 @@ const Type *check_ext_decl(Sema *sema, ASTNode *node) {
     EnumDef *edef = (recv_type == NULL) ? sema_lookup_enum(sema, target_name) : NULL;
     if (edef != NULL) {
         recv_type = edef->type; // raw TYPE_ENUM for lower pass
-        check_recv_type = type_create_ptr(sema->arena, edef->type, false); // ptr for scope
+        check_recv_type = type_create_ptr(sema->base.arena, edef->type, false); // ptr for scope
     }
     if (recv_type == NULL) {
         // Primitive type — look up the singleton instance
@@ -154,8 +152,8 @@ const Type *check_ext_decl(Sema *sema, ASTNode *node) {
         return &TYPE_UNIT_INST;
     }
 
-    for (int32_t i = 0; i < BUF_LEN(node->ext_decl.methods); i++) {
-        check_struct_method_body(sema, node->ext_decl.methods[i], target_name, check_recv_type);
+    for (int32_t i = 0; i < BUF_LEN(node->ext_decl->methods); i++) {
+        check_struct_method_body(sema, node->ext_decl->methods[i], target_name, check_recv_type);
     }
 
     node->type = recv_type;

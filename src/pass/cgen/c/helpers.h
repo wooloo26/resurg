@@ -1,6 +1,7 @@
 #ifndef RSG_CGEN_C_HELPERS_H
 #define RSG_CGEN_C_HELPERS_H
 
+#include "core/intrinsic.h"
 #include "pass/cgen/target.h"
 #include "repr/types.h"
 
@@ -17,7 +18,8 @@ typedef struct CGen CGen;
 
 /** C-backend code generator — embeds CGenTarget for vtable dispatch. */
 struct CGen {
-    CGenTarget base; // must be first (upcasting)
+    CGenTarget base;       // must be first (upcasting)
+    const RuntimeABI *abi; // runtime function name table
     FILE *output;
     FILE *real_output; // original output for companion fns
     Arena *arena;      // for temp str building

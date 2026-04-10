@@ -34,8 +34,8 @@ static void compose_struct_fields(Sema *sema, const ASTNode *decl, StructDef *de
     }
 
     // Add own fields, checking for duplicates against promoted fields
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.fields); i++) {
-        ASTStructField *ast_field = &decl->struct_decl.fields[i];
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl->fields); i++) {
+        ASTStructField *ast_field = &decl->struct_decl->fields[i];
         bool duplicate = false;
         for (int32_t j = 0; j < BUF_LEN(def->fields); j++) {
             if (strcmp(def->fields[j].name, ast_field->name) == 0) {
@@ -77,8 +77,8 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
     }
 
     // Add own fields
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.fields); i++) {
-        ASTStructField *ast_field = &decl->struct_decl.fields[i];
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl->fields); i++) {
+        ASTStructField *ast_field = &decl->struct_decl->fields[i];
         const Type *field_type = resolve_ast_type(sema, &ast_field->type);
         if (field_type == NULL) {
             field_type = &TYPE_ERR_INST;
@@ -94,30 +94,30 @@ static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
         .embedded = embedded_types,
         .embed_count = BUF_LEN(embedded_types),
     };
-    def->type = type_create_struct(sema->arena, &struct_spec);
+    def->type = type_create_struct(sema->base.arena, &struct_spec);
     decl->type = def->type;
 }
 
 /** Register each struct method as a fn sig. */
 static void register_struct_methods(Sema *sema, const ASTNode *decl, StructDef *def) {
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.methods); i++) {
-        register_method_sig(sema, def->name, decl->struct_decl.methods[i], &def->methods);
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl->methods); i++) {
+        register_method_sig(sema, def->name, decl->struct_decl->methods[i], &def->methods);
     }
 }
 
 // ── Public API ─────────────────────────────────────────────────────
 
 void register_struct_def(Sema *sema, ASTNode *decl) {
-    const char *struct_name = decl->struct_decl.name;
+    const char *struct_name = decl->struct_decl->name;
 
     // If the struct has type params, store as a generic template instead
-    if (BUF_LEN(decl->struct_decl.type_params) > 0) {
+    if (BUF_LEN(decl->struct_decl->type_params) > 0) {
         GenericStructDef *gdef = rsg_malloc(sizeof(*gdef));
         gdef->name = struct_name;
         gdef->decl = decl;
-        gdef->type_params = decl->struct_decl.type_params;
-        gdef->type_param_count = BUF_LEN(decl->struct_decl.type_params);
-        hash_table_insert(&sema->generics.structs, struct_name, gdef);
+        gdef->type_params = decl->struct_decl->type_params;
+        gdef->type_param_count = BUF_LEN(decl->struct_decl->type_params);
+        hash_table_insert(&sema->base.generics.structs, struct_name, gdef);
         return;
     }
 
@@ -127,36 +127,35 @@ void register_struct_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    const char *prev_self = sema->infer.self_type_name;
-    sema->infer.self_type_name = struct_name;
+    SEMA_INFER_SCOPE(sema, self_type_name, struct_name);
 
     StructDef *def = rsg_malloc(sizeof(*def));
     def->name = struct_name;
-    def->is_tuple_struct = decl->struct_decl.is_tuple_struct;
+    def->is_tuple_struct = decl->struct_decl->is_tuple_struct;
     def->fields = NULL;
     def->methods = NULL;
     def->embedded = NULL;
     def->assoc_types = NULL;
 
     // Copy associated types from AST
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.assoc_types); i++) {
-        BUF_PUSH(def->assoc_types, decl->struct_decl.assoc_types[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl->assoc_types); i++) {
+        BUF_PUSH(def->assoc_types, decl->struct_decl->assoc_types[i]);
     }
 
     // Collect embedded struct types
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.embedded); i++) {
-        BUF_PUSH(def->embedded, decl->struct_decl.embedded[i]);
+    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl->embedded); i++) {
+        BUF_PUSH(def->embedded, decl->struct_decl->embedded[i]);
     }
 
     compose_struct_fields(sema, decl, def);
     build_struct_type(sema, decl, def);
 
     // Register type alias early so Self-referencing method sigs can resolve
-    hash_table_insert(&sema->db.struct_table, struct_name, def);
-    hash_table_insert(&sema->db.type_alias_table, struct_name, (void *)def->type);
+    hash_table_insert(&sema->base.db.struct_table, struct_name, def);
+    hash_table_insert(&sema->base.db.type_alias_table, struct_name, (void *)def->type);
     scope_define(sema, &(SymDef){struct_name, def->type, false, SYM_TYPE});
 
     register_struct_methods(sema, decl, def);
 
-    sema->infer.self_type_name = prev_self;
+    SEMA_INFER_RESTORE(sema, self_type_name);
 }

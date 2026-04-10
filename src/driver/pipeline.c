@@ -5,6 +5,7 @@
 #endif
 
 #include "core/common.h"
+#include "core/diag.h"
 #include "pass/lex/lex.h"
 #include "pass/lower/hir_passes.h"
 #include "rsg/driver/pipeline.h"
@@ -18,6 +19,26 @@
 /**
  * @file pipeline.c
  * @brief Pipeline facade — orchestrates all pipeline stages.
+ *
+ * ## Arena lifecycle
+ *
+ * Two arenas partition allocations by stage lifetime:
+ *
+ *  - **arena** (main) — owns tokens, AST nodes, semantic tables, type
+ *    objects, and codegen scratch.  Created at the start of
+ *    @c pipeline_run and destroyed in its @c cleanup block.
+ *
+ *  - **hir_arena** — owns HIR nodes produced by Stage 4 (lower) and the
+ *    HIR-to-HIR optimisation passes (const-fold, escape analysis).
+ *    Created alongside the main arena and destroyed immediately after it.
+ *
+ * Both arenas are alive for the entire duration of @c pipeline_run.  The
+ * main arena must outlive the HIR arena because codegen (Stage 5)
+ * references type objects owned by the main arena while emitting HIR
+ * nodes.  A future optimisation could destroy the main arena right after
+ * lowering completes if codegen were changed to copy the type data it
+ * needs into hir_arena, but the current memory overhead is negligible for
+ * typical source sizes.
  */
 
 /** Maximum src file size accepted by the pipeline (64 MiB). */
@@ -30,8 +51,9 @@
 #endif
 
 struct Pipeline {
-    Arena *arena;
-    Arena *hir_arena;
+    Arena *arena;     // main arena: tokens, AST, sema tables, types, cgen scratch
+    Arena *hir_arena; // HIR arena: lowered IR nodes and HIR-pass temporaries
+    DiagCtx dctx;     // structured diagnostic collector
 };
 
 // ── File I/O ───────────────────────────────────────────────────────────
@@ -325,6 +347,9 @@ static bool stage_sema(Arena *arena, ASTNode *file_node, const char *std_search_
     }
     bool ok = sema_resolve(sema, file_node) && sema_check(sema, file_node) &&
               sema_mono(sema, file_node, sema_check_fn_body);
+    if (!ok) {
+        diag_render_all(sema_diag_ctx(sema), stderr);
+    }
     sema_destroy(sema);
     return ok;
 }
@@ -376,10 +401,78 @@ void pipeline_destroy(Pipeline *pipeline) {
     free(pipeline);
 }
 
+// ── Composable stage API ───────────────────────────────────────────────
+
+Arena *pipeline_arena(Pipeline *pipeline) {
+    return pipeline->arena;
+}
+
+Arena *pipeline_hir_arena(Pipeline *pipeline) {
+    return pipeline->hir_arena;
+}
+
+DiagCtx *pipeline_diag_ctx(Pipeline *pipeline) {
+    return &pipeline->dctx;
+}
+
+Token *pipeline_lex(Pipeline *pipeline, const char *src, const char *file) {
+    Lex *lex = lex_create(src, file, pipeline->arena);
+    Token *tokens = lex_scan_all(lex);
+    lex_destroy(lex);
+
+    for (int32_t i = 0; i < BUF_LEN(tokens); i++) {
+        if (tokens[i].kind == TOKEN_ERR) {
+            return NULL;
+        }
+    }
+    return tokens;
+}
+
+ASTNode *pipeline_parse(Pipeline *pipeline, Token *tokens, int32_t count, const char *file) {
+    Parser *parser = parser_create(tokens, count, pipeline->arena, file);
+    ASTNode *file_node = parser_parse(parser);
+    int32_t errs = parser_err_count(parser);
+    parser_destroy(parser);
+
+    if (errs > 0 || file_node == NULL) {
+        return NULL;
+    }
+    return file_node;
+}
+
+bool pipeline_resolve(Pipeline *pipeline, Sema *sema, ASTNode *file) {
+    (void)pipeline;
+    return sema_resolve(sema, file);
+}
+
+bool pipeline_check(Pipeline *pipeline, Sema *sema, ASTNode *file) {
+    (void)pipeline;
+    return sema_check(sema, file) && sema_mono(sema, file, sema_check_fn_body);
+}
+
+HirNode *pipeline_lower(Pipeline *pipeline, ASTNode *file) {
+    Lower *lower = lower_create(pipeline->hir_arena);
+    HirNode *hir_root = lower_lower(lower, file);
+    lower_destroy(lower);
+
+    // Run HIR-to-HIR optimisation passes.
+    hir_pass_const_fold(pipeline->hir_arena, hir_root);
+    hir_pass_escape_analysis(pipeline->hir_arena, hir_root);
+    return hir_root;
+}
+
+void pipeline_emit(Pipeline *pipeline, CGenTarget *target, const HirNode *file) {
+    (void)pipeline;
+    cgen_emit(target, file);
+}
+
+// ── Full pipeline ──────────────────────────────────────────────────────
+
 int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
     char *src = read_src_file(options->input_file);
     pipeline->arena = arena_create();
     pipeline->hir_arena = arena_create();
+    diag_ctx_init(&pipeline->dctx, pipeline->arena);
     Token *tokens = NULL; /* buf */
     HirNode *hir_root = NULL;
     Lower *lower = NULL;
@@ -394,9 +487,19 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
 
     // Stage 2: Parsing.
     ASTNode *file_node = stage_parse(options, tokens, BUF_LEN(tokens), pipeline->arena, &status);
+
+    // Tokens are consumed by the parser — free the token buf early to
+    // reduce peak memory.  Lexeme strings live in the main arena and
+    // remain valid.
+    BUF_FREE(tokens);
+
     if (file_node == NULL) {
         goto cleanup;
     }
+
+    // Source text is no longer needed after parsing.
+    free(src);
+    src = NULL;
 
     // Stage 2.5a: Always-inject std/builtin.rsg (core types and intrinsics).
     const char *std_dir = inject_builtin(pipeline->arena, options, file_node);
@@ -421,9 +524,11 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
 
 cleanup:
     lower_destroy(lower);
-    BUF_FREE(tokens);
     free(src);
     src = NULL;
+    diag_ctx_destroy(&pipeline->dctx);
+    // Destroy HIR arena first; then main arena (which owns types that
+    // codegen referenced through HIR nodes).
     arena_destroy(pipeline->hir_arena);
     arena_destroy(pipeline->arena);
     pipeline->arena = NULL;

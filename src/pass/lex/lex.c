@@ -331,7 +331,29 @@ Token scan_token(Lex *lex) {
         }
 
         // Line comments: skip until end of line.
+        // Doc comments (///) are emitted as TOKEN_DOC_COMMENT.
         if (peek(lex) == '/' && peek_next(lex) == '/') {
+            SrcLoc comment_loc = current_loc(lex);
+            advance(lex); // consume first '/'
+            advance(lex); // consume second '/'
+
+            // Check for `///` (doc comment) — but not `////` (regular comment).
+            if (peek(lex) == '/' && peek_next(lex) != '/') {
+                advance(lex); // consume third '/'
+                // Skip optional leading space.
+                if (peek(lex) == ' ') {
+                    advance(lex);
+                }
+                const char *start = lex->src + lex->pos;
+                int32_t doc_len = 0;
+                while (peek(lex) != '\n' && peek(lex) != '\0') {
+                    advance(lex);
+                    doc_len++;
+                }
+                return build_token(lex, TOKEN_DOC_COMMENT, start, doc_len, comment_loc);
+            }
+
+            // Regular comment — skip rest of line.
             while (peek(lex) != '\n' && peek(lex) != '\0') {
                 advance(lex);
             }

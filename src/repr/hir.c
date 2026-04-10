@@ -155,9 +155,21 @@ void hir_visit_children(HirNode *node, HirChildVisitor visitor, void *ctx) {
         break;
     case HIR_MATCH:
         visitor(ctx, &node->match_expr.operand);
-        visit_buf(visitor, ctx, node->match_expr.arm_conds, BUF_LEN(node->match_expr.arm_conds));
-        visit_buf(visitor, ctx, node->match_expr.arm_guards, BUF_LEN(node->match_expr.arm_guards));
-        visit_buf(visitor, ctx, node->match_expr.arm_bodies, BUF_LEN(node->match_expr.arm_bodies));
+        for (int32_t i = 0; i < BUF_LEN(node->match_expr.arms); i++) {
+            HirMatchArm *arm = &node->match_expr.arms[i];
+            if (arm->cond != NULL) {
+                visitor(ctx, &arm->cond);
+            }
+            if (arm->guard != NULL) {
+                visitor(ctx, &arm->guard);
+            }
+            if (arm->body != NULL) {
+                visitor(ctx, &arm->body);
+            }
+            if (arm->bindings != NULL) {
+                visitor(ctx, &arm->bindings);
+            }
+        }
         break;
     case HIR_CLOSURE:
         visit_buf(visitor, ctx, node->closure.params, BUF_LEN(node->closure.params));

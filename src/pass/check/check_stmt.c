@@ -32,7 +32,7 @@ const Type *check_if(Sema *sema, ASTNode *node) {
         if (init_type != NULL && init_type->kind == TYPE_ENUM) {
             // Use the full check_pattern from check_match with dummy tracking
             int32_t vc = type_enum_variant_count(init_type);
-            bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
+            bool *variant_covered = arena_alloc_zero(sema->base.arena, vc * sizeof(bool));
             bool has_wildcard = false;
             check_pattern(sema, node->if_expr.pattern, init_type,
                           &(MatchCoverage){variant_covered, &has_wildcard});
@@ -122,7 +122,7 @@ static const Type *reconcile_var_init(Sema *sema, ASTNode *node, const Type *dec
                                       const Type *init_type) {
     if (init_type == NULL && node->var_decl.init == NULL && declared->kind == TYPE_ENUM &&
         type_enum_find_variant(declared, "None") != NULL) {
-        node->var_decl.init = build_none_variant_call(sema->arena, declared, node->loc);
+        node->var_decl.init = build_none_variant_call(sema->base.arena, declared, node->loc);
         return declared;
     }
     if (init_type != NULL && node->var_decl.init != NULL) {
@@ -141,7 +141,7 @@ static const Type *reconcile_var_init(Sema *sema, ASTNode *node, const Type *dec
     if (init_type != NULL && !type_assignable(init_type, declared) && init_type->kind != TYPE_ERR &&
         declared->kind != TYPE_ERR) {
         SEMA_ERR(sema, node->loc, "type mismatch: expected '%s', got '%s'",
-                 type_name(sema->arena, declared), type_name(sema->arena, init_type));
+                 type_name(sema->base.arena, declared), type_name(sema->base.arena, init_type));
     }
     return declared;
 }
@@ -150,17 +150,14 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
     const Type *declared = resolve_ast_type(sema, &node->var_decl.type);
 
     // Set expected type before checking init for bidirectional inference
-    const Type *save_expected = sema->infer.expected_type;
-    if (declared != NULL) {
-        sema->infer.expected_type = declared;
-    }
+    SEMA_INFER_SCOPE(sema, expected_type, declared != NULL ? declared : sema->infer.expected_type);
 
     const Type *init_type = NULL;
     if (node->var_decl.init != NULL) {
         init_type = check_node(sema, node->var_decl.init);
     }
 
-    sema->infer.expected_type = save_expected;
+    SEMA_INFER_RESTORE(sema, expected_type);
 
     // Determine final type
     const Type *var_type;
@@ -206,7 +203,7 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
         }
         // Variadic param: ..T → []T (slice type)
         if (param->param.is_variadic) {
-            param_type = type_create_slice(sema->arena, param_type);
+            param_type = type_create_slice(sema->base.arena, param_type);
         }
         param->type = param_type;
         check_reserved_id(sema, param->loc, param->param.name);
@@ -217,17 +214,15 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
     if (fn_node->fn_decl.body != NULL) {
         // Pre-resolve return type for bidirectional inference (Ok/Err/None)
         const Type *pre_return = resolve_ast_type(sema, &fn_node->fn_decl.return_type);
-        const Type *save_fn_return = sema->infer.fn_return_type;
-        const Type *save_expected = sema->infer.expected_type;
-        if (pre_return != NULL) {
-            sema->infer.fn_return_type = pre_return;
-            sema->infer.expected_type = pre_return;
-        }
+        SEMA_INFER_SCOPE(sema, fn_return_type,
+                         pre_return != NULL ? pre_return : sema->infer.fn_return_type);
+        SEMA_INFER_SCOPE(sema, expected_type,
+                         pre_return != NULL ? pre_return : sema->infer.expected_type);
 
         const Type *body_type = check_node(sema, fn_node->fn_decl.body);
 
-        sema->infer.fn_return_type = save_fn_return;
-        sema->infer.expected_type = save_expected;
+        SEMA_INFER_RESTORE(sema, expected_type);
+        SEMA_INFER_RESTORE(sema, fn_return_type);
 
         // If return type not declared, infer from body
         const Type *resolved_return = pre_return;
@@ -245,7 +240,8 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
         // Update fn sigs
         const char *sig_key = fn_node->fn_decl.name;
         if (fn_node->fn_decl.owner_struct != NULL) {
-            sig_key = arena_sprintf(sema->arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
+            sig_key =
+                arena_sprintf(sema->base.arena, "%s.%s", fn_node->fn_decl.owner_struct, sig_key);
         }
         FnSig *sig = sema_lookup_fn(sema, sig_key);
         if (sig != NULL && sig->return_type->kind == TYPE_UNIT &&
@@ -271,7 +267,7 @@ static void check_closure_capture_mutation(Sema *sema, ASTNode *target) {
     }
     const char *name = target->id.name;
     bool found_local = false;
-    for (Scope *s = sema->current_scope; s != NULL && s != sema->closure.scope->parent;
+    for (Scope *s = sema->base.current_scope; s != NULL && s != sema->closure.scope->parent;
          s = s->parent) {
         if (hash_table_lookup(&s->table, name) != NULL) {
             found_local = true;
@@ -295,10 +291,9 @@ static void check_closure_capture_mutation(Sema *sema, ASTNode *target) {
 static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode *value) {
     const Type *target_type = check_node(sema, target);
 
-    const Type *saved_expected = sema->infer.expected_type;
-    sema->infer.expected_type = target_type;
+    SEMA_INFER_SCOPE(sema, expected_type, target_type);
     check_node(sema, value);
-    sema->infer.expected_type = saved_expected;
+    SEMA_INFER_RESTORE(sema, expected_type);
 
     promote_lit(value, target_type);
 
@@ -323,13 +318,12 @@ const Type *check_compound_assign(Sema *sema, ASTNode *node) {
 }
 
 static const Type *check_loop(Sema *sema, ASTNode *node) {
-    const Type *saved_break_type = sema->infer.loop_break_type;
-    sema->infer.loop_break_type = NULL;
+    SEMA_INFER_SCOPE(sema, loop_break_type, NULL);
     scope_push(sema, true);
     check_node(sema, node->loop.body);
     scope_pop(sema);
     const Type *result = sema->infer.loop_break_type;
-    sema->infer.loop_break_type = saved_break_type;
+    SEMA_INFER_RESTORE(sema, loop_break_type);
     return (result != NULL) ? result : &TYPE_NEVER_INST;
 }
 
@@ -340,7 +334,7 @@ static void check_while(Sema *sema, ASTNode *node) {
         scope_push(sema, true);
         if (init_type != NULL && init_type->kind == TYPE_ENUM) {
             int32_t vc = type_enum_variant_count(init_type);
-            bool *variant_covered = arena_alloc_zero(sema->arena, vc * sizeof(bool));
+            bool *variant_covered = arena_alloc_zero(sema->base.arena, vc * sizeof(bool));
             bool has_wildcard = false;
             check_pattern(sema, node->while_loop.pattern, init_type,
                           &(MatchCoverage){variant_covered, &has_wildcard});
@@ -353,7 +347,7 @@ static void check_while(Sema *sema, ASTNode *node) {
     const Type *cond_type = check_node(sema, node->while_loop.cond);
     if (cond_type != NULL && cond_type->kind != TYPE_BOOL && cond_type->kind != TYPE_ERR) {
         SEMA_ERR(sema, node->while_loop.cond->loc, "condition must be 'bool', got '%s'",
-                 type_name(sema->arena, cond_type));
+                 type_name(sema->base.arena, cond_type));
     }
     scope_push(sema, true);
     check_node(sema, node->while_loop.body);
@@ -416,7 +410,7 @@ static const Type *check_optional_chain(Sema *sema, ASTNode *node) {
     }
     if (obj_type->kind != TYPE_ENUM) {
         SEMA_ERR(sema, node->loc, "optional chaining requires Option type, got '%s'",
-                 type_name(sema->arena, obj_type));
+                 type_name(sema->base.arena, obj_type));
         return NULL;
     }
     const EnumVariant *some_var = type_enum_find_variant(obj_type, "Some");
@@ -446,13 +440,13 @@ static const Type *check_optional_chain(Sema *sema, ASTNode *node) {
         return NULL;
     }
     ASTType val_arg = {.kind = AST_TYPE_NAME,
-                       .name = type_name(sema->arena, field_type),
+                       .name = type_name(sema->base.arena, field_type),
                        .type_args = NULL,
                        .loc = node->loc};
-    hash_table_insert(&sema->generics.type_params, val_arg.name, (void *)field_type);
+    hash_table_insert(&sema->base.generics.type_params, val_arg.name, (void *)field_type);
     GenericInstArgs inst_args = {&val_arg, 1, node->loc};
     const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-    hash_table_remove(&sema->generics.type_params, val_arg.name);
+    hash_table_remove(&sema->base.generics.type_params, val_arg.name);
     if (mangled != NULL) {
         return sema_lookup_type_alias(sema, mangled);
     }
@@ -467,7 +461,7 @@ static const Type *check_try(Sema *sema, ASTNode *node) {
     }
     if (operand_type->kind != TYPE_ENUM) {
         SEMA_ERR(sema, node->loc, "postfix '!' requires Result type, got '%s'",
-                 type_name(sema->arena, operand_type));
+                 type_name(sema->base.arena, operand_type));
         return NULL;
     }
     const EnumVariant *ok_var = type_enum_find_variant(operand_type, "Ok");
@@ -492,7 +486,7 @@ const Type *check_node(Sema *sema, ASTNode *node) {
         break;
 
     case NODE_MODULE: {
-        sema->current_scope->module_name = node->module.name;
+        sema->base.current_scope->module_name = node->module.name;
         const char *prev_module = sema->module.current;
         sema->module.current = node->module.name;
         // Check nested module body declarations
@@ -660,10 +654,9 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_RETURN:
         if (node->return_stmt.value != NULL) {
-            const Type *save_expected = sema->infer.expected_type;
-            sema->infer.expected_type = sema->infer.fn_return_type;
+            SEMA_INFER_SCOPE(sema, expected_type, sema->infer.fn_return_type);
             check_node(sema, node->return_stmt.value);
-            sema->infer.expected_type = save_expected;
+            SEMA_INFER_RESTORE(sema, expected_type);
         }
         result = &TYPE_NEVER_INST;
         break;
