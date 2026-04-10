@@ -264,6 +264,7 @@ struct ASTNode {
         // NODE_FN_DECL
         struct {
             bool is_pub;
+            bool is_declare;
             const char *name;
             ASTNode **params; /* buf */
             ASTType return_type;
@@ -289,10 +290,11 @@ struct ASTNode {
         // NODE_VAR_DECL
         struct {
             const char *name;
-            ASTType type;  // may be AST_TYPE_INFERRED
-            ASTNode *init; // init expr
-            bool is_var;   // true for `var x: T = ...`, false for `:=`
-            bool is_immut; // true for `immut x := ...`
+            ASTType type;    // may be AST_TYPE_INFERRED
+            ASTNode *init;   // init expr
+            bool is_var;     // true for `var x: T = ...`, false for `:=`
+            bool is_immut;   // true for `immut x := ...`
+            bool is_declare; // true for `declare var x: T`
         } var_decl;
 
         // NODE_EXPR_STMT

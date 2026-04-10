@@ -965,27 +965,30 @@ const Type *check_call(Sema *sema, ASTNode *node) {
 
     check_call_args(sema, node, fn_name);
 
-    // Built-in fns
+    // Compiler-known functions (replacing former builtin registry)
     if (fn_name != NULL) {
-        const BuiltinFn *bfn = builtin_lookup_fn(&sema->builtins, fn_name);
-        if (bfn != NULL) {
-            if (bfn->kind == BUILTIN_LEN) {
-                if (BUF_LEN(node->call.args) != 1) {
-                    SEMA_ERR(sema, node->loc, "'len' expects exactly 1 argument");
-                    return &TYPE_ERR_INST;
-                }
-                const Type *arg_type = node->call.args[0]->type;
-                // Auto-deref: unwrap *[]T / *str
-                if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
-                    arg_type = arg_type->ptr.pointee;
-                }
-                if (arg_type == NULL ||
-                    (arg_type->kind != TYPE_SLICE && arg_type->kind != TYPE_STR)) {
-                    SEMA_ERR(sema, node->loc, "'len' requires a slice or str argument");
-                    return &TYPE_ERR_INST;
-                }
+        if (strcmp(fn_name, "len") == 0) {
+            if (BUF_LEN(node->call.args) != 1) {
+                SEMA_ERR(sema, node->loc, "'len' expects exactly 1 argument");
+                return &TYPE_ERR_INST;
             }
-            return bfn->return_type;
+            const Type *arg_type = node->call.args[0]->type;
+            // Auto-deref: unwrap *[]T / *str
+            if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
+                arg_type = arg_type->ptr.pointee;
+            }
+            if (arg_type == NULL || (arg_type->kind != TYPE_SLICE && arg_type->kind != TYPE_STR &&
+                                     arg_type->kind != TYPE_ARRAY)) {
+                SEMA_ERR(sema, node->loc, "'len' requires a slice, str, or array argument");
+                return &TYPE_ERR_INST;
+            }
+            return &TYPE_I32_INST;
+        }
+        if (strcmp(fn_name, "print") == 0 || strcmp(fn_name, "println") == 0) {
+            return &TYPE_UNIT_INST;
+        }
+        if (strcmp(fn_name, "assert") == 0) {
+            return &TYPE_UNIT_INST;
         }
     }
 

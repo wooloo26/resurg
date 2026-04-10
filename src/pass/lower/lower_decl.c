@@ -42,6 +42,10 @@ static HirNode *lower_fn_body(Lower *low, const ASTNode *body_ast) {
 // ── Declaration lower ──────────────────────────────────────────────
 
 HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
+    // Declare fns have no body — skip lowering
+    if (ast->fn_decl.is_declare) {
+        return NULL;
+    }
     const char *name = ast->fn_decl.name;
     bool is_pub = ast->fn_decl.is_pub;
     const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
@@ -77,6 +81,10 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
 
 HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_name,
                            const Type *struct_type) {
+    // Declare methods have no body — skip lowering
+    if (ast->fn_decl.is_declare) {
+        return NULL;
+    }
     const char *method_name = ast->fn_decl.name;
     const Type *return_type = ast->type != NULL ? ast->type : &TYPE_UNIT_INST;
     const char *key = arena_sprintf(low->hir_arena, "%s.%s", struct_name, method_name);

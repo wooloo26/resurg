@@ -1,7 +1,6 @@
 #ifndef RSG__SEMA_H
 #define RSG__SEMA_H
 
-#include "core/builtin_registry.h"
 #include "pass/resolve/_resolve.h"
 
 /**
@@ -156,7 +155,6 @@ struct Sema {
     FnBodyChecker fn_body_checker;    // injected callback for mono to type-check cloned fn bodies
     ClosureCtx closure;               // closure capture tracking (check pass)
     ASTNode *file_node;               // root file node (for appending monomorphized fns)
-    BuiltinRegistry builtins;         // centralized built-in fn/member registry
     HashTable type_alias_table;       // name → const Type*
     HashTable fn_table;               // name → FnSig*
     HashTable struct_table;           // name → StructDef*

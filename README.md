@@ -490,7 +490,7 @@ ext str impl Display {
 
 ### Literal Methods
 
-Receiver type determines callability on literals. Value receivers work on rvalues; pointer receivers require an addressable lvalue.
+Receiver type determines callability on literals. Value receivers work on lvalues and rvalues; pointer receivers require an addressable lvalue.
 
 ```rsg
 ext i32 {
@@ -501,7 +501,11 @@ ext i32 {
 10.is_even()         // OK: value receiver on literal
 // 10.increment()    // ERROR: pointer receiver on rvalue
 x := 10
-x.increment()        // OK: variable is addressable
+x.increment()        // x eq 11. OK: variable is addressable
+x.is_even()          // OK: value receiver on lvalue
+y := &x
+y.is_even()          // eq x.is_even()
+y.increment()        // eq x.increment()
 
 // Struct: same rules
 (Counter { value = 0 }).get_value()   // OK: value receiver
@@ -1280,19 +1284,32 @@ p: PositiveInt = 42.try_into()!          // OK
 // p2: PositiveInt = (-1).try_into()!    // Err("must be positive")
 ```
 
----
+## 13. `declare`
 
-## 13. Macro
-
-### `#[extern("print")]`
+### Variables
 
 ```rsg
-// std/builtin/io.rsg
-#[extern("rsg_println_str")]
-pub fn println(s: str)
+declare var dom: DOM
+```
 
-#[extern("rsg_print_str")]
-pub fn print(s: str)
+### Functions
+
+```rsg
+pub declare fn print(s: str)
+pub declare fn println(s: str)
+pub declare fn assert(cond: bool, msg: ?str)
+
+ext str {
+    declare fn len(s)
+}
+
+ext<T> []T {
+    declare fn len(s)
+}
+
+ext<T, comptime N: usize> [N]T {
+    declare fn len(s)
+}
 ```
 
 ---

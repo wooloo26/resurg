@@ -222,13 +222,14 @@ Higher-order programming and code organization.
 
 ## v0.9.10 — Before Prelude
 
-- [ ] Support `pub use any::*`
-- [ ] `#[extern("print")]`
+- [x] `declare`
+- [x] Value receivers work on lvalues and rvalues
+- [x] Remove builtin
 
 ## v0.9.11 — Prelude
 
+- [ ] Support `pub use` and `use any::*`
 - [ ] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
-- [ ] Remove builtin
 - [ ] `panic(message)`
 - [ ] `recover()`
 - [ ] `assert` rewritten on top of `panic`

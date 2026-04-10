@@ -52,6 +52,7 @@ static const TokenDescriptor TOKEN_TABLE[] = {
     [TOKEN_WHERE] = {"where", 0, 0, 0},
     [TOKEN_COMPTIME] = {"comptime", 0, 0, 0},
     [TOKEN_SELF] = {"Self", 0, 0, 0},
+    [TOKEN_DECLARE] = {"declare", 0, 0, 0},
     [TOKEN_BOOL] = {"bool", TKF_TYPE_KEYWORD, 0, 0},
     [TOKEN_I8] = {"i8", TKF_TYPE_KEYWORD, 0, 0},
     [TOKEN_I16] = {"i16", TKF_TYPE_KEYWORD, 0, 0},

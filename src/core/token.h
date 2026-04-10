@@ -48,6 +48,7 @@ typedef enum {
     TOKEN_WHERE,    // where
     TOKEN_COMPTIME, // comptime
     TOKEN_SELF,     // Self
+    TOKEN_DECLARE,  // declare
 
     // Type keywords
     TOKEN_BOOL,  // bool

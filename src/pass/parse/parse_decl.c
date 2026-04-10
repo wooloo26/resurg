@@ -73,11 +73,13 @@ static void parse_recv_and_params(Parser *parser, ASTNode *node) {
 // ── Method decl (inside struct/enum) ────────────────────────────
 
 static ASTNode *parse_method_decl(Parser *parser, const char *struct_name) {
+    bool is_declare = parser_match(parser, TOKEN_DECLARE);
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
 
     ASTNode *node = ast_new(parser->arena, NODE_FN_DECL, loc);
     node->fn_decl.is_pub = false;
+    node->fn_decl.is_declare = is_declare;
     node->fn_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->fn_decl.params = NULL;
     node->fn_decl.owner_struct = struct_name;
@@ -95,8 +97,10 @@ static ASTNode *parse_method_decl(Parser *parser, const char *struct_name) {
 
     parser_skip_newlines(parser);
 
-    // Body: block or = expr
-    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+    // Body: block or = expr (absent for declare methods)
+    if (is_declare) {
+        node->fn_decl.body = NULL;
+    } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         node->fn_decl.body = parser_parse_block(parser);
     } else if (parser_match(parser, TOKEN_EQUAL)) {
         node->fn_decl.body = parser_parse_expr(parser);
@@ -556,12 +560,31 @@ static ASTWhereClause *parse_where_clauses(Parser *parser) {
     return clauses;
 }
 
+/** Parse `declare var name: Type` — variable declaration without initializer. */
+static ASTNode *parse_declare_var(Parser *parser, bool is_pub) {
+    SrcLoc loc = parser_current_loc(parser);
+    parser_expect(parser, TOKEN_VAR);
+
+    ASTNode *node = ast_new(parser->arena, NODE_VAR_DECL, loc);
+    node->var_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
+    parser_expect(parser, TOKEN_COLON);
+    node->var_decl.type = parser_parse_type(parser);
+    node->var_decl.init = NULL;
+    node->var_decl.is_var = true;
+    node->var_decl.is_immut = false;
+    node->var_decl.is_declare = true;
+    (void)is_pub;
+    return node;
+}
+
 static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
+    bool is_declare = parser_match(parser, TOKEN_DECLARE);
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
 
     ASTNode *node = ast_new(parser->arena, NODE_FN_DECL, loc);
     node->fn_decl.is_pub = is_pub;
+    node->fn_decl.is_declare = is_declare;
     node->fn_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->fn_decl.params = NULL;
     node->fn_decl.recv_name = NULL;
@@ -614,8 +637,10 @@ static ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
 
     parser_skip_newlines(parser);
 
-    // Body: block or `= expr`
-    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+    // Body: block or `= expr` (absent for declare fns)
+    if (is_declare) {
+        node->fn_decl.body = NULL;
+    } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         node->fn_decl.body = parser_parse_block(parser);
     } else if (parser_match(parser, TOKEN_EQUAL)) {
         node->fn_decl.body = parser_parse_expr(parser);
@@ -679,7 +704,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
-        if (parser_check(parser, TOKEN_FN)) {
+        if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE)) {
             ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name);
             BUF_PUSH(node->ext_decl.methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
@@ -839,6 +864,20 @@ static ASTNode *parse_module_decl(Parser *parser, bool is_pub) {
 ASTNode *parser_parse_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
+    // declare fn / declare var
+    if (parser_check(parser, TOKEN_DECLARE)) {
+        if (parser_peek_is(parser, TOKEN_FN)) {
+            return parse_fn_decl(parser, false);
+        }
+        if (parser_peek_is(parser, TOKEN_VAR)) {
+            parser_advance(parser); // consume 'declare'
+            return parse_declare_var(parser, false);
+        }
+        rsg_err(parser_current_loc(parser), "expected 'fn' or 'var' after 'declare'");
+        parser_advance(parser);
+        return NULL;
+    }
+
     // module
     if (parser_check(parser, TOKEN_MODULE)) {
         return parse_module_decl(parser, false);
@@ -886,6 +925,18 @@ ASTNode *parser_parse_decl(Parser *parser) {
     if (parser_check(parser, TOKEN_PUB)) {
         parser_advance(parser); // consume 'pub'
         parser_skip_newlines(parser);
+        if (parser_check(parser, TOKEN_DECLARE)) {
+            if (parser_peek_is(parser, TOKEN_FN)) {
+                return parse_fn_decl(parser, true);
+            }
+            if (parser_peek_is(parser, TOKEN_VAR)) {
+                parser_advance(parser); // consume 'declare'
+                return parse_declare_var(parser, true);
+            }
+            rsg_err(parser_current_loc(parser), "expected 'fn' or 'var' after 'declare'");
+            parser_advance(parser);
+            return NULL;
+        }
         if (parser_check(parser, TOKEN_FN)) {
             return parse_fn_decl(parser, true);
         }

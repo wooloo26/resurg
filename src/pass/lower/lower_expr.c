@@ -405,9 +405,8 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
 }
 
 /**
- * Expand len(arg) → arg.len (struct field access).
- *
- * Works on both slices and strings, whose C structs have a `len` field.
+ * Expand len(arg) → arg.len (struct field access) for slices/strings,
+ * or a constant integer for fixed-size arrays.
  */
 static HirNode *lower_len_call(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
@@ -415,6 +414,17 @@ static HirNode *lower_len_call(Lower *low, const ASTNode *ast) {
         return hir_new(low->hir_arena, HIR_UNIT_LIT, &TYPE_UNIT_INST, loc);
     }
     HirNode *arg = lower_expr(low, ast->call.args[0]);
+    const Type *arg_type = arg->type;
+    // Auto-deref: unwrap *[]T / *str
+    if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
+        arg_type = arg_type->ptr.pointee;
+    }
+    // Fixed-size array: return compile-time constant
+    if (arg_type != NULL && arg_type->kind == TYPE_ARRAY) {
+        int32_t size = type_array_size(arg_type);
+        return lower_make_int_lit(low,
+                                  &(IntLitSpec){(uint64_t)size, &TYPE_I32_INST, TYPE_I32, loc});
+    }
     bool via_ptr = false;
     if (arg->type != NULL && arg->type->kind == TYPE_PTR) {
         via_ptr = true;
