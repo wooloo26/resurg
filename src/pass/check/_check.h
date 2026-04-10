@@ -40,6 +40,21 @@ void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_typ
 // ── Call checking (check_call.c) ──────────────────────────────────
 
 const Type *check_call(Sema *sema, ASTNode *node);
+const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig);
+bool is_lvalue(const ASTNode *node);
+const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_type);
+const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
+                                    const char *variant_name);
+
+// ── Method dispatch (check_method.c) ──────────────────────────────
+
+const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_name);
+const Type *check_inline_closure_call(Sema *sema, ASTNode *node);
+
+// ── Generic call (check_generic_call.c) ───────────────────────────
+
+const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *fn_name);
+const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name);
 
 // ── Pattern / match checking (check_match.c) ──────────────────────
 

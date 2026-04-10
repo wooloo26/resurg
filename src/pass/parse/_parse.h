@@ -22,6 +22,13 @@ struct Parser {
     bool no_struct_lit; // suppress struct-lit parsing in if/while conditions
 };
 
+/** Report a parse err and bump the parser's err counter. */
+#define PARSER_ERR(parser, loc, ...)                                                               \
+    do {                                                                                           \
+        rsg_err(loc, __VA_ARGS__);                                                                 \
+        (parser)->err_count++;                                                                     \
+    } while (0)
+
 // ── Token-stream navigation (parser/helpers.c) ────────────────────────
 
 /** Return the token at the current pos. */
@@ -45,6 +52,8 @@ const Token *parser_expect(Parser *parser, TokenKind kind);
 void parser_skip_newlines(Parser *parser);
 /** Return the src loc of the current token. */
 SrcLoc parser_current_loc(const Parser *parser);
+/** Peek one token ahead without consuming. */
+bool parser_peek_is(const Parser *parser, TokenKind kind);
 
 // ── Type parsing (parser/types.c) ──────────────────────────────────────
 
@@ -80,5 +89,20 @@ ASTNode *parser_parse_stmt(Parser *parser);
 
 /** Parse a top-level decl (module, type, fn, pub fn, or stmt). */
 ASTNode *parser_parse_decl(Parser *parser);
+
+// ── Fn / method parsing (parser/parse_fn.c) ─────────────────────
+
+/** Parse generic type param list: `<T, U: Bound + Bound2, ...>`. */
+ASTTypeParam *parse_type_params(Parser *parser);
+/** Parse where clauses: `where T: Bound1 + Bound2, U: Bound3`. */
+ASTWhereClause *parse_where_clauses(Parser *parser);
+/** Parse method receiver and params between `(` and `)`. */
+void parse_recv_and_params(Parser *parser, ASTNode *node);
+/** Parse a method decl inside a struct/enum/ext block. */
+ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub);
+/** Parse a top-level fn decl. */
+ASTNode *parse_fn_decl(Parser *parser, bool is_pub);
+/** Parse `declare var name: Type`. */
+ASTNode *parse_declare_var(Parser *parser, bool is_pub);
 
 #endif // RSG__PARSE_H

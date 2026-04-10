@@ -18,6 +18,8 @@ typedef struct FnSig FnSig;
 typedef struct StructDef StructDef;
 typedef struct EnumDef EnumDef;
 typedef struct PactDef PactDef;
+typedef struct StructFieldInfo StructFieldInfo;
+typedef struct StructMethodInfo StructMethodInfo;
 typedef struct GenericDef GenericDef;
 typedef GenericDef GenericFnDef;
 typedef GenericDef GenericStructDef;
@@ -115,7 +117,7 @@ LitKind type_to_lit_kind(TypeKind kind);
  */
 const Type *promote_lit(ASTNode *lit, const Type *target);
 
-// ── Registration (resolve_register.c) ──────────────────────────────────
+// ── Fn registration (resolve_fn.c) ─────────────────────────────────────
 
 /**
  * Create a FnSig from a fn decl, resolving its return type and param types.
@@ -123,13 +125,31 @@ const Type *promote_lit(ASTNode *lit, const Type *target);
  */
 FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub);
 
+/** Register a method sig in the fn table and append to @p methods buf. */
+void register_method_sig(Sema *sema, const char *type_name, ASTNode *method,
+                         StructMethodInfo **methods);
 void register_fn_sig(Sema *sema, ASTNode *decl);
+
+// ── Struct registration (resolve_struct.c) ─────────────────────────────
+
 void register_struct_def(Sema *sema, ASTNode *decl);
+
+// ── Enum/pact registration (resolve_register.c) ───────────────────────
+
+void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo **fields);
+void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **methods);
+void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def, const PactDef *pact);
 void register_enum_def(Sema *sema, ASTNode *decl);
 void register_pact_def(Sema *sema, ASTNode *decl);
-void register_ext_decl(Sema *sema, ASTNode *decl);
 void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def);
+
+// ── Ext registration (resolve_ext.c) ──────────────────────────────────
+
+void register_ext_decl(Sema *sema, ASTNode *decl);
 void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl);
+
+// ── Module registration (resolve_module.c) ────────────────────────────
+
 void register_module_decl(Sema *sema, ASTNode *decl);
 void register_use_decl(Sema *sema, ASTNode *decl);
 
@@ -149,6 +169,20 @@ typedef struct {
 bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name);
 /** Build a mangled name for a generic instantiation: "base__type1_type2". */
 const char *build_mangled_name(Sema *sema, const char *base, const Type **type_args, int32_t count);
+
+/**
+ * Push type param substitutions into the sema type_param_table, saving
+ * any previously bound values.  Caller must pair with sema_pop_type_params.
+ */
+void sema_push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved, int32_t count,
+                           const Type ***out_saved);
+
+/**
+ * Pop type param substitutions, restoring previous values saved by
+ * sema_push_type_params.  Frees the @p saved buffer.
+ */
+void sema_pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count, const Type **saved);
+
 /**
  * Instantiate a generic struct with the given type args.
  * Creates a concrete struct def with a mangled name and registers it.

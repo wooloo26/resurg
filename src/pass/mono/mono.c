@@ -24,11 +24,10 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         GenericInst *inst = &sema->pending_insts[gi];
         GenericFnDef *gdef = inst->generic;
 
-        // Push type param substitutions
-        for (int32_t ti = 0; ti < gdef->type_param_count; ti++) {
-            hash_table_insert(&sema->generics.type_params, gdef->type_params[ti].name,
-                              (void *)inst->type_args[ti]);
-        }
+        // Push type param substitutions (save previous for nested generics)
+        const Type **saved = NULL;
+        sema_push_type_params(sema, gdef->type_params, inst->type_args, gdef->type_param_count,
+                              &saved);
 
         // Create a cloned fn_decl with the mangled name and concrete types
         ASTNode *orig = gdef->decl;
@@ -63,8 +62,8 @@ static void instantiate_pending_generics(Sema *sema, ASTNode *file) {
         // Append to file decls so lowering/codegen can see it
         BUF_PUSH(inst->file_node->file.decls, clone);
 
-        // Clear type param substitutions
-        sema_reset_type_params(sema);
+        // Pop type param substitutions (restore previous values)
+        sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
     }
 }
 

@@ -2,16 +2,13 @@
 
 /**
  * @file check_call.c
- * @brief Call-expression type checking — fn calls, method dispatch, generics.
- *
- * Handles direct fn calls, member method calls, generic fn instantiation,
- * type inference, enum variant constructors, closure calls, and named args.
+ * @brief Call-expression type checking — direct calls, named args, tuple structs, variants.
  */
 
 // ── Addressability helpers ────────────────────────────────────────
 
 /** Return true if @p node is an addressable lvalue (variable, member, index). */
-static bool is_lvalue(const ASTNode *node) {
+bool is_lvalue(const ASTNode *node) {
     if (node == NULL) {
         return false;
     }
@@ -200,7 +197,7 @@ static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *
 }
 
 /** Validate a call through a fn-typed value (variable, field, or expression). */
-static const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_type) {
+const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_type) {
     int32_t arg_count = BUF_LEN(node->call.args);
     int32_t fn_param_count = fn_type->fn_type.param_count;
     if (arg_count != fn_param_count) {
@@ -223,8 +220,8 @@ static const Type *check_fn_type_call(Sema *sema, ASTNode *node, const Type *fn_
 // ── Enum variant call ─────────────────────────────────────────────
 
 /** Check an enum tuple variant construction: Enum.Variant(args). */
-static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
-                                           const char *variant_name) {
+const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type *enum_type,
+                                    const char *variant_name) {
     const EnumVariant *variant = type_enum_find_variant(enum_type, variant_name);
     if (variant == NULL) {
         return NULL;
@@ -264,557 +261,11 @@ static const Type *check_enum_variant_call(Sema *sema, ASTNode *node, const Type
 // ── Resolved call application ─────────────────────────────────────
 
 /** Reorder named args, validate, and apply a resolved fn sig to a call. */
-static const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig) {
+const Type *resolve_call(Sema *sema, ASTNode *node, const FnSig *sig) {
     reorder_named_args(sema, node, sig);
     check_and_promote_call_args(sema, node, sig);
     node->type = sig->return_type;
     return sig->return_type;
-}
-
-// ── Method call resolution ────────────────────────────────────────
-
-/** Resolve a struct method call, including promoted methods from embedded structs. */
-static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Type *struct_type,
-                                            const char *method_name) {
-    const char *method_key =
-        arena_sprintf(sema->arena, "%s.%s", struct_type->struct_type.name, method_name);
-    FnSig *sig = sema_lookup_fn(sema, method_key);
-
-    // If not found directly, check embedded structs for promoted methods
-    if (sig == NULL) {
-        StructDef *sdef = sema_lookup_struct(sema, struct_type->struct_type.name);
-        if (sdef != NULL) {
-            for (int32_t ei = 0; ei < BUF_LEN(sdef->embedded); ei++) {
-                const char *embed_key =
-                    arena_sprintf(sema->arena, "%s.%s", sdef->embedded[ei], method_name);
-                sig = sema_lookup_fn(sema, embed_key);
-                if (sig != NULL) {
-                    break;
-                }
-            }
-        }
-    }
-    if (sig == NULL) {
-        return NULL;
-    }
-    // Reject pointer receiver on rvalue (literal, call result, etc.)
-    if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
-        SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
-        return &TYPE_ERR_INST;
-    }
-    for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-        check_node(sema, node->call.args[i]);
-    }
-    return resolve_call(sema, node, sig);
-}
-
-/** Try to resolve a member call (enum variant, enum method, or struct method). */
-/**
- * Handle module-qualified calls: mod::fn(args), mod::Enum::Variant(args),
- * mod::Type, or mod::inner sub-module lookup.
- *
- * @return Resolved return type on direct function call hit,
- *         TYPE_ERR on error, or NULL when the caller should continue dispatch.
- */
-static const Type *try_module_qualified_call(Sema *sema, ASTNode *node, const Type *obj_type,
-                                             const char *method_name, const char **out_fn_name,
-                                             const Type **out_obj_type) {
-    const char *mod_name = obj_type->module_type.name;
-    const char *qualified;
-    if (strlen(mod_name) == 0) {
-        qualified = method_name;
-    } else {
-        qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, method_name);
-    }
-
-    // Try as fn call: mod::fn(args)
-    FnSig *sig = sema_lookup_fn(sema, qualified);
-    if (sig != NULL) {
-        if (!sig->is_pub) {
-            SEMA_ERR(sema, node->loc, "'%s' is private in module '%s'", method_name, mod_name);
-            return &TYPE_ERR_INST;
-        }
-        node->call.callee->kind = NODE_ID;
-        node->call.callee->id.name = qualified;
-        for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-            check_node(sema, node->call.args[i]);
-        }
-        return resolve_call(sema, node, sig);
-    }
-
-    // Try as struct lit or enum access: mod::Type
-    StructDef *sdef = sema_lookup_struct(sema, qualified);
-    if (sdef != NULL) {
-        node->call.callee->member.object->type = sdef->type;
-        *out_fn_name = method_name;
-        return NULL;
-    }
-
-    EnumDef *edef = sema_lookup_enum(sema, qualified);
-    if (edef != NULL) {
-        node->call.callee->member.object->type = edef->type;
-        node->call.callee->member.object->id.name = qualified;
-        *out_obj_type = edef->type;
-        return NULL;
-    }
-
-    // Try as sub-module: mod::inner::...
-    Sym *mod_sym = scope_lookup(sema, qualified);
-    if (mod_sym != NULL && mod_sym->type != NULL && mod_sym->type->kind == TYPE_MODULE) {
-        *out_obj_type = mod_sym->type;
-    }
-    return NULL;
-}
-
-static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_name) {
-    const char *method_name = node->call.callee->member.member;
-    const Type *obj_type = NULL;
-
-    // Handle generic enum instantiation via type_args on the call node.
-    // Check BEFORE calling check_node to avoid spurious "undefined variable" errors.
-    if (node->call.callee->member.object->kind == NODE_ID && BUF_LEN(node->call.type_args) > 0) {
-        const char *enum_name = node->call.callee->member.object->id.name;
-        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, enum_name);
-        if (gdef != NULL) {
-            GenericInstArgs inst_args = {node->call.type_args, BUF_LEN(node->call.type_args),
-                                         node->loc};
-            const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-            if (mangled != NULL) {
-                node->call.callee->member.object->id.name = mangled;
-                EnumDef *edef = sema_lookup_enum(sema, mangled);
-                obj_type = edef->type;
-                node->call.callee->member.object->type = obj_type;
-                // Clear type_args since they've been consumed for enum instantiation
-                node->call.type_args = NULL;
-            }
-        }
-    }
-
-    if (obj_type == NULL) {
-        obj_type = check_node(sema, node->call.callee->member.object);
-    }
-
-    // Auto-deref for ptr types
-    if (obj_type != NULL && obj_type->kind == TYPE_PTR) {
-        obj_type = obj_type->ptr.pointee;
-    }
-
-    // Module-qualified call: mod::fn(args) or mod::Enum::Variant(args)
-    if (obj_type != NULL && obj_type->kind == TYPE_MODULE) {
-        const Type *result =
-            try_module_qualified_call(sema, node, obj_type, method_name, out_fn_name, &obj_type);
-        if (result != NULL) {
-            return result;
-        }
-    }
-
-    if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
-        const Type *result = check_enum_variant_call(sema, node, obj_type, method_name);
-        if (result != NULL) {
-            return result;
-        }
-        // Enum method call
-        const char *method_key =
-            arena_sprintf(sema->arena, "%s.%s", type_enum_name(obj_type), method_name);
-        FnSig *sig = sema_lookup_fn(sema, method_key);
-        if (sig != NULL) {
-            // Reject pointer receiver on rvalue
-            if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
-                SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
-                return &TYPE_ERR_INST;
-            }
-            return resolve_call(sema, node, sig);
-        }
-    }
-
-    if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
-        const Type *result = check_struct_method_call(sema, node, obj_type, method_name);
-        if (result != NULL) {
-            return result;
-        }
-    }
-
-    // Call through fn-typed struct field: obj.field(args)
-    if (obj_type != NULL && obj_type->kind == TYPE_STRUCT) {
-        const StructField *sf = type_struct_find_field(obj_type, method_name);
-        if (sf != NULL && sf->type != NULL && sf->type->kind == TYPE_FN) {
-            node->call.callee->type = sf->type;
-            return check_fn_type_call(sema, node, sf->type);
-        }
-    }
-
-    // Extension method call on primitive and compound types
-    if (obj_type != NULL) {
-        const char *prim_name = type_name(sema->arena, obj_type);
-        if (prim_name != NULL) {
-            const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
-            FnSig *sig = sema_lookup_fn(sema, method_key);
-
-            // Generic ext instantiation: ext<T> []T or ext<T, comptime N: usize> [N]T
-            if (sig == NULL && obj_type->kind == TYPE_SLICE) {
-                sig = instantiate_compound_ext(sema, "[]", obj_type, prim_name, method_name);
-            }
-            if (sig == NULL && obj_type->kind == TYPE_ARRAY) {
-                sig = instantiate_compound_ext(sema, "[_]", obj_type, prim_name, method_name);
-            }
-
-            if (sig != NULL) {
-                // Reject pointer receiver on rvalue (literal, call result, etc.)
-                if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
-                    SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
-                    return &TYPE_ERR_INST;
-                }
-                for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-                    check_node(sema, node->call.args[i]);
-                }
-                return resolve_call(sema, node, sig);
-            }
-        }
-    }
-
-    *out_fn_name = method_name;
-    return NULL;
-}
-
-// ── Inline closure call ───────────────────────────────────────────
-
-/** Check an inline closure call: (|x| expr)(args). */
-static const Type *check_inline_closure_call(Sema *sema, ASTNode *node) {
-    for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-        check_node(sema, node->call.args[i]);
-    }
-    int32_t param_count = BUF_LEN(node->call.callee->closure.params);
-    int32_t arg_count = BUF_LEN(node->call.args);
-    const Type **param_types = NULL;
-    for (int32_t i = 0; i < param_count; i++) {
-        const Type *pt = (i < arg_count && node->call.args[i]->type != NULL)
-                             ? node->call.args[i]->type
-                             : &TYPE_ERR_INST;
-        BUF_PUSH(param_types, pt);
-    }
-    FnTypeSpec fn_spec = {param_types, param_count, NULL, FN_PLAIN};
-    const Type *expected_fn = type_create_fn(sema->arena, &fn_spec);
-    const Type *saved = sema->expected_type;
-    sema->expected_type = expected_fn;
-    const Type *callee_type = check_closure(sema, node->call.callee);
-    sema->expected_type = saved;
-    node->call.callee->type = callee_type;
-    if (callee_type != NULL && callee_type->kind == TYPE_FN) {
-        return callee_type->fn_type.return_type;
-    }
-    return &TYPE_ERR_INST;
-}
-
-// ── Generic fn instantiation ──────────────────────────────────────
-
-/** Instantiate a generic fn call with explicit type args: fn_name<T>(args). */
-/** Resolve type args for a generic fn call. Returns resolved args buf (caller must BUF_FREE). */
-static const Type **resolve_generic_type_args(Sema *sema, ASTNode *node, GenericFnDef *gdef) {
-    int32_t got = BUF_LEN(node->call.type_args);
-    const Type **resolved_args = NULL;
-    for (int32_t i = 0; i < got; i++) {
-        const Type *t = resolve_ast_type(sema, &node->call.type_args[i]);
-        if (t == NULL) {
-            t = &TYPE_ERR_INST;
-        }
-        BUF_PUSH(resolved_args, t);
-    }
-
-    // Push type param substitutions early for constraint resolution (e.g., I::Item)
-    for (int32_t i = 0; i < gdef->type_param_count; i++) {
-        hash_table_insert(&sema->generics.type_params, gdef->type_params[i].name,
-                          (void *)resolved_args[i]);
-    }
-    return resolved_args;
-}
-
-/** Validate pact bounds, associated type constraints, and where clauses. Returns false on error. */
-/** Validate type params against their declared pact bounds. */
-static bool validate_pact_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                 const Type **resolved_args) {
-    int32_t expected = gdef->type_param_count;
-    for (int32_t i = 0; i < expected; i++) {
-        for (int32_t b = 0; b < BUF_LEN(gdef->type_params[i].bounds); b++) {
-            const char *bound = gdef->type_params[i].bounds[b];
-            if (!type_satisfies_bound(sema, resolved_args[i], bound)) {
-                SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
-                         type_name(sema->arena, resolved_args[i]), bound);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-/** Validate associated type constraints (e.g. T: Pact<Item = i32>). */
-static bool validate_assoc_constraints(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                       const Type **resolved_args) {
-    int32_t expected = gdef->type_param_count;
-    for (int32_t i = 0; i < expected; i++) {
-        for (int32_t c = 0; c < BUF_LEN(gdef->type_params[i].assoc_constraints); c++) {
-            ASTAssocConstraint *ac = &gdef->type_params[i].assoc_constraints[c];
-            if (resolved_args[i]->kind != TYPE_STRUCT) {
-                continue;
-            }
-            StructDef *sdef = sema_lookup_struct(sema, resolved_args[i]->struct_type.name);
-            if (sdef == NULL) {
-                continue;
-            }
-            const Type *assoc_resolved = NULL;
-            for (int32_t a = 0; a < BUF_LEN(sdef->assoc_types); a++) {
-                if (strcmp(sdef->assoc_types[a].name, ac->assoc_name) == 0 &&
-                    sdef->assoc_types[a].concrete_type != NULL) {
-                    assoc_resolved = resolve_ast_type(sema, sdef->assoc_types[a].concrete_type);
-                    break;
-                }
-            }
-            if (assoc_resolved == NULL || assoc_resolved->kind == TYPE_ERR) {
-                SEMA_ERR(sema, node->loc, "'%s' has no associated type '%s' for pact '%s'",
-                         type_name(sema->arena, resolved_args[i]), ac->assoc_name, ac->pact_name);
-                return false;
-            }
-            const Type *expected_type = resolve_ast_type(sema, ac->expected_type);
-            if (expected_type != NULL && expected_type->kind != TYPE_ERR &&
-                !type_equal(assoc_resolved, expected_type)) {
-                SEMA_ERR(sema, node->loc, "associated type '%s' is '%s', expected '%s'",
-                         ac->assoc_name, type_name(sema->arena, assoc_resolved),
-                         type_name(sema->arena, expected_type));
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-/** Validate where clause bounds (including association type projections). */
-static bool validate_where_clauses(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                   const Type **resolved_args) {
-    int32_t expected = gdef->type_param_count;
-    ASTWhereClause *wcs = gdef->decl->fn_decl.where_clauses;
-    for (int32_t w = 0; w < BUF_LEN(wcs); w++) {
-        const Type *wc_type = NULL;
-        for (int32_t i = 0; i < expected; i++) {
-            if (strcmp(gdef->type_params[i].name, wcs[w].type_name) == 0) {
-                wc_type = resolved_args[i];
-                break;
-            }
-        }
-        if (wc_type == NULL) {
-            continue;
-        }
-        // Handle associated type projection: I::Item: Clone
-        if (wcs[w].assoc_member != NULL) {
-            if (wc_type->kind == TYPE_STRUCT) {
-                StructDef *sdef = sema_lookup_struct(sema, wc_type->struct_type.name);
-                if (sdef != NULL) {
-                    const Type *assoc_resolved = NULL;
-                    for (int32_t a = 0; a < BUF_LEN(sdef->assoc_types); a++) {
-                        if (strcmp(sdef->assoc_types[a].name, wcs[w].assoc_member) == 0 &&
-                            sdef->assoc_types[a].concrete_type != NULL) {
-                            assoc_resolved =
-                                resolve_ast_type(sema, sdef->assoc_types[a].concrete_type);
-                            break;
-                        }
-                    }
-                    if (assoc_resolved != NULL && assoc_resolved->kind != TYPE_ERR) {
-                        for (int32_t b = 0; b < BUF_LEN(wcs[w].bounds); b++) {
-                            if (!type_satisfies_bound(sema, assoc_resolved, wcs[w].bounds[b])) {
-                                SEMA_ERR(sema, node->loc,
-                                         "'%s::%s' = '%s' does not satisfy pact bound '%s'",
-                                         wcs[w].type_name, wcs[w].assoc_member,
-                                         type_name(sema->arena, assoc_resolved), wcs[w].bounds[b]);
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-            continue;
-        }
-        for (int32_t b = 0; b < BUF_LEN(wcs[w].bounds); b++) {
-            if (!type_satisfies_bound(sema, wc_type, wcs[w].bounds[b])) {
-                SEMA_ERR(sema, node->loc, "'%s' does not satisfy pact bound '%s'",
-                         type_name(sema->arena, wc_type), wcs[w].bounds[b]);
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-/** Validate all generic bounds: pact bounds, assoc constraints, and where clauses. */
-static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                    const Type **resolved_args) {
-    return validate_pact_bounds(sema, node, gdef, resolved_args) &&
-           validate_assoc_constraints(sema, node, gdef, resolved_args) &&
-           validate_where_clauses(sema, node, gdef, resolved_args);
-}
-
-/** Build a concrete FnSig from a generic template and queue a deferred instantiation. */
-static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                        const Type **resolved_args, const char *mangled) {
-    ASTNode *orig = gdef->decl;
-    FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = mangled;
-    sig->param_count = BUF_LEN(orig->fn_decl.params);
-    sig->required_count = sig->param_count;
-    sig->param_types = NULL;
-    sig->param_names = NULL;
-    sig->is_pub = false;
-    sig->is_ptr_recv = false;
-    sig->is_declare = orig->fn_decl.is_declare;
-    sig->has_variadic = false;
-    sig->default_kinds = NULL;
-    sig->default_exprs = NULL;
-    for (int32_t i = 0; i < sig->param_count; i++) {
-        ASTNode *param = orig->fn_decl.params[i];
-        const Type *pt = resolve_ast_type(sema, &param->param.type);
-        if (pt == NULL) {
-            pt = &TYPE_ERR_INST;
-        }
-        if (param->param.is_variadic) {
-            pt = type_create_slice(sema->arena, pt);
-            sig->has_variadic = true;
-        }
-        BUF_PUSH(sig->param_types, pt);
-        BUF_PUSH(sig->param_names, param->param.name);
-    }
-    const Type *ret = resolve_ast_type(sema, &orig->fn_decl.return_type);
-    sig->return_type = (ret != NULL) ? ret : &TYPE_UNIT_INST;
-
-    sema_reset_type_params(sema);
-
-    hash_table_insert(&sema->fn_table, mangled, sig);
-
-    // Declare fns have no body to clone/check — skip deferred instantiation.
-    if (!orig->fn_decl.is_declare) {
-        GenericInst inst = {.generic = gdef,
-                            .mangled_name = mangled,
-                            .type_args = resolved_args,
-                            .file_node = sema->file_node};
-        BUF_PUSH(sema->pending_insts, inst);
-    }
-
-    node->call.callee->id.name = mangled;
-    return resolve_call(sema, node, sig);
-}
-
-/** Instantiate a generic fn call with explicit type args: fn_name<T>(args). */
-static const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *fn_name) {
-    GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
-    if (gdef == NULL) {
-        SEMA_ERR(sema, node->loc, "undefined generic function '%s'", fn_name);
-        return &TYPE_ERR_INST;
-    }
-    int32_t expected = gdef->type_param_count;
-    int32_t got = BUF_LEN(node->call.type_args);
-    if (got != expected) {
-        SEMA_ERR(sema, node->loc, "wrong number of type arguments for '%s': expected %d, got %d",
-                 fn_name, expected, got);
-        return &TYPE_ERR_INST;
-    }
-
-    const Type **resolved_args = resolve_generic_type_args(sema, node, gdef);
-
-    if (!validate_generic_bounds(sema, node, gdef, resolved_args)) {
-        sema_reset_type_params(sema);
-        return &TYPE_ERR_INST;
-    }
-
-    const char *mangled = build_mangled_name(sema, fn_name, resolved_args, got);
-    FnSig *existing = sema_lookup_fn(sema, mangled);
-    if (existing != NULL) {
-        sema_reset_type_params(sema);
-        node->call.callee->id.name = mangled;
-        node->call.type_args = NULL;
-        return resolve_call(sema, node, existing);
-    }
-
-    const Type *result = emit_generic_fn_inst(sema, node, gdef, resolved_args, mangled);
-    node->call.type_args = NULL;
-    return result;
-}
-
-// ── Generic type inference ────────────────────────────────────────
-
-/** Convert a resolved Type back to an ASTType for synthetic type arg construction. */
-static ASTType type_to_ast_type(Arena *arena, const Type *type) {
-    ASTType ast = {0};
-    if (type == NULL) {
-        ast.kind = AST_TYPE_NAME;
-        ast.name = "<err>";
-        return ast;
-    }
-    switch (type->kind) {
-    case TYPE_SLICE:
-        ast.kind = AST_TYPE_SLICE;
-        ast.slice_elem = arena_alloc(arena, sizeof(ASTType));
-        *ast.slice_elem = type_to_ast_type(arena, type->slice.elem);
-        return ast;
-    case TYPE_ARRAY:
-        ast.kind = AST_TYPE_ARRAY;
-        ast.array_elem = arena_alloc(arena, sizeof(ASTType));
-        *ast.array_elem = type_to_ast_type(arena, type->array.elem);
-        ast.array_size = type->array.size;
-        return ast;
-    case TYPE_PTR:
-        ast.kind = AST_TYPE_PTR;
-        ast.ptr_elem = arena_alloc(arena, sizeof(ASTType));
-        *ast.ptr_elem = type_to_ast_type(arena, type->ptr.pointee);
-        return ast;
-    default:
-        ast.kind = AST_TYPE_NAME;
-        ast.name = type_name(arena, type);
-        return ast;
-    }
-}
-
-/** Try to infer type args from call args: identity(42) → identity<i32>(42). */
-static const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
-    GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
-    if (gdef == NULL) {
-        return NULL;
-    }
-    ASTNode *orig = gdef->decl;
-    int32_t num_params = gdef->type_param_count;
-    int32_t arg_count = BUF_LEN(node->call.args);
-    int32_t param_count = BUF_LEN(orig->fn_decl.params);
-    if (arg_count != param_count) {
-        return NULL;
-    }
-
-    const Type **inferred =
-        (const Type **)arena_alloc_zero(sema->arena, num_params * sizeof(const Type *));
-    for (int32_t pi = 0; pi < param_count; pi++) {
-        ASTNode *param = orig->fn_decl.params[pi];
-        if (param->param.type.kind != AST_TYPE_NAME) {
-            continue;
-        }
-        for (int32_t ti = 0; ti < num_params; ti++) {
-            if (strcmp(param->param.type.name, gdef->type_params[ti].name) == 0) {
-                const Type *arg_type = node->call.args[pi]->type;
-                if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
-                    inferred[ti] = arg_type;
-                }
-                break;
-            }
-        }
-    }
-
-    for (int32_t i = 0; i < num_params; i++) {
-        if (inferred[i] == NULL) {
-            return NULL;
-        }
-    }
-
-    // Build synthetic type_args and recurse
-    ASTType *synth_args = NULL;
-    for (int32_t i = 0; i < num_params; i++) {
-        ASTType arg = type_to_ast_type(sema->arena, inferred[i]);
-        BUF_PUSH(synth_args, arg);
-    }
-    node->call.type_args = synth_args;
-    return check_call(sema, node);
 }
 
 // ── Tuple struct constructors ─────────────────────────────────────
@@ -859,8 +310,8 @@ static StructDef *infer_tuple_struct_type_args(Sema *sema, ASTNode *node, const 
 
 static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char *fn_name) {
     // Resolve Self to enclosing type name
-    if (strcmp(fn_name, "Self") == 0 && sema->self_type_name != NULL) {
-        fn_name = sema->self_type_name;
+    if (strcmp(fn_name, "Self") == 0 && sema->infer.self_type_name != NULL) {
+        fn_name = sema->infer.self_type_name;
         node->call.callee->id.name = fn_name;
     }
 
@@ -903,10 +354,10 @@ static const Type *check_tuple_struct_call(Sema *sema, ASTNode *node, const char
         const Type *actual = node->call.args[i]->type;
         // Re-check arg with expected type if initial check failed (e.g., bare None)
         if (actual == NULL || actual->kind == TYPE_ERR) {
-            const Type *saved = sema->expected_type;
-            sema->expected_type = expected;
+            const Type *saved = sema->infer.expected_type;
+            sema->infer.expected_type = expected;
             actual = check_node(sema, node->call.args[i]);
-            sema->expected_type = saved;
+            sema->infer.expected_type = saved;
         }
         if (actual == NULL || actual->kind == TYPE_ERR) {
             continue;
@@ -989,9 +440,9 @@ static const Type *check_bare_variant_call(Sema *sema, ASTNode *node, const char
 
     // bare Ok(x) / Err(x) → Result<T, E>
     if (strcmp(fn_name, "Ok") == 0 || strcmp(fn_name, "Err") == 0) {
-        const Type *expected = sema->expected_type;
+        const Type *expected = sema->infer.expected_type;
         if (expected == NULL) {
-            expected = sema->fn_return_type;
+            expected = sema->infer.fn_return_type;
         }
         if (expected == NULL || expected->kind != TYPE_ENUM) {
             return NULL;
@@ -1021,14 +472,14 @@ static void check_call_args(Sema *sema, ASTNode *node, const char *fn_name) {
         }
     }
     for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
-        const Type *saved = sema->expected_type;
+        const Type *saved = sema->infer.expected_type;
         if (early_sig != NULL && i < early_sig->param_count) {
-            sema->expected_type = early_sig->param_types[i];
+            sema->infer.expected_type = early_sig->param_types[i];
         } else if (callee_fn_type != NULL && i < callee_fn_type->fn_type.param_count) {
-            sema->expected_type = callee_fn_type->fn_type.params[i];
+            sema->infer.expected_type = callee_fn_type->fn_type.params[i];
         }
         check_node(sema, node->call.args[i]);
-        sema->expected_type = saved;
+        sema->infer.expected_type = saved;
     }
 }
 

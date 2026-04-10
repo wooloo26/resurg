@@ -35,7 +35,8 @@ static ASTPattern *parse_pattern(Parser *parser) {
             return pattern;
         }
         // Not an empty tuple — rewind is not possible, so error
-        rsg_err(paren_loc, "expected ')' for unit pattern or use a different pattern form");
+        PARSER_ERR(parser, paren_loc,
+                   "expected ')' for unit pattern or use a different pattern form");
         pattern->kind = PATTERN_WILDCARD;
         return pattern;
     }
@@ -102,7 +103,7 @@ static ASTPattern *parse_pattern(Parser *parser) {
             pattern->lit = lit;
             return pattern;
         }
-        rsg_err(pattern->loc, "expected integer after '-' in pattern");
+        PARSER_ERR(parser, pattern->loc, "expected integer after '-' in pattern");
     }
 
     // Float lit
@@ -153,7 +154,7 @@ static ASTPattern *parse_pattern(Parser *parser) {
         return pattern;
     }
 
-    rsg_err(pattern->loc, "expected pattern");
+    PARSER_ERR(parser, pattern->loc, "expected pattern");
     pattern->kind = PATTERN_WILDCARD;
     return pattern;
 }

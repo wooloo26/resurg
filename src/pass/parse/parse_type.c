@@ -67,7 +67,7 @@ static ASTType parse_bracket_type(Parser *parser, SrcLoc loc) {
         type.array_size_name = parser_current_token(parser)->lexeme;
         parser_advance(parser); // consume identifier
     } else {
-        rsg_err(parser_current_loc(parser), "expected array size");
+        PARSER_ERR(parser, parser_current_loc(parser), "expected array size");
         type.kind = AST_TYPE_INFERRED;
         return type;
     }
@@ -189,7 +189,7 @@ ASTType parser_parse_type(Parser *parser) {
         parser_check(parser, TOKEN_ID) || parser_check(parser, TOKEN_SELF)) {
         type.name = parser_advance(parser)->lexeme;
     } else {
-        rsg_err(parser_current_loc(parser), "expected type name");
+        PARSER_ERR(parser, parser_current_loc(parser), "expected type name");
         type.kind = AST_TYPE_INFERRED;
         return type;
     }

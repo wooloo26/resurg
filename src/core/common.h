@@ -119,6 +119,39 @@ typedef struct {
 /** Internal growth routine for stretchy bufs - do not call directly. */
 void *buf__grow(const void *buf, size_t new_len, size_t elem_size);
 
+// ── Arena-backed stretchy buf ───────────────────────────────────────
+
+/**
+ * Arena-backed stretchy buf - same layout as heap bufs, but allocated
+ * from an Arena.  Never needs BUF_FREE; the memory is reclaimed when
+ * the arena is destroyed.
+ *
+ * BUF_LEN, BUF_CAPACITY, and BUF_END work transparently.
+ *
+ * @code
+ *     ASTNode **nodes = NULL;
+ *     ARENA_BUF_PUSH(arena, nodes, node);
+ *     for (int i = 0; i < BUF_LEN(nodes); i++) { ... }
+ *     // no BUF_FREE needed
+ * @endcode
+ */
+
+/** Internal arena growth routine - do not call directly. */
+void *arena_buf__grow(Arena *arena, const void *buf, size_t new_len, size_t elem_size);
+
+#define ARENA_BUF_FIT(arena, buf, needed)                                                          \
+    ((needed) <= BUF_CAPACITY(buf)                                                                 \
+         ? 0                                                                                       \
+         : ((buf) = (__typeof__(buf))arena_buf__grow(                                              \
+                (arena), (const void *)(buf), (needed),                                            \
+                sizeof(*(buf))))) /* NOLINT(bugprone-sizeof-expression) */
+
+#define ARENA_BUF_PUSH(arena, buf, value)                                                          \
+    do {                                                                                           \
+        ARENA_BUF_FIT((arena), (buf), BUF_LEN(buf) + 1);                                           \
+        (buf)[BUF__HEADER(buf)->len++] = (value);                                                  \
+    } while (0)
+
 /** A file:line:column triple attached to tokens and AST nodes. */
 typedef struct {
     const char *file;

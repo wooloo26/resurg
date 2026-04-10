@@ -1,5 +1,42 @@
 #include "_lower.h"
 
+// ── Enum desugaring helpers ────────────────────────────────────────
+
+/** Build a tag comparison: @p sym._tag == @p variant->discriminant. */
+HirNode *lower_enum_tag_check(Lower *low, HirSym *sym, const EnumVariant *variant, SrcLoc loc) {
+    HirNode *tag =
+        lower_make_field_access(low, &(FieldAccessSpec){lower_make_var_ref(low, sym, loc), "_tag",
+                                                        &TYPE_I32_INST, false, loc});
+    HirNode *tag_val = lower_make_int_lit(
+        low, &(IntLitSpec){(uint64_t)variant->discriminant, &TYPE_I32_INST, TYPE_I32, loc});
+    HirNode *cond = hir_new(low->hir_arena, HIR_BINARY, &TYPE_BOOL_INST, loc);
+    cond->binary.op = TOKEN_EQUAL_EQUAL;
+    cond->binary.left = tag;
+    cond->binary.right = tag_val;
+    return cond;
+}
+
+/**
+ * Build an enum variant struct literal with the given discriminant tag.
+ * If @p data_field is non-NULL, the literal also contains the data payload.
+ */
+HirNode *lower_enum_variant_lit(Lower *low, const EnumVariant *variant, const char *data_field,
+                                HirNode *data_val, const Type *result_type, SrcLoc loc) {
+    const char **fn = NULL;
+    HirNode **fv = NULL;
+    BUF_PUSH(fn, "_tag");
+    BUF_PUSH(fv, lower_make_int_lit(low, &(IntLitSpec){(uint64_t)variant->discriminant,
+                                                       &TYPE_I32_INST, TYPE_I32, loc}));
+    if (data_field != NULL) {
+        BUF_PUSH(fn, data_field);
+        BUF_PUSH(fv, data_val);
+    }
+    HirNode *lit = hir_new(low->hir_arena, HIR_STRUCT_LIT, result_type, loc);
+    lit->struct_lit.field_names = fn;
+    lit->struct_lit.field_values = fv;
+    return lit;
+}
+
 // ── Enum variant lowering ──────────────────────────────────────────
 
 /** Internal state for building an enum variant struct literal. */

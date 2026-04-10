@@ -9,12 +9,13 @@ static bool is_foreign_struct(const Sema *sema, const char *struct_name) {
     if (dot == NULL) {
         return false; // same-file struct
     }
-    if (sema->self_type_name != NULL && strcmp(sema->self_type_name, struct_name) == 0) {
+    if (sema->infer.self_type_name != NULL &&
+        strcmp(sema->infer.self_type_name, struct_name) == 0) {
         return false; // inside ext block for this type
     }
-    if (sema->current_module != NULL) {
-        size_t mod_len = strlen(sema->current_module);
-        if (strncmp(struct_name, sema->current_module, mod_len) == 0 &&
+    if (sema->module.current != NULL) {
+        size_t mod_len = strlen(sema->module.current);
+        if (strncmp(struct_name, sema->module.current, mod_len) == 0 &&
             struct_name[mod_len] == '.') {
             return false; // same-module struct
         }
@@ -62,8 +63,8 @@ const Type *check_lit(Sema *sema, ASTNode *node) {
 
 const Type *check_id(Sema *sema, ASTNode *node) {
     // Resolve Self to the enclosing type name in expression context
-    if (strcmp(node->id.name, "Self") == 0 && sema->self_type_name != NULL) {
-        node->id.name = sema->self_type_name;
+    if (strcmp(node->id.name, "Self") == 0 && sema->infer.self_type_name != NULL) {
+        node->id.name = sema->infer.self_type_name;
     }
 
     Sym *sym = scope_lookup(sema, node->id.name);
@@ -100,9 +101,9 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         }
         // Handle bare `None` — resolve from expected type or fn return type
         if (strcmp(node->id.name, "None") == 0) {
-            const Type *ctx = sema->expected_type;
+            const Type *ctx = sema->infer.expected_type;
             if (ctx == NULL || ctx->kind != TYPE_ENUM) {
-                ctx = sema->fn_return_type;
+                ctx = sema->infer.fn_return_type;
             }
             if (ctx != NULL && ctx->kind == TYPE_ENUM) {
                 const EnumVariant *variant = type_enum_find_variant(ctx, "None");
@@ -572,8 +573,8 @@ static StructDef *resolve_struct_lit(Sema *sema, ASTNode *node) {
     const char *struct_name = node->struct_lit.name;
 
     // Resolve Self to the enclosing type name
-    if (strcmp(struct_name, "Self") == 0 && sema->self_type_name != NULL) {
-        struct_name = sema->self_type_name;
+    if (strcmp(struct_name, "Self") == 0 && sema->infer.self_type_name != NULL) {
+        struct_name = sema->infer.self_type_name;
         node->struct_lit.name = struct_name;
     }
 
@@ -672,12 +673,12 @@ const Type *check_struct_lit(Sema *sema, ASTNode *node) {
         }
 
         // Set expected type before checking (aids closure param inference)
-        const Type *saved_expected = sema->expected_type;
+        const Type *saved_expected = sema->infer.expected_type;
         if (field_type != NULL) {
-            sema->expected_type = field_type;
+            sema->infer.expected_type = field_type;
         }
         check_node(sema, fvalue);
-        sema->expected_type = saved_expected;
+        sema->infer.expected_type = saved_expected;
 
         // Validate the field type
         if (field_type != NULL) {
@@ -740,7 +741,7 @@ const Type *check_deref(Sema *sema, ASTNode *node) {
 }
 
 const Type *check_closure(Sema *sema, ASTNode *node) {
-    const Type *expected = sema->expected_type;
+    const Type *expected = sema->infer.expected_type;
     int32_t param_count = BUF_LEN(node->closure.params);
     const Type **param_types = NULL;
 

@@ -11,8 +11,8 @@
 /** Type-check a single struct method: register recv + params, check body. */
 void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_name,
                               const Type *struct_type) {
-    const char *prev_self = sema->self_type_name;
-    sema->self_type_name = struct_name;
+    const char *prev_self = sema->infer.self_type_name;
+    sema->infer.self_type_name = struct_name;
     scope_push(sema, false);
 
     // Register recv as a param with struct type
@@ -43,17 +43,17 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
     if (method->fn_decl.body != NULL) {
         // Pre-resolve return type for bidirectional inference (Ok/Err/None)
         const Type *pre_return = resolve_ast_type(sema, &method->fn_decl.return_type);
-        const Type *save_fn_return = sema->fn_return_type;
-        const Type *save_expected = sema->expected_type;
+        const Type *save_fn_return = sema->infer.fn_return_type;
+        const Type *save_expected = sema->infer.expected_type;
         if (pre_return != NULL) {
-            sema->fn_return_type = pre_return;
-            sema->expected_type = pre_return;
+            sema->infer.fn_return_type = pre_return;
+            sema->infer.expected_type = pre_return;
         }
 
         const Type *body_type = check_node(sema, method->fn_decl.body);
 
-        sema->fn_return_type = save_fn_return;
-        sema->expected_type = save_expected;
+        sema->infer.fn_return_type = save_fn_return;
+        sema->infer.expected_type = save_expected;
 
         const Type *return_type = pre_return;
         if (return_type == NULL) {
@@ -70,7 +70,7 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
         }
     }
     scope_pop(sema);
-    sema->self_type_name = prev_self;
+    sema->infer.self_type_name = prev_self;
 }
 
 // ── Decl-level checkers ─────────────────────────────────────────────────
@@ -111,11 +111,11 @@ const Type *check_struct_decl(Sema *sema, ASTNode *node) {
     for (int32_t i = 0; i < BUF_LEN(node->struct_decl.fields); i++) {
         ASTStructField *f = &node->struct_decl.fields[i];
         if (f->default_value != NULL) {
-            const Type *saved = sema->expected_type;
+            const Type *saved = sema->infer.expected_type;
             const Type *field_type = resolve_ast_type(sema, &f->type);
-            sema->expected_type = field_type;
+            sema->infer.expected_type = field_type;
             check_node(sema, f->default_value);
-            sema->expected_type = saved;
+            sema->infer.expected_type = saved;
         }
     }
     return result;

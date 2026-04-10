@@ -41,24 +41,24 @@ static const char *extract_dir_path(Arena *arena, const char *file_path) {
  * Returns the parsed declarations or NULL on failure.
  */
 ASTNode **load_module_decls(Sema *sema, const char *mod_path) {
-    if (sema->module_loader == NULL) {
+    if (sema->module.loader == NULL) {
         return NULL;
     }
-    return sema->module_loader(sema->module_loader_ctx, sema->arena, mod_path);
+    return sema->module.loader(sema->module.loader_ctx, sema->arena, mod_path);
 }
 
 /** Destroy and reinitialize all hash tables and buffers for a fresh compilation. */
 static void sema_destroy_and_reinit_tables(Sema *sema) {
-    hash_table_destroy(&sema->fn_table);
-    hash_table_init(&sema->fn_table, NULL);
-    hash_table_destroy(&sema->type_alias_table);
-    hash_table_init(&sema->type_alias_table, NULL);
-    hash_table_destroy(&sema->struct_table);
-    hash_table_init(&sema->struct_table, NULL);
-    hash_table_destroy(&sema->enum_table);
-    hash_table_init(&sema->enum_table, NULL);
-    hash_table_destroy(&sema->pact_table);
-    hash_table_init(&sema->pact_table, NULL);
+    hash_table_destroy(&sema->db.fn_table);
+    hash_table_init(&sema->db.fn_table, NULL);
+    hash_table_destroy(&sema->db.type_alias_table);
+    hash_table_init(&sema->db.type_alias_table, NULL);
+    hash_table_destroy(&sema->db.struct_table);
+    hash_table_init(&sema->db.struct_table, NULL);
+    hash_table_destroy(&sema->db.enum_table);
+    hash_table_init(&sema->db.enum_table, NULL);
+    hash_table_destroy(&sema->db.pact_table);
+    hash_table_init(&sema->db.pact_table, NULL);
     hash_table_destroy(&sema->generics.fn);
     hash_table_init(&sema->generics.fn, NULL);
     hash_table_destroy(&sema->generics.structs);
@@ -90,7 +90,8 @@ static void register_type_alias(Sema *sema, ASTNode *decl) {
     } else {
         const Type *underlying = resolve_ast_type(sema, &decl->type_alias.alias_type);
         if (underlying != NULL) {
-            hash_table_insert(&sema->type_alias_table, decl->type_alias.name, (void *)underlying);
+            hash_table_insert(&sema->db.type_alias_table, decl->type_alias.name,
+                              (void *)underlying);
         }
     }
 }
@@ -108,18 +109,18 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         }
         if (decl->module.decls == NULL) {
             // Filesystem module resolution: load <name>.rsg from module search dir
-            const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->module_search_dir,
+            const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->module.search_dir,
                                                  PATH_SEP, decl->module.name);
             ASTNode **decls = load_module_decls(sema, mod_path);
 
             // Fallback: try std library directory
-            const char *base_dir = sema->module_search_dir;
-            if (decls == NULL && sema->std_search_dir != NULL) {
-                mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->std_search_dir, PATH_SEP,
+            const char *base_dir = sema->module.search_dir;
+            if (decls == NULL && sema->module.std_dir != NULL) {
+                mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->module.std_dir, PATH_SEP,
                                          decl->module.name);
                 decls = load_module_decls(sema, mod_path);
                 if (decls != NULL) {
-                    base_dir = sema->std_search_dir;
+                    base_dir = sema->module.std_dir;
                 }
             }
 
@@ -130,11 +131,11 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
             decl->module.decls = decls;
 
             // Child modules of this file search in <base_dir>/<name>/
-            const char *prev_dir = sema->module_search_dir;
-            sema->module_search_dir =
+            const char *prev_dir = sema->module.search_dir;
+            sema->module.search_dir =
                 arena_sprintf(sema->arena, "%s%c%s", base_dir, PATH_SEP, decl->module.name);
             register_module_decl(sema, decl);
-            sema->module_search_dir = prev_dir;
+            sema->module.search_dir = prev_dir;
             continue;
         }
         register_module_decl(sema, decl);
@@ -221,12 +222,12 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
 // ── Public API ─────────────────────────────────────────────────────────
 
 void sema_set_module_loader(Sema *sema, ModuleLoader loader, void *ctx) {
-    sema->module_loader = loader;
-    sema->module_loader_ctx = ctx;
+    sema->module.loader = loader;
+    sema->module.loader_ctx = ctx;
 }
 
 void sema_set_std_search_dir(Sema *sema, const char *dir) {
-    sema->std_search_dir = dir;
+    sema->module.std_dir = dir;
 }
 
 Sema *sema_create(Arena *arena) {
@@ -234,24 +235,24 @@ Sema *sema_create(Arena *arena) {
     sema->arena = arena;
     sema->current_scope = NULL;
     sema->err_count = 0;
-    sema->loop_break_type = NULL;
-    sema->expected_type = NULL;
-    sema->fn_return_type = NULL;
-    sema->self_type_name = NULL;
-    sema->current_module = NULL;
-    sema->module_search_dir = NULL;
-    sema->std_search_dir = NULL;
-    sema->module_loader = NULL;
-    sema->module_loader_ctx = NULL;
+    sema->infer.loop_break_type = NULL;
+    sema->infer.expected_type = NULL;
+    sema->infer.fn_return_type = NULL;
+    sema->infer.self_type_name = NULL;
+    sema->module.current = NULL;
+    sema->module.search_dir = NULL;
+    sema->module.std_dir = NULL;
+    sema->module.loader = NULL;
+    sema->module.loader_ctx = NULL;
     sema->fn_body_checker = NULL;
     sema->closure = (ClosureCtx){0};
     sema->file_node = NULL;
     sema->method_checker = NULL;
-    hash_table_init(&sema->type_alias_table, NULL);
-    hash_table_init(&sema->fn_table, NULL);
-    hash_table_init(&sema->struct_table, NULL);
-    hash_table_init(&sema->enum_table, NULL);
-    hash_table_init(&sema->pact_table, NULL);
+    hash_table_init(&sema->db.type_alias_table, NULL);
+    hash_table_init(&sema->db.fn_table, NULL);
+    hash_table_init(&sema->db.struct_table, NULL);
+    hash_table_init(&sema->db.enum_table, NULL);
+    hash_table_init(&sema->db.pact_table, NULL);
     hash_table_init(&sema->generics.fn, NULL);
     hash_table_init(&sema->generics.structs, NULL);
     hash_table_init(&sema->generics.enums, NULL);
@@ -265,11 +266,11 @@ Sema *sema_create(Arena *arena) {
 
 void sema_destroy(Sema *sema) {
     if (sema != NULL) {
-        hash_table_destroy(&sema->type_alias_table);
-        hash_table_destroy(&sema->fn_table);
-        hash_table_destroy(&sema->struct_table);
-        hash_table_destroy(&sema->enum_table);
-        hash_table_destroy(&sema->pact_table);
+        hash_table_destroy(&sema->db.type_alias_table);
+        hash_table_destroy(&sema->db.fn_table);
+        hash_table_destroy(&sema->db.struct_table);
+        hash_table_destroy(&sema->db.enum_table);
+        hash_table_destroy(&sema->db.pact_table);
         hash_table_destroy(&sema->generics.fn);
         hash_table_destroy(&sema->generics.structs);
         hash_table_destroy(&sema->generics.enums);
@@ -290,9 +291,9 @@ bool sema_resolve(Sema *sema, ASTNode *file) {
     // Use the file node's own loc first — this ensures that prelude declarations
     // prepended from a different directory don't shift the search path.
     if (file->loc.file != NULL) {
-        sema->module_search_dir = extract_dir_path(sema->arena, file->loc.file);
+        sema->module.search_dir = extract_dir_path(sema->arena, file->loc.file);
     } else if (BUF_LEN(file->file.decls) > 0 && file->file.decls[0]->loc.file != NULL) {
-        sema->module_search_dir = extract_dir_path(sema->arena, file->file.decls[0]->loc.file);
+        sema->module.search_dir = extract_dir_path(sema->arena, file->file.decls[0]->loc.file);
     }
 
     scope_push(sema, false); // global scope

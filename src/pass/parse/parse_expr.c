@@ -352,7 +352,7 @@ static ASTNode *parse_primary(Parser *parser) {
         return parse_closure(parser, loc);
     }
     const char *token_name = token_kind_str(parser_current_token(parser)->kind);
-    rsg_err(loc, "expected expr, got '%s'", token_name);
+    PARSER_ERR(parser, loc, "expected expr, got '%s'", token_name);
     parser_advance(parser);
     return ast_new(parser->arena, NODE_LIT, loc); // err recovery
 }

@@ -208,6 +208,9 @@ typedef enum {
     NODE_CLOSURE,            // |params| body
 } NodeKind;
 
+/** Total number of NodeKind values (for dispatch table sizing). */
+#define NODE_KIND_COUNT (NODE_CLOSURE + 1)
+
 /** Kind of default value for a function parameter. */
 typedef enum {
     DEFAULT_NONE, // no default value

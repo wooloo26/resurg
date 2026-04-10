@@ -150,9 +150,9 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
     const Type *declared = resolve_ast_type(sema, &node->var_decl.type);
 
     // Set expected type before checking init for bidirectional inference
-    const Type *save_expected = sema->expected_type;
+    const Type *save_expected = sema->infer.expected_type;
     if (declared != NULL) {
-        sema->expected_type = declared;
+        sema->infer.expected_type = declared;
     }
 
     const Type *init_type = NULL;
@@ -160,7 +160,7 @@ const Type *check_var_decl(Sema *sema, ASTNode *node) {
         init_type = check_node(sema, node->var_decl.init);
     }
 
-    sema->expected_type = save_expected;
+    sema->infer.expected_type = save_expected;
 
     // Determine final type
     const Type *var_type;
@@ -217,17 +217,17 @@ void check_fn_body(Sema *sema, ASTNode *fn_node) {
     if (fn_node->fn_decl.body != NULL) {
         // Pre-resolve return type for bidirectional inference (Ok/Err/None)
         const Type *pre_return = resolve_ast_type(sema, &fn_node->fn_decl.return_type);
-        const Type *save_fn_return = sema->fn_return_type;
-        const Type *save_expected = sema->expected_type;
+        const Type *save_fn_return = sema->infer.fn_return_type;
+        const Type *save_expected = sema->infer.expected_type;
         if (pre_return != NULL) {
-            sema->fn_return_type = pre_return;
-            sema->expected_type = pre_return;
+            sema->infer.fn_return_type = pre_return;
+            sema->infer.expected_type = pre_return;
         }
 
         const Type *body_type = check_node(sema, fn_node->fn_decl.body);
 
-        sema->fn_return_type = save_fn_return;
-        sema->expected_type = save_expected;
+        sema->infer.fn_return_type = save_fn_return;
+        sema->infer.expected_type = save_expected;
 
         // If return type not declared, infer from body
         const Type *resolved_return = pre_return;
@@ -295,10 +295,10 @@ static void check_closure_capture_mutation(Sema *sema, ASTNode *target) {
 static const Type *check_assignment_common(Sema *sema, ASTNode *target, ASTNode *value) {
     const Type *target_type = check_node(sema, target);
 
-    const Type *saved_expected = sema->expected_type;
-    sema->expected_type = target_type;
+    const Type *saved_expected = sema->infer.expected_type;
+    sema->infer.expected_type = target_type;
     check_node(sema, value);
-    sema->expected_type = saved_expected;
+    sema->infer.expected_type = saved_expected;
 
     promote_lit(value, target_type);
 
@@ -323,13 +323,13 @@ const Type *check_compound_assign(Sema *sema, ASTNode *node) {
 }
 
 static const Type *check_loop(Sema *sema, ASTNode *node) {
-    const Type *saved_break_type = sema->loop_break_type;
-    sema->loop_break_type = NULL;
+    const Type *saved_break_type = sema->infer.loop_break_type;
+    sema->infer.loop_break_type = NULL;
     scope_push(sema, true);
     check_node(sema, node->loop.body);
     scope_pop(sema);
-    const Type *result = sema->loop_break_type;
-    sema->loop_break_type = saved_break_type;
+    const Type *result = sema->infer.loop_break_type;
+    sema->infer.loop_break_type = saved_break_type;
     return (result != NULL) ? result : &TYPE_NEVER_INST;
 }
 
@@ -400,8 +400,8 @@ static void check_break_continue(Sema *sema, ASTNode *node) {
     }
     if (node->kind == NODE_BREAK && node->break_stmt.value != NULL) {
         const Type *val_type = check_node(sema, node->break_stmt.value);
-        if (sema->loop_break_type == NULL) {
-            sema->loop_break_type = val_type;
+        if (sema->infer.loop_break_type == NULL) {
+            sema->infer.loop_break_type = val_type;
         }
     }
 }
@@ -493,13 +493,13 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_MODULE: {
         sema->current_scope->module_name = node->module.name;
-        const char *prev_module = sema->current_module;
-        sema->current_module = node->module.name;
+        const char *prev_module = sema->module.current;
+        sema->module.current = node->module.name;
         // Check nested module body declarations
         for (int32_t i = 0; i < BUF_LEN(node->module.decls); i++) {
             check_node(sema, node->module.decls[i]);
         }
-        sema->current_module = prev_module;
+        sema->module.current = prev_module;
         break;
     }
 
@@ -660,10 +660,10 @@ const Type *check_node(Sema *sema, ASTNode *node) {
 
     case NODE_RETURN:
         if (node->return_stmt.value != NULL) {
-            const Type *save_expected = sema->expected_type;
-            sema->expected_type = sema->fn_return_type;
+            const Type *save_expected = sema->infer.expected_type;
+            sema->infer.expected_type = sema->infer.fn_return_type;
             check_node(sema, node->return_stmt.value);
-            sema->expected_type = save_expected;
+            sema->infer.expected_type = save_expected;
         }
         result = &TYPE_NEVER_INST;
         break;

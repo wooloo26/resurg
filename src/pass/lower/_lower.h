@@ -125,6 +125,8 @@ const char *lower_mangle_name(Arena *arena, const char *name);
 HirNode *lower_node(Lower *low, const ASTNode *ast);
 /** Lower an AST expr. */
 HirNode *lower_expr(Lower *low, const ASTNode *ast);
+/** Lower a buf of AST expr nodes into a buf of HIR nodes. */
+HirNode **lower_elem_list(Lower *low, ASTNode **ast_elems);
 /** Lower a NODE_BLOCK. */
 HirNode *lower_block(Lower *low, const ASTNode *ast);
 /** Lower a NODE_IF (used as both expr and stmt). */
@@ -142,8 +144,18 @@ HirNode *lower_match(Lower *low, const ASTNode *ast);
 /** Lower a NODE_CLOSURE (capture analysis + HIR construction). */
 HirNode *lower_closure(Lower *low, const ASTNode *ast);
 
+// ── Call lowering (lower_expr_call.c) ─────────────────────────────────
+
+/** Lower a NODE_CALL — intrinsics, method dispatch, variadic packing. */
+HirNode *lower_call(Lower *low, const ASTNode *ast);
+
 // ── Enum variant lowering (lower_enum.c) ──────────────────────────────
 
+/** Build a tag comparison: sym._tag == variant->discriminant. */
+HirNode *lower_enum_tag_check(Lower *low, HirSym *sym, const EnumVariant *variant, SrcLoc loc);
+/** Build an enum variant struct literal with tag and optional data payload. */
+HirNode *lower_enum_variant_lit(Lower *low, const EnumVariant *variant, const char *data_field,
+                                HirNode *data_val, const Type *result_type, SrcLoc loc);
 /** Lower an enum unit variant access: Enum.Variant → struct lit with _tag. */
 HirNode *lower_enum_unit_init(Lower *low, const EnumVariantSpec *spec);
 /** Lower an enum tuple variant call: Enum.Variant(args) → struct lit with _tag + data. */

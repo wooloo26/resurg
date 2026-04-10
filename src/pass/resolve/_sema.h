@@ -143,39 +143,48 @@ typedef struct GenericTables {
     HashTable type_params; // name → const Type* (active during generic body check)
 } GenericTables;
 
+/** Read-write symbol registry — the 5 global declaration tables. */
+typedef struct SemaDB {
+    HashTable type_alias_table; // name → const Type*
+    HashTable fn_table;         // name → FnSig*
+    HashTable struct_table;     // name → StructDef*
+    HashTable enum_table;       // name → EnumDef*
+    HashTable pact_table;       // name → PactDef*
+} SemaDB;
+
+/** Module-loading context — directory paths and loader callback. */
+typedef struct ModuleCtx {
+    const char *current;    // current module prefix (e.g. "math_helper"); NULL for root file
+    const char *search_dir; // directory for resolving filesystem modules
+    const char *std_dir;    // fallback directory for std library modules
+    ModuleLoader loader;    // injected callback to load module files
+    void *loader_ctx;       // opaque context for the module loader
+} ModuleCtx;
+
+/** Per-expression type inference context — saved/restored around sub-checks. */
+typedef struct TypeInferCtx {
+    const Type *expected_type;   // expected type for current expr (bidirectional inference)
+    const Type *loop_break_type; // break value type in current loop (NULL if no break-with-value)
+    const Type *fn_return_type;  // return type of the enclosing function (for Ok/Err/None)
+    const char *self_type_name;  // enclosing type name for Self resolution (NULL if not in method)
+} TypeInferCtx;
+
 struct Sema {
     Arena *arena;
     Scope *current_scope;
     int32_t err_count;
-    MethodChecker method_checker; // set by check pass; NULL during resolve
-    const Type *loop_break_type;  // break value type in current loop (NULL if no break-with-value)
-    const Type *expected_type;    // expected type for current expr (bidirectional inference)
-    const Type *fn_return_type;   // return type of the enclosing function (for Ok/Err/None)
-    const char *self_type_name;   // enclosing type name for Self resolution (NULL if not in method)
-    const char *current_module;   // current module prefix (e.g. "math_helper"); NULL for root file
-    const char *module_search_dir;    // directory for resolving filesystem modules
-    const char *std_search_dir;       // fallback directory for std library modules
-    ModuleLoader module_loader;       // injected callback to load module files
-    void *module_loader_ctx;          // opaque context for the module loader
+    MethodChecker method_checker;     // set by check pass; NULL during resolve
+    TypeInferCtx infer;               // per-expression type inference context
+    ModuleCtx module;                 // module-loading context
     FnBodyChecker fn_body_checker;    // injected callback for mono to type-check cloned fn bodies
     ClosureCtx closure;               // closure capture tracking (check pass)
     ASTNode *file_node;               // root file node (for appending monomorphized fns)
-    HashTable type_alias_table;       // name → const Type*
-    HashTable fn_table;               // name → FnSig*
-    HashTable struct_table;           // name → StructDef*
-    HashTable enum_table;             // name → EnumDef*
-    HashTable pact_table;             // name → PactDef*
+    SemaDB db;                        // global declaration tables
     GenericTables generics;           // generic template tables + active type params
     GenericInst *pending_insts;       /* buf - deferred generic instantiations */
     GenericExtDef **generic_ext_defs; /* buf - generic ext templates */
     ASTNode **synthetic_decls;        /* buf - monomorphized struct/enum decls to append */
 };
-
-/** Reset the type_param table — destroy and reinitialize. */
-static inline void sema_reset_type_params(Sema *sema) {
-    hash_table_destroy(&sema->generics.type_params);
-    hash_table_init(&sema->generics.type_params, NULL);
-}
 
 /** Report a semantic err and bump the sema's err counter. */
 #define SEMA_ERR(sema, loc, ...)                                                                   \

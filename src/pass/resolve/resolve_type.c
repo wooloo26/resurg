@@ -3,23 +3,23 @@
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
 const Type *sema_lookup_type_alias(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->type_alias_table, name);
+    return hash_table_lookup(&sema->db.type_alias_table, name);
 }
 
 FnSig *sema_lookup_fn(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->fn_table, name);
+    return hash_table_lookup(&sema->db.fn_table, name);
 }
 
 StructDef *sema_lookup_struct(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->struct_table, name);
+    return hash_table_lookup(&sema->db.struct_table, name);
 }
 
 EnumDef *sema_lookup_enum(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->enum_table, name);
+    return hash_table_lookup(&sema->db.enum_table, name);
 }
 
 PactDef *sema_lookup_pact(const Sema *sema, const char *name) {
-    return hash_table_lookup(&sema->pact_table, name);
+    return hash_table_lookup(&sema->db.pact_table, name);
 }
 
 GenericFnDef *sema_lookup_generic_fn(const Sema *sema, const char *name) {
@@ -201,12 +201,12 @@ static ASTType *collect_type_arg_values(const ASTType *ast_type) {
 static const Type *resolve_name_type(Sema *sema, const ASTType *ast_type) {
     // Resolve Self to the enclosing type
     if (strcmp(ast_type->name, "Self") == 0) {
-        if (sema->self_type_name == NULL) {
+        if (sema->infer.self_type_name == NULL) {
             SEMA_ERR(sema, ast_type->loc, "'Self' used outside of a type context");
             return &TYPE_ERR_INST;
         }
         ASTType self_ast = {.kind = AST_TYPE_NAME,
-                            .name = sema->self_type_name,
+                            .name = sema->infer.self_type_name,
                             .loc = ast_type->loc,
                             .type_args = NULL};
         return resolve_name_type(sema, &self_ast);
@@ -273,7 +273,7 @@ static const Type *resolve_assoc_type(Sema *sema, const ASTType *ast_type) {
     // Resolve the base type name to a concrete struct/enum name
     const char *resolved_name = NULL;
     if (strcmp(base_name, "Self") == 0) {
-        resolved_name = sema->self_type_name;
+        resolved_name = sema->infer.self_type_name;
     } else {
         const Type *param_type = hash_table_lookup(&sema->generics.type_params, base_name);
         if (param_type != NULL && param_type->kind == TYPE_STRUCT) {

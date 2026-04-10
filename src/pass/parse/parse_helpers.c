@@ -37,8 +37,8 @@ const Token *parser_expect(Parser *parser, TokenKind kind) {
     if (parser_check(parser, kind)) {
         return parser_advance(parser);
     }
-    rsg_err(parser_current_token(parser)->loc, "expected '%s', got '%s'", token_kind_str(kind),
-            token_kind_str(parser_current_token(parser)->kind));
+    PARSER_ERR(parser, parser_current_token(parser)->loc, "expected '%s', got '%s'",
+               token_kind_str(kind), token_kind_str(parser_current_token(parser)->kind));
     return parser_current_token(parser);
 }
 

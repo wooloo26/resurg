@@ -1,205 +1,11 @@
 #include "_sema.h"
 
-#ifdef _WIN32
-#define PATH_SEP '\\'
-#else
-#define PATH_SEP '/'
-#endif
-
 /**
  * @file resolve_register.c
- * @brief Declaration registration — first-pass symbol table population.
- *
- * Registers pacts, structs, enums, type aliases, and fn sigs into
- * the Sema tables so that subsequent passes can look them up.
+ * @brief Enum/pact registration and pact conformance enforcement.
  */
 
 // ── Static helpers ─────────────────────────────────────────────────
-
-/**
- * Collect fields for a struct: promoted fields from embedded structs first,
- * then the struct's own fields (with duplicate checking).
- */
-static void compose_struct_fields(Sema *sema, const ASTNode *decl, StructDef *def) {
-    // Promote fields from embedded structs
-    for (int32_t i = 0; i < BUF_LEN(def->embedded); i++) {
-        StructDef *embed_def = sema_lookup_struct(sema, def->embedded[i]);
-        if (embed_def == NULL) {
-            SEMA_ERR(sema, decl->loc, "unknown embedded struct '%s'", def->embedded[i]);
-            continue;
-        }
-        for (int32_t j = 0; j < embed_def->type->struct_type.field_count; j++) {
-            const StructField *ef = &embed_def->type->struct_type.fields[j];
-            StructFieldInfo fi = {
-                .name = ef->name, .type = ef->type, .default_value = NULL, .is_pub = ef->is_pub};
-            for (int32_t k = 0; k < BUF_LEN(embed_def->fields); k++) {
-                if (strcmp(embed_def->fields[k].name, ef->name) == 0) {
-                    fi.default_value = embed_def->fields[k].default_value;
-                    break;
-                }
-            }
-            BUF_PUSH(def->fields, fi);
-        }
-    }
-
-    // Add own fields, checking for duplicates against promoted fields
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.fields); i++) {
-        ASTStructField *ast_field = &decl->struct_decl.fields[i];
-        bool duplicate = false;
-        for (int32_t j = 0; j < BUF_LEN(def->fields); j++) {
-            if (strcmp(def->fields[j].name, ast_field->name) == 0) {
-                SEMA_ERR(sema, decl->loc, "duplicate field '%s'", ast_field->name);
-                duplicate = true;
-                break;
-            }
-        }
-        if (!duplicate) {
-            const Type *field_type = resolve_ast_type(sema, &ast_field->type);
-            if (field_type == NULL) {
-                field_type = &TYPE_ERR_INST;
-            }
-            StructFieldInfo fi = {.name = ast_field->name,
-                                  .type = field_type,
-                                  .default_value = ast_field->default_value,
-                                  .is_pub = ast_field->is_pub};
-            BUF_PUSH(def->fields, fi);
-        }
-    }
-}
-
-/**
- * Build the Type* for a struct from its collected fields and embedded types,
- * and assign it to both the def and the AST decl node.
- */
-static void build_struct_type(Sema *sema, ASTNode *decl, StructDef *def) {
-    const Type **embedded_types = NULL;
-    StructField *type_fields = NULL;
-
-    // Add embedded struct fields as named fields (e.g., "Base")
-    for (int32_t i = 0; i < BUF_LEN(def->embedded); i++) {
-        StructDef *embed_def = sema_lookup_struct(sema, def->embedded[i]);
-        if (embed_def != NULL) {
-            BUF_PUSH(embedded_types, embed_def->type);
-            StructField sf = {.name = def->embedded[i], .type = embed_def->type, .is_pub = true};
-            BUF_PUSH(type_fields, sf);
-        }
-    }
-
-    // Add own fields
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.fields); i++) {
-        ASTStructField *ast_field = &decl->struct_decl.fields[i];
-        const Type *field_type = resolve_ast_type(sema, &ast_field->type);
-        if (field_type == NULL) {
-            field_type = &TYPE_ERR_INST;
-        }
-        StructField sf = {.name = ast_field->name, .type = field_type, .is_pub = ast_field->is_pub};
-        BUF_PUSH(type_fields, sf);
-    }
-
-    StructTypeSpec struct_spec = {
-        .name = def->name,
-        .fields = type_fields,
-        .field_count = BUF_LEN(type_fields),
-        .embedded = embedded_types,
-        .embed_count = BUF_LEN(embedded_types),
-    };
-    def->type = type_create_struct(sema->arena, &struct_spec);
-    decl->type = def->type;
-}
-
-/**
- * Create a FnSig from a fn decl, resolving its return type and param types.
- * The caller is responsible for inserting the sig into the fn table.
- */
-FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
-    const Type *return_type = &TYPE_UNIT_INST;
-    if (decl->fn_decl.return_type.kind != AST_TYPE_INFERRED) {
-        return_type = resolve_ast_type(sema, &decl->fn_decl.return_type);
-        if (return_type == NULL) {
-            return_type = &TYPE_UNIT_INST;
-        }
-    }
-
-    FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = decl->fn_decl.name;
-    sig->return_type = return_type;
-    sig->param_types = NULL;
-    sig->param_names = NULL;
-    sig->param_count = BUF_LEN(decl->fn_decl.params);
-    sig->required_count = sig->param_count;
-    sig->is_pub = is_pub;
-    sig->is_declare = decl->fn_decl.is_declare;
-    sig->has_variadic = false;
-    sig->default_kinds = NULL;
-    sig->default_exprs = NULL;
-
-    bool has_defaults = false;
-    for (int32_t j = 0; j < sig->param_count; j++) {
-        ASTNode *param = decl->fn_decl.params[j];
-        const Type *pt = resolve_ast_type(sema, &param->param.type);
-        if (pt == NULL) {
-            pt = &TYPE_ERR_INST;
-        }
-        // Variadic param: ..T → []T (slice type)
-        if (param->param.is_variadic) {
-            pt = type_create_slice(sema->arena, pt);
-            sig->has_variadic = true;
-        }
-        BUF_PUSH(sig->param_types, pt);
-        BUF_PUSH(sig->param_names, param->param.name);
-
-        if (param->param.default_kind != DEFAULT_NONE) {
-            has_defaults = true;
-        }
-    }
-
-    // Build default info if any param has a default value
-    if (has_defaults) {
-        sig->required_count = sig->param_count; // will be lowered below
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = decl->fn_decl.params[j];
-            BUF_PUSH(sig->default_kinds, param->param.default_kind);
-            BUF_PUSH(sig->default_exprs, param->param.default_value);
-        }
-        // required_count = index of first param with a default
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            if (sig->default_kinds[j] != DEFAULT_NONE) {
-                sig->required_count = j;
-                break;
-            }
-        }
-    }
-    return sig;
-}
-
-/**
- * Register a method's sig in the fn table (keyed as "TypeName.method_name")
- * and append a StructMethodInfo entry to the methods buf.
- */
-static void register_method_sig(Sema *sema, const char *type_name, ASTNode *method,
-                                StructMethodInfo **methods) {
-    StructMethodInfo mi = {.name = method->fn_decl.name,
-                           .is_mut_recv = method->fn_decl.is_mut_recv,
-                           .is_ptr_recv = method->fn_decl.is_ptr_recv,
-                           .recv_name = method->fn_decl.recv_name,
-                           .decl = method};
-    BUF_PUSH(*methods, mi);
-
-    const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, mi.name);
-    FnSig *sig = build_fn_sig(sema, method, false);
-    sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-    hash_table_insert(&sema->fn_table, method_key, sig);
-}
-
-/**
- * Register each struct method as a fn sig in the sema's
- * fn table (keyed as "StructName.method_name").
- */
-static void register_struct_methods(Sema *sema, const ASTNode *decl, StructDef *def) {
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.methods); i++) {
-        register_method_sig(sema, def->name, decl->struct_decl.methods[i], &def->methods);
-    }
-}
 
 /** Build a single EnumVariant from its AST representation. */
 static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
@@ -256,7 +62,7 @@ static EnumVariant build_enum_variant(Sema *sema, ASTEnumVariant *ast_variant,
  * Collect all required fields from a pact and its super pacts (recursively).
  * Appends to @p fields buf, deduplicating by name.
  */
-static void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo **fields) {
+void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo **fields) {
     for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
         PactDef *super = sema_lookup_pact(sema, pact->super_pacts[i]);
         if (super != NULL) {
@@ -281,7 +87,7 @@ static void collect_pact_fields(Sema *sema, const PactDef *pact, StructFieldInfo
  * Collect all required methods from a pact and its super pacts (recursively).
  * Appends to @p methods buf, deduplicating by name.
  */
-static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **methods) {
+void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodInfo **methods) {
     for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
         PactDef *super = sema_lookup_pact(sema, pact->super_pacts[i]);
         if (super != NULL) {
@@ -304,86 +110,6 @@ static void collect_pact_methods(Sema *sema, const PactDef *pact, StructMethodIn
 
 // ── Registration functions ─────────────────────────────────────────
 
-void register_fn_sig(Sema *sema, ASTNode *decl) {
-    // If the fn has type params, store as a generic template instead
-    if (BUF_LEN(decl->fn_decl.type_params) > 0) {
-        // Reject default generics on functions
-        for (int32_t i = 0; i < BUF_LEN(decl->fn_decl.type_params); i++) {
-            if (decl->fn_decl.type_params[i].default_type != NULL) {
-                SEMA_ERR(sema, decl->loc, "default generics are not allowed on fn declarations");
-                return;
-            }
-        }
-        GenericFnDef *gdef = rsg_malloc(sizeof(*gdef));
-        gdef->name = decl->fn_decl.name;
-        gdef->decl = decl;
-        gdef->type_params = decl->fn_decl.type_params;
-        gdef->type_param_count = BUF_LEN(decl->fn_decl.type_params);
-        hash_table_insert(&sema->generics.fn, decl->fn_decl.name, gdef);
-        return;
-    }
-
-    FnSig *sig = build_fn_sig(sema, decl, decl->fn_decl.is_pub);
-    hash_table_insert(&sema->fn_table, decl->fn_decl.name, sig);
-
-    scope_define(sema,
-                 &(SymDef){decl->fn_decl.name, sig->return_type, decl->fn_decl.is_pub, SYM_FN});
-}
-
-void register_struct_def(Sema *sema, ASTNode *decl) {
-    const char *struct_name = decl->struct_decl.name;
-
-    // If the struct has type params, store as a generic template instead
-    if (BUF_LEN(decl->struct_decl.type_params) > 0) {
-        GenericStructDef *gdef = rsg_malloc(sizeof(*gdef));
-        gdef->name = struct_name;
-        gdef->decl = decl;
-        gdef->type_params = decl->struct_decl.type_params;
-        gdef->type_param_count = BUF_LEN(decl->struct_decl.type_params);
-        hash_table_insert(&sema->generics.structs, struct_name, gdef);
-        return;
-    }
-
-    // Check for duplicate struct def
-    if (sema_lookup_struct(sema, struct_name) != NULL) {
-        SEMA_ERR(sema, decl->loc, "duplicate struct def '%s'", struct_name);
-        return;
-    }
-
-    const char *prev_self = sema->self_type_name;
-    sema->self_type_name = struct_name;
-
-    StructDef *def = rsg_malloc(sizeof(*def));
-    def->name = struct_name;
-    def->is_tuple_struct = decl->struct_decl.is_tuple_struct;
-    def->fields = NULL;
-    def->methods = NULL;
-    def->embedded = NULL;
-    def->assoc_types = NULL;
-
-    // Copy associated types from AST
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.assoc_types); i++) {
-        BUF_PUSH(def->assoc_types, decl->struct_decl.assoc_types[i]);
-    }
-
-    // Collect embedded struct types
-    for (int32_t i = 0; i < BUF_LEN(decl->struct_decl.embedded); i++) {
-        BUF_PUSH(def->embedded, decl->struct_decl.embedded[i]);
-    }
-
-    compose_struct_fields(sema, decl, def);
-    build_struct_type(sema, decl, def);
-
-    // Register type alias early so Self-referencing method sigs can resolve
-    hash_table_insert(&sema->struct_table, struct_name, def);
-    hash_table_insert(&sema->type_alias_table, struct_name, (void *)def->type);
-    scope_define(sema, &(SymDef){struct_name, def->type, false, SYM_TYPE});
-
-    register_struct_methods(sema, decl, def);
-
-    sema->self_type_name = prev_self;
-}
-
 void register_enum_def(Sema *sema, ASTNode *decl) {
     const char *enum_name = decl->enum_decl.name;
 
@@ -403,8 +129,8 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    const char *prev_self = sema->self_type_name;
-    sema->self_type_name = enum_name;
+    const char *prev_self = sema->infer.self_type_name;
+    sema->infer.self_type_name = enum_name;
 
     // Register associated type aliases before variant resolution
     // so that variant types can reference them (e.g., Data(Payload))
@@ -413,7 +139,7 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
             const Type *at_type =
                 resolve_ast_type(sema, decl->enum_decl.assoc_types[i].concrete_type);
             if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->type_alias_table, decl->enum_decl.assoc_types[i].name,
+                hash_table_insert(&sema->db.type_alias_table, decl->enum_decl.assoc_types[i].name,
                                   (void *)at_type);
             }
         }
@@ -442,15 +168,15 @@ void register_enum_def(Sema *sema, ASTNode *decl) {
     }
 
     // Register type alias early so Self-referencing method sigs can resolve
-    hash_table_insert(&sema->enum_table, enum_name, def);
-    hash_table_insert(&sema->type_alias_table, enum_name, (void *)enum_type);
+    hash_table_insert(&sema->db.enum_table, enum_name, def);
+    hash_table_insert(&sema->db.type_alias_table, enum_name, (void *)enum_type);
     scope_define(sema, &(SymDef){enum_name, enum_type, false, SYM_TYPE});
 
     for (int32_t i = 0; i < BUF_LEN(decl->enum_decl.methods); i++) {
         register_method_sig(sema, enum_name, decl->enum_decl.methods[i], &def->methods);
     }
 
-    sema->self_type_name = prev_self;
+    sema->infer.self_type_name = prev_self;
 }
 
 void register_pact_def(Sema *sema, ASTNode *decl) {
@@ -461,8 +187,8 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
         return;
     }
 
-    const char *prev_self = sema->self_type_name;
-    sema->self_type_name = pact_name;
+    const char *prev_self = sema->infer.self_type_name;
+    sema->infer.self_type_name = pact_name;
 
     PactDef *def = rsg_malloc(sizeof(*def));
     def->name = pact_name;
@@ -504,8 +230,8 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
         BUF_PUSH(def->methods, mi);
     }
 
-    hash_table_insert(&sema->pact_table, pact_name, def);
-    sema->self_type_name = prev_self;
+    hash_table_insert(&sema->db.pact_table, pact_name, def);
+    sema->infer.self_type_name = prev_self;
 }
 
 /** Verify that all pact-required fields are present and type-correct. */
@@ -623,8 +349,8 @@ static void validate_pact_assoc_types(Sema *sema, ASTNode *decl, StructDef *def,
 }
 
 /** Enforce pact-declared bounds on each associated type. */
-static void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def,
-                                           const PactDef *pact) {
+void enforce_pact_assoc_type_bounds(Sema *sema, ASTNode *decl, StructDef *def,
+                                    const PactDef *pact) {
     for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
         if (BUF_LEN(pact->assoc_types[i].bounds) == 0) {
             continue;
@@ -670,605 +396,5 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def) {
         enforce_pact_assoc_type_bounds(sema, decl, def, pact);
         enforce_pact_fields(sema, decl, def, pact);
         enforce_pact_methods(sema, decl, def, pact);
-    }
-}
-
-// ── Module registration ─────────────────────────────────────────────
-
-void register_module_decl(Sema *sema, ASTNode *decl) {
-    const char *mod_name = decl->module.name;
-
-    // Create module type and register in scope
-    const Type *mod_type = type_create_module(sema->arena, mod_name);
-    scope_define(sema, &(SymDef){mod_name, mod_type, true, SYM_MODULE});
-
-    if (decl->module.decls == NULL) {
-        return;
-    }
-
-    // Set module context so resolve_ast_type can find sibling types
-    const char *prev_module_name = sema->current_scope->module_name;
-    sema->current_scope->module_name = mod_name;
-
-    // Register all inner declarations with qualified names
-    for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
-        ASTNode *inner = decl->module.decls[i];
-
-        if (inner->kind == NODE_MODULE) {
-            // Nested sub-module: prefix its name and recurse
-            const char *orig_name = inner->module.name;
-            inner->module.name = arena_sprintf(sema->arena, "%s.%s", mod_name, orig_name);
-
-            // Filesystem module: load from module_search_dir/<orig_name>.rsg
-            if (inner->module.decls == NULL && sema->module_search_dir != NULL) {
-                const char *mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg",
-                                                     sema->module_search_dir, PATH_SEP, orig_name);
-                ASTNode **decls = load_module_decls(sema, mod_path);
-
-                // Fallback: try std library directory
-                const char *base_dir = sema->module_search_dir;
-                if (decls == NULL && sema->std_search_dir != NULL) {
-                    mod_path = arena_sprintf(sema->arena, "%s%c%s.rsg", sema->std_search_dir,
-                                             PATH_SEP, orig_name);
-                    decls = load_module_decls(sema, mod_path);
-                    if (decls != NULL) {
-                        base_dir = sema->std_search_dir;
-                    }
-                }
-
-                if (decls == NULL) {
-                    SEMA_ERR(sema, inner->loc, "cannot find module file '%s.rsg'", orig_name);
-                } else {
-                    inner->module.decls = decls;
-                    // Update search dir for grandchild modules
-                    const char *prev_dir = sema->module_search_dir;
-                    sema->module_search_dir =
-                        arena_sprintf(sema->arena, "%s%c%s", base_dir, PATH_SEP, orig_name);
-                    register_module_decl(sema, inner);
-                    sema->module_search_dir = prev_dir;
-                    continue;
-                }
-            }
-
-            register_module_decl(sema, inner);
-            continue;
-        }
-
-        if (inner->kind == NODE_FN_DECL) {
-            // Rewrite fn name to qualified form: mod.fn_name
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", mod_name, inner->fn_decl.name);
-            inner->fn_decl.name = qualified;
-            register_fn_sig(sema, inner);
-            continue;
-        }
-
-        if (inner->kind == NODE_STRUCT_DECL) {
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", mod_name, inner->struct_decl.name);
-            inner->struct_decl.name = qualified;
-            register_struct_def(sema, inner);
-            continue;
-        }
-
-        if (inner->kind == NODE_ENUM_DECL) {
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", mod_name, inner->enum_decl.name);
-            inner->enum_decl.name = qualified;
-            register_enum_def(sema, inner);
-            continue;
-        }
-
-        if (inner->kind == NODE_PACT_DECL) {
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", mod_name, inner->pact_decl.name);
-            inner->pact_decl.name = qualified;
-            register_pact_def(sema, inner);
-            continue;
-        }
-
-        if (inner->kind == NODE_TYPE_ALIAS) {
-            const char *qualified =
-                arena_sprintf(sema->arena, "%s.%s", mod_name, inner->type_alias.name);
-            inner->type_alias.name = qualified;
-            const Type *underlying = resolve_ast_type(sema, &inner->type_alias.alias_type);
-            if (underlying != NULL) {
-                hash_table_insert(&sema->type_alias_table, qualified, (void *)underlying);
-            }
-            continue;
-        }
-
-        // Defer use decls — processed after all module contents are registered
-    }
-
-    // Process use decls inside the module (after all sibling decls are registered)
-    for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
-        ASTNode *inner = decl->module.decls[i];
-        if (inner->kind == NODE_USE_DECL) {
-            register_use_decl(sema, inner);
-        }
-    }
-
-    sema->current_scope->module_name = prev_module_name;
-}
-
-/** Resolve a 'super' or 'super::super' path to the parent module's qualified name. */
-static const char *resolve_super_path(Sema *sema, const char *path, SrcLoc loc) {
-    const char *current = sema->current_scope->module_name;
-    if (current == NULL) {
-        // At file scope, super:: has no parent
-        SEMA_ERR(sema, loc, "'super' used outside of a module");
-        return NULL;
-    }
-    // Walk up one level for each 'super' segment (separated by '::')
-    // The path is "super" or "super::super" etc., optionally followed by "::rest"
-    const char *remaining = path;
-    char *cur = arena_sprintf(sema->arena, "%s", current);
-    while (remaining != NULL) {
-        const char *sep = strstr(remaining, "::");
-        size_t seg_len = (sep != NULL) ? (size_t)(sep - remaining) : strlen(remaining);
-        if (seg_len == 5 && strncmp(remaining, "super", 5) == 0) {
-            // Strip last component from cur (e.g., "a.b" -> "a")
-            char *last_dot = strrchr(cur, '.');
-            if (last_dot != NULL) {
-                *last_dot = '\0';
-            } else {
-                // Already at top level — super goes to file scope
-                cur[0] = '\0';
-            }
-        } else {
-            break;
-        }
-        remaining = (sep != NULL) ? sep + 2 : NULL;
-    }
-    // Append any remaining non-super segments (e.g., "math_ops" from "super::math_ops")
-    if (remaining != NULL && remaining[0] != '\0') {
-        if (cur[0] != '\0') {
-            return arena_sprintf(sema->arena, "%s.%s", cur, remaining);
-        }
-        return remaining;
-    }
-    return cur;
-}
-
-/**
- * Wildcard import: iterate all pub symbols whose qualified key starts
- * with "mod_name." and import them under their bare name.
- * When @p reexport_prefix is non-NULL (pub use inside a module),
- * also register under "reexport_prefix.bare" as a pub re-export.
- */
-static void register_wildcard_use(Sema *sema, const char *mod_name, const char *reexport_prefix) {
-    size_t prefix_len = strlen(mod_name);
-    const char *prefix_dot = arena_sprintf(sema->arena, "%s.", mod_name);
-    size_t prefix_dot_len = prefix_len + 1;
-
-    // Scan fn_table
-    for (int32_t i = 0; i < sema->fn_table.capacity; i++) {
-        HashEntry *e = &sema->fn_table.entries[i];
-        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
-            continue;
-        }
-        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
-            const char *bare = e->key + prefix_dot_len;
-            // Skip sub-module qualified names (contain another '.')
-            if (strchr(bare, '.') != NULL) {
-                continue;
-            }
-            FnSig *sig = (FnSig *)e->value;
-            if (sig->is_pub) {
-                hash_table_insert(&sema->fn_table, bare, sig);
-                if (reexport_prefix != NULL) {
-                    const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
-                    hash_table_insert(&sema->fn_table, rekey, sig);
-                }
-            }
-        }
-    }
-
-    // Scan struct_table
-    for (int32_t i = 0; i < sema->struct_table.capacity; i++) {
-        HashEntry *e = &sema->struct_table.entries[i];
-        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
-            continue;
-        }
-        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
-            const char *bare = e->key + prefix_dot_len;
-            if (strchr(bare, '.') != NULL) {
-                continue;
-            }
-            StructDef *sdef = (StructDef *)e->value;
-            hash_table_insert(&sema->struct_table, bare, sdef);
-            scope_define(sema, &(SymDef){bare, sdef->type, true, SYM_TYPE});
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
-                hash_table_insert(&sema->struct_table, rekey, sdef);
-                scope_define(sema, &(SymDef){rekey, sdef->type, true, SYM_TYPE});
-            }
-        }
-    }
-
-    // Scan enum_table
-    for (int32_t i = 0; i < sema->enum_table.capacity; i++) {
-        HashEntry *e = &sema->enum_table.entries[i];
-        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
-            continue;
-        }
-        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
-            const char *bare = e->key + prefix_dot_len;
-            if (strchr(bare, '.') != NULL) {
-                continue;
-            }
-            EnumDef *edef = (EnumDef *)e->value;
-            hash_table_insert(&sema->enum_table, bare, edef);
-            scope_define(sema, &(SymDef){bare, edef->type, true, SYM_TYPE});
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
-                hash_table_insert(&sema->enum_table, rekey, edef);
-                scope_define(sema, &(SymDef){rekey, edef->type, true, SYM_TYPE});
-            }
-        }
-    }
-
-    // Scan type_alias_table
-    for (int32_t i = 0; i < sema->type_alias_table.capacity; i++) {
-        HashEntry *e = &sema->type_alias_table.entries[i];
-        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
-            continue;
-        }
-        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
-            const char *bare = e->key + prefix_dot_len;
-            if (strchr(bare, '.') != NULL) {
-                continue;
-            }
-            hash_table_insert(&sema->type_alias_table, bare, e->value);
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, bare);
-                hash_table_insert(&sema->type_alias_table, rekey, e->value);
-            }
-        }
-    }
-}
-
-void register_use_decl(Sema *sema, ASTNode *decl) {
-    const char *mod_name = decl->use_decl.module_path;
-
-    // Resolve super:: paths first (before normalizing separators)
-    if (strncmp(mod_name, "super", 5) == 0) {
-        const char *resolved = resolve_super_path(sema, mod_name, decl->loc);
-        if (resolved == NULL) {
-            return;
-        }
-        mod_name = resolved;
-        decl->use_decl.module_path = resolved;
-    }
-
-    // Strip leading self:: prefix (refers to current crate/module root)
-    if (strncmp(mod_name, "self::", 6) == 0) {
-        mod_name = mod_name + 6;
-        decl->use_decl.module_path = mod_name;
-    }
-
-    // Normalize :: separators to . for internal lookup
-    if (strstr(mod_name, "::") != NULL) {
-        size_t len = strlen(mod_name);
-        char *normalized = arena_alloc(sema->arena, len + 1);
-        size_t j = 0;
-        for (size_t i = 0; i < len; i++) {
-            if (mod_name[i] == ':' && i + 1 < len && mod_name[i + 1] == ':') {
-                normalized[j++] = '.';
-                i++; // skip second ':'
-            } else {
-                normalized[j++] = mod_name[i];
-            }
-        }
-        normalized[j] = '\0';
-        mod_name = normalized;
-        decl->use_decl.module_path = normalized;
-    }
-
-    // Determine re-export prefix for pub use inside a module
-    const char *reexport_prefix = NULL;
-    if (decl->use_decl.is_pub && sema->current_scope->module_name != NULL) {
-        reexport_prefix = sema->current_scope->module_name;
-    }
-
-    // Wildcard import: use module::*
-    if (decl->use_decl.is_wildcard) {
-        register_wildcard_use(sema, mod_name, reexport_prefix);
-        return;
-    }
-
-    for (int32_t i = 0; i < BUF_LEN(decl->use_decl.imported_names); i++) {
-        const char *name = decl->use_decl.imported_names[i];
-        const char *alias = decl->use_decl.aliases[i];
-        const char *qualified;
-        if (strlen(mod_name) == 0) {
-            qualified = name;
-        } else {
-            qualified = arena_sprintf(sema->arena, "%s.%s", mod_name, name);
-        }
-
-        // Try fn
-        FnSig *sig = sema_lookup_fn(sema, qualified);
-        if (sig != NULL) {
-            // Check visibility: fn must be pub
-            if (!sig->is_pub) {
-                SEMA_ERR(sema, decl->loc, "'%s' is private in module '%s'", name, mod_name);
-                continue;
-            }
-            hash_table_insert(&sema->fn_table, alias, sig);
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
-                hash_table_insert(&sema->fn_table, rekey, sig);
-            }
-            continue;
-        }
-
-        // Try struct
-        StructDef *sdef = sema_lookup_struct(sema, qualified);
-        if (sdef != NULL) {
-            hash_table_insert(&sema->struct_table, alias, sdef);
-            scope_define(sema, &(SymDef){alias, sdef->type, true, SYM_TYPE});
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
-                hash_table_insert(&sema->struct_table, rekey, sdef);
-                scope_define(sema, &(SymDef){rekey, sdef->type, true, SYM_TYPE});
-            }
-            continue;
-        }
-
-        // Try enum
-        EnumDef *edef = sema_lookup_enum(sema, qualified);
-        if (edef != NULL) {
-            hash_table_insert(&sema->enum_table, alias, edef);
-            scope_define(sema, &(SymDef){alias, edef->type, true, SYM_TYPE});
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
-                hash_table_insert(&sema->enum_table, rekey, edef);
-                scope_define(sema, &(SymDef){rekey, edef->type, true, SYM_TYPE});
-            }
-            continue;
-        }
-
-        // Try type alias
-        const Type *talias = sema_lookup_type_alias(sema, qualified);
-        if (talias != NULL) {
-            hash_table_insert(&sema->type_alias_table, alias, (void *)talias);
-            if (reexport_prefix != NULL) {
-                const char *rekey = arena_sprintf(sema->arena, "%s.%s", reexport_prefix, alias);
-                hash_table_insert(&sema->type_alias_table, rekey, (void *)talias);
-            }
-            continue;
-        }
-
-        SEMA_ERR(sema, decl->loc, "'%s' not found in module '%s'", name, mod_name);
-    }
-}
-
-// ── Extension method registration ──────────────────────────────────
-
-/** Push ext-declared associated types into @p target_buf and register as type aliases. */
-static void register_ext_assoc_types(Sema *sema, const ASTNode *decl, ASTAssocType **target_buf) {
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.assoc_types); i++) {
-        BUF_PUSH(*target_buf, decl->ext_decl.assoc_types[i]);
-        if (decl->ext_decl.assoc_types[i].concrete_type != NULL) {
-            const Type *at_type =
-                resolve_ast_type(sema, decl->ext_decl.assoc_types[i].concrete_type);
-            if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->type_alias_table, decl->ext_decl.assoc_types[i].name,
-                                  (void *)at_type);
-            }
-        }
-    }
-}
-
-/** Register ext methods into the fn table and append to @p methods buf. */
-static void register_ext_methods(Sema *sema, const char *target_name, const ASTNode *decl,
-                                 StructMethodInfo **methods) {
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        ASTNode *method = decl->ext_decl.methods[i];
-        method->fn_decl.owner_struct = target_name;
-        register_method_sig(sema, target_name, method, methods);
-    }
-}
-
-/** Register a single primitive ext method into the fn_table with "type.method" key. */
-static void register_primitive_method(Sema *sema, const char *type_name, ASTNode *method) {
-    method->fn_decl.owner_struct = type_name;
-
-    const char *method_key = arena_sprintf(sema->arena, "%s.%s", type_name, method->fn_decl.name);
-    FnSig *sig = build_fn_sig(sema, method, false);
-    sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-    hash_table_insert(&sema->fn_table, method_key, sig);
-}
-
-void register_ext_decl(Sema *sema, ASTNode *decl) {
-    const char *target_name = decl->ext_decl.target_name;
-
-    // For generic ext blocks (ext<T,U> Pair<T,U>), store template for later
-    if (BUF_LEN(decl->ext_decl.type_params) > 0) {
-        GenericExtDef *gext = rsg_malloc(sizeof(*gext));
-        gext->base.name = target_name;
-        gext->base.decl = decl;
-        gext->base.type_params = decl->ext_decl.type_params;
-        gext->base.type_param_count = BUF_LEN(decl->ext_decl.type_params);
-        gext->target_name = target_name;
-        BUF_PUSH(sema->generic_ext_defs, gext);
-        return;
-    }
-
-    // Try to find the target as a struct
-    StructDef *sdef = sema_lookup_struct(sema, target_name);
-    if (sdef != NULL) {
-        const char *prev_self = sema->self_type_name;
-        sema->self_type_name = target_name;
-        register_ext_assoc_types(sema, decl, &sdef->assoc_types);
-        register_ext_methods(sema, target_name, decl, &sdef->methods);
-        sema->self_type_name = prev_self;
-        return;
-    }
-
-    // Try to find the target as an enum
-    EnumDef *edef = sema_lookup_enum(sema, target_name);
-    if (edef != NULL) {
-        const char *prev_self = sema->self_type_name;
-        sema->self_type_name = target_name;
-        register_ext_assoc_types(sema, decl, &edef->assoc_types);
-        register_ext_methods(sema, target_name, decl, &edef->methods);
-        sema->self_type_name = prev_self;
-        return;
-    }
-
-    // Primitive type
-    for (int32_t i = 0; i < BUF_LEN(decl->ext_decl.methods); i++) {
-        register_primitive_method(sema, target_name, decl->ext_decl.methods[i]);
-    }
-}
-
-/** Check whether a pact method exists for an enum/primitive target. */
-static bool ext_method_exists(const Sema *sema, const char *target_name, const char *method_name,
-                              const EnumDef *edef) {
-    if (edef != NULL) {
-        for (int32_t j = 0; j < BUF_LEN(edef->methods); j++) {
-            if (strcmp(edef->methods[j].name, method_name) == 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-    // Primitive — check fn_table
-    const char *key = arena_sprintf(sema->arena, "%s.%s", target_name, method_name);
-    return sema_lookup_fn(sema, key) != NULL;
-}
-
-/** Enforce a single pact conformance for a struct-targeted ext decl. */
-static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
-                                    const char *pact_name, PactDef *pact) {
-    // Apply defaults for missing associated types
-    for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-        const char *at_name = pact->assoc_types[i].name;
-        bool found = false;
-        for (int32_t j = 0; j < BUF_LEN(sdef->assoc_types); j++) {
-            if (strcmp(sdef->assoc_types[j].name, at_name) != 0) {
-                continue;
-            }
-            if (sdef->assoc_types[j].pact_qualifier != NULL &&
-                strcmp(sdef->assoc_types[j].pact_qualifier, pact_name) != 0) {
-                continue;
-            }
-            found = true;
-            break;
-        }
-        if (!found) {
-            if (pact->assoc_types[i].concrete_type != NULL) {
-                ASTAssocType defaulted = {
-                    .name = at_name,
-                    .pact_qualifier = NULL,
-                    .bounds = NULL,
-                    .concrete_type = pact->assoc_types[i].concrete_type,
-                };
-                BUF_PUSH(sdef->assoc_types, defaulted);
-            } else {
-                SEMA_ERR(sema, decl->loc, "missing associated type '%s' required by pact '%s'",
-                         at_name, pact_name);
-            }
-        }
-    }
-    // Reject ext-declared assoc types not present in the pact
-    for (int32_t j = 0; j < BUF_LEN(decl->ext_decl.assoc_types); j++) {
-        const char *at_name = decl->ext_decl.assoc_types[j].name;
-        if (decl->ext_decl.assoc_types[j].pact_qualifier != NULL &&
-            strcmp(decl->ext_decl.assoc_types[j].pact_qualifier, pact_name) != 0) {
-            continue;
-        }
-        bool in_pact = false;
-        for (int32_t i = 0; i < BUF_LEN(pact->assoc_types); i++) {
-            if (strcmp(pact->assoc_types[i].name, at_name) == 0) {
-                in_pact = true;
-                break;
-            }
-        }
-        if (!in_pact) {
-            SEMA_ERR(sema, decl->loc, "associated type '%s' is not a member of pact '%s'", at_name,
-                     pact_name);
-        }
-    }
-    // Reuse shared bounds enforcement
-    enforce_pact_assoc_type_bounds(sema, decl, sdef, pact);
-
-    // Enforce required methods and inject defaults
-    StructMethodInfo *pact_methods = NULL;
-    collect_pact_methods(sema, pact, &pact_methods);
-    for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-        bool found = false;
-        for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
-            if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            bool has_body =
-                pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
-            if (has_body) {
-                ASTNode *method_ast = pact_methods[i].decl;
-                method_ast->fn_decl.owner_struct = sdef->name;
-                BUF_PUSH(decl->ext_decl.methods, method_ast);
-                register_method_sig(sema, sdef->name, method_ast, &sdef->methods);
-            } else {
-                SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                         pact_methods[i].name, pact_name);
-            }
-        }
-    }
-    BUF_FREE(pact_methods);
-}
-
-void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
-    if (BUF_LEN(decl->ext_decl.impl_pacts) == 0) {
-        return;
-    }
-
-    const char *target_name = decl->ext_decl.target_name;
-
-    // For struct targets, delegate per-pact enforcement
-    StructDef *sdef = sema_lookup_struct(sema, target_name);
-    if (sdef != NULL) {
-        for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
-            const char *pact_name = decl->ext_decl.impl_pacts[pi];
-            PactDef *pact = sema_lookup_pact(sema, pact_name);
-            if (pact == NULL) {
-                SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
-                continue;
-            }
-            enforce_ext_struct_pact(sema, decl, sdef, pact_name, pact);
-        }
-        return;
-    }
-
-    // For enum/primitive targets, check methods exist in fn_table
-    EnumDef *edef = sema_lookup_enum(sema, target_name);
-    for (int32_t pi = 0; pi < BUF_LEN(decl->ext_decl.impl_pacts); pi++) {
-        const char *pact_name = decl->ext_decl.impl_pacts[pi];
-        PactDef *pact = sema_lookup_pact(sema, pact_name);
-        if (pact == NULL) {
-            SEMA_ERR(sema, decl->loc, "unknown pact '%s'", pact_name);
-            continue;
-        }
-
-        StructMethodInfo *pact_methods = NULL;
-        collect_pact_methods(sema, pact, &pact_methods);
-
-        for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
-            if (!ext_method_exists(sema, target_name, pact_methods[i].name, edef)) {
-                bool has_body =
-                    pact_methods[i].decl != NULL && pact_methods[i].decl->fn_decl.body != NULL;
-                if (!has_body) {
-                    SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
-                             pact_methods[i].name, pact_name);
-                }
-            }
-        }
-        BUF_FREE(pact_methods);
     }
 }

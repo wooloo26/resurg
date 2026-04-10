@@ -295,7 +295,8 @@ static ASTNode *parse_tuple_destructure(Parser *parser) {
     do {
         if (parser_match(parser, TOKEN_DOT_DOT)) {
             if (node->tuple_destructure.has_rest) {
-                rsg_err(parser_current_loc(parser), "only one '..' allowed in tuple destructure");
+                PARSER_ERR(parser, parser_current_loc(parser),
+                           "only one '..' allowed in tuple destructure");
             }
             node->tuple_destructure.has_rest = true;
             node->tuple_destructure.rest_pos = idx;

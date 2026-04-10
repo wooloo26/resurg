@@ -137,8 +137,8 @@ static const Type **resolve_type_args(Sema *sema, ASTType *type_args, int32_t co
 }
 
 /** Push type param substitutions into the sema type_param_table. */
-static void push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved, int32_t count,
-                             const Type ***out_saved) {
+void sema_push_type_params(Sema *sema, ASTTypeParam *params, const Type **resolved, int32_t count,
+                           const Type ***out_saved) {
     const Type **saved = NULL;
     for (int32_t i = 0; i < count; i++) {
         const Type *old = hash_table_lookup(&sema->generics.type_params, params[i].name);
@@ -149,7 +149,7 @@ static void push_type_params(Sema *sema, ASTTypeParam *params, const Type **reso
 }
 
 /** Pop type param substitutions, restoring any previous values. */
-static void pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count, const Type **saved) {
+void sema_pop_type_params(Sema *sema, ASTTypeParam *params, int32_t count, const Type **saved) {
     for (int32_t i = 0; i < count; i++) {
         if (saved[i] != NULL) {
             hash_table_insert(&sema->generics.type_params, params[i].name, (void *)saved[i]);
@@ -174,7 +174,7 @@ static void register_generic_methods(Sema *sema, ASTNode **orig_methods,
 
         const char *method_key = arena_sprintf(sema->arena, "%s.%s", mangled, mi.name);
         FnSig *sig = build_fn_sig(sema, method, false);
-        hash_table_insert(&sema->fn_table, method_key, sig);
+        hash_table_insert(&sema->db.fn_table, method_key, sig);
     }
 }
 
@@ -210,8 +210,8 @@ static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec
 
         // Push ext type params mapped to the concrete args
         const Type **ext_saved = NULL;
-        push_type_params(sema, gext->base.type_params, spec->resolved_args, spec->arg_count,
-                         &ext_saved);
+        sema_push_type_params(sema, gext->base.type_params, spec->resolved_args, spec->arg_count,
+                              &ext_saved);
 
         // Phase 1: Register all ext method sigs
         ASTNode *ext_decl = gext->base.decl;
@@ -226,7 +226,7 @@ static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec
             const char *method_key =
                 arena_sprintf(sema->arena, "%s.%s", spec->mangled, method_info.name);
             FnSig *sig = build_fn_sig(sema, method, false);
-            hash_table_insert(&sema->fn_table, method_key, sig);
+            hash_table_insert(&sema->db.fn_table, method_key, sig);
         }
 
         // Phase 2: Clone and type-check ext method bodies
@@ -245,7 +245,7 @@ static void instantiate_generic_ext_methods(Sema *sema, const GenericExtInstSpec
             }
         }
 
-        pop_type_params(sema, gext->base.type_params, spec->arg_count, ext_saved);
+        sema_pop_type_params(sema, gext->base.type_params, spec->arg_count, ext_saved);
     }
 }
 
@@ -336,8 +336,8 @@ static Type *struct_create_stub(Sema *sema, const char *mangled) {
         .name = mangled, .fields = NULL, .field_count = 0, .embedded = NULL, .embed_count = 0};
     Type *fwd_type = type_create_struct(sema->arena, &stub_spec);
     def->type = fwd_type;
-    hash_table_insert(&sema->struct_table, mangled, def);
-    hash_table_insert(&sema->type_alias_table, mangled, (void *)fwd_type);
+    hash_table_insert(&sema->db.struct_table, mangled, def);
+    hash_table_insert(&sema->db.type_alias_table, mangled, (void *)fwd_type);
     return fwd_type;
 }
 
@@ -417,8 +417,8 @@ static Type *enum_create_stub(Sema *sema, const char *mangled) {
     def->methods = NULL;
     def->assoc_types = NULL;
     def->type = fwd_enum;
-    hash_table_insert(&sema->enum_table, mangled, def);
-    hash_table_insert(&sema->type_alias_table, mangled, (void *)fwd_enum);
+    hash_table_insert(&sema->db.enum_table, mangled, def);
+    hash_table_insert(&sema->db.type_alias_table, mangled, (void *)fwd_enum);
     return fwd_enum;
 }
 
@@ -433,7 +433,7 @@ static StructMethodInfo **enum_resolve_members(Sema *sema, ASTNode *orig, Type *
             const Type *at_type =
                 resolve_ast_type(sema, orig->enum_decl.assoc_types[i].concrete_type);
             if (at_type != NULL && at_type->kind != TYPE_ERR) {
-                hash_table_insert(&sema->type_alias_table, orig->enum_decl.assoc_types[i].name,
+                hash_table_insert(&sema->db.type_alias_table, orig->enum_decl.assoc_types[i].name,
                                   (void *)at_type);
             }
         }
@@ -550,8 +550,8 @@ static const GenericTypeInstSpec ENUM_INST_SPEC = {
 /**
  * Unified scaffolding for generic struct/enum instantiation.
  *
- * Steps: preamble → cache check → push_type_params → create stub →
- * resolve members → build synth → ext methods → pop_type_params.
+ * Steps: preamble → cache check → sema_push_type_params → create stub →
+ * resolve members → build synth → ext methods → sema_pop_type_params.
  */
 static const char *instantiate_generic_type(Sema *sema, GenericDef *gdef,
                                             const GenericInstArgs *args,
@@ -576,7 +576,7 @@ static const char *instantiate_generic_type(Sema *sema, GenericDef *gdef,
     }
 
     const Type **saved = NULL;
-    push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count, &saved);
+    sema_push_type_params(sema, gdef->type_params, resolved_args, gdef->type_param_count, &saved);
 
     ASTNode *orig = gdef->decl;
     Type *stub = spec->create_stub(sema, mangled);
@@ -597,7 +597,7 @@ static const char *instantiate_generic_type(Sema *sema, GenericDef *gdef,
 
     BUF_PUSH(sema->synthetic_decls, synth);
 
-    pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
+    sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
 
     BUF_FREE(resolved_args);
     return mangled;
@@ -668,8 +668,8 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
 
         // Push type param substitutions
         const Type **saved = NULL;
-        push_type_params(sema, gext->base.type_params, resolved_args, gext->base.type_param_count,
-                         &saved);
+        sema_push_type_params(sema, gext->base.type_params, resolved_args,
+                              gext->base.type_param_count, &saved);
 
         // Create synthetic non-generic ext decl for lowering
         ASTNode *synth = ast_new(sema->arena, NODE_EXT_DECL, ext_decl->loc);
@@ -688,7 +688,7 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
                 arena_sprintf(sema->arena, "%s.%s", concrete_name, method->fn_decl.name);
             FnSig *sig = build_fn_sig(sema, method, false);
             sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
-            hash_table_insert(&sema->fn_table, method_key, sig);
+            hash_table_insert(&sema->db.fn_table, method_key, sig);
 
             ASTNode *mclone = ast_clone(sema->arena, method);
             mclone->fn_decl.owner_struct = concrete_name;
@@ -700,7 +700,7 @@ FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type
             }
         }
 
-        pop_type_params(sema, gext->base.type_params, gext->base.type_param_count, saved);
+        sema_pop_type_params(sema, gext->base.type_params, gext->base.type_param_count, saved);
         BUF_FREE(resolved_args);
 
         BUF_PUSH(sema->synthetic_decls, synth);
