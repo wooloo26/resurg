@@ -1,0 +1,44 @@
+// TEST: compile_error
+
+// === undefined variable ===
+// EXPECT-ERROR: undefined variable 'x'
+
+fn main() {
+    y := x + 1
+}
+
+// === undefined function ===
+// EXPECT-ERROR: undefined function 'nonexistent'
+
+fn main() {
+    x := nonexistent(42)
+}
+
+// === unknown type ===
+// EXPECT-ERROR: unknown type 'Foo'
+
+fn main() {
+    var x: Foo = 1
+}
+
+// === break outside loop ===
+// EXPECT-ERROR: 'break' outside of loop
+
+fn main() {
+    break
+}
+
+// === continue outside loop ===
+// EXPECT-ERROR: 'continue' outside of loop
+
+fn main() {
+    continue
+}
+
+// === while non-bool ===
+// EXPECT-ERROR: condition must be 'bool'
+
+fn main() {
+    while 42 {
+    }
+}

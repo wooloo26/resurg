@@ -1,0 +1,60 @@
+// Methods on generic enums with self-references
+
+// ── generic enum with methods using type parameters ──
+
+enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+ext<L, R> Either<L, R> {
+    fn is_left(*e) -> bool {
+        match e {
+            Left(_) => true,
+            Right(_) => false,
+        }
+    }
+
+    fn is_right(*e) -> bool {
+        match e {
+            Left(_) => false,
+            Right(_) => true,
+        }
+    }
+}
+
+fn test_is_left() {
+    e := Either<i32, str>::Left(42)
+    assert(e.is_left() == true)
+    assert(e.is_right() == false)
+}
+
+fn test_is_right() {
+    e := Either<i32, str>::Right("hello")
+    assert(e.is_left() == false)
+    assert(e.is_right() == true)
+}
+
+// ── generic enum with method that returns a type parameter ──
+
+enum Maybe<T> {
+    Nothing,
+    Just(T),
+}
+
+ext<T> Maybe<T> {
+    fn is_nothing(*m) -> bool {
+        match m {
+            Nothing => true,
+            Just(_) => false,
+        }
+    }
+}
+
+fn test_maybe_methods() {
+    a := Maybe<i32>::Nothing
+    assert(a.is_nothing() == true)
+
+    b := Maybe<i32>::Just(10)
+    assert(b.is_nothing() == false)
+}

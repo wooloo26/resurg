@@ -1,0 +1,133 @@
+// Extension methods on struct types
+
+// ── basic struct for testing ──
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+// ── extension with pointer receiver ──
+
+ext Point {
+    fn magnitude(*p) -> f64 {
+        p.x + p.y
+    }
+}
+
+fn test_ext_pointer_receiver() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.magnitude() == 7.0)
+}
+
+// ── extension with value receiver ──
+
+ext Point {
+    fn sum(p) -> f64 {
+        p.x + p.y
+    }
+}
+
+fn test_ext_value_receiver() {
+    p := Point { x = 1.0, y = 2.0 }
+    assert(p.sum() == 3.0)
+}
+
+// ── extension with mut pointer receiver ──
+
+ext Point {
+    fn reset(mut *p) {
+        p.x = 0.0
+        p.y = 0.0
+    }
+}
+
+fn test_ext_mut_pointer_receiver() {
+    p := &Point { x = 5.0, y = 10.0 }
+    p.reset()
+    assert(p.x == 0.0)
+    assert(p.y == 0.0)
+}
+
+// ── multiple methods in one ext block ──
+
+struct Rectangle {
+    width: f64 = 0.0
+    height: f64 = 0.0
+}
+
+ext Rectangle {
+    fn area(*r) -> f64 { r.width * r.height }
+    fn perimeter(*r) -> f64 { 2.0 * (r.width + r.height) }
+}
+
+fn test_ext_multiple_methods() {
+    r := Rectangle { width = 3.0, height = 4.0 }
+    assert(r.area() == 12.0)
+    assert(r.perimeter() == 14.0)
+}
+
+// ── ext method on struct with methods in ext block ──
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn current(*c) -> i32 { c.value }
+    fn doubled(*c) -> i32 { c.value * 2 }
+}
+
+fn test_ext_struct_methods() {
+    c := Counter { value = 5 }
+    assert(c.current() == 5)
+    assert(c.doubled() == 10)
+}
+
+// ── ext method with additional parameters ──
+
+ext Point {
+    fn translate(*p, dx: f64, dy: f64) -> Point {
+        Point { x = p.x + dx, y = p.y + dy }
+    }
+}
+
+fn test_ext_with_params() {
+    p := Point { x = 1.0, y = 2.0 }
+    q := p.translate(3.0, 4.0)
+    assert(q.x == 4.0)
+    assert(q.y == 6.0)
+}
+
+// ── ext method calling another ext method ──
+
+ext Point {
+    fn is_origin(*p) -> bool {
+        p.magnitude() == 0.0
+    }
+}
+
+fn test_ext_calling_ext_method() {
+    origin := Point {}
+    assert(origin.is_origin())
+
+    p := Point { x = 1.0, y = 2.0 }
+    assert(p.is_origin() == false)
+}
+
+// ── ext on heap-allocated struct ──
+
+fn test_ext_on_heap_struct() {
+    p := &Point { x = 10.0, y = 20.0 }
+    assert(p.magnitude() == 30.0)
+    assert(p.is_origin() == false)
+}
+
+// ── ext method with named arguments ──
+
+fn test_ext_named_args() {
+    p := Point { x = 1.0, y = 2.0 }
+    q := p.translate(dx = 5.0, dy = 10.0)
+    assert(q.x == 6.0)
+    assert(q.y == 12.0)
+}

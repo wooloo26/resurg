@@ -1,0 +1,113 @@
+// String literals and interpolation
+
+fn test_string_literal() {
+    s := "hello world"
+    assert(s == "hello world")
+}
+
+fn test_empty_string() {
+    s := ""
+    assert(s == "")
+}
+
+fn test_string_with_escapes() {
+    tab := "\t"
+    newline := "\n"
+    quote := "\""
+    backslash := "\\"
+    assert(tab == "\t")
+    assert(newline == "\n")
+    assert(quote == "\"")
+    assert(backslash == "\\")
+}
+
+fn test_string_interpolation_variable() {
+    name := "Alice"
+    greeting := "Hello, {name}!"
+    assert(greeting == "Hello, Alice!")
+}
+
+fn test_string_interpolation_expression() {
+    a := 3
+    b := 4
+    result := "sum is {a + b}"
+    assert(result == "sum is 7")
+}
+
+fn test_string_interpolation_multiple() {
+    x := 10
+    y := 20
+    msg := "{x} + {y} = {x + y}"
+    assert(msg == "10 + 20 = 30")
+}
+
+fn double(n: i32) = n * 2
+
+fn test_string_interpolation_nested_call() {
+    val := 5
+    s := "double of {val} is {double(val)}"
+    assert(s == "double of 5 is 10")
+}
+
+fn test_string_interpolation_bool() {
+    flag := true
+    s := "flag is {flag}"
+    assert(s == "flag is true")
+}
+
+fn test_string_interpolation_f64() {
+    pi := 3.14
+    s := "pi = {pi}"
+    assert(s == "pi = 3.14")
+}
+
+fn test_string_no_interpolation() {
+    // a string with no interpolation markers
+    s := "just a plain string"
+    assert(s == "just a plain string")
+}
+
+fn test_string_adjacent_interpolations() {
+    a := "hello"
+    b := "world"
+    s := "{a}{b}"
+    assert(s == "helloworld")
+}
+
+fn test_string_interpolation_u32() {
+    var x: u32 = 255
+    s := "value is {x}"
+    assert(s == "value is 255")
+}
+
+fn test_string_interpolation_comparison() {
+    a := 3
+    b := 5
+    s := "a < b is {a < b}"
+    assert(s == "a < b is true")
+}
+
+fn test_string_interpolation_in_loop() {
+    last := ""
+    for 0..3 |i| {
+        last = "i={i}"
+    }
+    assert(last == "i=2")
+}
+
+fn test_string_only_interpolation() {
+    x := 42
+    s := "{x}"
+    assert(s == "42")
+}
+
+fn test_string_interpolation_negative() {
+    n := -7
+    s := "n is {n}"
+    assert(s == "n is -7")
+}
+
+fn test_string_special_characters() {
+    s := "line1\nline2\ttab"
+    assert(s == "line1\nline2\ttab")
+}

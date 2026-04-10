@@ -1,0 +1,66 @@
+// TEST: compile_error
+
+// === duplicate field ===
+// EXPECT-ERROR: duplicate field 'x'
+
+struct Bad {
+    x: i32 = 0
+    x: i32 = 1
+}
+
+fn main() {
+    b := Bad {}
+}
+
+// === missing field ===
+// EXPECT-ERROR: missing field 'age'
+
+struct User {
+    name: str
+    age: i32
+}
+
+fn main() {
+    u := User { name = "Alice" }
+}
+
+// === no field ===
+// EXPECT-ERROR: no field 'z'
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+fn main() {
+    p := Point {}
+    z := p.z
+}
+
+// === inline method ===
+// EXPECT-ERROR: expected field
+
+struct Foo {
+    x: i32 = 0
+
+    fn bad_method(f) -> i32 { f.x }
+}
+
+fn main() {
+    f := Foo {}
+}
+
+// === conformance list ===
+// EXPECT-ERROR: conformance lists on struct declarations are not supported
+
+pact Printable {
+    fn to_string() -> str
+}
+
+struct Foo: Printable {
+    x: i32 = 0
+}
+
+fn main() {
+    f := Foo {}
+}

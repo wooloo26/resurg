@@ -1,8 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: no parameter named 'c'
-
-fn add(a: i32, b: i32) = a + b
-
-fn main() {
-    result := add(c = 1, b = 2)
-}

@@ -1,0 +1,93 @@
+// Associated type concretization via ext...impl blocks
+
+// ── pact with associated type ──
+
+pact Iterator {
+    type Item
+
+    fn next(mut *self) -> ?Self::Item
+}
+
+// ── struct without inline conformance ──
+
+struct RangeIter {
+    current: i32
+    end: i32
+}
+
+// ── ext...impl concretizes associated type ──
+
+ext RangeIter impl Iterator {
+    type Item = i32
+
+    fn next(mut *self) -> ?i32 {
+        if self.current < self.end {
+            val := self.current
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+fn test_ext_impl_basic() {
+    iter := RangeIter { current = 0, end = 3 }
+    match iter.next() {
+        Some(v) => assert(v == 0),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(v) => assert(v == 1),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(v) => assert(v == 2),
+        None => assert(false),
+    }
+    match iter.next() {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── generic function over ext-impl associated type ──
+
+fn get_next<I: Iterator>(mut iter: *I) -> ?I::Item {
+    iter.next()
+}
+
+fn test_ext_impl_generic_fn() {
+    iter := RangeIter { current = 10, end = 12 }
+    match get_next<RangeIter>(mut &iter) {
+        Some(v) => assert(v == 10),
+        None => assert(false),
+    }
+}
+
+// ── ext...impl inherits pact defaults ──
+
+pact Accumulator {
+    type Value = i32
+    type Result = bool
+
+    fn accumulate(mut *self, v: Self::Value) -> Self::Result
+}
+
+struct SimpleAcc {
+    total: i32 = 0
+}
+
+ext SimpleAcc impl Accumulator {
+    fn accumulate(mut *self, v: i32) -> bool {
+        self.total = self.total + v
+        self.total > 10
+    }
+}
+
+fn test_ext_impl_defaults_inherited() {
+    acc := SimpleAcc {}
+    assert(acc.accumulate(5) == false)
+    assert(acc.accumulate(6) == true)
+    assert(acc.total == 11)
+}

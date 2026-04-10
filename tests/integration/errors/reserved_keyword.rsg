@@ -1,6 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: 'async' is a reserved keyword
-
-fn main() {
-    async := 42
-}

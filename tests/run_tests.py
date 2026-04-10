@@ -61,6 +61,9 @@ _DIRECTIVE_TABLE: list[tuple[re.Pattern[str], str, bool]] = [
     (re.compile(r"^//\s*DEPENDS:\s*(.+)"),       "depends",       True),
 ]
 
+# Section marker regex for multi-test files.
+SECTION_RE = re.compile(r"^//\s*===\s*(.+?)\s*===\s*$")
+
 
 def parse_directives(path: Path) -> dict:
     """Extract directives from the leading comment block of a .rsg file."""
@@ -91,6 +94,51 @@ def parse_directives(path: Path) -> dict:
                     continue
                 break
     return directives
+
+
+# ── Section support ─────────────────────────────────────────────────────
+
+def section_names(path: Path) -> list[str]:
+    """Return section names if the file contains ``// === name ===`` markers."""
+    names: list[str] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = SECTION_RE.match(line.rstrip("\n"))
+            if m:
+                names.append(m.group(1).strip())
+    return names
+
+
+def extract_section_content(path: Path, name: str) -> str:
+    """Return preamble + named section text for compilation.
+
+    The *preamble* is every line before the first section marker (typically
+    file-level directives like ``// TEST: compile_error``).  The section
+    body is everything between the requested ``// === name ===`` marker and
+    the next marker (or EOF).
+    """
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    preamble: list[str] = []
+    found = False
+    section: list[str] = []
+    seen_any_section = False
+    for line in lines:
+        m = SECTION_RE.match(line.rstrip("\n"))
+        if m:
+            if found:
+                break  # reached next section
+            seen_any_section = True
+            if m.group(1).strip() == name:
+                found = True
+            continue  # always skip the marker line itself
+        if not seen_any_section:
+            preamble.append(line)
+        elif found:
+            section.append(line)
+        # else: skip lines belonging to other sections
+    if not found:
+        raise ValueError(f"section '{name}' not found in {path}")
+    return "".join(preamble + section)
 
 
 # ── Result dataclass ────────────────────────────────────────────────────
@@ -142,7 +190,7 @@ def is_cached(rsg_path: Path, c_path: Path, bin_path: Path) -> bool:
 # ── Single-test execution ──────────────────────────────────────────────
 
 def run_one_test(
-    rsg_file: str,
+    test_id: str,
     resurg: str,
     cc: str,
     rt_objs: str,
@@ -150,10 +198,23 @@ def run_one_test(
     runtime_dir: str,
     use_cache: bool,
 ) -> TestResult:
-    """Execute a single .rsg test and return the result."""
-    rsg_path = Path(rsg_file)
-    result = TestResult(name=rsg_file, passed=False)
+    """Execute a single .rsg test (or section) and return the result."""
+    result = TestResult(name=test_id, passed=False)
     start = time.monotonic()
+
+    # ── Resolve section-based test IDs ──
+    if "::" in test_id:
+        base_file, section_name = test_id.rsplit("::", 1)
+        content = extract_section_content(Path(base_file), section_name)
+        safe = re.sub(r"[^a-zA-Z0-9_]", "_", section_name)
+        stem = base_file.removesuffix(".rsg")
+        rsg_path = Path(build_dir) / f"{stem}__{safe}.rsg"
+        rsg_path.parent.mkdir(parents=True, exist_ok=True)
+        rsg_path.write_text(content, encoding="utf-8")
+        out_stem = f"{stem}__{safe}"
+    else:
+        rsg_path = Path(test_id)
+        out_stem = test_id.removesuffix(".rsg") if test_id.endswith(".rsg") else test_id
 
     # ── Parse directives ──
     directives = parse_directives(rsg_path)
@@ -168,9 +229,8 @@ def run_one_test(
         return result
 
     # ── Output paths ──
-    rel = rsg_file.removesuffix(".rsg") if rsg_file.endswith(".rsg") else rsg_file
-    test_c = Path(build_dir) / f"{rel}.c"
-    test_bin = Path(build_dir) / f"{rel}{EXE_EXT}"
+    test_c = Path(build_dir) / f"{out_stem}.c"
+    test_bin = Path(build_dir) / f"{out_stem}{EXE_EXT}"
     test_c.parent.mkdir(parents=True, exist_ok=True)
 
     rt_list = rt_objs.split() if rt_objs else []
@@ -473,9 +533,42 @@ def print_human(results: list[TestResult]) -> None:
 # ── Test discovery ──────────────────────────────────────────────────────
 
 def discover_tests(root: str) -> list[str]:
-    """Find all .rsg test files under the integration test directory."""
+    """Find all .rsg test files under the integration test directory.
+
+    Files containing ``// === name ===`` section markers are expanded into
+    one test entry per section (``path.rsg::section_name``).
+    """
     pattern = os.path.join(root, "tests", "integration", "**", "*.rsg")
-    return sorted(glob.glob(pattern, recursive=True))
+    raw_files = sorted(glob.glob(pattern, recursive=True))
+    result: list[str] = []
+    for f in raw_files:
+        names = section_names(Path(f))
+        if names:
+            for n in names:
+                result.append(f"{f}::{n}")
+        else:
+            result.append(f)
+    return result
+
+
+def expand_tests(files: list[str]) -> list[str]:
+    """Expand explicitly-provided file paths that contain sections."""
+    result: list[str] = []
+    for f in files:
+        if "::" in f:
+            result.append(f)
+        else:
+            p = Path(f)
+            if p.exists():
+                names = section_names(p)
+                if names:
+                    for n in names:
+                        result.append(f"{f}::{n}")
+                else:
+                    result.append(f)
+            else:
+                result.append(f)
+    return result
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────
@@ -540,7 +633,7 @@ def main() -> int:
     resolve_defaults(args)
 
     # Discover or use explicit file list.
-    files = args.files if args.files else discover_tests(".")
+    files = expand_tests(args.files) if args.files else discover_tests(".")
     if not files:
         print("No test files found.", file=sys.stderr)
         return 1

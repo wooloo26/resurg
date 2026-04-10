@@ -1,0 +1,27 @@
+// TEST: compile_error
+
+// === private access ===
+// EXPECT-ERROR: private
+
+mod secret {
+    fn hidden() -> i32 = 42
+    pub fn visible() -> i32 = hidden()
+}
+
+fn main() {
+    secret::hidden()
+}
+
+// === nested module deep private ===
+// EXPECT-ERROR: private
+
+mod a {
+    pub mod b {
+        fn private_fn() -> i32 = 42
+        pub fn public_fn() -> i32 = private_fn()
+    }
+}
+
+fn main() {
+    a::b::private_fn()
+}

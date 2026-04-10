@@ -1,0 +1,95 @@
+// builtin.rsg injection: core types and functions available without prelude
+// EXPECT-STDOUT: builtin injection works
+
+// ── Core types from builtin.rsg are always available ──
+
+fn test_option_available() {
+    var x: ?i32 = Some(10)
+    match x {
+        Some(v) => assert(v == 10),
+        None => assert(false),
+    }
+}
+
+fn test_result_available() {
+    var r: i32 ! str = Ok(42)
+    match r {
+        Ok(v) => assert(v == 42),
+        Err(_) => assert(false),
+    }
+}
+
+// ── Core functions from builtin.rsg ──
+
+fn test_println_available() {
+    println("builtin injection works")
+}
+
+fn test_print_available() {
+    print("")
+}
+
+fn test_assert_available() {
+    assert(true)
+    assert(1 + 1 == 2, "math works")
+}
+
+fn test_panic_recover() {
+    var caught: ?str = None
+    defer {
+        if Some(msg) := recover() {
+            caught = Some(msg)
+        }
+    }
+    panic("test panic")
+}
+
+fn test_len_function() {
+    assert(len("hello") == 5)
+    assert(len([]i32{1, 2, 3}) == 3)
+}
+
+fn test_len_method() {
+    assert("hello".len() == 5)
+    assert(([]i32{1, 2, 3}).len() == 3)
+    assert(([3]i32{1, 2, 3}).len() == 3)
+}
+
+// ── Result with both Ok/Err paths ──
+
+fn safe_div(a: f64, b: f64) -> f64 ! str {
+    if b == 0.0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn test_result_err_path() {
+    r := safe_div(10.0, 2.0)
+    match r {
+        Ok(v) => assert(v == 5.0),
+        Err(_) => assert(false),
+    }
+
+    r2 := safe_div(1.0, 0.0)
+    match r2 {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "division by zero"),
+    }
+}
+
+// ── Option with if-let ──
+
+fn test_option_if_let() {
+    var x: ?i32 = Some(42)
+    var y: ?i32 = None
+
+    if Some(v) := x {
+        assert(v == 42)
+    } else {
+        assert(false)
+    }
+
+    match y {
+        None => assert(true),
+        _ => assert(false),
+    }
+}

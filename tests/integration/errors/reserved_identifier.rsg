@@ -1,6 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: identifier 'rsg_data' uses a prefix reserved for the runtime
-
-fn main() {
-    rsg_data := 42
-}

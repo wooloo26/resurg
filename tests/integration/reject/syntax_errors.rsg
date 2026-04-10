@@ -1,0 +1,85 @@
+// TEST: compile_error
+
+// === bang non-bool ===
+// EXPECT-ERROR: '!' requires 'bool' operand
+
+fn main() {
+    var x: i32 = !42
+}
+
+// === negate string ===
+// EXPECT-ERROR: '-' requires numeric operand
+
+fn main() {
+    var x: str = -"hello"
+}
+
+// === reserved identifier ===
+// EXPECT-ERROR: identifier 'rsg_data' uses a prefix reserved for the runtime
+
+fn main() {
+    rsg_data := 42
+}
+
+// === reserved keyword ===
+// EXPECT-ERROR: 'async' is a reserved keyword
+
+fn main() {
+    async := 42
+}
+
+// === unexpected character ===
+// EXPECT-ERROR: unexpected character '$'
+
+fn main() {
+    x := $invalid
+}
+
+// === use old syntax ===
+// EXPECT-ERROR: expected '::'
+
+mod math {
+    pub fn add(a: i32, b: i32) -> i32 = a + b
+}
+
+use math { add }
+
+fn main() {
+    add(1, 2)
+}
+
+// === named arg unknown ===
+// EXPECT-ERROR: no parameter named 'c'
+
+fn add(a: i32, b: i32) = a + b
+
+fn main() {
+    result := add(c = 1, b = 2)
+}
+
+// === variadic not last ===
+// EXPECT-ERROR: variadic must be last parameter
+
+fn bad(values: ..i32, extra: i32) -> i32 {
+    0
+}
+
+fn main() {
+    bad(1, 2, 3)
+}
+
+// === tuple destructure arity ===
+// EXPECT-ERROR: tuple destructure requires 2 names but got 3
+
+fn main() {
+    t := (1, 2)
+    (a, b, c) := t
+}
+
+// === tuple destructure too few ===
+// EXPECT-ERROR: tuple destructure requires 3 names but got 2
+
+fn main() {
+    t := (10, true, "hello")
+    (x, flag) := t
+}

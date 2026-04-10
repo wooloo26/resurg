@@ -1,0 +1,117 @@
+// Option type: ?T sugar for Option<T> { None, Some(T) }
+
+// ── Some wraps a value ──
+
+fn test_option_some_i32() {
+    var x: ?i32 = Some(42)
+    match x {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+}
+
+fn test_option_some_str() {
+    var x: ?str = Some("hello")
+    match x {
+        Some(v) => assert(v == "hello"),
+        None => assert(false),
+    }
+}
+
+fn test_option_some_bool() {
+    var x: ?bool = Some(true)
+    match x {
+        Some(v) => assert(v == true),
+        None => assert(false),
+    }
+}
+
+// ── None represents absence ──
+
+fn test_option_none() {
+    var x: ?i32 = None
+    match x {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+fn test_option_none_str() {
+    var x: ?str = None
+    match x {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── inferred option type ──
+
+fn test_option_inferred_some() {
+    x := Some(42)
+    match x {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+}
+
+// ── function returning ?T ──
+
+fn find_user(id: u64) -> ?str {
+    if id == 1 { Some("Alice") } else { None }
+}
+
+fn test_function_returning_option() {
+    result := find_user(1)
+    match result {
+        Some(name) => assert(name == "Alice"),
+        None => assert(false),
+    }
+
+    result2 := find_user(99)
+    match result2 {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}
+
+// ── nested option ──
+
+fn test_nested_option() {
+    var x: ??i32 = Some(Some(42))
+    match x {
+        Some(inner) => {
+            match inner {
+                Some(v) => assert(v == 42),
+                None => assert(false),
+            }
+        },
+        None => assert(false),
+    }
+}
+
+// ── option with pointer ──
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+fn test_option_pointer() {
+    p := &Point { x = 1.0, y = 2.0 }
+    var opt: ?*Point = Some(p)
+    match opt {
+        Some(ptr) => {
+            assert(ptr.x == 1.0)
+            assert(ptr.y == 2.0)
+        },
+        None => assert(false),
+    }
+}
+
+fn test_option_pointer_none() {
+    var opt: ?*Point = None
+    match opt {
+        Some(_) => assert(false),
+        None => assert(true),
+    }
+}

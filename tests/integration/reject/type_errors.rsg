@@ -1,0 +1,72 @@
+// TEST: compile_error
+
+// === bool as integer ===
+// EXPECT-ERROR: type mismatch
+
+fn main() {
+    var flag: bool = true
+    var x: i32 = flag + 1
+}
+
+// === implicit int conversion ===
+// EXPECT-ERROR: type mismatch
+
+fn main() {
+    var a: i32 = 10
+    var b: i64 = 20
+    var c: i64 = a + b
+}
+
+// === implicit sign conversion ===
+// EXPECT-ERROR: type mismatch
+
+fn main() {
+    var x: i32 = 42
+    var y: u32 = x
+}
+
+// === implicit float conversion ===
+// EXPECT-ERROR: type mismatch
+
+fn main() {
+    var a: f32 = 1.5
+    var b: f64 = 2.5
+    var c: f64 = a + b
+}
+
+// === implicit arg conversion ===
+// EXPECT-ERROR: type mismatch
+
+fn double(x: i64) -> i64 {
+    x * 2
+}
+
+fn main() {
+    var a: i32 = 10
+    var b: i64 = double(a)
+}
+
+// === struct field type ===
+// EXPECT-ERROR: type mismatch
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+fn main() {
+    p := Point { x = "hello" }
+}
+
+// === newtype type mismatch ===
+// EXPECT-ERROR: type mismatch
+
+struct Meters(f64)
+struct Seconds(f64)
+
+fn requires_meters(m: Meters) -> f64 { m.0 }
+
+fn main() {
+    t := Seconds(9.58)
+    requires_meters(t)
+}

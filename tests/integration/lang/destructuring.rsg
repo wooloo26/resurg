@@ -1,0 +1,141 @@
+// Struct and tuple destructuring
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+struct User {
+    name: str
+    age: i32
+}
+
+// ── struct destructuring ──
+fn test_struct_destructure() {
+    p := Point { x = 3.0, y = 4.0 }
+    {x, y} := p
+    assert(x == 3.0)
+    assert(y == 4.0)
+}
+
+fn test_struct_destructure_all_fields() {
+    u := User { name = "Alice", age = 30 }
+    {name, age} := u
+    assert(name == "Alice")
+    assert(age == 30)
+}
+
+// ── struct destructure with field order different from definition ──
+fn test_struct_destructure_reorder() {
+    p := Point { x = 3.0, y = 4.0 }
+    {y, x} := p
+    assert(x == 3.0)
+    assert(y == 4.0)
+}
+
+// ── tuple destructuring ──
+fn test_tuple_destructure_pair() {
+    t := (1, 2)
+    (a, b) := t
+    assert(a == 1)
+    assert(b == 2)
+}
+
+fn test_tuple_destructure_triple() {
+    t := (10, true, "hello")
+    (x, flag, msg) := t
+    assert(x == 10)
+    assert(flag == true)
+    assert(msg == "hello")
+}
+
+// ── tuple destructure from function return ──
+fn get_pair() -> (i32, i32) {
+    (42, 99)
+}
+
+fn test_tuple_destructure_fn() {
+    (a, b) := get_pair()
+    assert(a == 42)
+    assert(b == 99)
+}
+
+// ── struct destructure from function return ──
+fn make_user() -> User {
+    User { name = "Bob", age = 25 }
+}
+
+fn test_struct_destructure_fn() {
+    {name, age} := make_user()
+    assert(name == "Bob")
+    assert(age == 25)
+}
+
+// ── destructured values are independent copies ──
+fn test_destructure_copy_semantics() {
+    p := Point { x = 1.0, y = 2.0 }
+    {x, y} := p
+    p.x = 99.0
+    assert(x == 1.0)
+}
+
+// ── tuple destructuring with underscore (ignore elements) ──
+fn test_tuple_destructure_ignore() {
+    t := (10, true, "hello")
+    (x, _, _msg) := t
+    assert(x == 10)
+}
+
+fn test_tuple_destructure_ignore_first() {
+    t := (42, 99)
+    (_, b) := t
+    assert(b == 99)
+}
+
+// ── tuple destructuring with rest pattern (..) ──
+fn test_tuple_destructure_rest_end() {
+    t := (10, true, "hello")
+    (x, ..) := t
+    assert(x == 10)
+}
+
+fn test_tuple_destructure_rest_start() {
+    t := (10, true, "hello")
+    (.., msg) := t
+    assert(msg == "hello")
+}
+
+fn test_tuple_destructure_rest_middle() {
+    t := (10, true, "hello", 42)
+    (first, .., last) := t
+    assert(first == 10)
+    assert(last == 42)
+}
+
+// ── partial struct destructuring ──
+fn test_partial_struct_destructure() {
+    u := User { name = "Alice", age = 30 }
+    {name} := u
+    assert(name == "Alice")
+}
+
+// ── struct destructuring with aliases ──
+fn test_struct_destructure_alias() {
+    u := User { name = "Alice", age = 30 }
+    {name: userName, age: userAge} := u
+    assert(userName == "Alice")
+    assert(userAge == 30)
+}
+
+fn test_struct_destructure_partial_alias() {
+    u := User { name = "Alice", age = 30 }
+    {name: n, age} := u
+    assert(n == "Alice")
+    assert(age == 30)
+}
+
+fn test_struct_destructure_alias_fn() {
+    {name: who, age: howOld} := make_user()
+    assert(who == "Bob")
+    assert(howOld == 25)
+}

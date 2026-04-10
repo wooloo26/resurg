@@ -1,6 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: undefined function 'nonexistent'
-
-fn main() {
-    x := nonexistent(42)
-}

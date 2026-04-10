@@ -1,0 +1,98 @@
+// unit equivalent to ()
+
+// ── () as unit literal ──
+
+fn test_empty_tuple_is_unit() {
+    x := ()
+    assert(true)
+}
+
+// ── () as type annotation ──
+
+fn test_empty_tuple_type_annotation() {
+    var x: () = unit
+    assert(true)
+}
+
+// ── unit assignable to () type ──
+
+fn test_unit_to_empty_tuple() {
+    var x: () = unit
+    assert(true)
+}
+
+// ── () assignable to unit type ──
+
+fn test_empty_tuple_to_unit() {
+    var x: unit = ()
+    assert(true)
+}
+
+// ── () == unit ──
+
+fn test_unit_eq_empty_tuple() {
+    assert(unit == ())
+    assert(() == unit)
+}
+
+// ── function returning () is same as returning unit ──
+
+fn returns_empty_tuple() -> () {}
+
+fn test_fn_returns_empty_tuple() {
+    returns_empty_tuple()
+    assert(true)
+}
+
+// ── function returning unit (unchanged behavior) ──
+
+fn returns_unit() -> unit {}
+
+fn test_fn_returns_unit() {
+    returns_unit()
+    assert(true)
+}
+
+// ── match on () ──
+
+fn test_match_empty_tuple() {
+    match () {
+        () => assert(true),
+    }
+}
+
+// ── match on unit with () pattern ──
+
+fn test_match_unit_with_empty_tuple_pattern() {
+    match unit {
+        () => assert(true),
+    }
+}
+
+// ── match on unit variable with () pattern ──
+
+fn test_match_unit_variable() {
+    x := ()
+    match x {
+        () => assert(true),
+    }
+}
+
+// ── match on unit variable with unit keyword pattern ──
+
+fn test_match_unit_variable_keyword() {
+    x := unit
+    match x {
+        unit => assert(true),
+    }
+}
+
+// ── match on fn returning unit ──
+
+fn returns_nothing() {}
+
+fn test_match_fn_result_unit() {
+    match returns_nothing() {
+        () => assert(true),
+    }
+}

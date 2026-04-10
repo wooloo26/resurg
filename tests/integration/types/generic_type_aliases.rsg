@@ -1,0 +1,23 @@
+// Generic type aliases: type aliases with type parameters
+
+// ── generic type alias for a struct ──
+
+struct Pair<T, U> {
+    first: T
+    second: U
+}
+
+type IntPair = Pair<i32, i32>
+type StrPair = Pair<str, str>
+
+fn test_int_pair_alias() {
+    p := IntPair { first = 1, second = 2 }
+    assert(p.first == 1)
+    assert(p.second == 2)
+}
+
+fn test_str_pair_alias() {
+    p := StrPair { first = "a", second = "b" }
+    assert(p.first == "a")
+    assert(p.second == "b")
+}

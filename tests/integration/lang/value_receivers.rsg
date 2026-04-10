@@ -1,0 +1,115 @@
+// Value receivers work on lvalues and rvalues
+// EXPECT-STDOUT: lvalue value recv ok
+// EXPECT-STDOUT: rvalue value recv ok
+// EXPECT-STDOUT: slice rvalue len ok
+
+// ── ext i32: value receiver ──
+
+ext i32 {
+    fn is_even(n) -> bool { n % 2 == 0 }
+    fn doubled(n) -> i32 { n * 2 }
+    fn increment(mut *n) { *n += 1 }
+}
+
+// ── value receiver works on literal (rvalue) ──
+
+fn test_value_recv_on_int_literal() {
+    assert(10.is_even())
+    assert(3.is_even() == false)
+    assert(5.doubled() == 10)
+    assert(42.doubled() == 84)
+}
+
+// ── value receiver works on variable (lvalue) ──
+
+fn test_value_recv_on_int_variable() {
+    x := 4
+    assert(x.is_even())
+    assert(x.doubled() == 8)
+}
+
+// ── pointer receiver still requires lvalue ──
+
+fn test_pointer_recv_on_lvalue() {
+    x := 10
+    x.increment()
+    assert(x == 11)
+}
+
+// ── struct with value + pointer receivers ──
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn get_value(c) -> i32 { c.value }
+    fn inc(mut *c) { c.value = c.value + 1 }
+}
+
+// ── value receiver on struct literal (rvalue) ──
+
+fn test_struct_rvalue_value_recv() {
+    assert(Counter { value = 42 }.get_value() == 42)
+    assert((Counter { value = 99 }).get_value() == 99)
+    println("rvalue value recv ok")
+}
+
+// ── value receiver on struct variable (lvalue) ──
+
+fn test_struct_lvalue_value_recv() {
+    c := Counter { value = 7 }
+    assert(c.get_value() == 7)
+    println("lvalue value recv ok")
+}
+
+// ── pointer receiver on struct variable (lvalue, auto-address) ──
+
+fn test_struct_pointer_recv_on_lvalue() {
+    c := Counter { value = 0 }
+    c.inc()
+    assert(c.get_value() == 1)
+    c.inc()
+    assert(c.get_value() == 2)
+}
+
+// ── pointer receiver on heap-allocated struct ──
+
+fn test_struct_pointer_recv_on_heap() {
+    c := &Counter { value = 0 }
+    c.inc()
+    assert(c.value == 1)
+}
+
+// ── value receiver on method chain with struct construction ──
+
+fn make_counter(v: i32) -> Counter {
+    Counter { value = v }
+}
+
+fn test_value_recv_on_fn_return() {
+    assert(make_counter(5).get_value() == 5)
+}
+
+// ── value receiver on slice operations ──
+
+fn test_value_recv_on_slice_rvalue() {
+    // Calling len on a temporary slice should work 
+    assert(len([]i32{1, 2, 3}) == 3)
+    println("slice rvalue len ok")
+}
+
+// ── value receiver on tuple ──
+
+struct Pair {
+    a: i32 = 0
+    b: i32 = 0
+}
+
+ext Pair {
+    fn sum(p) -> i32 { p.a + p.b }
+}
+
+fn test_value_recv_on_struct_temporary() {
+    assert(Pair { a = 3, b = 4 }.sum() == 7)
+}

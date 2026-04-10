@@ -1,0 +1,86 @@
+// mod path resolution (super::, self::)
+
+// ── use super:: to import from parent mod ──
+
+mod m {
+    pub fn base_value() -> i32 = 100
+
+    pub mod child {
+        use super::base_value
+
+        pub fn call_parent() -> i32 {
+            base_value()
+        }
+    }
+}
+
+fn test_use_super() {
+    assert(m::child::call_parent() == 100)
+}
+
+// ── super::super:: through two levels ──
+
+mod top {
+    pub fn root_fn() -> i32 = 42
+
+    pub mod mid {
+        pub mod bottom {
+            use super::super::root_fn
+
+            pub fn deep_call() -> i32 {
+                root_fn()
+            }
+        }
+    }
+}
+
+fn test_super_super() {
+    assert(top::mid::bottom::deep_call() == 42)
+}
+
+// ── self:: explicit reference at file scope ──
+
+mod helper {
+    pub fn add(a: i32, b: i32) -> i32 = a + b
+}
+
+fn test_self_path() {
+    result := self::helper::add(10, 20)
+    assert(result == 30)
+}
+
+// ── direct super:: call (not via use) ──
+
+mod direct {
+    pub fn get_value() -> i32 = 77
+
+    pub mod sub {
+        pub fn call_via_super() -> i32 {
+            super::get_value()
+        }
+    }
+}
+
+fn test_direct_super_call() {
+    assert(direct::sub::call_via_super() == 77)
+}
+
+// ── use super:: with multiple items ──
+
+mod multi {
+    pub fn first() -> i32 = 1
+    pub fn second() -> i32 = 2
+
+    pub mod inner {
+        use super::first
+        use super::second
+
+        pub fn sum() -> i32 {
+            first() + second()
+        }
+    }
+}
+
+fn test_use_super_multiple() {
+    assert(multi::inner::sum() == 3)
+}

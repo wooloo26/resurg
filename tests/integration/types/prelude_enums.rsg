@@ -1,0 +1,101 @@
+// Option/Result as prelude enums with ?T and T!E as syntax sugar
+// EXPECT-STDOUT: prelude enums work
+
+// ── Option<T> is a real enum, ?T is syntax sugar ──
+
+fn test_option_as_enum() {
+    // ?i32 is syntax sugar for Option<i32>
+    var x: ?i32 = Some(42)
+    var y: ?i32 = None
+
+    match x {
+        Some(v) => assert(v == 42),
+        None => assert(false),
+    }
+
+    match y {
+        None => assert(true),
+        Some(_) => assert(false),
+    }
+}
+
+fn test_option_explicit_generic() {
+    // Option<str> is the canonical form
+    var s: Option<str> = Some("hello")
+    match s {
+        Some(v) => assert(v == "hello"),
+        None => assert(false),
+    }
+}
+
+// ── Result<T, E> is a real enum, T ! E is syntax sugar ──
+
+fn safe_div(a: f64, b: f64) -> f64 ! str {
+    if b == 0.0 { Err("division by zero") }
+    else { Ok(a / b) }
+}
+
+fn test_result_as_enum() {
+    r := safe_div(10.0, 2.0)
+    match r {
+        Ok(v) => assert(v == 5.0),
+        Err(_) => assert(false),
+    }
+
+    r2 := safe_div(1.0, 0.0)
+    match r2 {
+        Ok(_) => assert(false),
+        Err(e) => assert(e == "division by zero"),
+    }
+}
+
+fn test_result_explicit_generic() {
+    // Result<i32, str> is the canonical form
+    var r: Result<i32, str> = Ok(99)
+    match r {
+        Ok(v) => assert(v == 99),
+        Err(_) => assert(false),
+    }
+}
+
+// ── Optional chaining still works ──
+
+struct Container {
+    value: ?i32 = None
+}
+
+fn test_option_chaining() {
+    var c: ?Container = Some(Container { value = Some(42) })
+    // Basic option matching
+    if Some(inner) := c {
+        if Some(v) := inner.value {
+            assert(v == 42)
+        } else {
+            assert(false)
+        }
+    } else {
+        assert(false)
+    }
+}
+
+// ── Error propagation with ! still works ──
+
+fn might_fail(x: i32) -> i32 ! str {
+    if x < 0 { Err("negative") }
+    else { Ok(x * 2) }
+}
+
+fn chain_calls() -> i32 ! str {
+    a := might_fail(5)!
+    b := might_fail(a)!
+    Ok(b)
+}
+
+fn test_error_propagation() {
+    r := chain_calls()
+    match r {
+        Ok(v) => assert(v == 20),
+        Err(_) => assert(false),
+    }
+    println("prelude enums work")
+}

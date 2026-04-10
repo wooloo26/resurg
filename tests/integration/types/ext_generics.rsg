@@ -1,0 +1,111 @@
+// Generic extension methods
+
+// ── generic ext with single type parameter ──
+
+struct Wrapper<T> {
+    value: T
+}
+
+ext<T> Wrapper<T> {
+    fn get(*w) -> T {
+        w.value
+    }
+}
+
+fn test_single_type_param() {
+    wi := Wrapper<i32> { value = 42 }
+    assert(wi.get() == 42)
+
+    ws := Wrapper<str> { value = "hello" }
+    assert(ws.get() == "hello")
+}
+
+// ── generic ext with two type parameters ──
+
+struct Pair<T, U> {
+    first: T
+    second: U
+}
+
+ext<T, U> Pair<T, U> {
+    fn get_first(*p) -> T { p.first }
+    fn get_second(*p) -> U { p.second }
+    fn swap(*p) -> Pair<U, T> {
+        Pair<U, T> { first = p.second, second = p.first }
+    }
+}
+
+fn test_two_type_params() {
+    p := Pair<i32, str> { first = 42, second = "hello" }
+    assert(p.get_first() == 42)
+    assert(p.get_second() == "hello")
+}
+
+fn test_swap() {
+    p := Pair<i32, str> { first = 1, second = "world" }
+    swapped := p.swap()
+    assert(swapped.first == "world")
+    assert(swapped.second == 1)
+}
+
+// ── generic ext with mut pointer receiver ──
+
+ext<T> Wrapper<T> {
+    fn set(mut *w, new_value: T) {
+        w.value = new_value
+    }
+}
+
+fn test_mut_pointer_receiver() {
+    w := &Wrapper<i32> { value = 0 }
+    w.set(99)
+    assert(w.get() == 99)
+}
+
+// ── generic ext on enum ──
+
+enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+ext<L, R> Either<L, R> {
+    fn is_left(*e) -> bool {
+        match e {
+            Left(_) => true,
+            Right(_) => false,
+        }
+    }
+
+    fn is_right(*e) -> bool {
+        match e {
+            Left(_) => false,
+            Right(_) => true,
+        }
+    }
+}
+
+fn test_generic_ext_enum() {
+    l := Either<i32, str>::Left(42)
+    assert(l.is_left())
+    assert(l.is_right() == false)
+
+    r := Either<i32, str>::Right("hello")
+    assert(r.is_right())
+    assert(r.is_left() == false)
+}
+
+// ── generic ext called on different instantiations ──
+
+fn test_multiple_instantiations() {
+    p1 := Pair<i32, i32> { first = 10, second = 20 }
+    assert(p1.get_first() == 10)
+    assert(p1.get_second() == 20)
+
+    p2 := Pair<bool, f64> { first = true, second = 3.14 }
+    assert(p2.get_first() == true)
+
+    p3 := Pair<str, bool> { first = "yes", second = false }
+    assert(p3.get_first() == "yes")
+    assert(p3.get_second() == false)
+}

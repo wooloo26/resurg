@@ -1,0 +1,217 @@
+// TEST: compile_error
+
+// === bound not satisfied ===
+// EXPECT-ERROR: does not satisfy pact bound
+
+pact Display {
+    fn to_display() -> str
+}
+
+fn show<T: Display>(x: T) -> str {
+    x.to_display()
+}
+
+struct Plain {
+    value: i32 = 0
+}
+
+fn main() {
+    a := Plain { value = 1 }
+    show<Plain>(a)
+}
+
+// === type mismatch ===
+// EXPECT-ERROR: type mismatch
+
+fn id<T>(x: T) -> T {
+    x
+}
+
+fn main() {
+    var result: str = id<i32>(42)
+}
+
+// === ext type mismatch ===
+// EXPECT-ERROR: type mismatch
+
+struct Box<T> {
+    value: T
+}
+
+ext<T> Box<T> {
+    fn get(*b) -> T { b.value }
+}
+
+fn main() {
+    b := Box<i32> { value = 42 }
+    var result: str = b.get()
+}
+
+// === wrong type arg count ===
+// EXPECT-ERROR: wrong number of type arguments
+
+fn id<T>(x: T) -> T {
+    x
+}
+
+fn main() {
+    id<i32, str>(42)
+}
+
+// === default generic on fn ===
+// EXPECT-ERROR: default generics
+
+fn identity<T = i32>(x: T) -> T {
+    x
+}
+
+fn main() {
+    identity(42)
+}
+
+// === where bound not satisfied ===
+// EXPECT-ERROR: does not satisfy pact bound
+
+pact Ord {
+    fn compare(*self, other: *Self) -> i32
+}
+
+struct Plain {
+    value: i32 = 0
+}
+
+fn max_val<T>(a: T, b: T) -> T
+where T: Ord,
+{
+    a
+}
+
+fn main() {
+    a := Plain { value = 1 }
+    b := Plain { value = 2 }
+    max_val<Plain>(a, b)
+}
+
+// === assoc type bound violated ===
+// EXPECT-ERROR: does not satisfy
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Container {
+    type Element: Display
+    fn first(*self) -> ?Self::Element
+}
+
+struct PlainInt {
+    value: i32 = 0
+}
+
+struct BadContainer {
+    item: PlainInt
+}
+
+ext BadContainer impl Container {
+    type Element = PlainInt
+
+    fn first(*self) -> ?PlainInt {
+        Some(self.item)
+    }
+}
+
+fn main() {
+    c := BadContainer { item = PlainInt { value = 1 } }
+}
+
+// === assoc type constraint mismatch ===
+// EXPECT-ERROR: associated type 'Item' is 'str', expected 'i32'
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct StrIter {}
+
+ext StrIter impl Iterator {
+    type Item = str
+    fn next(mut *self) -> ?str { None }
+}
+
+fn only_i32<I: Iterator<Item = i32>>(mut iter: *I) -> ?i32 {
+    iter.next()
+}
+
+fn main() {
+    iter := StrIter {}
+    only_i32<StrIter>(mut &iter)
+}
+
+// === assoc type ext not member ===
+// EXPECT-ERROR: associated type
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct BadIter {}
+
+ext BadIter impl Iterator {
+    type Item = i32
+    type Alias = str
+
+    fn next(mut *self) -> ?i32 {
+        None
+    }
+}
+
+fn main() {
+    iter := BadIter {}
+}
+
+// === assoc type not member ===
+// EXPECT-ERROR: associated type
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct BadIter: Iterator {
+    type Item = i32
+    type Alias = str
+
+    fn next(mut *self) -> ?i32 {
+        None
+    }
+}
+
+fn main() {
+    iter := BadIter {}
+}
+
+// === missing associated type ===
+// EXPECT-ERROR: missing associated type
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+    fn has_next(*self) -> bool
+}
+
+struct BadIter {}
+
+ext BadIter impl Iterator {
+    fn next(mut *self) -> ?i32 {
+        None
+    }
+    fn has_next(*self) -> bool {
+        false
+    }
+}
+
+fn main() {
+    iter := BadIter {}
+}

@@ -1,0 +1,75 @@
+// Structs contain only fields and embeddings; methods move to ext blocks
+
+// ── struct with fields only ──
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+ext Point {
+    fn sum(p) -> f64 { p.x + p.y }
+    fn translate(p, dx: f64, dy: f64) -> Point {
+        Point { x = p.x + dx, y = p.y + dy }
+    }
+}
+
+fn test_struct_fields_with_ext_methods() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.sum() == 7.0)
+    q := p.translate(1.0, 2.0)
+    assert(q.x == 4.0)
+    assert(q.y == 6.0)
+}
+
+// ── struct with embedding, methods via ext ──
+
+struct Point3D {
+    Point
+    z: f64 = 0.0
+}
+
+ext Point3D {
+    fn sum3d(p) -> f64 { p.x + p.y + p.z }
+}
+
+fn test_embedding_with_ext() {
+    p := Point3D { x = 1.0, y = 2.0, z = 3.0 }
+    assert(p.sum3d() == 6.0)
+    assert(p.sum() == 3.0)
+}
+
+// ── struct with mut pointer receiver in ext ──
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn get(c) -> i32 { c.value }
+    fn increment(mut *c) { c.value = c.value + 1 }
+}
+
+fn test_mut_pointer_ext() {
+    c := Counter {}
+    assert(c.get() == 0)
+    c.increment()
+    assert(c.get() == 1)
+    c.increment()
+    assert(c.get() == 2)
+}
+
+// ── struct with default values ──
+
+struct Config {
+    host: str = "localhost"
+    port: i32 = 8080
+    debug: bool = false
+}
+
+fn test_struct_defaults() {
+    cfg := Config {}
+    assert(cfg.host == "localhost")
+    assert(cfg.port == 8080)
+    assert(cfg.debug == false)
+}

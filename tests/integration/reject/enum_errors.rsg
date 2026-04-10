@@ -1,0 +1,48 @@
+// TEST: compile_error
+
+// === inline method ===
+// EXPECT-ERROR: expected enum variant
+
+enum Foo {
+    A,
+    B,
+
+    fn bad_method(*f) -> i32 { 0 }
+}
+
+fn main() {
+    f := Foo::A
+}
+
+// === match missing variants ===
+// EXPECT-ERROR: non-exhaustive
+
+enum Msg {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(str),
+}
+
+fn main() {
+    m := Msg::Quit
+    match m {
+        Quit => "quit",
+    }
+}
+
+// === match non-exhaustive ===
+// EXPECT-ERROR: non-exhaustive
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn main() {
+    c := Color::Red
+    match c {
+        Red => "red",
+        Green => "green",
+    }
+}

@@ -1,0 +1,122 @@
+// Extension methods on enum types
+
+// ── simple unit enum ──
+
+enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+ext Direction {
+    fn is_vertical(*d) -> bool {
+        match d {
+            North => true,
+            South => true,
+            _ => false,
+        }
+    }
+
+    fn is_horizontal(*d) -> bool {
+        match d {
+            East => true,
+            West => true,
+            _ => false,
+        }
+    }
+}
+
+fn test_ext_enum_value_receiver() {
+    n := Direction::North
+    assert(n.is_vertical())
+    assert(n.is_horizontal() == false)
+
+    e := Direction::East
+    assert(e.is_horizontal())
+    assert(e.is_vertical() == false)
+}
+
+// ── ADT enum with tuple and struct variants ──
+
+enum Shape {
+    Circle(f64),
+    Rect { w: f64, h: f64 },
+}
+
+ext Shape {
+    fn area(*s) -> f64 {
+        match s {
+            Circle(r) => 3.14159 * r * r,
+            Rect { w, h } => w * h,
+        }
+    }
+
+    fn describe(*s) -> str {
+        match s {
+            Circle(_) => "circle",
+            Rect { w, h } => "rectangle",
+        }
+    }
+}
+
+fn test_ext_adt_enum() {
+    c := Shape::Circle(2.0)
+    assert(c.describe() == "circle")
+
+    r := Shape::Rect { w = 3.0, h = 4.0 }
+    assert(r.area() == 12.0)
+    assert(r.describe() == "rectangle")
+}
+
+// ── ext on enum with pointer receiver ──
+
+ext Shape {
+    fn is_circle(*s) -> bool {
+        match s {
+            Circle(_) => true,
+            _ => false,
+        }
+    }
+}
+
+fn test_ext_enum_pointer_receiver() {
+    c := Shape::Circle(1.0)
+    assert(c.is_circle())
+
+    r := Shape::Rect { w = 1.0, h = 1.0 }
+    assert(r.is_circle() == false)
+}
+
+// ── ext methods on enum (no inline methods) ──
+
+enum Status {
+    Active,
+    Inactive,
+}
+
+ext Status {
+    fn is_active(*s) -> bool {
+        match s {
+            Active => true,
+            _ => false,
+        }
+    }
+
+    fn is_inactive(*s) -> bool {
+        match s {
+            Inactive => true,
+            _ => false,
+        }
+    }
+}
+
+fn test_ext_enum_methods() {
+    a := Status::Active
+    assert(a.is_active())
+    assert(a.is_inactive() == false)
+
+    i := Status::Inactive
+    assert(i.is_active() == false)
+    assert(i.is_inactive())
+}

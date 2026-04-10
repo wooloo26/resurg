@@ -1,0 +1,134 @@
+// Slice rewrite regression tests
+
+// ── basic slice creation and access ──
+
+fn test_slice_literal() {
+    s := []i32{1, 2, 3, 4, 5}
+    assert(len(s) == 5)
+    assert(s[0] == 1)
+    assert(s[4] == 5)
+}
+
+// ── empty slice ──
+
+fn test_empty_slice() {
+    s := []i32{}
+    assert(len(s) == 0)
+}
+
+// ── typed slice declaration ──
+
+fn test_slice_typed() {
+    var s: []i32 = []i32{10, 20, 30}
+    assert(len(s) == 3)
+    assert(s[1] == 20)
+}
+
+// ── array-to-slice is an independent copy ──
+
+fn test_array_to_slice_copy() {
+    arr := [3]i32{1, 2, 3}
+    var s: []i32 = arr[..]
+    s[0] = 99
+    assert(arr[0] == 1)
+    assert(s[0] == 99)
+}
+
+// ── sub-slicing shares backing storage ──
+
+fn test_sub_slice_shared() {
+    s := []i32{10, 20, 30, 40, 50}
+    t := s[1..4]
+    assert(len(t) == 3)
+    assert(t[0] == 20)
+    t[0] = 99
+    assert(s[1] == 99)
+}
+
+// ── sub-slice open-start and open-end ──
+
+fn test_sub_slice_open_end() {
+    s := []i32{10, 20, 30, 40, 50}
+    t := s[2..]
+    assert(len(t) == 3)
+    assert(t[0] == 30)
+}
+
+fn test_sub_slice_open_start() {
+    s := []i32{10, 20, 30, 40, 50}
+    t := s[..3]
+    assert(len(t) == 3)
+    assert(t[2] == 30)
+}
+
+// ── slice element mutation ──
+
+fn test_slice_mutation() {
+    s := []i32{1, 2, 3}
+    s[0] = 10
+    assert(s[0] == 10)
+    assert(s[1] == 2)
+}
+
+// ── slice of different types ──
+
+fn test_slice_bool() {
+    s := []bool{true, false, true}
+    assert(len(s) == 3)
+    assert(s[0] == true)
+    assert(s[1] == false)
+}
+
+fn test_slice_str() {
+    s := []str{"hello", "world"}
+    assert(len(s) == 2)
+    assert(s[0] == "hello")
+    assert(s[1] == "world")
+}
+
+fn test_slice_f64() {
+    s := []f64{1.5, 2.5, 3.5}
+    assert(len(s) == 3)
+    assert(s[0] == 1.5)
+}
+
+// ── slice as function parameter ──
+
+fn sum_slice(s: []i32) -> i32 {
+    total := 0
+    for s |v| { total += v }
+    total
+}
+
+fn test_slice_param() {
+    assert(sum_slice([]i32{1, 2, 3, 4}) == 10)
+}
+
+// ── for over slice with value and index ──
+
+fn test_for_slice_value_index() {
+    s := []i32{10, 20, 30}
+    sum := 0
+    for s |v, i| {
+        sum += v
+    }
+    assert(sum == 60)
+}
+
+// ── slice of slices ──
+
+fn test_slice_of_slices() {
+    s := [][]i32{[]i32{1, 2}, []i32{3, 4}}
+    assert(len(s) == 2)
+    assert(len(s[0]) == 2)
+    assert(s[0][0] == 1)
+    assert(s[1][1] == 4)
+}
+
+// ── single element slice ──
+
+fn test_single_element_slice() {
+    s := []i32{42}
+    assert(len(s) == 1)
+    assert(s[0] == 42)
+}

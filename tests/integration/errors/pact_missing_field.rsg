@@ -1,9 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: expected method or pact name in pact declaration; fields are not supported in pacts
-// v0.9.6 — Error: pact field declarations are no longer supported
-
-pact Named {
-    name: str
-}
-
-fn main() {}

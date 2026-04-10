@@ -1,0 +1,88 @@
+// Semicolon/Separator Rules
+
+// ── struct fields separated by semicolons ──
+
+struct Point { x: f64; y: f64 }
+
+fn test_struct_field_semicolons() {
+    p := Point { x = 1.0, y = 2.0 }
+    assert(p.x == 1.0)
+    assert(p.y == 2.0)
+}
+
+// ── struct with default values and semicolons ──
+
+struct DefaultPoint { x: f64 = 0.0; y: f64 = 0.0 }
+
+fn test_struct_default_semicolons() {
+    p := DefaultPoint {}
+    assert(p.x == 0.0)
+    assert(p.y == 0.0)
+}
+
+// ── struct with three fields on one line ──
+
+struct RGB { r: i32; g: i32; b: i32 }
+
+fn test_struct_three_fields() {
+    c := RGB { r = 255, g = 128, b = 0 }
+    assert(c.r == 255)
+    assert(c.g == 128)
+    assert(c.b == 0)
+}
+
+// ── mixed semicolons and newlines in struct ──
+
+struct Mixed {
+    a: i32
+    b: i32; c: i32
+    d: i32
+}
+
+fn test_mixed_separators() {
+    m := Mixed { a = 1, b = 2, c = 3, d = 4 }
+    assert(m.a + m.b + m.c + m.d == 10)
+}
+
+// ── semicolons in block expressions ──
+
+fn test_block_semicolons() {
+    result := { a := 10; b := 20; a + b }
+    assert(result == 30)
+}
+
+// ── semicolons in if/else expression ──
+
+fn test_if_else_semicolons() {
+    x := if true { a := 1; a + 1 } else { b := 2; b + 2 }
+    assert(x == 2)
+}
+
+// ── semicolons in loop body ──
+
+fn test_loop_semicolons() {
+    var i: i32 = 0
+    loop { i += 1; if i == 3 { break } }
+    assert(i == 3)
+}
+
+// ── semicolons in for loop body ──
+
+fn test_for_semicolons() {
+    sum := 0
+    for 0..3 |i| { sum += i; assert(sum >= 0) }
+    assert(sum == 3)
+}
+
+// ── struct with methods in ext block using semicolons ──
+
+struct Counter { value: i32 = 0 }
+
+ext Counter { fn inc(mut *c) { c.value += 1 } }
+
+fn test_struct_method_semicolons() {
+    c := &Counter {}
+    c.inc()
+    c.inc()
+    assert(c.value == 2)
+}

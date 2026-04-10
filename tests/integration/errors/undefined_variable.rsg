@@ -1,6 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: undefined variable 'x'
-
-fn main() {
-    y := x + 1
-}

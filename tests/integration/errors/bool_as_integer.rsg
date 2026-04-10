@@ -1,7 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: type mismatch
-
-fn main() {
-    var flag: bool = true
-    var x: i32 = flag + 1
-}

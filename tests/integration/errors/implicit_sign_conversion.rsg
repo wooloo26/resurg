@@ -1,7 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: type mismatch
-
-fn main() {
-    var x: i32 = 42
-    var y: u32 = x
-}

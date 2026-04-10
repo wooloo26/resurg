@@ -1,0 +1,109 @@
+// Extension methods on primitive types
+
+// ── ext on i32 ──
+
+ext i32 {
+    fn abs(n) -> i32 {
+        if n < 0 { 0 - n } else { n }
+    }
+
+    fn is_positive(n) -> bool { n > 0 }
+    fn is_zero(n) -> bool { n == 0 }
+}
+
+fn test_ext_i32_value_receiver() {
+    x := 42
+    assert(x.abs() == 42)
+
+    y := -10
+    assert(y.abs() == 10)
+
+    z := 0
+    assert(z.abs() == 0)
+}
+
+fn test_ext_i32_pointer_receiver() {
+    x := 5
+    assert(x.is_positive())
+    assert(x.is_zero() == false)
+
+    y := 0
+    assert(y.is_positive() == false)
+    assert(y.is_zero())
+}
+
+// ── ext on bool ──
+
+ext bool {
+    fn to_i32(b) -> i32 {
+        if b { 1 } else { 0 }
+    }
+}
+
+fn test_ext_bool() {
+    t := true
+    assert(t.to_i32() == 1)
+
+    f := false
+    assert(f.to_i32() == 0)
+}
+
+// ── ext on f64 ──
+
+ext f64 {
+    fn is_negative(n) -> bool { n < 0.0 }
+
+    fn floor_to_i32(n) -> i32 {
+        i32(n)
+    }
+}
+
+fn test_ext_f64() {
+    x := -3.14
+    assert(x.is_negative())
+
+    y := 5.0
+    assert(y.is_negative() == false)
+}
+
+fn test_ext_f64_conversion() {
+    x := 3.7
+    assert(x.floor_to_i32() == 3)
+}
+
+// ── ext on str ──
+
+ext str {
+    fn is_hello(s) -> bool {
+        s == "hello"
+    }
+
+    fn exclaim(s) -> str {
+        "{s}!"
+    }
+}
+
+fn test_ext_str() {
+    s := "hello"
+    assert(s.is_hello())
+
+    t := "world"
+    assert(t.is_hello() == false)
+}
+
+fn test_ext_str_returns_str() {
+    s := "wow"
+    assert(s.exclaim() == "wow!")
+}
+
+// ── multiple ext blocks on same primitive ──
+
+ext i32 {
+    fn doubled(n) -> i32 { n * 2 }
+}
+
+fn test_ext_multiple_blocks_same_primitive() {
+    x := 7
+    assert(x.doubled() == 14)
+    assert(x.abs() == 7)
+}

@@ -1,0 +1,53 @@
+// TEST: compile_error
+
+// === address of rvalue ===
+// EXPECT-ERROR: cannot take address of rvalue
+
+fn main() {
+    px := &42
+}
+
+// === immut reassign ===
+// EXPECT-ERROR: cannot assign to immutable
+
+fn main() {
+    immut x := 42
+    x = 100
+}
+
+// === literal method int ptr ===
+// EXPECT-ERROR: cannot call pointer receiver on rvalue
+
+ext i32 {
+    fn increment(mut *n) { *n += 1 }
+}
+
+fn main() {
+    10.increment()
+}
+
+// === literal method struct ptr ===
+// EXPECT-ERROR: cannot call pointer receiver on rvalue
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn inc(mut *c) { c.value = c.value + 1 }
+}
+
+fn main() {
+    Counter { value = 0 }.inc()
+}
+
+// === fn captures mutate ===
+// EXPECT-ERROR: cannot assign mutable closure to Fn
+
+fn main() {
+    count := 0
+    var cb: Fn(i32) -> i32 = |x| {
+        count += 1
+        x + count
+    }
+}

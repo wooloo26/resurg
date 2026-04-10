@@ -239,11 +239,7 @@ Higher-order programming and code organization.
 - [x] Support `pub declare`
 - [x] `len()` to `.len()`
 
-## v0.9.13 — Test Cases
-
-- [ ] Better Test Cases
-
-## v0.9.14 — Standard Library
+## v0.9.13 — Standard Library
 
 - [ ] Comprehensive standard library (`std/io`, …)
 

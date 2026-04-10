@@ -1,0 +1,95 @@
+// Associated type constraints: constrain associated types at usage site
+
+// ── setup pacts and types ──
+
+pact Clone {
+    fn clone(*self) -> Self
+}
+
+pact Display {
+    fn to_display(*self) -> str
+}
+
+pact Iterator {
+    type Item
+    fn next(mut *self) -> ?Self::Item
+}
+
+struct MyInt {
+    value: i32 = 0
+}
+
+ext MyInt impl Clone + Display {
+    fn clone(*self) -> Self { Self { value = self.value } }
+    fn to_display(*self) -> str { "MyInt" }
+}
+
+struct IntIter {
+    current: i32 = 0
+    end: i32 = 0
+}
+
+ext IntIter impl Iterator {
+    type Item = i32
+
+    fn next(mut *self) -> ?i32 {
+        if self.current < self.end {
+            val := self.current
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+struct MyIntIter {
+    current: i32 = 0
+    end: i32 = 0
+}
+
+ext MyIntIter impl Iterator {
+    type Item = MyInt
+
+    fn next(mut *self) -> ?MyInt {
+        if self.current < self.end {
+            val := MyInt { value = self.current }
+            self.current = self.current + 1
+            Some(val)
+        } else {
+            None
+        }
+    }
+}
+
+// ── constrain associated type to concrete type ──
+
+fn only_i32<I: Iterator<Item = i32>>(mut iter: *I) -> ?i32 {
+    iter.next()
+}
+
+fn test_constraint_concrete() {
+    iter := IntIter { current = 0, end = 3 }
+    match only_i32<IntIter>(mut &iter) {
+        Some(v) => assert(v == 0),
+        None => assert(false),
+    }
+}
+
+// ── constrain two iterators to same Item ──
+
+fn same_item<I: Iterator, J: Iterator<Item = I::Item>>(mut i: *I, mut j: *J) -> bool {
+    match i.next() {
+        Some(_) => match j.next() {
+            Some(_) => true,
+            None => false,
+        },
+        None => false,
+    }
+}
+
+fn test_same_item_constraint() {
+    a := IntIter { current = 0, end = 1 }
+    b := IntIter { current = 10, end = 11 }
+    assert(same_item<IntIter, IntIter>(mut &a, mut &b) == true)
+}

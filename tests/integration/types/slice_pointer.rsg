@@ -1,0 +1,37 @@
+// Slice pointer *[]T: reassign slice header in-place
+
+// ── pass slice pointer to function ──
+
+fn append_value(mut s: *[]i32) {
+    s = []i32{1, 2, 3, 99}
+}
+
+fn test_slice_pointer_reassign() {
+    s := []i32{1, 2, 3}
+    append_value(mut &s)
+    assert(len(s) == 4)
+    assert(s[3] == 99)
+}
+
+// ── slice pointer vs slice of pointers ──
+
+fn test_slice_pointer_type() {
+    s := []i32{10, 20, 30}
+    p := &s
+    assert(len(p) == 3)
+    assert(p[0] == 10)
+}
+
+// ── mutate via slice pointer ──
+
+fn replace_slice(mut s: *[]i32) {
+    s = []i32{100, 200}
+}
+
+fn test_replace_slice() {
+    s := []i32{1, 2, 3, 4, 5}
+    replace_slice(mut &s)
+    assert(len(s) == 2)
+    assert(s[0] == 100)
+    assert(s[1] == 200)
+}

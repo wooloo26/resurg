@@ -1,7 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: cannot assign to immutable
-
-fn main() {
-    immut x := 42
-    x = 100
-}

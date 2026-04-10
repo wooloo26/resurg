@@ -1,0 +1,61 @@
+// TEST: compile_error
+
+// === field decl ===
+// EXPECT-ERROR: expected method
+
+pact Named {
+    name: str
+}
+
+struct Foo {
+    name: str
+}
+
+fn main() {
+    f := Foo { name = "test" }
+}
+
+// === missing field ===
+// EXPECT-ERROR: expected method or pact name in pact declaration; fields are not supported in pacts
+
+pact Named {
+    name: str
+}
+
+fn main() {}
+
+// === missing method ===
+// EXPECT-ERROR: missing required method 'to_string' from pact 'Printable'
+
+pact Printable {
+    fn to_string() -> str
+}
+
+struct Foo {
+    x: i32 = 0
+}
+
+ext Foo impl Printable {}
+
+fn main() {
+    f := Foo {}
+}
+
+// === ext pact missing method ===
+// EXPECT-ERROR: missing required method 'describe' from pact 'Describable'
+
+pact Describable {
+    fn describe() -> str
+}
+
+struct Foo {
+    x: i32 = 0
+}
+
+ext Foo impl Describable {
+    fn other(*f) -> i32 { f.x }
+}
+
+fn main() {
+    f := Foo {}
+}

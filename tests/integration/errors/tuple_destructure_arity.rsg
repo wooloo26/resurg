@@ -1,7 +1,0 @@
-// TEST: compile_error
-// EXPECT-ERROR: tuple destructure requires 2 names but got 3
-
-fn main() {
-    t := (1, 2)
-    (a, b, c) := t
-}

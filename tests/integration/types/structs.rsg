@@ -1,0 +1,167 @@
+// Struct definition, instantiation, and field access
+
+// ── struct with all default values ──
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+// ── struct without default values ──
+struct User {
+    name: str
+    age: i32
+}
+
+// ── struct with mixed defaults ──
+struct Config {
+    name: str
+    width: i32 = 800
+    height: i32 = 600
+}
+
+// ── struct with various field types ──
+struct Mixed {
+    flag: bool = false
+    count: i32 = 0
+    value: f64 = 0.0
+    label: str = ""
+}
+
+// ── nested struct types ──
+struct Color {
+    r: i32 = 0
+    g: i32 = 0
+    b: i32 = 0
+}
+
+struct Pixel {
+    x: i32 = 0
+    y: i32 = 0
+    color: Color = Color {}
+}
+
+// ── all defaults ──
+fn test_all_defaults() {
+    p := Point {}
+    assert(p.x == 0.0)
+    assert(p.y == 0.0)
+}
+
+// ── explicit values ──
+fn test_explicit_values() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(p.x == 3.0)
+    assert(p.y == 4.0)
+}
+
+// ── partial values, rest default ──
+fn test_partial_values() {
+    p := Point { x = 5.0 }
+    assert(p.x == 5.0)
+    assert(p.y == 0.0)
+}
+
+// ── required fields (no defaults) ──
+fn test_required_fields() {
+    u := User { name = "Alice", age = 30 }
+    assert(u.name == "Alice")
+    assert(u.age == 30)
+}
+
+// ── mixed defaults — only required field provided ──
+fn test_mixed_defaults() {
+    c := Config { name = "App" }
+    assert(c.name == "App")
+    assert(c.width == 800)
+    assert(c.height == 600)
+}
+
+// ── mixed defaults — override a default ──
+fn test_override_default() {
+    c := Config { name = "App", width = 1024 }
+    assert(c.name == "App")
+    assert(c.width == 1024)
+    assert(c.height == 600)
+}
+
+// ── field assignment ──
+fn test_field_assignment() {
+    p := Point { x = 1.0, y = 2.0 }
+    p.x = 10.0
+    p.y = 20.0
+    assert(p.x == 10.0)
+    assert(p.y == 20.0)
+}
+
+// ── value semantics — assignment copies ──
+fn test_value_copy() {
+    a := Point { x = 1.0, y = 2.0 }
+    b := a
+    b.x = 99.0
+    assert(a.x == 1.0)
+    assert(b.x == 99.0)
+}
+
+// ── struct as function parameter ──
+fn point_sum(p: Point) -> f64 {
+    p.x + p.y
+}
+
+fn test_struct_param() {
+    p := Point { x = 3.0, y = 4.0 }
+    assert(point_sum(p) == 7.0)
+}
+
+// ── struct as return value ──
+fn make_point(x: f64, y: f64) -> Point {
+    Point { x = x, y = y }
+}
+
+fn test_struct_return() {
+    p := make_point(5.0, 6.0)
+    assert(p.x == 5.0)
+    assert(p.y == 6.0)
+}
+
+// ── var with explicit struct type ──
+fn test_var_declaration() {
+    var p: Point = Point { x = 1.0, y = 2.0 }
+    assert(p.x == 1.0)
+    p.x = 3.0
+    assert(p.x == 3.0)
+}
+
+// ── struct with various field types ──
+fn test_mixed_field_types() {
+    m := Mixed { flag = true, count = 42, value = 3.14, label = "hello" }
+    assert(m.flag == true)
+    assert(m.count == 42)
+    assert(m.value == 3.14)
+    assert(m.label == "hello")
+}
+
+// ── nested struct instantiation and access ──
+fn test_nested_struct() {
+    px := Pixel { x = 10, y = 20, color = Color { r = 255, g = 128, b = 0 } }
+    assert(px.x == 10)
+    assert(px.y == 20)
+    assert(px.color.r == 255)
+    assert(px.color.g == 128)
+    assert(px.color.b == 0)
+}
+
+// ── nested struct field assignment ──
+fn test_nested_field_assign() {
+    px := Pixel {}
+    px.color.r = 100
+    assert(px.color.r == 100)
+}
+
+// ── struct field in conditions ──
+fn test_struct_in_condition() {
+    p := Point { x = 3.0, y = -1.0 }
+    result := if p.x > 0.0 { true } else { false }
+    assert(result == true)
+    result2 := if p.y > 0.0 { true } else { false }
+    assert(result2 == false)
+}
