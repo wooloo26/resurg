@@ -295,11 +295,15 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
     }
 }
 
-/** Replace '.' with '_' in a C identifier string. */
+/** Replace non-alphanumeric/underscore chars with '_' for valid C identifiers. */
 const char *lower_mangle_name(Arena *arena, const char *name) {
     char *buf = arena_alloc(arena, strlen(name) + 1);
     for (size_t i = 0; name[i] != '\0'; i++) {
-        buf[i] = (char)((name[i] == '.') ? '_' : name[i]);
+        char c = name[i];
+        buf[i] = (char)((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                (c >= '0' && c <= '9') || c == '_'
+                            ? c
+                            : '_');
     }
     buf[strlen(name)] = '\0';
     return buf;

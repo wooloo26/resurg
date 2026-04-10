@@ -36,10 +36,10 @@ ext str {
     pub declare fn len(s) -> i32
 }
 
-ext [] {
+ext<T> []T {
     pub declare fn len(s) -> i32
 }
 
-ext [_] {
+ext<T, comptime N: usize> [N]T {
     pub declare fn len(s) -> i32
 }

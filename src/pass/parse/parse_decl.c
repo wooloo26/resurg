@@ -674,7 +674,13 @@ static ASTNode *parse_ext_decl(Parser *parser) {
 
     // Target type name (struct, enum, primitive, or compound type)
     if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
-        // Compound type: ext [] { ... } (slice) or ext [_] { ... } (array)
+        // Compound type: ext<T> []T (slice) or ext<T, comptime N: usize> [N]T (array)
+        if (BUF_LEN(node->ext_decl.type_params) == 0) {
+            rsg_err(parser_current_loc(parser),
+                    "compound ext blocks require type parameters: "
+                    "use 'ext<T> []T' or 'ext<T, comptime N: usize> [N]T'");
+            parser->err_count++;
+        }
         parser_advance(parser); // consume '['
         if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
             parser_advance(parser); // consume ']'
@@ -684,7 +690,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
             parser_expect(parser, TOKEN_RIGHT_BRACKET);
             node->ext_decl.target_name = "[_]";
         }
-        // Consume optional element type name (e.g., T in ext<T> []T)
+        // Consume element type name (e.g., T in ext<T> []T)
         if (parser_check(parser, TOKEN_ID) ||
             token_is_type_keyword(parser_current_token(parser)->kind)) {
             parser_advance(parser);

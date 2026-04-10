@@ -417,14 +417,12 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
             const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
             FnSig *sig = sema_lookup_fn(sema, method_key);
 
-            // Compound type fallback: []i32.len → [].len, [3]i32.len → [_].len
+            // Generic ext instantiation: ext<T> []T or ext<T, comptime N: usize> [N]T
             if (sig == NULL && obj_type->kind == TYPE_SLICE) {
-                const char *fallback = arena_sprintf(sema->arena, "[].%s", method_name);
-                sig = sema_lookup_fn(sema, fallback);
+                sig = instantiate_compound_ext(sema, "[]", obj_type, prim_name, method_name);
             }
             if (sig == NULL && obj_type->kind == TYPE_ARRAY) {
-                const char *fallback = arena_sprintf(sema->arena, "[_].%s", method_name);
-                sig = sema_lookup_fn(sema, fallback);
+                sig = instantiate_compound_ext(sema, "[_]", obj_type, prim_name, method_name);
             }
 
             if (sig != NULL) {

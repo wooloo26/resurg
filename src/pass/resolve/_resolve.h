@@ -163,4 +163,14 @@ const char *instantiate_generic_struct(Sema *sema, GenericStructDef *gdef,
  */
 const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef, const GenericInstArgs *args);
 
+/**
+ * Instantiate generic ext templates for compound types (slices, arrays).
+ * Searches generic_ext_defs for templates targeting @p compound_key,
+ * registers concrete methods under @p concrete_name, and appends a synthetic
+ * ext decl for the lowering pass.
+ * @return The FnSig for @p method_name if found after instantiation, else NULL.
+ */
+FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type *obj_type,
+                                const char *concrete_name, const char *method_name);
+
 #endif // RSG__RESOLVE_H

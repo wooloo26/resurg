@@ -607,3 +607,105 @@ const char *instantiate_generic_enum(Sema *sema, GenericEnumDef *gdef,
                                      const GenericInstArgs *args) {
     return instantiate_generic_type(sema, gdef, args, &ENUM_INST_SPEC);
 }
+
+// ── Compound type generic ext instantiation ───────────────────────
+
+/**
+ * Instantiate generic ext templates for compound types (slices, arrays).
+ *
+ * When a method call on a compound type fails lookup, this function searches
+ * generic_ext_defs for templates targeting @p compound_key ("[]" for slices,
+ * "[_]" for arrays), instantiates them with concrete type args derived from
+ * @p obj_type, registers the methods under @p concrete_name, and appends a
+ * synthetic ext decl for the lowering pass.
+ *
+ * @return The FnSig for @p method_name if found after instantiation, else NULL.
+ */
+FnSig *instantiate_compound_ext(Sema *sema, const char *compound_key, const Type *obj_type,
+                                const char *concrete_name, const char *method_name) {
+    for (int32_t ei = 0; ei < BUF_LEN(sema->generic_ext_defs); ei++) {
+        GenericExtDef *gext = sema->generic_ext_defs[ei];
+        if (strcmp(gext->target_name, compound_key) != 0) {
+            continue;
+        }
+
+        // Build resolved type args from the concrete compound type
+        const Type **resolved_args = NULL;
+        if (obj_type->kind == TYPE_SLICE) {
+            BUF_PUSH(resolved_args, type_slice_elem(obj_type));
+        } else if (obj_type->kind == TYPE_ARRAY) {
+            BUF_PUSH(resolved_args, type_array_elem(obj_type));
+            const Type *size_type =
+                type_create_comptime_int(sema->arena, type_array_size(obj_type));
+            BUF_PUSH(resolved_args, size_type);
+        }
+
+        if (BUF_LEN(resolved_args) != gext->base.type_param_count) {
+            BUF_FREE(resolved_args);
+            continue;
+        }
+
+        // Skip templates already instantiated for this concrete type
+        ASTNode *ext_decl = gext->base.decl;
+        if (BUF_LEN(ext_decl->ext_decl.methods) > 0) {
+            const char *first_key = arena_sprintf(sema->arena, "%s.%s", concrete_name,
+                                                  ext_decl->ext_decl.methods[0]->fn_decl.name);
+            if (sema_lookup_fn(sema, first_key) != NULL) {
+                BUF_FREE(resolved_args);
+                const char *key = arena_sprintf(sema->arena, "%s.%s", concrete_name, method_name);
+                FnSig *found = sema_lookup_fn(sema, key);
+                if (found != NULL) {
+                    return found;
+                }
+                continue;
+            }
+        }
+
+        // Push type param substitutions
+        const Type **saved = NULL;
+        push_type_params(sema, gext->base.type_params, resolved_args, gext->base.type_param_count,
+                         &saved);
+
+        // Create synthetic non-generic ext decl for lowering
+        ASTNode *synth = ast_new(sema->arena, NODE_EXT_DECL, ext_decl->loc);
+        synth->ext_decl.type_params = NULL;
+        synth->ext_decl.target_name = concrete_name;
+        synth->ext_decl.target_type_args = NULL;
+        synth->ext_decl.impl_pacts = NULL;
+        synth->ext_decl.methods = NULL;
+        synth->ext_decl.assoc_types = NULL;
+        synth->type = obj_type;
+
+        // Register method sigs and clone method bodies
+        for (int32_t mi = 0; mi < BUF_LEN(ext_decl->ext_decl.methods); mi++) {
+            ASTNode *method = ext_decl->ext_decl.methods[mi];
+            const char *method_key =
+                arena_sprintf(sema->arena, "%s.%s", concrete_name, method->fn_decl.name);
+            FnSig *sig = build_fn_sig(sema, method, false);
+            sig->is_ptr_recv = method->fn_decl.is_ptr_recv;
+            hash_table_insert(&sema->fn_table, method_key, sig);
+
+            ASTNode *mclone = ast_clone(sema->arena, method);
+            mclone->fn_decl.owner_struct = concrete_name;
+            mclone->fn_decl.type_params = NULL;
+            BUF_PUSH(synth->ext_decl.methods, mclone);
+
+            if (method->fn_decl.body != NULL && sema->method_checker != NULL) {
+                sema->method_checker(sema, mclone, concrete_name, obj_type);
+            }
+        }
+
+        pop_type_params(sema, gext->base.type_params, gext->base.type_param_count, saved);
+        BUF_FREE(resolved_args);
+
+        BUF_PUSH(sema->synthetic_decls, synth);
+
+        // Return if the requested method was found in this template
+        const char *key = arena_sprintf(sema->arena, "%s.%s", concrete_name, method_name);
+        FnSig *found = sema_lookup_fn(sema, key);
+        if (found != NULL) {
+            return found;
+        }
+    }
+    return NULL;
+}
