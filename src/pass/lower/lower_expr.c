@@ -593,6 +593,29 @@ static HirNode *lower_member_call(Lower *low, const ASTNode *ast) {
         }
     }
 
+    // Built-in .len() method on str, []T, [N]T
+    if (obj_type != NULL) {
+        const char *mname = member_ast->member.member;
+        if (strcmp(mname, "len") == 0 &&
+            (obj_type->kind == TYPE_SLICE || obj_type->kind == TYPE_STR ||
+             obj_type->kind == TYPE_ARRAY)) {
+            SrcLoc loc = ast->loc;
+            HirNode *arg = lower_expr(low, member_ast->member.object);
+            const Type *arg_type = arg->type;
+            if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
+                arg_type = arg_type->ptr.pointee;
+            }
+            if (arg_type != NULL && arg_type->kind == TYPE_ARRAY) {
+                int32_t size = type_array_size(arg_type);
+                return lower_make_int_lit(
+                    low, &(IntLitSpec){(uint64_t)size, &TYPE_I32_INST, TYPE_I32, loc});
+            }
+            bool vp = (arg->type != NULL && arg->type->kind == TYPE_PTR);
+            return lower_make_field_access(low,
+                                           &(FieldAccessSpec){arg, "len", &TYPE_I32_INST, vp, loc});
+        }
+    }
+
     return NULL;
 }
 

@@ -278,6 +278,9 @@ static HirNode *lower_expr_stmt(Lower *low, const ASTNode *ast) {
 static void preregister_type_methods(Lower *low, const char *type_name, ASTNode *const *methods) {
     for (int32_t j = 0; j < BUF_LEN(methods); j++) {
         const ASTNode *method = methods[j];
+        if (method->fn_decl.is_declare) {
+            continue; // Declare methods have no body — lowerer handles them as intrinsics
+        }
         const char *method_name = method->fn_decl.name;
         const Type *ret = method->type != NULL ? method->type : &TYPE_UNIT_INST;
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
@@ -311,7 +314,7 @@ static HirNode *lower_module(Lower *low, const ASTNode *ast);
 /** Pre-register a single decl (fn/struct/enum/ext/module). */
 static void preregister_single_decl(Lower *low, const ASTNode *decl) {
     if (decl->kind == NODE_FN_DECL) {
-        if (BUF_LEN(decl->fn_decl.type_params) > 0) {
+        if (decl->fn_decl.is_declare || BUF_LEN(decl->fn_decl.type_params) > 0) {
             return;
         }
         const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;

@@ -1,8 +1,8 @@
-// std/prelude.rsg — compiler auto-imported prelude
+// std/prelude.rsg — optional prelude (auto-imported unless --no-prelude)
 //
-// Types: Option<T>, Result<T, E> and variants (Some, None, Ok, Err)
-// are injected directly by the compiler and available everywhere.
-
-mod builtin
-pub use builtin::io::{print, println}
-pub use builtin::ops::{assert, len, panic, recover}
+// Core types (Option, Result) and intrinsics (print, println, assert,
+// len, panic, recover) are provided by std/builtin.rsg, which is
+// always injected regardless of prelude settings.
+//
+// This file is reserved for additional standard-library re-exports
+// and user-customizable convenience imports.

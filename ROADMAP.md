@@ -228,17 +228,22 @@ Higher-order programming and code organization.
 
 ## v0.9.11 — Prelude
 
-- [ ] Support `pub use` and `use any::*`
-- [ ] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
-- [ ] `panic(message)`
-- [ ] `recover()`
-- [ ] `assert` rewritten on top of `panic`
+- [x] Support `pub use` and `use any::*`
+- [x] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
+- [x] `panic(message)`
+- [x] `recover()`
+- [x] `assert` rewritten on top of `panic`
 
-## v0.9.12 — Test Cases
+## v0.9.12 — Fix Bugs
+
+- [x] Support `pub declare`
+- [x] `len()` to `.len()`
+
+## v0.9.13 — Test Cases
 
 - [ ] Better Test Cases
 
-## v0.9.13 — Standard Library
+## v0.9.14 — Standard Library
 
 - [ ] Comprehensive standard library (`std/io`, …)
 

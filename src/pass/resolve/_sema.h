@@ -31,6 +31,7 @@ struct FnSig {
     int32_t param_count;
     bool is_pub;
     bool is_ptr_recv;
+    bool is_declare;   // true for declare fns (intrinsic, skip arg validation)
     bool has_variadic; // true when last param is variadic (..T)
 };
 

@@ -72,13 +72,13 @@ static void parse_recv_and_params(Parser *parser, ASTNode *node) {
 
 // ── Method decl (inside struct/enum) ────────────────────────────
 
-static ASTNode *parse_method_decl(Parser *parser, const char *struct_name) {
+static ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub) {
     bool is_declare = parser_match(parser, TOKEN_DECLARE);
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
 
     ASTNode *node = ast_new(parser->arena, NODE_FN_DECL, loc);
-    node->fn_decl.is_pub = false;
+    node->fn_decl.is_pub = is_pub;
     node->fn_decl.is_declare = is_declare;
     node->fn_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->fn_decl.params = NULL;
@@ -299,7 +299,7 @@ static ASTNode *parse_enum_decl(Parser *parser) {
             rsg_err(parser_current_loc(parser), "expected enum variant in enum block; "
                                                 "methods must be defined in ext blocks");
             parser->err_count++;
-            parse_method_decl(parser, node->enum_decl.name);
+            parse_method_decl(parser, node->enum_decl.name, false);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Reject inline associated types: use ext impl blocks instead
             rsg_err(parser_current_loc(parser),
@@ -423,7 +423,7 @@ static ASTNode *parse_struct_decl(Parser *parser) {
                     "expected field or embedded struct in struct block; "
                     "methods must be defined in ext blocks");
             parser->err_count++;
-            parse_method_decl(parser, node->struct_decl.name);
+            parse_method_decl(parser, node->struct_decl.name, false);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Reject inline associated types: use ext impl blocks instead
             rsg_err(parser_current_loc(parser),
@@ -672,9 +672,25 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     // Optional type params: ext<T, U>
     node->ext_decl.type_params = parse_type_params(parser);
 
-    // Target type name (struct, enum, or primitive type keyword)
-    if (parser_check(parser, TOKEN_ID) ||
-        token_is_type_keyword(parser_current_token(parser)->kind)) {
+    // Target type name (struct, enum, primitive, or compound type)
+    if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
+        // Compound type: ext [] { ... } (slice) or ext [_] { ... } (array)
+        parser_advance(parser); // consume '['
+        if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            parser_advance(parser); // consume ']'
+            node->ext_decl.target_name = "[]";
+        } else {
+            parser_advance(parser); // consume size placeholder (e.g., '_' or N)
+            parser_expect(parser, TOKEN_RIGHT_BRACKET);
+            node->ext_decl.target_name = "[_]";
+        }
+        // Consume optional element type name (e.g., T in ext<T> []T)
+        if (parser_check(parser, TOKEN_ID) ||
+            token_is_type_keyword(parser_current_token(parser)->kind)) {
+            parser_advance(parser);
+        }
+    } else if (parser_check(parser, TOKEN_ID) ||
+               token_is_type_keyword(parser_current_token(parser)->kind)) {
         node->ext_decl.target_name = parser_advance(parser)->lexeme;
     } else {
         rsg_err(parser_current_loc(parser), "expected type name after 'ext'");
@@ -704,8 +720,9 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        bool method_is_pub = parser_match(parser, TOKEN_PUB);
         if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE)) {
-            ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name);
+            ASTNode *method = parse_method_decl(parser, node->ext_decl.target_name, method_is_pub);
             BUF_PUSH(node->ext_decl.methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType

@@ -410,12 +410,23 @@ static const Type *check_member_call(Sema *sema, ASTNode *node, const char **out
         }
     }
 
-    // Extension method call on primitive types (i32, str, bool, f64, etc.)
+    // Extension method call on primitive and compound types
     if (obj_type != NULL) {
         const char *prim_name = type_name(sema->arena, obj_type);
         if (prim_name != NULL) {
             const char *method_key = arena_sprintf(sema->arena, "%s.%s", prim_name, method_name);
             FnSig *sig = sema_lookup_fn(sema, method_key);
+
+            // Compound type fallback: []i32.len → [].len, [3]i32.len → [_].len
+            if (sig == NULL && obj_type->kind == TYPE_SLICE) {
+                const char *fallback = arena_sprintf(sema->arena, "[].%s", method_name);
+                sig = sema_lookup_fn(sema, fallback);
+            }
+            if (sig == NULL && obj_type->kind == TYPE_ARRAY) {
+                const char *fallback = arena_sprintf(sema->arena, "[_].%s", method_name);
+                sig = sema_lookup_fn(sema, fallback);
+            }
+
             if (sig != NULL) {
                 // Reject pointer receiver on rvalue (literal, call result, etc.)
                 if (sig->is_ptr_recv && !is_lvalue(node->call.callee->member.object)) {
@@ -965,52 +976,13 @@ const Type *check_call(Sema *sema, ASTNode *node) {
 
     check_call_args(sema, node, fn_name);
 
-    // Compiler-known functions (replacing former builtin registry)
+    // Declare fns (intrinsics): return the declared type, skip arg validation.
+    // The lowerer handles polymorphic dispatch and arg expansion for builtins.
     if (fn_name != NULL) {
-        if (strcmp(fn_name, "len") == 0) {
-            if (BUF_LEN(node->call.args) != 1) {
-                SEMA_ERR(sema, node->loc, "'len' expects exactly 1 argument");
-                return &TYPE_ERR_INST;
-            }
-            const Type *arg_type = node->call.args[0]->type;
-            // Auto-deref: unwrap *[]T / *str
-            if (arg_type != NULL && arg_type->kind == TYPE_PTR) {
-                arg_type = arg_type->ptr.pointee;
-            }
-            if (arg_type == NULL || (arg_type->kind != TYPE_SLICE && arg_type->kind != TYPE_STR &&
-                                     arg_type->kind != TYPE_ARRAY)) {
-                SEMA_ERR(sema, node->loc, "'len' requires a slice, str, or array argument");
-                return &TYPE_ERR_INST;
-            }
-            return &TYPE_I32_INST;
-        }
-        if (strcmp(fn_name, "print") == 0 || strcmp(fn_name, "println") == 0) {
-            return &TYPE_UNIT_INST;
-        }
-        if (strcmp(fn_name, "assert") == 0) {
-            return &TYPE_UNIT_INST;
-        }
-        if (strcmp(fn_name, "panic") == 0) {
-            if (BUF_LEN(node->call.args) != 1) {
-                SEMA_ERR(sema, node->loc, "'panic' expects exactly 1 argument");
-                return &TYPE_NEVER_INST;
-            }
-            return &TYPE_NEVER_INST;
-        }
-        if (strcmp(fn_name, "recover") == 0) {
-            if (BUF_LEN(node->call.args) != 0) {
-                SEMA_ERR(sema, node->loc, "'recover' takes no arguments");
-                return &TYPE_ERR_INST;
-            }
-            // Return ?str — instantiate Option<str> via the type resolver
-            ASTType str_ast = {.kind = AST_TYPE_NAME, .name = "str", .type_args = NULL};
-            ASTType opt_ast = {.kind = AST_TYPE_OPTION, .option_elem = &str_ast};
-            const Type *opt_str = resolve_ast_type(sema, &opt_ast);
-            if (opt_str != NULL && opt_str->kind != TYPE_ERR) {
-                node->type = opt_str;
-                return opt_str;
-            }
-            return &TYPE_ERR_INST;
+        FnSig *dsig = sema_lookup_fn(sema, fn_name);
+        if (dsig != NULL && dsig->is_declare) {
+            node->type = dsig->return_type;
+            return dsig->return_type;
         }
     }
 

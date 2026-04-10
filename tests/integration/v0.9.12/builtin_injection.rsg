@@ -1,0 +1,56 @@
+// v0.9.12 — builtin.rsg injection: core types and functions available without prelude
+// EXPECT-STDOUT: builtin injection works
+
+// ── Core types from builtin.rsg are always available ──
+
+fn test_option_available() {
+    var x: ?i32 = Some(10)
+    match x {
+        Some(v) => assert(v == 10),
+        None => assert(false),
+    }
+}
+
+fn test_result_available() {
+    var r: i32 ! str = Ok(42)
+    match r {
+        Ok(v) => assert(v == 42),
+        Err(_) => assert(false),
+    }
+}
+
+// ── Core functions from builtin.rsg ──
+
+fn test_println_available() {
+    println("builtin injection works")
+}
+
+fn test_print_available() {
+    print("")
+}
+
+fn test_assert_available() {
+    assert(true)
+    assert(1 + 1 == 2, "math works")
+}
+
+fn test_panic_recover() {
+    var caught: ?str = None
+    defer {
+        if Some(msg) := recover() {
+            caught = Some(msg)
+        }
+    }
+    panic("test panic")
+}
+
+fn test_len_function() {
+    assert(len("hello") == 5)
+    assert(len([]i32{1, 2, 3}) == 3)
+}
+
+fn test_len_method() {
+    assert("hello".len() == 5)
+    assert(([]i32{1, 2, 3}).len() == 3)
+    assert(([3]i32{1, 2, 3}).len() == 3)
+}

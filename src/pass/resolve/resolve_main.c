@@ -148,9 +148,14 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         }
     }
 
-    // Inject built-in generic enum templates: Option<T> and Result<T, E>
+    // Register generic enum templates early (Option<T>, Result<T,E> from builtin.rsg)
     // Must come before struct registration, since struct fields may use ?T / T!E.
-    inject_builtin_enums(sema);
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_ENUM_DECL && BUF_LEN(decl->enum_decl.type_params) > 0) {
+            register_enum_def(sema, decl);
+        }
+    }
 
     // Register structs (they may be refd by type aliases and fns)
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
@@ -171,7 +176,7 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         }
     }
 
-    // Register enum defs
+    // Register all enums (non-generic ones need structs to be available for variant types)
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_ENUM_DECL) {

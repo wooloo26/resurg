@@ -1,8 +1,0 @@
-// std/builtin/io.rsg — I/O built-in declarations
-//
-// These are compiler-intrinsic functions that accept any printable type.
-// The signatures below document the primary str API; the compiler
-// applies polymorphic dispatch internally.
-
-pub declare fn print(value: str)
-pub declare fn println(value: str)

@@ -196,63 +196,81 @@ static const char *find_std_path(Arena *arena, const PipelineOptions *options) {
 }
 
 /**
- * Parse std/prelude.rsg and prepend its declarations to the user's file AST.
+ * Parse an .rsg file from @p path and prepend its declarations to @p file_node.
  *
- * Returns the discovered std directory path (for module resolution fallback),
- * or NULL when prelude injection is disabled or unavailable.
+ * Returns true when at least one declaration was prepended.
  */
-static const char *inject_prelude(Arena *arena, const PipelineOptions *options,
-                                  ASTNode *file_node) {
-    if (options->no_prelude) {
-        return NULL;
+static bool prepend_rsg_file(Arena *arena, const char *path, ASTNode *file_node) {
+    char *src = read_module_file(path);
+    if (src == NULL) {
+        return false;
     }
 
-    const char *std_dir = find_std_path(arena, options);
-    if (std_dir == NULL) {
-        return NULL;
-    }
-
-    const char *prelude_path = arena_sprintf(arena, "%s%cprelude.rsg", std_dir, PATH_SEP);
-    char *prelude_src = read_module_file(prelude_path);
-    if (prelude_src == NULL) {
-        return std_dir;
-    }
-
-    Lex *lex = lex_create(prelude_src, prelude_path, arena);
+    Lex *lex = lex_create(src, path, arena);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
     int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, arena, prelude_path);
-    ASTNode *prelude_file = parser_parse(parser);
+    Parser *parser = parser_create(tokens, count, arena, path);
+    ASTNode *parsed = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
-    free(prelude_src);
+    free(src);
 
-    if (errs > 0 || prelude_file == NULL) {
-        return std_dir;
+    if (errs > 0 || parsed == NULL) {
+        return false;
     }
 
-    // Prepend prelude declarations before the user's declarations.
-    int32_t prelude_count = BUF_LEN(prelude_file->file.decls);
-    if (prelude_count == 0) {
-        return std_dir;
+    int32_t parsed_count = BUF_LEN(parsed->file.decls);
+    if (parsed_count == 0) {
+        return false;
     }
 
     int32_t user_count = BUF_LEN(file_node->file.decls);
     ASTNode **merged = NULL;
-    for (int32_t i = 0; i < prelude_count; i++) {
-        BUF_PUSH(merged, prelude_file->file.decls[i]);
+    for (int32_t i = 0; i < parsed_count; i++) {
+        BUF_PUSH(merged, parsed->file.decls[i]);
     }
     for (int32_t i = 0; i < user_count; i++) {
         BUF_PUSH(merged, file_node->file.decls[i]);
     }
 
-    // Replace the file's decl buf with the merged list.
     BUF_FREE(file_node->file.decls);
     file_node->file.decls = merged;
+    return true;
+}
 
+/**
+ * Always-inject std/builtin.rsg (core types and intrinsic declarations).
+ *
+ * Returns the discovered std directory path (for module resolution fallback),
+ * or NULL when the std directory is unavailable.
+ */
+static const char *inject_builtin(Arena *arena, const PipelineOptions *options,
+                                  ASTNode *file_node) {
+    const char *std_dir = find_std_path(arena, options);
+    if (std_dir == NULL) {
+        return NULL;
+    }
+
+    const char *builtin_path = arena_sprintf(arena, "%s%cbuiltin.rsg", std_dir, PATH_SEP);
+    prepend_rsg_file(arena, builtin_path, file_node);
     return std_dir;
+}
+
+/**
+ * Optionally inject std/prelude.rsg (convenience re-exports).
+ *
+ * Skipped when --no-prelude is set.
+ */
+static void inject_prelude(Arena *arena, const PipelineOptions *options, const char *std_dir,
+                           ASTNode *file_node) {
+    if (options->no_prelude || std_dir == NULL) {
+        return;
+    }
+
+    const char *prelude_path = arena_sprintf(arena, "%s%cprelude.rsg", std_dir, PATH_SEP);
+    prepend_rsg_file(arena, prelude_path, file_node);
 }
 
 /** Run the lex and optionally dump tokens.  Returns 0 on success, 1 on err. */
@@ -380,8 +398,11 @@ int pipeline_run(Pipeline *pipeline, const PipelineOptions *options) {
         goto cleanup;
     }
 
-    // Stage 2.5: Prelude injection (parse std/prelude.rsg and prepend to file AST).
-    const char *std_dir = inject_prelude(pipeline->arena, options, file_node);
+    // Stage 2.5a: Always-inject std/builtin.rsg (core types and intrinsics).
+    const char *std_dir = inject_builtin(pipeline->arena, options, file_node);
+
+    // Stage 2.5b: Optionally inject std/prelude.rsg (convenience re-exports).
+    inject_prelude(pipeline->arena, options, std_dir, file_node);
 
     // Stage 3: Semantic analysis (resolve → check → mono).
     if (!stage_sema(pipeline->arena, file_node, std_dir)) {

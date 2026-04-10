@@ -1,0 +1,36 @@
+// v0.9.12 — Declared functions resolve from builtin.rsg (not hardcoded)
+// EXPECT-STDOUT: declared resolve works
+
+// ── panic in statement position ──
+
+fn test_panic_in_defer_recover() {
+    var caught: ?str = None
+    defer {
+        caught = recover()
+    }
+    panic("expected panic")
+}
+
+// ── recover returns ?str ──
+
+fn test_recover_returns_option_str() {
+    var result: ?str = None
+    defer {
+        result = recover()
+    }
+    panic("caught")
+}
+
+// ── print/println accept str ──
+
+fn test_print_str() {
+    println("declared resolve works")
+    print("")
+}
+
+// ── assert accepts bool (with optional msg) ──
+
+fn test_assert_forms() {
+    assert(true)
+    assert(1 == 1, "one equals one")
+}

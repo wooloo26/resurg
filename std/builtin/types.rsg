@@ -1,4 +1,0 @@
-// std/builtin/types.rsg — core type declarations
-//
-// Option<T> and Result<T, E> are injected directly by the compiler
-// and do not require source-level definitions.

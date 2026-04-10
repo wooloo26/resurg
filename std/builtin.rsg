@@ -1,4 +1,45 @@
-// std/builtin.rsg — core built-in module declarations
+// std/builtin.rsg — always-injected core definitions
+//
+// This file is unconditionally prepended by the compiler.
+// It defines the core types and intrinsic function signatures
+// that every Resurg program depends on.
 
-pub mod io
-pub mod ops
+// ── Core ADTs ──────────────────────────────────────────────────
+// ?T  is syntax sugar for Option<T>
+// T!E is syntax sugar for Result<T, E>
+
+pub enum Option<T> {
+    None,
+    Some(T),
+}
+
+pub enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+// ── I/O intrinsics ─────────────────────────────────────────────
+
+pub declare fn print(value: str)
+pub declare fn println(value: str)
+
+// ── Runtime intrinsics ─────────────────────────────────────────
+
+pub declare fn assert(cond: bool)
+pub declare fn len(value: str) -> i32
+pub declare fn panic(msg: str) -> never
+pub declare fn recover() -> ?str
+
+// ── Method extensions ──────────────────────────────────────────
+
+ext str {
+    pub declare fn len(s) -> i32
+}
+
+ext [] {
+    pub declare fn len(s) -> i32
+}
+
+ext [_] {
+    pub declare fn len(s) -> i32
+}

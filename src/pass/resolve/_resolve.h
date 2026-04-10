@@ -132,7 +132,6 @@ void enforce_pact_conformances(Sema *sema, ASTNode *decl, StructDef *def);
 void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl);
 void register_module_decl(Sema *sema, ASTNode *decl);
 void register_use_decl(Sema *sema, ASTNode *decl);
-void inject_builtin_enums(Sema *sema);
 
 /** Load a filesystem module file, lex, and parse it. Returns NULL on failure. */
 ASTNode **load_module_decls(Sema *sema, const char *mod_path);
