@@ -1,10 +1,12 @@
 #include "rsg_str.h"
 
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "rsg_gc.h"
 #include "rsg_internal.h"
 
 // ── printf-style helper ────────────────────────────────────────────────
@@ -250,4 +252,173 @@ RsgStr rsg_str_to_lower(RsgStr s) {
     }
     buf[s.len] = '\0';
     return (RsgStr){.data = buf, .len = s.len, .ref_count = 1};
+}
+
+// ── New extension methods ──────────────────────────────────────────────
+
+RsgSlice rsg_str_split(RsgStr s, RsgStr sep) {
+    if (sep.len == 0) {
+        // Split empty separator: return single-element slice containing s
+        RsgStr *data = rsg_heap_alloc(sizeof(RsgStr));
+        data[0] = s;
+        return (RsgSlice){.data = data, .len = 1};
+    }
+
+    // Count occurrences first
+    int32_t count = 1;
+    for (int32_t i = 0; i <= s.len - sep.len; i++) {
+        if (memcmp(s.data + i, sep.data, sep.len) == 0) {
+            count++;
+            i += sep.len - 1;
+        }
+    }
+
+    RsgStr *parts = rsg_heap_alloc((size_t)count * sizeof(RsgStr));
+    int32_t part_idx = 0;
+    int32_t start = 0;
+    for (int32_t i = 0; i <= s.len - sep.len; i++) {
+        if (memcmp(s.data + i, sep.data, sep.len) == 0) {
+            int32_t part_len = i - start;
+            parts[part_idx++] =
+                (part_len > 0) ? rsg_str_new(s.data + start, part_len) : rsg_str_empty();
+            start = i + sep.len;
+            i += sep.len - 1;
+        }
+    }
+    // Trailing segment
+    int32_t tail_len = s.len - start;
+    parts[part_idx++] = (tail_len > 0) ? rsg_str_new(s.data + start, tail_len) : rsg_str_empty();
+
+    return (RsgSlice){.data = parts, .len = part_idx};
+}
+
+RsgStr rsg_str_replace(RsgStr s, RsgStr old, RsgStr replacement) {
+    if (old.len == 0 || s.len == 0) {
+        return s;
+    }
+
+    // Count occurrences
+    int32_t count = 0;
+    for (int32_t i = 0; i <= s.len - old.len; i++) {
+        if (memcmp(s.data + i, old.data, old.len) == 0) {
+            count++;
+            i += old.len - 1;
+        }
+    }
+    if (count == 0) {
+        return s;
+    }
+
+    int32_t new_len = s.len + count * (replacement.len - old.len);
+    char *buf = checked_malloc(new_len + 1);
+    int32_t dst = 0;
+    for (int32_t i = 0; i < s.len;) {
+        if (i <= s.len - old.len && memcmp(s.data + i, old.data, old.len) == 0) {
+            memcpy(buf + dst, replacement.data, replacement.len);
+            dst += replacement.len;
+            i += old.len;
+        } else {
+            buf[dst++] = s.data[i++];
+        }
+    }
+    buf[new_len] = '\0';
+    return (RsgStr){.data = buf, .len = new_len, .ref_count = 1};
+}
+
+RsgStr rsg_str_substr(RsgStr s, int32_t start, int32_t end) {
+    if (start < 0) {
+        start = 0;
+    }
+    if (end > s.len) {
+        end = s.len;
+    }
+    if (start >= end) {
+        return rsg_str_empty();
+    }
+    return rsg_str_new(s.data + start, end - start);
+}
+
+int32_t rsg_str_index_of(RsgStr s, RsgStr needle) {
+    if (needle.len == 0) {
+        return 0;
+    }
+    if (needle.len > s.len) {
+        return -1;
+    }
+    for (int32_t i = 0; i <= s.len - needle.len; i++) {
+        if (memcmp(s.data + i, needle.data, needle.len) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+char rsg_str_char_at(RsgStr s, int32_t idx) {
+    if (idx < 0 || idx >= s.len) {
+        return 0;
+    }
+    return s.data[idx];
+}
+
+int32_t rsg_str_parse_i32(RsgStr s) {
+    if (s.len == 0) {
+        return 0;
+    }
+    char buf[64];
+    int32_t copy_len = s.len < 63 ? s.len : 63;
+    memcpy(buf, s.data, copy_len);
+    buf[copy_len] = '\0';
+    char *endp = NULL;
+    long val = strtol(buf, &endp, 10);
+    if (endp == buf || *endp != '\0') {
+        return 0;
+    }
+    if (val < INT32_MIN || val > INT32_MAX) {
+        return 0;
+    }
+    return (int32_t)val;
+}
+
+int64_t rsg_str_parse_i64(RsgStr s) {
+    if (s.len == 0) {
+        return 0;
+    }
+    char buf[64];
+    int32_t copy_len = s.len < 63 ? s.len : 63;
+    memcpy(buf, s.data, copy_len);
+    buf[copy_len] = '\0';
+    char *endp = NULL;
+    long long val = strtoll(buf, &endp, 10);
+    if (endp == buf || *endp != '\0') {
+        return 0;
+    }
+    return (int64_t)val;
+}
+
+double rsg_str_parse_f64(RsgStr s) {
+    if (s.len == 0) {
+        return 0.0;
+    }
+    char buf[256];
+    int32_t copy_len = s.len < 255 ? s.len : 255;
+    memcpy(buf, s.data, copy_len);
+    buf[copy_len] = '\0';
+    char *endp = NULL;
+    double val = strtod(buf, &endp);
+    if (endp == buf || *endp != '\0') {
+        return 0.0;
+    }
+    return val;
+}
+
+RsgSlice rsg_str_chars(RsgStr s) {
+    uint32_t *chars = rsg_heap_alloc(s.len * sizeof(uint32_t));
+    for (int32_t i = 0; i < s.len; i++) {
+        chars[i] = (uint32_t)(unsigned char)s.data[i];
+    }
+    return (RsgSlice){.data = chars, .len = s.len};
+}
+
+RsgSlice rsg_str_bytes(RsgStr s) {
+    return rsg_slice_new(s.data, s.len, sizeof(uint8_t));
 }

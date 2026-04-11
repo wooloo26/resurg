@@ -1,0 +1,11 @@
+// std/fmt.rsg — formatting utilities
+//
+// Usage: mod fmt
+//        use self::fmt::fixed
+
+pub decl fn fixed(value: f64, decimals: i32) -> str
+pub decl fn hex(value: i64) -> str
+pub decl fn bin(value: i64) -> str
+pub decl fn oct(value: i64) -> str
+pub decl fn pad_left(s: str, width: i32, fill: char) -> str
+pub decl fn pad_right(s: str, width: i32, fill: char) -> str

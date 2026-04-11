@@ -20,15 +20,9 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
 
         if (method->fn_decl.is_declare) {
-            // Register decl methods — use explicit #[extern("...")]
-            // symbol when provided, otherwise default rsg_ mangling.
-            const char *mangled;
-            if (method->fn_decl.extern_name != NULL) {
-                mangled = arena_sprintf(low->hir_arena, "rsg_%s", method->fn_decl.extern_name);
-            } else {
-                mangled = arena_sprintf(low->hir_arena, "rsg_%s_%s",
-                                        lower_mangle_name(low->hir_arena, type_name), method_name);
-            }
+            const char *mangled =
+                arena_sprintf(low->hir_arena, "rsg_%s_%s",
+                              lower_mangle_name(low->hir_arena, type_name), method_name);
             HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
             HirSym *sym = lower_make_sym(low, &sym_spec);
             sym->mangled_name = mangled;
@@ -68,14 +62,9 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
                 const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
                 HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
                 HirSym *sym = lower_make_sym(low, &fn_spec);
-                if (decl->fn_decl.extern_name != NULL) {
-                    sym->mangled_name =
-                        arena_sprintf(low->hir_arena, "rsg_%s", decl->fn_decl.extern_name);
-                } else {
-                    sym->mangled_name =
-                        arena_sprintf(low->hir_arena, "rsg_%s",
-                                      lower_mangle_name(low->hir_arena, decl->fn_decl.name));
-                }
+                sym->mangled_name =
+                    arena_sprintf(low->hir_arena, "rsg_%s",
+                                  lower_mangle_name(low->hir_arena, decl->fn_decl.name));
                 lower_scope_define(low, decl->fn_decl.name, sym);
             }
             return;
@@ -104,6 +93,14 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
             return;
         }
         preregister_type_methods(low, decl->ext_decl->target_name, decl->ext_decl->methods);
+    }
+    if (decl->kind == NODE_VAR_DECL && decl->var_decl.is_pub) {
+        const Type *type = decl->type != NULL ? decl->type : &TYPE_ERR_INST;
+        HirSymSpec var_spec = {HIR_SYM_VAR, decl->var_decl.name, type, false, decl->loc};
+        HirSym *sym = lower_make_sym(low, &var_spec);
+        sym->mangled_name = arena_sprintf(low->hir_arena, "rsg_%s",
+                                          lower_mangle_name(low->hir_arena, decl->var_decl.name));
+        lower_scope_define(low, decl->var_decl.name, sym);
     }
     if (decl->kind == NODE_MODULE && decl->module.decls != NULL) {
         preregister_decl_list(low, decl->module.decls, BUF_LEN(decl->module.decls));
@@ -238,6 +235,17 @@ static void flatten_module_decls(Lower *low, const ASTNode *mod, HirNode ***decl
             continue;
         }
         if (inner->kind == NODE_USE_DECL) {
+            continue;
+        }
+        if (inner->kind == NODE_VAR_DECL && inner->var_decl.is_pub) {
+            HirSym *sym = lower_scope_lookup(low, inner->var_decl.name);
+            if (sym != NULL) {
+                HirNode *init =
+                    (inner->var_decl.init != NULL) ? lower_expr(low, inner->var_decl.init) : NULL;
+                HirNode *vd = lower_make_var_decl(low, sym, init);
+                vd->var_decl.is_global = true;
+                BUF_PUSH(*decls, vd);
+            }
             continue;
         }
         if (inner->kind == NODE_MODULE && inner->module.decls != NULL) {

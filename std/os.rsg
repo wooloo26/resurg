@@ -1,0 +1,9 @@
+// std/os.rsg — OS interaction
+//
+// Usage: mod os
+//        use self::os::args
+
+pub decl fn args() -> []str
+pub decl fn env(key: str) -> str
+pub decl fn set_env(key: str, value: str)
+pub decl fn exit(code: i32) -> never

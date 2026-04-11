@@ -1,0 +1,28 @@
+// stdlib: Phase 1 — Option and Result extension methods
+// EXPECT-STDOUT: option result ext tests passed
+
+fn main() {
+    // ── Option extensions ──────────────────────────────────
+    var some_val: Option<i32> = Some(42)
+    var none_val: Option<i32> = None
+
+    assert(some_val.is_some(), "option is_some")
+    assert(!some_val.is_none(), "option is_none on some")
+    assert(none_val.is_none(), "option is_none")
+    assert(!none_val.is_some(), "option is_some on none")
+    assert(some_val.unwrap_or(0) == 42, "option unwrap_or some")
+    assert(none_val.unwrap_or(99) == 99, "option unwrap_or none")
+
+    // ── Result extensions ──────────────────────────────────
+    var ok_val: Result<i32, str> = Ok(10)
+    var err_val: Result<i32, str> = Err("bad")
+
+    assert(ok_val.is_ok(), "result is_ok")
+    assert(!ok_val.is_err(), "result is_ok not err")
+    assert(err_val.is_err(), "result is_err")
+    assert(!err_val.is_ok(), "result is_ok on err")
+    assert(ok_val.unwrap_or(0) == 10, "result unwrap_or ok")
+    assert(err_val.unwrap_or(0) == 0, "result unwrap_or err")
+
+    println("option result ext tests passed")
+}

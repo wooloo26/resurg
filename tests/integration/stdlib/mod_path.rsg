@@ -1,0 +1,22 @@
+// stdlib: Phase 4 — path module
+// EXPECT-STDOUT: path module tests passed
+mod path
+
+use self::path::file_name
+use self::path::dir
+use self::path::extension
+use self::path::join
+
+fn main() {
+    assert(file_name("/home/user/test.txt") == "test.txt", "path file_name")
+    assert(file_name("test.txt") == "test.txt", "path file_name no dir")
+    assert(dir("/home/user/test.txt") == "/home/user", "path dir")
+    assert(extension("archive.tar.gz") == ".gz", "path ext")
+    assert(extension("noext") == "", "path ext none")
+
+    joined := join("/home", "user")
+    // result depends on platform but should contain both parts
+    assert(joined.len() > 5, "path join")
+
+    println("path module tests passed")
+}

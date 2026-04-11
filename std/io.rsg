@@ -1,4 +1,8 @@
 // std/io.rsg — standard I/O library
 //
 // Core I/O primitives (print, println) are provided by std/builtin.rsg.
-// This module is reserved for extended I/O operations (file I/O, etc.).
+// This module provides extended I/O operations.
+
+pub decl fn read_line() -> str
+pub decl fn eprint(msg: str)
+pub decl fn eprintln(msg: str)

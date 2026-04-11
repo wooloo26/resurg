@@ -54,6 +54,16 @@ ext str {
     pub decl fn repeat(s, n: i32) -> str
     pub decl fn to_upper(s) -> str
     pub decl fn to_lower(s) -> str
+    pub decl fn split(s, sep: str) -> []str
+    pub decl fn replace(s, old: str, new: str) -> str
+    pub decl fn substr(s, start: i32, end: i32) -> str
+    pub decl fn index_of(s, needle: str) -> i32
+    pub decl fn char_at(s, idx: i32) -> char
+    pub decl fn parse_i32(s) -> i32
+    pub decl fn parse_i64(s) -> i64
+    pub decl fn parse_f64(s) -> f64
+    pub decl fn chars(s) -> []char
+    pub decl fn bytes(s) -> []u8
 }
 
 ext<T> Option<T> {
@@ -66,14 +76,138 @@ ext<T> Option<T> {
         Some(_) => false
         None => true
     }
+    pub fn unwrap(o) -> T = match o {
+        Some(v) => v
+        None => panic("called unwrap on a None value")
+    }
+    pub fn expect(o, msg: str) -> T = match o {
+        Some(v) => v
+        None => panic(msg)
+    }
     pub fn unwrap_or(o, fallback: T) -> T = match o {
         Some(v) => v
         None => fallback
     }
 }
 
+ext<T, E> Result<T, E> {
+    pub fn is_ok(r) -> bool = match r {
+        Ok(_) => true
+        Err(_) => false
+    }
+    pub fn is_err(r) -> bool = match r {
+        Ok(_) => false
+        Err(_) => true
+    }
+    pub fn unwrap(r) -> T = match r {
+        Ok(v) => v
+        Err(_) => panic("called unwrap on an Err value")
+    }
+    pub fn expect(r, msg: str) -> T = match r {
+        Ok(v) => v
+        Err(_) => panic(msg)
+    }
+    pub fn unwrap_or(r, fallback: T) -> T = match r {
+        Ok(v) => v
+        Err(_) => fallback
+    }
+    pub fn unwrap_err(r) -> E = match r {
+        Ok(_) => panic("called unwrap_err on an Ok value")
+        Err(e) => e
+    }
+}
+
+// ── char extensions ───────────────────────────────────────────────────
+
+ext char {
+    pub decl fn is_alpha(c) -> bool
+    pub decl fn is_digit(c) -> bool
+    pub decl fn is_alphanumeric(c) -> bool
+    pub decl fn is_whitespace(c) -> bool
+    pub decl fn is_upper(c) -> bool
+    pub decl fn is_lower(c) -> bool
+    pub decl fn to_upper(c) -> char
+    pub decl fn to_lower(c) -> char
+    pub decl fn to_str(c) -> str
+    pub decl fn to_i32(c) -> i32
+}
+
+// ── i32 extensions ────────────────────────────────────────────────────
+
+ext i32 {
+    pub decl fn abs(n) -> i32
+    pub decl fn min(n, other: i32) -> i32
+    pub decl fn max(n, other: i32) -> i32
+    pub decl fn clamp(n, lo: i32, hi: i32) -> i32
+    pub decl fn to_str(n) -> str
+    pub decl fn to_f64(n) -> f64
+    pub decl fn pow(n, exp: u32) -> i32
+}
+
+// ── i64 extensions ────────────────────────────────────────────────────
+
+ext i64 {
+    pub decl fn abs(n) -> i64
+    pub decl fn min(n, other: i64) -> i64
+    pub decl fn max(n, other: i64) -> i64
+    pub decl fn clamp(n, lo: i64, hi: i64) -> i64
+    pub decl fn to_str(n) -> str
+    pub decl fn to_f64(n) -> f64
+    pub decl fn pow(n, exp: u32) -> i64
+}
+
+// ── f64 extensions ────────────────────────────────────────────────────
+
+ext f64 {
+    pub decl fn abs(n) -> f64
+    pub decl fn floor(n) -> f64
+    pub decl fn ceil(n) -> f64
+    pub decl fn round(n) -> f64
+    pub decl fn trunc(n) -> f64
+    pub decl fn sqrt(n) -> f64
+    pub decl fn min(n, other: f64) -> f64
+    pub decl fn max(n, other: f64) -> f64
+    pub decl fn clamp(n, lo: f64, hi: f64) -> f64
+    pub decl fn is_nan(n) -> bool
+    pub decl fn is_inf(n) -> bool
+    pub decl fn is_finite(n) -> bool
+    pub decl fn to_i32(n) -> i32
+    pub decl fn to_str(n) -> str
+    pub decl fn pow(n, exp: f64) -> f64
+    pub decl fn ln(n) -> f64
+    pub decl fn log2(n) -> f64
+    pub decl fn log10(n) -> f64
+    pub decl fn sin(n) -> f64
+    pub decl fn cos(n) -> f64
+    pub decl fn tan(n) -> f64
+}
+
+// ── f32 extensions ────────────────────────────────────────────────────
+
+ext f32 {
+    pub decl fn abs(n) -> f32
+    pub decl fn floor(n) -> f32
+    pub decl fn ceil(n) -> f32
+    pub decl fn round(n) -> f32
+    pub decl fn sqrt(n) -> f32
+    pub decl fn is_nan(n) -> bool
+    pub decl fn is_inf(n) -> bool
+    pub decl fn is_finite(n) -> bool
+    pub decl fn to_str(n) -> str
+}
+
+// ── bool extensions ───────────────────────────────────────────────────
+
+ext bool {
+    pub decl fn to_str(b) -> str
+    pub decl fn to_i32(b) -> i32
+}
+
+// ── slice extensions ──────────────────────────────────────────────────
+
 ext<T> []T {
     pub fn len(s) -> i32 = len(s)
+    pub fn is_empty(s) -> bool = s.len() == 0
 }
 
 ext<T, comptime N: usize> [N]T {

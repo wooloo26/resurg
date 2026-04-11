@@ -1,0 +1,37 @@
+// stdlib: Phase 3 — fs module
+// EXPECT-STDOUT: fs module tests passed
+mod fs
+
+use self::fs::write_file
+use self::fs::read_file
+use self::fs::exists
+use self::fs::remove
+use self::fs::append_file
+use self::fs::rename
+
+fn main() {
+    path := "_test_fs_tmp.txt"
+
+    // write + read
+    write_file(path, "hello")
+    assert(exists(path), "fs exists after write")
+    content := read_file(path)
+    assert(content == "hello", "fs read_file")
+
+    // append + read
+    append_file(path, " world")
+    content2 := read_file(path)
+    assert(content2 == "hello world", "fs append_file")
+
+    // rename
+    path2 := "_test_fs_tmp2.txt"
+    rename(path, path2)
+    assert(exists(path2), "fs exists after rename")
+    assert(!exists(path), "fs old gone after rename")
+
+    // remove
+    remove(path2)
+    assert(!exists(path2), "fs remove")
+
+    println("fs module tests passed")
+}

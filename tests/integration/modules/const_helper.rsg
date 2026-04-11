@@ -1,0 +1,5 @@
+// Module exposing pub immut constants
+
+pub immut PI: f64 = 3.14159
+pub immut MAX_SIZE: i32 = 100
+pub immut GREETING: str = "hello"

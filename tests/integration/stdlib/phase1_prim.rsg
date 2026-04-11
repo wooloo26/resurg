@@ -1,0 +1,59 @@
+// stdlib: Phase 1 — primitive type extension methods
+// EXPECT-STDOUT: phase1 prim tests passed
+
+fn main() {
+    // ── char extensions ────────────────────────────────────
+    assert('A'.is_alpha(), "char is_alpha A")
+    assert(!'1'.is_alpha(), "char is_alpha 1")
+    assert('5'.is_digit(), "char is_digit 5")
+    assert(!'x'.is_digit(), "char is_digit x")
+    assert('a'.is_alphanumeric(), "char is_alnum a")
+    assert('3'.is_alphanumeric(), "char is_alnum 3")
+    assert(!' '.is_alphanumeric(), "char is_alnum space")
+    assert(' '.is_whitespace(), "char is_ws space")
+    assert(!'/'.is_whitespace(), "char is_ws slash")
+    assert('A'.is_upper(), "char is_upper A")
+    assert(!'a'.is_upper(), "char is_upper a")
+    assert('z'.is_lower(), "char is_lower z")
+    assert(!'Z'.is_lower(), "char is_lower Z")
+    assert('a'.to_upper() == 'A', "char to_upper")
+    assert('A'.to_lower() == 'a', "char to_lower")
+    assert('x'.to_str() == "x", "char to_str")
+    assert('A'.to_i32() == 65, "char to_i32")
+
+    // ── i32 extensions ─────────────────────────────────────
+    assert((-5).abs() == 5, "i32 abs neg")
+    assert(3.abs() == 3, "i32 abs pos")
+    assert(3.min(7) == 3, "i32 min")
+    assert(3.max(7) == 7, "i32 max")
+    assert(10.clamp(0, 5) == 5, "i32 clamp high")
+    assert((-3).clamp(0, 5) == 0, "i32 clamp low")
+    assert(3.clamp(0, 5) == 3, "i32 clamp in")
+    assert(42.to_str() == "42", "i32 to_str")
+    assert(10.to_f64() == 10.0, "i32 to_f64")
+    assert(2.pow(10) == 1024, "i32 pow")
+
+    // ── f64 extensions ─────────────────────────────────────
+    assert((-3.14).abs() > 3.13, "f64 abs")
+    assert(2.7.floor() == 2.0, "f64 floor")
+    assert(2.1.ceil() == 3.0, "f64 ceil")
+    assert(2.6.round() == 3.0, "f64 round")
+    assert(2.9.trunc() == 2.0, "f64 trunc")
+    assert(4.0.sqrt() == 2.0, "f64 sqrt")
+    assert(3.0.min(5.0) == 3.0, "f64 min")
+    assert(3.0.max(5.0) == 5.0, "f64 max")
+    assert(10.0.clamp(0.0, 5.0) == 5.0, "f64 clamp")
+    assert(!1.0.is_nan(), "f64 is_nan")
+    assert(!1.0.is_inf(), "f64 is_inf")
+    assert(1.0.is_finite(), "f64 is_finite")
+    assert(3.0.to_i32() == 3, "f64 to_i32")
+    assert(2.0.pow(10.0) == 1024.0, "f64 pow")
+
+    // ── bool extensions ────────────────────────────────────
+    assert(true.to_str() == "true", "bool to_str true")
+    assert(false.to_str() == "false", "bool to_str false")
+    assert(true.to_i32() == 1, "bool to_i32 true")
+    assert(false.to_i32() == 0, "bool to_i32 false")
+
+    println("phase1 prim tests passed")
+}

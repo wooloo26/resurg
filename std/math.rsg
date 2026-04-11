@@ -1,0 +1,50 @@
+// std/math.rsg — mathematical constants and functions
+//
+// Usage: mod math   (loads from std/ directory)
+//        use self::math::sqrt
+
+// ── Constants ─────────────────────────────────────────────────────────
+
+pub immut PI: f64 = 3.14159265358979323846
+pub immut E: f64 = 2.71828182845904523536
+pub immut TAU: f64 = 6.28318530717958647692
+
+pub immut MAX_I32: i32 = 2147483647
+pub immut MIN_I32: i32 = -2147483648
+pub immut MAX_I64: i64 = 9223372036854775807
+pub immut MIN_I64: i64 = -9223372036854775808
+
+// ── Functions ─────────────────────────────────────────────────────────
+
+pub decl fn abs_i32(x: i32) -> i32
+pub decl fn abs_f64(x: f64) -> f64
+pub decl fn min_i32(a: i32, b: i32) -> i32
+pub decl fn max_i32(a: i32, b: i32) -> i32
+pub decl fn min_f64(a: f64, b: f64) -> f64
+pub decl fn max_f64(a: f64, b: f64) -> f64
+pub decl fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32
+pub decl fn clamp_f64(x: f64, lo: f64, hi: f64) -> f64
+
+pub decl fn floor(x: f64) -> f64
+pub decl fn ceil(x: f64) -> f64
+pub decl fn round(x: f64) -> f64
+pub decl fn trunc(x: f64) -> f64
+pub decl fn sqrt(x: f64) -> f64
+pub decl fn cbrt(x: f64) -> f64
+pub decl fn pow(base: f64, exp: f64) -> f64
+
+pub decl fn ln(x: f64) -> f64
+pub decl fn log2(x: f64) -> f64
+pub decl fn log10(x: f64) -> f64
+
+pub decl fn sin(x: f64) -> f64
+pub decl fn cos(x: f64) -> f64
+pub decl fn tan(x: f64) -> f64
+pub decl fn asin(x: f64) -> f64
+pub decl fn acos(x: f64) -> f64
+pub decl fn atan(x: f64) -> f64
+pub decl fn atan2(y: f64, x: f64) -> f64
+
+pub decl fn is_nan(x: f64) -> bool
+pub decl fn is_inf(x: f64) -> bool
+pub decl fn is_finite(x: f64) -> bool

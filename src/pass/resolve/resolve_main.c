@@ -61,6 +61,8 @@ static void sema_destroy_and_reinit_tables(Sema *sema) {
     hash_table_init(&sema->base.db.pact_table, NULL);
     hash_table_destroy(&sema->base.db.variant_ctor_table);
     hash_table_init(&sema->base.db.variant_ctor_table, NULL);
+    hash_table_destroy(&sema->base.db.var_table);
+    hash_table_init(&sema->base.db.var_table, NULL);
     hash_table_destroy(&sema->base.generics.fn);
     hash_table_init(&sema->base.generics.fn, NULL);
     hash_table_destroy(&sema->base.generics.structs);
@@ -259,6 +261,7 @@ Sema *sema_create(Arena *arena) {
     hash_table_init(&sema->base.db.enum_table, NULL);
     hash_table_init(&sema->base.db.pact_table, NULL);
     hash_table_init(&sema->base.db.variant_ctor_table, NULL);
+    hash_table_init(&sema->base.db.var_table, NULL);
     hash_table_init(&sema->base.generics.fn, NULL);
     hash_table_init(&sema->base.generics.structs, NULL);
     hash_table_init(&sema->base.generics.enums, NULL);

@@ -1,0 +1,28 @@
+// TEST: normal
+// EXPECT-STDOUT: new stdlib features passed
+
+fn main() {
+    // ── i64.pow ──────────────────────────────────────────
+    var x: i64 = 2
+    assert(x.pow(10) == 1024, "i64 pow")
+    var y: i64 = 3
+    assert(y.pow(5) == 243, "i64 pow 2")
+
+    // ── Result.unwrap_err ────────────────────────────────
+    var e: Result<i32, str> = Err("bad")
+    assert(e.unwrap_err() == "bad", "unwrap_err")
+
+    // ── str.chars ────────────────────────────────────────
+    s := "abc"
+    cs := s.chars()
+    assert(len(cs) == 3, "chars len")
+    assert(cs[0] == 'a', "chars[0]")
+    assert(cs[1] == 'b', "chars[1]")
+    assert(cs[2] == 'c', "chars[2]")
+
+    // ── str.bytes ────────────────────────────────────────
+    bs := s.bytes()
+    assert(len(bs) == 3, "bytes len")
+
+    println("new stdlib features passed")
+}

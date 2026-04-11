@@ -27,4 +27,13 @@ void rsg_println_f64(double value);
 void rsg_println_bool(bool value);
 void rsg_println_char(char value);
 
+// ── Extended I/O (std/io module) ──────────────────────────────────────
+
+/** Read a line from stdin (without trailing newline). */
+RsgStr rsg_io_read_line(void);
+/** Print a string to stderr (no newline). */
+void rsg_io_eprint(RsgStr msg);
+/** Print a string to stderr with trailing newline. */
+void rsg_io_eprintln(RsgStr msg);
+
 #endif // RSG_IO_H

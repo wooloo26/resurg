@@ -1,0 +1,33 @@
+// TEST: normal
+// EXPECT-STDOUT: 42
+// EXPECT-STDOUT: hello
+// EXPECT-STDOUT: 42
+// EXPECT-STDOUT: hello
+// EXPECT-STDOUT: 99
+// EXPECT-STDOUT: fallback
+
+fn main() {
+    // Option unwrap
+    var x: Option<i32> = Some(42)
+    println(x.unwrap())
+
+    // Option expect
+    var y: Option<str> = Some("hello")
+    println(y.expect("should have value"))
+
+    // Result unwrap
+    var r: Result<i32, str> = Ok(42)
+    println(r.unwrap())
+
+    // Result expect
+    var r2: Result<str, str> = Ok("hello")
+    println(r2.expect("should be ok"))
+
+    // Option unwrap_or (None)
+    var n: Option<i32> = None
+    println(n.unwrap_or(99))
+
+    // Result unwrap_or (Err)
+    var e: Result<str, str> = Err("bad")
+    println(e.unwrap_or("fallback"))
+}

@@ -1,0 +1,25 @@
+// stdlib: Phase 4 — sort module
+// EXPECT-STDOUT: sort module tests passed
+mod sort
+
+use self::sort::sort_i32
+use self::sort::is_sorted_i32
+use self::sort::binary_search_i32
+
+fn main() {
+    arr := []i32{5, 3, 1, 4, 2}
+    sort_i32(mut &arr)
+    assert(arr[0] == 1, "sort first")
+    assert(arr[1] == 2, "sort second")
+    assert(arr[2] == 3, "sort third")
+    assert(arr[3] == 4, "sort fourth")
+    assert(arr[4] == 5, "sort fifth")
+    assert(is_sorted_i32(arr), "is_sorted after sort")
+
+    idx := binary_search_i32(arr, 3)
+    assert(idx == 2, "binary_search found")
+    idx2 := binary_search_i32(arr, 99)
+    assert(idx2 == -1, "binary_search not found")
+
+    println("sort module tests passed")
+}

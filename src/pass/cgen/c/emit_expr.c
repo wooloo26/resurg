@@ -552,8 +552,14 @@ static void emit_match_arm_body(CGen *cgen, const MatchArm *arm) {
         emit_block_stmts(cgen, arm->bindings);
     }
     if (arm->result != NULL) {
-        const char *value = emit_expr(cgen, arm->body);
-        emit_line(cgen, "%s = %s;", arm->result, value);
+        // Never-typed arms (e.g. panic()) are void in C — emit as stmt only.
+        if (arm->body->type != NULL && arm->body->type->kind == TYPE_NEVER) {
+            const char *value = emit_expr(cgen, arm->body);
+            emit_line(cgen, "%s;", value);
+        } else {
+            const char *value = emit_expr(cgen, arm->body);
+            emit_line(cgen, "%s = %s;", arm->result, value);
+        }
     } else {
         emit_stmt(cgen, arm->body);
     }
@@ -586,8 +592,13 @@ static void emit_match_arm_guarded(CGen *cgen, const MatchArm *arm, const HirNod
     }
 
     if (arm->result != NULL) {
-        const char *value = emit_expr(cgen, arm->body);
-        emit_line(cgen, "%s = %s;", arm->result, value);
+        if (arm->body->type != NULL && arm->body->type->kind == TYPE_NEVER) {
+            const char *value = emit_expr(cgen, arm->body);
+            emit_line(cgen, "%s;", value);
+        } else {
+            const char *value = emit_expr(cgen, arm->body);
+            emit_line(cgen, "%s = %s;", arm->result, value);
+        }
     } else {
         emit_stmt(cgen, arm->body);
     }

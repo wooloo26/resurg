@@ -36,7 +36,6 @@ struct FnSig {
     bool is_declare;         // true for decl fns
     bool has_variadic;       // true when last param is variadic (..T)
     IntrinsicKind intrinsic; // INTRINSIC_NONE for user fns; set once during resolve
-    const char *extern_name; // C symbol from #[extern("...")]; NULL for default mangling
 };
 
 /** Base for all generic templates (fn, struct, enum). */
@@ -156,6 +155,14 @@ typedef struct VariantCtorInfo {
     bool has_payload;         // true for tuple variants (Some(T)), false for unit (None)
 } VariantCtorInfo;
 
+/** Module-level immutable variable — registered by `pub immut`. */
+typedef struct VarInfo {
+    const char *name; // qualified name (e.g. "math.PI")
+    const Type *type; // resolved type
+    ASTNode *init;    // init expression AST (always non-NULL)
+    bool is_pub;      // true for pub immut
+} VarInfo;
+
 /** Read-write symbol registry — the global declaration tables. */
 typedef struct SemaDB {
     HashTable type_alias_table;   // name → const Type*
@@ -164,6 +171,7 @@ typedef struct SemaDB {
     HashTable enum_table;         // name → EnumDef*
     HashTable pact_table;         // name → PactDef*
     HashTable variant_ctor_table; // bare_name → VariantCtorInfo*
+    HashTable var_table;          // name → VarInfo*
 } SemaDB;
 
 /** Module-loading context — directory paths and loader callback. */

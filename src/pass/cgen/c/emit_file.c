@@ -421,6 +421,23 @@ static bool emit_top_level_wrapper(CGen *cgen, const HirNode *file) {
     return true;
 }
 
+/** Emit file-scope declarations for pub immut global vars (no initializer). */
+static void emit_global_consts(CGen *cgen, const HirNode *file) {
+    bool any = false;
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        const HirNode *decl = file->file.decls[i];
+        if (decl->kind == HIR_VAR_DECL && decl->var_decl.is_global) {
+            const Type *type = decl->var_decl.var_type;
+            const char *c_name = decl->var_decl.sym->mangled_name;
+            emit_line(cgen, "static %s %s;", c_type_for(cgen, type), c_name);
+            any = true;
+        }
+    }
+    if (any) {
+        emit(cgen, "\n");
+    }
+}
+
 /**
  * Emit the full C translation unit: preamble, module comment, compound
  * types, forward decls, fn defs, and (if present)
@@ -429,6 +446,7 @@ static bool emit_top_level_wrapper(CGen *cgen, const HirNode *file) {
 void emit_file(CGen *cgen, const HirNode *file) {
     emit_preamble(cgen);
     emit_module_and_types(cgen, file);
+    emit_global_consts(cgen, file);
     emit_fns(cgen, file);
     bool has_top_stmts = emit_top_level_wrapper(cgen, file);
     emit_entry_point(cgen, file, has_top_stmts);

@@ -1,0 +1,45 @@
+// stdlib: Phase 1 — str extension methods (new additions)
+// EXPECT-STDOUT: str ext new tests passed
+
+fn main() {
+    // ── str.index_of ───────────────────────────────────────
+    idx := "hello world".index_of("world")
+    assert(idx == 6, "index_of found")
+    idx2 := "hello world".index_of("xyz")
+    assert(idx2 == -1, "index_of not found")
+
+    // ── str.char_at ────────────────────────────────────────
+    ch := "abcdef".char_at(0)
+    assert(ch == 'a', "char_at 0")
+    ch2 := "abcdef".char_at(5)
+    assert(ch2 == 'f', "char_at 5")
+
+    // ── str.substr ─────────────────────────────────────────
+    sub := "hello world".substr(6, 11)
+    assert(sub == "world", "substr")
+    sub2 := "abcdef".substr(0, 3)
+    assert(sub2 == "abc", "substr start")
+
+    // ── str.replace ────────────────────────────────────────
+    rep := "aabbcc".replace("bb", "XX")
+    assert(rep == "aaXXcc", "replace")
+    rep2 := "hello".replace("xyz", "!")
+    assert(rep2 == "hello", "replace no match")
+
+    // ── str.split ──────────────────────────────────────────
+    parts := "a,b,c".split(",")
+    assert(parts.len() == 3, "split len")
+    assert(parts[0] == "a", "split 0")
+    assert(parts[1] == "b", "split 1")
+    assert(parts[2] == "c", "split 2")
+
+    // ── str.parse_i32 / parse_i64 / parse_f64 ─────────────
+    n := "42".parse_i32()
+    assert(n == 42, "parse_i32")
+    n2 := "-7".parse_i32()
+    assert(n2 == -7, "parse_i32 neg")
+    n3 := "123456789".parse_i64()
+    assert(n3 == 123456789, "parse_i64")
+
+    println("str ext new tests passed")
+}

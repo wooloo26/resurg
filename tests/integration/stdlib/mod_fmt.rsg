@@ -1,0 +1,26 @@
+// stdlib: Phase 4 — fmt module
+// EXPECT-STDOUT: fmt module tests passed
+mod fmt
+
+use self::fmt::hex
+use self::fmt::oct
+use self::fmt::bin
+use self::fmt::pad_left
+use self::fmt::pad_right
+use self::fmt::fixed
+
+fn main() {
+    assert(hex(255) == "ff", "fmt hex")
+    assert(hex(0) == "0", "fmt hex zero")
+    assert(oct(8) == "10", "fmt oct")
+    assert(bin(5) == "101", "fmt bin")
+    assert(bin(0) == "0", "fmt bin zero")
+    assert(pad_left("hi", 5, ' ') == "   hi", "fmt pad_left")
+    assert(pad_right("hi", 5, ' ') == "hi   ", "fmt pad_right")
+    assert(pad_left("hello", 3, ' ') == "hello", "fmt pad_left no pad")
+
+    f := fixed(3.14159, 2)
+    assert(f == "3.14", "fmt fixed")
+
+    println("fmt module tests passed")
+}

@@ -1,0 +1,30 @@
+// stdlib: Phase 4 — rand module
+// EXPECT-STDOUT: rand module tests passed
+mod rand
+
+use self::rand::seed
+use self::rand::rand_i32
+use self::rand::rand_f64
+
+fn main() {
+    seed(12345)
+
+    // rand_i32 in range
+    val := rand_i32(1, 100)
+    assert(val >= 1, "rand_i32 >= lo")
+    assert(val <= 100, "rand_i32 <= hi")
+
+    // rand_f64 in [0, 1)
+    fval := rand_f64()
+    assert(fval >= 0.0, "rand_f64 >= 0")
+    assert(fval < 1.0, "rand_f64 < 1")
+
+    // deterministic: same seed produces same sequence
+    seed(99)
+    a := rand_i32(0, 1000000)
+    seed(99)
+    b := rand_i32(0, 1000000)
+    assert(a == b, "rand deterministic")
+
+    println("rand module tests passed")
+}

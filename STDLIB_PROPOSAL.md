@@ -696,11 +696,6 @@ pub fn oct(value: i64) -> str
 The prelude (`std/prelude.rsg`) should auto-import the most commonly used items from
 the standard library, so users don't need explicit `use` for everyday operations.
 
-### Currently in Prelude
-
-- `Option<T>`, `Result<T, E>` (via `builtin.rsg`)
-- `print`, `println`, `assert`, `len`, `panic`, `catch_panic` (via `builtin.rsg`)
-
 ### Proposed Prelude Additions
 
 ```rsg
@@ -720,7 +715,7 @@ pub use std::io::{read_line, eprint, eprintln}
 
 Ordered by user impact and dependency chain.
 
-### Phase 1 — Foundation (v0.9.13a)
+### Phase 1 — Foundation
 
 High impact, low dependency. Enables idiomatic Resurg programs.
 
@@ -730,7 +725,7 @@ High impact, low dependency. Enables idiomatic Resurg programs.
 4. **Integer/float `.to_str()`** — enables `Display` conformance
 5. **`?T` / `T ! E` extensions** — `unwrap`, `unwrap_or`, `map`, `is_some`, `is_ok`
 
-### Phase 2 — Collections & Algorithms (v0.9.13b)
+### Phase 2 — Collections & Algorithms
 
 Requires Phase 1 (`Hash`, `Eq`, `Ord`).
 
@@ -739,7 +734,7 @@ Requires Phase 1 (`Hash`, `Eq`, `Ord`).
 3. **`std/sort`** — `sort`, `sort_by`, `binary_search`
 4. **`std/math`** — constants, trig, pow, floor/ceil/round
 
-### Phase 3 — I/O & OS (v0.9.13c)
+### Phase 3 — I/O & OS
 
 Requires Phase 1 (`Display` for errors).
 
@@ -747,7 +742,7 @@ Requires Phase 1 (`Display` for errors).
 2. **`std/fs`** — `read_file`, `write_file`, `exists`, `mkdir`, `read_dir`
 3. **`std/os`** — `args`, `env`, `exit`
 
-### Phase 4 — Ergonomics (v0.9.13d)
+### Phase 4 — Ergonomics
 
 1. **`std/fmt`** — `fixed`, `hex`, `bin`
 2. **`std/time`** — `now_ns`, `sleep_ms`
@@ -755,68 +750,3 @@ Requires Phase 1 (`Display` for errors).
 4. **`std/path`** — `join`, `file_name`, `ext`
 5. **`std/testing`** — `assert_eq`, `assert_ne`, `assert_ok`, `assert_some`
 6. **Builtin `sizeof` / `type_name`** — compiler intrinsics
-
----
-
-## 6. Runtime Implementation Notes
-
-### Adding a Non-Intrinsic Stdlib Function
-
-For functions that don't need special compiler support (no type dispatch, no source injection):
-
-1. Add `pub declare fn name(...) = "c_link_name"` in the appropriate `std/*.rsg` file
-2. Implement `c_link_name()` in `runtime/rsg_<module>.c`
-3. Declare in `runtime/rsg_<module>.h`
-4. Include in `runtime/rsg_runtime.h` umbrella
-5. Add to CMake sources
-
-### Adding an Extension Method on a Primitive
-
-Two implementation strategies:
-
-**A. Pure Resurg (preferred when no C dependency):**
-
-```rsg
-// std/builtin.rsg or std/str_ext.rsg
-ext str {
-    pub fn is_empty(s) -> bool { s.len() == 0 }
-}
-```
-
-**B. Declare + C runtime (when C library access needed):**
-
-```rsg
-// std/builtin.rsg
-ext str {
-    pub declare fn contains(s, needle: str) -> bool = "rsg_str_contains"
-}
-```
-
-```c
-// runtime/rsg_str.c
-bool rsg_str_contains(RsgStr haystack, RsgStr needle) {
-    if (needle.len == 0) return true;
-    if (needle.len > haystack.len) return false;
-    return memmem(haystack.data, haystack.len, needle.data, needle.len) != NULL;
-}
-```
-
-### GC Considerations
-
-All `str` and `[]T` values returned from runtime functions must be GC-allocated
-(via `rsg_heap_alloc`) so the conservative GC can track them. The existing
-`rsg_str_new` and `rsg_slice_new` already handle this.
-
----
-
-## 7. Design Decisions & Rationale
-
-| Decision                                             | Rationale                                                                                     |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Extension methods over free functions for primitives | Discoverable via `.` completion; natural to the language idiom                                |
-| `std/conv` pacts early                               | Enables generic algorithms (`sort<T: Ord>`, `Map<K: Hash + Eq>`)                              |
-| Separate `std/math` module vs float extensions       | Extensions for common ops (`.abs()`, `.floor()`); module for constants and advanced functions |
-| `str` parsing as extensions (`.to_i32()`)            | Matches `i32.to_str()` symmetry; no need for standalone `parse_*` intrinsics                  |
-| `Option`/`Result` methods in `builtin.rsg`           | Always available; most commonly used utility methods after `.len()`                           |
-| `Map`/`Set` before `Queue`/`Stack`                   | Higher demand; Queue/Stack trivially built on slices                                          |
-| `declare fn ... = "link_name"` for most stdlib       | Avoids adding intrinsics; link_name mechanism already works                                   |

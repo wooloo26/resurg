@@ -609,17 +609,6 @@ static ASTNode *parse_module_decl(Parser *parser, bool is_pub) {
 ASTNode *parser_parse_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
-    // #[extern("symbol")] on top-level fns
-    if (parser_check(parser, TOKEN_HASH)) {
-        const char *ext_name = try_parse_extern_attr(parser);
-        bool is_pub = parser_match(parser, TOKEN_PUB);
-        ASTNode *node = parse_fn_decl(parser, is_pub);
-        if (node != NULL) {
-            node->fn_decl.extern_name = ext_name;
-        }
-        return node;
-    }
-
     // decl fn / decl var
     if (parser_check(parser, TOKEN_DECLARE)) {
         if (parser_peek_is(parser, TOKEN_FN)) {
@@ -696,6 +685,25 @@ ASTNode *parser_parse_decl(Parser *parser) {
         if (parser_check(parser, TOKEN_FN)) {
             return parse_fn_decl(parser, true);
         }
+        if (parser_check(parser, TOKEN_IMMUT)) {
+            SrcLoc loc = parser_current_loc(parser);
+            parser_advance(parser); // consume 'immut'
+            ASTNode *node = ast_new(parser->arena, NODE_VAR_DECL, loc);
+            node->var_decl.is_pub = true;
+            node->var_decl.is_immut = true;
+            node->var_decl.is_var = false;
+            node->var_decl.is_declare = false;
+            node->var_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
+            if (parser_match(parser, TOKEN_COLON)) {
+                node->var_decl.type = parser_parse_type(parser);
+                parser_expect(parser, TOKEN_EQUAL);
+            } else {
+                node->var_decl.type.kind = AST_TYPE_INFERRED;
+                parser_expect(parser, TOKEN_COLON_EQUAL);
+            }
+            node->var_decl.init = parser_parse_expr(parser);
+            return node;
+        }
         if (parser_check(parser, TOKEN_STRUCT)) {
             ASTNode *node = parse_struct_decl(parser);
             node->struct_decl->is_pub = true;
@@ -729,7 +737,8 @@ ASTNode *parser_parse_decl(Parser *parser) {
             return parse_use_decl(parser, true);
         }
         PARSER_ERR(parser, parser_current_loc(parser),
-                   "expected 'fn', 'struct', 'enum', 'pact', 'type', 'mod', or 'use' after 'pub'");
+                   "expected 'fn', 'immut', 'struct', 'enum', 'pact', 'type', 'mod', or 'use' "
+                   "after 'pub'");
         return NULL;
     }
 

@@ -1,0 +1,46 @@
+// stdlib: Phase 2 — math module
+// EXPECT-STDOUT: math module tests passed
+mod math
+
+use self::math::sqrt
+use self::math::abs_f64
+use self::math::abs_i32
+use self::math::floor
+use self::math::ceil
+use self::math::round
+use self::math::pow
+use self::math::min_i32
+use self::math::max_i32
+use self::math::min_f64
+use self::math::max_f64
+use self::math::clamp_i32
+use self::math::sin
+use self::math::cos
+use self::math::ln
+use self::math::log2
+use self::math::log10
+use self::math::is_nan
+use self::math::is_finite
+use self::math::PI
+use self::math::E
+
+fn main() {
+    assert(sqrt(4.0) == 2.0, "math sqrt")
+    assert(abs_f64(-3.5) > 3.4, "math abs_f64")
+    assert(abs_i32(-7) == 7, "math abs_i32")
+    assert(floor(2.9) == 2.0, "math floor")
+    assert(ceil(2.1) == 3.0, "math ceil")
+    assert(round(2.5) == 3.0, "math round")
+    assert(pow(2.0, 10.0) == 1024.0, "math pow")
+    assert(min_i32(3, 7) == 3, "math min_i32")
+    assert(max_i32(3, 7) == 7, "math max_i32")
+    assert(min_f64(1.5, 2.5) == 1.5, "math min_f64")
+    assert(max_f64(1.5, 2.5) == 2.5, "math max_f64")
+    assert(clamp_i32(10, 0, 5) == 5, "math clamp_i32")
+    assert(!is_nan(1.0), "math is_nan")
+    assert(is_finite(1.0), "math is_finite")
+    assert(PI > 3.14, "math PI")
+    assert(E > 2.71, "math E")
+
+    println("math module tests passed")
+}

@@ -187,6 +187,7 @@ struct HirNode {
             const Type *var_type;
             HirNode *init;
             bool is_mut;
+            bool is_global;
         } var_decl;
 
         // HIR_RETURN

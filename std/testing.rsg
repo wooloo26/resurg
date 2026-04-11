@@ -1,0 +1,15 @@
+// std/testing.rsg — test assertion helpers
+//
+// Usage: mod testing
+//        use self::testing::assert_eq_i32
+//
+// Note: Generic assert_eq/assert_ne require compiler trait support.
+// For now, type-specific variants are provided.
+
+pub decl fn assert_eq_i32(actual: i32, expected: i32)
+pub decl fn assert_eq_str(actual: str, expected: str)
+pub decl fn assert_eq_f64(actual: f64, expected: f64)
+pub decl fn assert_eq_bool(actual: bool, expected: bool)
+
+pub decl fn assert_ne_i32(actual: i32, expected: i32)
+pub decl fn assert_ne_str(actual: str, expected: str)

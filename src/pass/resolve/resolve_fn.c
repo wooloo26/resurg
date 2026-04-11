@@ -29,7 +29,6 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
     sig->is_declare = decl->fn_decl.is_declare;
     sig->has_variadic = false;
     sig->intrinsic = intrinsic_lookup(decl->fn_decl.name);
-    sig->extern_name = decl->fn_decl.extern_name;
 
     for (int32_t j = 0; j < sig->param_count; j++) {
         ASTNode *param = decl->fn_decl.params[j];

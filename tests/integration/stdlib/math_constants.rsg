@@ -1,0 +1,26 @@
+// TEST: normal
+// EXPECT-STDOUT: math constants test passed
+
+mod math
+
+use self::math::PI
+use self::math::E
+use self::math::TAU
+use self::math::MAX_I32
+use self::math::MIN_I32
+use self::math::MAX_I64
+use self::math::MIN_I64
+
+fn main() {
+    assert(PI > 3.14, "PI")
+    assert(PI < 3.15, "PI upper")
+    assert(E > 2.71, "E")
+    assert(E < 2.72, "E upper")
+    assert(TAU > 6.28, "TAU")
+    assert(TAU < 6.29, "TAU upper")
+    assert(MAX_I32 == 2147483647, "MAX_I32")
+    assert(MIN_I32 == -2147483648, "MIN_I32")
+    assert(MAX_I64 == 9223372036854775807, "MAX_I64")
+    assert(MIN_I64 == -9223372036854775808, "MIN_I64")
+    println("math constants test passed")
+}

@@ -1,6 +1,7 @@
 #include "rsg_io.h"
 
 #include <stdio.h>
+#include <string.h>
 
 // ── print (no trailing newline) ────────────────────────────────────────
 
@@ -53,4 +54,31 @@ void rsg_println_bool(bool value) {
 
 void rsg_println_char(char value) {
     printf("%c\n", value);
+}
+
+// ── Extended I/O (std/io module) ──────────────────────────────────────
+
+RsgStr rsg_io_read_line(void) {
+    char buf[4096];
+    if (fgets(buf, (int)sizeof(buf), stdin) == NULL) {
+        return rsg_str_empty();
+    }
+    // Strip trailing newline
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '\n') {
+        len--;
+        if (len > 0 && buf[len - 1] == '\r') {
+            len--;
+        }
+    }
+    return rsg_str_new(buf, (int32_t)len);
+}
+
+void rsg_io_eprint(RsgStr msg) {
+    fwrite(msg.data, 1, msg.len, stderr);
+}
+
+void rsg_io_eprintln(RsgStr msg) {
+    fwrite(msg.data, 1, msg.len, stderr);
+    fputc('\n', stderr);
 }

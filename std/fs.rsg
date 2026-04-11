@@ -1,0 +1,13 @@
+// std/fs.rsg — file system operations
+//
+// Usage: mod fs   (loads from std/ directory)
+//        use self::fs::read_file
+
+pub decl fn read_file(path: str) -> str
+pub decl fn write_file(path: str, content: str) -> bool
+pub decl fn append_file(path: str, content: str) -> bool
+pub decl fn exists(path: str) -> bool
+pub decl fn remove(path: str) -> bool
+pub decl fn rename(old: str, new: str) -> bool
+pub decl fn mkdir(path: str) -> bool
+pub decl fn read_dir(path: str) -> []str

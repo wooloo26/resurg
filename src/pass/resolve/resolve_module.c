@@ -153,6 +153,31 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
         }
     }
 
+    // Scan var_table
+    for (int32_t i = 0; i < sema->base.db.var_table.capacity; i++) {
+        HashEntry *e = &sema->base.db.var_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            VarInfo *vi = (VarInfo *)e->value;
+            if (vi->is_pub) {
+                hash_table_insert(&sema->base.db.var_table, bare, vi);
+                scope_define(sema, &(SymDef){bare, vi->type, true, SYM_VAR});
+                if (reexport_prefix != NULL) {
+                    const char *rekey =
+                        arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
+                    hash_table_insert(&sema->base.db.var_table, rekey, vi);
+                    scope_define(sema, &(SymDef){rekey, vi->type, true, SYM_VAR});
+                }
+            }
+        }
+    }
+
     // Register variant constructors from generic enums matching mod_name.
     // e.g., `pub use Option::*` makes Some and None available as bare names.
     GenericEnumDef *gdef =
@@ -276,6 +301,21 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
             if (underlying != NULL) {
                 hash_table_insert(&sema->base.db.type_alias_table, qualified, (void *)underlying);
             }
+            continue;
+        }
+
+        if (inner->kind == NODE_VAR_DECL && inner->var_decl.is_pub) {
+            const char *qualified =
+                arena_sprintf(sema->base.arena, "%s.%s", mod_name, inner->var_decl.name);
+            inner->var_decl.name = qualified;
+            const Type *var_type = resolve_ast_type(sema, &inner->var_decl.type);
+            VarInfo *vi = arena_alloc(sema->base.arena, sizeof(VarInfo));
+            vi->name = qualified;
+            vi->type = var_type;
+            vi->init = inner->var_decl.init;
+            vi->is_pub = true;
+            hash_table_insert(&sema->base.db.var_table, qualified, vi);
+            scope_define(sema, &(SymDef){qualified, var_type, true, SYM_VAR});
             continue;
         }
 
@@ -405,6 +445,24 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
                 const char *rekey =
                     arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
                 hash_table_insert(&sema->base.db.type_alias_table, rekey, (void *)talias);
+            }
+            continue;
+        }
+
+        // Try var
+        VarInfo *vi = (VarInfo *)hash_table_lookup(&sema->base.db.var_table, qualified);
+        if (vi != NULL) {
+            if (!vi->is_pub) {
+                SEMA_ERR(sema, decl->loc, "'%s' is private in module '%s'", name, mod_name);
+                continue;
+            }
+            hash_table_insert(&sema->base.db.var_table, alias, vi);
+            scope_define(sema, &(SymDef){alias, vi->type, true, SYM_VAR});
+            if (reexport_prefix != NULL) {
+                const char *rekey =
+                    arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->base.db.var_table, rekey, vi);
+                scope_define(sema, &(SymDef){rekey, vi->type, true, SYM_VAR});
             }
             continue;
         }

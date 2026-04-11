@@ -169,6 +169,9 @@ const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_nam
                 SEMA_ERR(sema, node->loc, "cannot call pointer receiver on rvalue");
                 return &TYPE_ERR_INST;
             }
+            for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+                check_node(sema, node->call.args[i]);
+            }
             return resolve_call(sema, node, sig);
         }
     }

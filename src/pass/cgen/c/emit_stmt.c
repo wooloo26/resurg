@@ -103,6 +103,16 @@ static void emit_var_decl_stmt(CGen *cgen, const HirNode *node) {
     }
 
     const char *c_name = node->var_decl.sym->mangled_name;
+
+    // Global vars are declared at file scope; emit assignment only.
+    if (node->var_decl.is_global) {
+        if (node->var_decl.init != NULL) {
+            const char *value = emit_expr(cgen, node->var_decl.init);
+            emit_line(cgen, "%s = %s;", c_name, value);
+        }
+        return;
+    }
+
     if (node->var_decl.init != NULL) {
         const char *value = emit_expr(cgen, node->var_decl.init);
         emit_line(cgen, "%s %s = %s;", c_type_for(cgen, type), c_name, value);

@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "rsg_slice.h"
+
 /**
  * Immutable, ref-counted str.  ref_count == -1 marks a
  * static str lit (no heap alloc).
@@ -94,5 +96,28 @@ RsgStr rsg_str_repeat(RsgStr s, int32_t n);
 RsgStr rsg_str_to_upper(RsgStr s);
 /** Convert all ASCII letters to lowercase. */
 RsgStr rsg_str_to_lower(RsgStr s);
+
+/** Split @p s by @p sep into a slice of RsgStr. */
+RsgSlice rsg_str_split(RsgStr s, RsgStr sep);
+/** Replace all occurrences of @p old in @p s with @p replacement. */
+RsgStr rsg_str_replace(RsgStr s, RsgStr old, RsgStr replacement);
+/** Extract a byte-offset substring [start, end). */
+RsgStr rsg_str_substr(RsgStr s, int32_t start, int32_t end);
+/** Find the first occurrence of @p needle in @p s; returns -1 if not found. */
+int32_t rsg_str_index_of(RsgStr s, RsgStr needle);
+/** Return the byte at @p idx as a char; returns 0 if out of bounds. */
+char rsg_str_char_at(RsgStr s, int32_t idx);
+
+/** Parse @p s as an i32; returns 0 on failure. */
+int32_t rsg_str_parse_i32(RsgStr s);
+/** Parse @p s as an i64; returns 0 on failure. */
+int64_t rsg_str_parse_i64(RsgStr s);
+/** Parse @p s as an f64; returns 0.0 on failure. */
+double rsg_str_parse_f64(RsgStr s);
+
+/** Return the individual bytes of @p s as a []char slice. */
+RsgSlice rsg_str_chars(RsgStr s);
+/** Return the raw bytes of @p s as a []u8 slice. */
+RsgSlice rsg_str_bytes(RsgStr s);
 
 #endif // RSG_STR_H

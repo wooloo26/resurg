@@ -163,7 +163,8 @@ const Type *check_match(Sema *sema, ASTNode *node) {
         }
 
         const Type *arm_type = check_node(sema, arm->body);
-        if (result_type == NULL && arm_type != NULL && arm_type->kind != TYPE_UNIT) {
+        if (result_type == NULL && arm_type != NULL && arm_type->kind != TYPE_UNIT &&
+            arm_type->kind != TYPE_NEVER) {
             result_type = arm_type;
         }
 

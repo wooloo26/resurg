@@ -1,0 +1,8 @@
+// std/rand.rsg — random number generation
+//
+// Usage: mod rand
+//        use self::rand::rand_i32
+
+pub decl fn seed(s: u64)
+pub decl fn rand_i32(lo: i32, hi: i32) -> i32
+pub decl fn rand_f64() -> f64

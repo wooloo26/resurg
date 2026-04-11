@@ -324,8 +324,6 @@ struct ASTNode {
             // Generic type params (NULL for non-generic fns)
             ASTTypeParam *type_params;     /* buf */
             ASTWhereClause *where_clauses; /* buf - where clause predicates */
-            // Attribute: #[extern("c_symbol")]
-            const char *extern_name; // NULL unless #[extern("...")] is present
         } fn_decl;
 
         // NODE_PARAM
@@ -344,6 +342,7 @@ struct ASTNode {
             bool is_var;     // true for `var x: T = ...`, false for `:=`
             bool is_immut;   // true for `immut x := ...`
             bool is_declare; // true for `decl var x: T`
+            bool is_pub;     // true for `pub immut x := ...` (module-level export)
         } var_decl;
 
         // NODE_EXPR_STMT

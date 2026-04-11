@@ -1,0 +1,16 @@
+// Test pub immut variable exports from modules
+// EXPECT-STDOUT: pub_immut: all tests passed
+
+mod const_helper
+use self::const_helper::{PI, MAX_SIZE, GREETING}
+
+fn test_pub_immut_named() {
+    assert(PI == 3.14159, "PI should be 3.14159")
+    assert(MAX_SIZE == 100, "MAX_SIZE should be 100")
+    assert(GREETING == "hello", "GREETING should be hello")
+}
+
+fn main() {
+    test_pub_immut_named()
+    println("pub_immut: all tests passed")
+}

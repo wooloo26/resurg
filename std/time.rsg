@@ -1,0 +1,8 @@
+// std/time.rsg — time measurement
+//
+// Usage: mod time
+//        use self::time::now_ns
+
+pub decl fn now_ns() -> i64
+pub decl fn unix_secs() -> i64
+pub decl fn sleep_ms(ms: i64)

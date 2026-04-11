@@ -5,40 +5,6 @@
 
 #include "_parse.h"
 
-// ── Attribute parsing ──────────────────────────────────────────────────
-
-/**
- * Try to parse `#[extern("c_symbol")]`.
- *
- * Returns the C symbol name, or NULL if no attribute is present.
- * Currently only the `extern` attribute is recognised; unknown
- * attribute names produce a diagnostic.
- */
-const char *try_parse_extern_attr(Parser *parser) {
-    if (!parser_check(parser, TOKEN_HASH)) {
-        return NULL;
-    }
-    parser_advance(parser); // consume '#'
-    parser_expect(parser, TOKEN_LEFT_BRACKET);
-    const Token *attr_name = parser_expect(parser, TOKEN_ID);
-    if (strcmp(attr_name->lexeme, "extern") != 0) {
-        PARSER_ERR(parser, attr_name->loc, "unknown attribute '%s'", attr_name->lexeme);
-        // Skip to ']'
-        while (!parser_check(parser, TOKEN_RIGHT_BRACKET) && !parser_at_end(parser)) {
-            parser_advance(parser);
-        }
-        parser_match(parser, TOKEN_RIGHT_BRACKET);
-        return NULL;
-    }
-    parser_expect(parser, TOKEN_LEFT_PAREN);
-    const Token *sym_tok = parser_expect(parser, TOKEN_STR_LIT);
-    const char *symbol = sym_tok->lit_value.str_value;
-    parser_expect(parser, TOKEN_RIGHT_PAREN);
-    parser_expect(parser, TOKEN_RIGHT_BRACKET);
-    parser_skip_newlines(parser);
-    return symbol;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /** Peek one token ahead without consuming. */
@@ -216,11 +182,6 @@ void parse_recv_and_params(Parser *parser, ASTNode *node) {
 // ── Method decl (inside struct/enum/ext) ────────────────────────
 
 ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub) {
-    const char *extern_name = try_parse_extern_attr(parser);
-    // `#[extern("...")]` may precede `pub`, so check again after consuming attr.
-    if (extern_name != NULL && !is_pub) {
-        is_pub = parser_match(parser, TOKEN_PUB);
-    }
     bool is_declare = parser_match(parser, TOKEN_DECLARE);
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
@@ -228,7 +189,6 @@ ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub)
     ASTNode *node = ast_new(parser->arena, NODE_FN_DECL, loc);
     node->fn_decl.is_pub = is_pub;
     node->fn_decl.is_declare = is_declare;
-    node->fn_decl.extern_name = extern_name;
     node->fn_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->fn_decl.params = NULL;
     node->fn_decl.owner_struct = struct_name;
@@ -275,7 +235,7 @@ ASTNode *parse_declare_var(Parser *parser, bool is_pub) {
     node->var_decl.is_var = true;
     node->var_decl.is_immut = false;
     node->var_decl.is_declare = true;
-    (void)is_pub;
+    node->var_decl.is_pub = is_pub;
     return node;
 }
 

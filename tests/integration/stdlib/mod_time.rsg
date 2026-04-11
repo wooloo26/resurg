@@ -1,0 +1,17 @@
+// stdlib: Phase 4 — time module
+// EXPECT-STDOUT: time module tests passed
+mod time
+
+use self::time::now_ns
+use self::time::unix_secs
+
+fn main() {
+    ns := now_ns()
+    assert(ns > 0, "time now_ns positive")
+
+    secs := unix_secs()
+    // unix_secs should be > 2024-01-01 epoch (1704067200)
+    assert(secs > 1704067200, "time unix_secs reasonable")
+
+    println("time module tests passed")
+}

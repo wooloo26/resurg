@@ -275,6 +275,10 @@ w := v            // OK: value copy
 
 struct Service { immut db: *Database; name: str }
 fn create_logger() -> immut *Logger { &Logger { level = "info" } }
+
+// module-level exported constant
+pub immut PI: f64 = 3.14159265358979323846
+pub immut NAME := "resurg"                   // type inferred
 ```
 
 ### Option (`?T`)
@@ -1049,6 +1053,9 @@ write(..)
 pub use std::io::*
 
 pub fn add(a: i32, b: i32) = a + b
+
+pub immut MAX_SIZE: i32 = 100               // module-level constant
+pub immut GREETING := "hello"               // type-inferred constant
 
 pub struct User {
     pub name: str
