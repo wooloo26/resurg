@@ -35,13 +35,13 @@ pub declare fn recover() -> ?str
 // ── Method extensions ──────────────────────────────────────────
 
 ext str {
-    pub declare fn len(s) -> i32
+    pub fn len(s) -> i32 = len(s)
 }
 
 ext<T> []T {
-    pub declare fn len(s) -> i32
+    pub fn len(s) -> i32 = len(s)
 }
 
 ext<T, comptime N: usize> [N]T {
-    pub declare fn len(s) -> i32
+    pub fn len(s) -> i32 = len(s)
 }

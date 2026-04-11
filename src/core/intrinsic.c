@@ -9,13 +9,13 @@
 // ── Intrinsic descriptor table ──────────────────────────────────────
 
 static const IntrinsicDesc INTRINSIC_TABLE[] = {
-    {"print", INTRINSIC_PRINT, 1, 1, false, false},
-    {"println", INTRINSIC_PRINTLN, 1, 1, false, false},
-    {"assert", INTRINSIC_ASSERT, 1, 2, true, false},
-    {"panic", INTRINSIC_PANIC, 1, 1, false, false},
-    {"recover", INTRINSIC_RECOVER, 0, 0, false, false},
-    {"len", INTRINSIC_LEN, 1, 1, false, true},
-    {"rsg_slice_concat", INTRINSIC_SLICE_CONCAT, 2, 2, false, false},
+    {"print", INTRINSIC_PRINT, 1, 1, false},
+    {"println", INTRINSIC_PRINTLN, 1, 1, false},
+    {"assert", INTRINSIC_ASSERT, 1, 2, true},
+    {"panic", INTRINSIC_PANIC, 1, 1, false},
+    {"recover", INTRINSIC_RECOVER, 0, 0, false},
+    {"len", INTRINSIC_LEN, 1, 1, false},
+    {"rsg_slice_concat", INTRINSIC_SLICE_CONCAT, 2, 2, false},
 };
 
 #define INTRINSIC_COUNT (sizeof(INTRINSIC_TABLE) / sizeof(INTRINSIC_TABLE[0]))

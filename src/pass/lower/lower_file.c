@@ -20,13 +20,7 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
 
         if (method->fn_decl.is_declare) {
-            // Intrinsic methods (e.g. .len()) are expanded inline during lowering.
-            const char *bare = strrchr(method_name, '.');
-            bare = (bare != NULL) ? bare + 1 : method_name;
-            if (intrinsic_lookup(bare) != INTRINSIC_NONE) {
-                continue;
-            }
-            // Register non-intrinsic declare methods with default mangling
+            // Register declare methods with default mangling
             // so normal call lowering can resolve their symbol.
             const char *mangled =
                 arena_sprintf(low->hir_arena, "rsgu_%s_%s",

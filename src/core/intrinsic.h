@@ -106,7 +106,6 @@ typedef struct {
     uint8_t min_args; // minimum arg count
     uint8_t max_args; // maximum arg count
     bool injects_loc; // auto-injects file/line (assert)
-    bool is_method;   // can appear as .name() on types
 } IntrinsicDesc;
 
 /**
