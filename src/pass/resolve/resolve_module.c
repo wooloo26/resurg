@@ -152,6 +152,26 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
             }
         }
     }
+
+    // Register variant constructors from generic enums matching mod_name.
+    // e.g., `pub use Option::*` makes Some and None available as bare names.
+    GenericEnumDef *gdef =
+        (GenericEnumDef *)hash_table_lookup(&sema->base.generics.enums, mod_name);
+    if (gdef != NULL && gdef->decl != NULL && gdef->decl->kind == NODE_ENUM_DECL) {
+        ASTEnumVariant *variants = gdef->decl->enum_decl->variants;
+        for (int32_t i = 0; i < BUF_LEN(variants); i++) {
+            VariantCtorInfo *vci = arena_alloc(sema->base.arena, sizeof(VariantCtorInfo));
+            vci->enum_name = mod_name;
+            vci->variant_name = variants[i].name;
+            vci->has_payload = (variants[i].kind != VARIANT_UNIT);
+            hash_table_insert(&sema->base.db.variant_ctor_table, variants[i].name, vci);
+            if (reexport_prefix != NULL) {
+                const char *rekey =
+                    arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, variants[i].name);
+                hash_table_insert(&sema->base.db.variant_ctor_table, rekey, vci);
+            }
+        }
+    }
 }
 
 // ── Public API ─────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ static ASTNode *parse_var_decl(Parser *parser) {
         return node;
     }
 
-    // `var x: T = expr` or `x := expr` or `var x` (declare first)
+    // `var x: T = expr` or `x := expr` or `var x` (decl first)
     if (parser_match(parser, TOKEN_VAR)) {
         node->var_decl.is_var = true;
         node->var_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;

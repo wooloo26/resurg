@@ -263,6 +263,14 @@ static void enforce_pact_fields(Sema *sema, const ASTNode *decl, const StructDef
     BUF_FREE(required_fields);
 }
 
+/** Return a human-readable label for a receiver form. */
+static const char *recv_label(bool is_ptr, bool is_mut) {
+    if (is_ptr) {
+        return is_mut ? "mut *self" : "*self";
+    }
+    return "self";
+}
+
 /** Verify pact-required methods exist; inject defaults when available. */
 static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, PactDef *pact) {
     StructMethodInfo *pact_methods = NULL;
@@ -273,10 +281,28 @@ static void enforce_pact_methods(Sema *sema, ASTNode *decl, StructDef *def, Pact
 
         bool found = false;
         for (int32_t j = 0; j < BUF_LEN(def->methods); j++) {
-            if (strcmp(def->methods[j].name, pact_methods[i].name) == 0) {
-                found = true;
-                break;
+            if (strcmp(def->methods[j].name, pact_methods[i].name) != 0) {
+                continue;
             }
+            found = true;
+            // Enforce receiver compatibility when pact declares a receiver
+            if (pact_methods[i].recv_name != NULL) {
+                bool p_ptr = pact_methods[i].is_ptr_recv;
+                bool p_mut = pact_methods[i].is_mut_recv;
+                bool s_ptr = def->methods[j].is_ptr_recv;
+                bool s_mut = def->methods[j].is_mut_recv;
+                if (def->methods[j].recv_name == NULL) {
+                    SEMA_ERR(sema, decl->loc,
+                             "method '%s' must have receiver '%s' as required by pact '%s'",
+                             pact_methods[i].name, recv_label(p_ptr, p_mut), pact->name);
+                } else if (p_ptr != s_ptr || p_mut != s_mut) {
+                    SEMA_ERR(sema, decl->loc,
+                             "method '%s' has receiver '%s' but pact '%s' requires '%s'",
+                             pact_methods[i].name, recv_label(s_ptr, s_mut), pact->name,
+                             recv_label(p_ptr, p_mut));
+                }
+            }
+            break;
         }
 
         if (!found) {

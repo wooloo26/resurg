@@ -345,6 +345,7 @@ static bool stage_sema(Arena *arena, ASTNode *file_node, const char *std_search_
     if (std_search_dir != NULL) {
         sema_set_std_search_dir(sema, std_search_dir);
     }
+    sema_enable_method_checking(sema);
     bool ok = sema_resolve(sema, file_node) && sema_check(sema, file_node) &&
               sema_mono(sema, file_node, sema_check_fn_body);
     if (!ok) {

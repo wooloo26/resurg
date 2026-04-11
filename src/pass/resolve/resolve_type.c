@@ -117,36 +117,6 @@ static const Type *resolve_ptr_type(Sema *sema, const ASTType *ast_type) {
     return type_create_ptr(sema->base.arena, pointee, false);
 }
 
-static const Type *resolve_option_type(Sema *sema, const ASTType *ast_type) {
-    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
-    if (gdef == NULL) {
-        SEMA_ERR(sema, ast_type->loc, "built-in Option enum not found");
-        return &TYPE_ERR_INST;
-    }
-    ASTType val_args[1] = {*ast_type->option_elem};
-    GenericInstArgs inst_args = {val_args, 1, ast_type->loc};
-    const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-    if (mangled != NULL) {
-        return sema_lookup_type_alias(sema, mangled);
-    }
-    return &TYPE_ERR_INST;
-}
-
-static const Type *resolve_result_type(Sema *sema, const ASTType *ast_type) {
-    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Result");
-    if (gdef == NULL) {
-        SEMA_ERR(sema, ast_type->loc, "built-in Result enum not found");
-        return &TYPE_ERR_INST;
-    }
-    ASTType val_args[2] = {*ast_type->result_ok, *ast_type->result_err};
-    GenericInstArgs inst_args = {val_args, 2, ast_type->loc};
-    const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-    if (mangled != NULL) {
-        return sema_lookup_type_alias(sema, mangled);
-    }
-    return &TYPE_ERR_INST;
-}
-
 static const Type *resolve_fn_type(Sema *sema, const ASTType *ast_type) {
     const Type **params = NULL;
     for (int32_t i = 0; i < BUF_LEN(ast_type->fn_param_types); i++) {
@@ -357,11 +327,10 @@ static const Type *resolve_comptime_int_type(Sema *sema, const ASTType *ast_type
 typedef const Type *(*TypeResolver)(Sema *, const ASTType *);
 
 static const TypeResolver TYPE_RESOLVERS[] = {
-    [AST_TYPE_NAME] = resolve_name_type,     [AST_TYPE_ARRAY] = resolve_array_type,
-    [AST_TYPE_SLICE] = resolve_slice_type,   [AST_TYPE_TUPLE] = resolve_tuple_type,
-    [AST_TYPE_PTR] = resolve_ptr_type,       [AST_TYPE_OPTION] = resolve_option_type,
-    [AST_TYPE_RESULT] = resolve_result_type, [AST_TYPE_FN] = resolve_fn_type,
-    [AST_TYPE_ASSOC] = resolve_assoc_type,   [AST_TYPE_COMPTIME_INT] = resolve_comptime_int_type,
+    [AST_TYPE_NAME] = resolve_name_type,   [AST_TYPE_ARRAY] = resolve_array_type,
+    [AST_TYPE_SLICE] = resolve_slice_type, [AST_TYPE_TUPLE] = resolve_tuple_type,
+    [AST_TYPE_PTR] = resolve_ptr_type,     [AST_TYPE_FN] = resolve_fn_type,
+    [AST_TYPE_ASSOC] = resolve_assoc_type, [AST_TYPE_COMPTIME_INT] = resolve_comptime_int_type,
 };
 
 #define TYPE_RESOLVER_COUNT ((int32_t)(sizeof(TYPE_RESOLVERS) / sizeof(TYPE_RESOLVERS[0])))

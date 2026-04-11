@@ -1,11 +1,11 @@
-// pub declare: public declared functions in ext blocks
-// EXPECT-STDOUT: pub declare ext works
+// pub decl: public declared functions in ext blocks
+// EXPECT-STDOUT: pub decl ext works
 
-// ── pub declare fn for len is available via prelude ext blocks ──
+// ── pub decl fn for len is available via prelude ext blocks ──
 // Per README § 13:
-//   ext str { pub declare fn len(s) }
-//   ext<T> []T { pub declare fn len(s) }
-//   ext<T, comptime N: usize> [N]T { pub declare fn len(s) }
+//   ext str { pub decl fn len(s) }
+//   ext<T> []T { pub decl fn len(s) }
+//   ext<T, comptime N: usize> [N]T { pub decl fn len(s) }
 
 fn test_prelude_dot_len_str() {
     s := "hello"
@@ -37,5 +37,5 @@ ext Counter {
 fn test_pub_fn_in_ext_block() {
     c := Counter { value = 42 }
     assert(c.get_value() == 42, "")
-    println("pub declare ext works")
+    println("pub decl ext works")
 }

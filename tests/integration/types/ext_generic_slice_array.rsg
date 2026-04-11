@@ -2,10 +2,10 @@
 // Tests: ext<T> []T and ext<T, comptime N: usize> [N]T
 // EXPECT-STDOUT: generic ext slice/array ok
 
-// ── ext<T> []T: declare fn len ──
+// ── ext<T> []T: decl fn len ──
 
 // Per README § 13:
-//   ext<T> []T { pub declare fn len(s) -> i32 }
+//   ext<T> []T { pub decl fn len(s) -> i32 }
 // The prelude provides .len() on all slice types via this generic ext.
 
 fn test_slice_len_i32() {
@@ -32,10 +32,10 @@ fn test_slice_len_rvalue() {
     assert(([]i32{1, 2, 3}).len() == 3, "")
 }
 
-// ── ext<T, comptime N: usize> [N]T: declare fn len ──
+// ── ext<T, comptime N: usize> [N]T: decl fn len ──
 
 // Per README § 13:
-//   ext<T, comptime N: usize> [N]T { pub declare fn len(s) -> i32 }
+//   ext<T, comptime N: usize> [N]T { pub decl fn len(s) -> i32 }
 // The prelude provides .len() on all array types via this generic ext.
 
 fn test_array_len_i32() {

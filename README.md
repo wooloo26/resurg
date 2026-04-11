@@ -315,32 +315,25 @@ f := open(path)!
 defer f.close()
 ```
 
-### Panic & Recover
+### Panic & Catch
 
-`panic` aborts the current execution path. `recover` — only callable inside `defer` — returns `Some(message)` if a panic is active and catches it, `None` otherwise.
-
-When `panic` fires: execution stops, defers run LIFO. If a defer calls `recover()`, the panic is caught and the function returns from the defer (not the panic site).
+`panic` aborts the current execution path. `catch_panic` wraps a closure call and returns a `Result<T, str>` — `Ok(value)` on success, `Err(message)` if the closure panicked.
 
 ```rsg
-fn safe_call() -> ?str {
-    var result: ?str = None
-    
-    defer {
-        // Only place where recover() is allowed
-        if Some(msg) := recover() {
-            println("Caught panic: {msg}")
-            result = Some(msg)          // Convert panic → controlled return
-            result                      // or return Some(msg)
-        }
-    }
-    
-    println("About to panic...")
-    panic("went wrong")                 // Triggers defer above
-    result                              // Unreachable
+fn risky() -> str {
+    panic("went wrong")
 }
 
-// Usage:
-msg := safe_call()                      // → Some("went wrong")
+result := catch_panic(risky)            // → Err("went wrong")
+match result {
+    Ok(v) => println("ok: {v}"),
+    Err(msg) => println("caught: {msg}"),
+}
+
+// Inline closure form:
+result := catch_panic(|| {
+    assert(false, "boom")
+})
 ```
 
 ### Assert
@@ -358,11 +351,11 @@ assert(x > 0, "x must be positive")
 
 Value types. Embedding promotes fields/methods; override by redefining.
 
-| Receiver    | Syntax         | Semantics                       |
-| ----------- | -------------- | ------------------------------- |
-| Value       | `fn f(p)`      | Copy of struct, cannot mutate   |
-| Pointer     | `fn f(*p)`     | Read-only pointer (`const T *`) |
-| Mut pointer | `fn f(mut *p)` | Mutable pointer (`T *`)         |
+| Receiver    | Syntax         | Semantics                          |
+| ----------- | -------------- | ---------------------------------- |
+| Value       | `fn f(p)`      | Mutable copy, usable as a variable |
+| Pointer     | `fn f(*p)`     | Read-only pointer (`const T *`)    |
+| Mut pointer | `fn f(mut *p)` | Mutable pointer (`T *`)            |
 
 ```rsg
 struct Point {
@@ -932,34 +925,6 @@ sum(0, ..nums, 99)     // 105
 fn bad(values: ..i32, default: i32) -> i32 {
     // ERROR: variadic must be last parameter
 }
-```
-
-### Default Parameters
-
-Parameters can have default values using `= expr`. Parameters with defaults must follow required ones.
-
-```rsg
-fn greet(name: str, greeting: str = "Hello") {
-    println("{greeting}, {name}!")
-}
-
-greet("Alice")              // Hello, Alice!
-greet("Bob", "Hi")          // Hi, Bob!
-
-fn connect(host: str, port: i32 = 8080, retries: i32 = 3) -> bool {
-    // ...
-}
-
-connect("localhost")              // port=8080, retries=3
-connect("localhost", 443)         // retries=3
-connect("localhost", 443, 5)
-```
-
-Built-in `assert` uses this feature:
-
-```rsg
-assert(x > 0)                // just a condition
-assert(x > 0, "x must be positive")  // with message
 ```
 
 ### Closures

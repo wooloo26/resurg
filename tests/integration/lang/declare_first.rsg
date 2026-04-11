@@ -1,6 +1,6 @@
-// Declare first: variable declaration without initializer
+// Decl first: variable declaration without initializer
 
-// ── simple declare then assign ──
+// ── simple decl then assign ──
 
 fn test_declare_first_simple() {
     var x: i32
@@ -8,7 +8,7 @@ fn test_declare_first_simple() {
     assert(x == 42, "")
 }
 
-// ── declare first with conditional assignment ──
+// ── decl first with conditional assignment ──
 
 fn test_declare_first_conditional() {
     var result: str
@@ -30,7 +30,7 @@ fn test_declare_first_conditional_else() {
     assert(result == "no", "")
 }
 
-// ── declare first then use in loop ──
+// ── decl first then use in loop ──
 
 fn test_declare_first_loop() {
     var total: i32

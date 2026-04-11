@@ -11,9 +11,9 @@
 static const IntrinsicDesc INTRINSIC_TABLE[] = {
     {"print", INTRINSIC_PRINT, 1, 1, false},
     {"println", INTRINSIC_PRINTLN, 1, 1, false},
-    {"assert", INTRINSIC_ASSERT, 1, 2, true},
+    {"assert", INTRINSIC_ASSERT, 2, 2, true},
     {"panic", INTRINSIC_PANIC, 1, 1, false},
-    {"recover", INTRINSIC_RECOVER, 0, 0, false},
+    {"catch_panic", INTRINSIC_CATCH_PANIC, 1, 1, false},
     {"len", INTRINSIC_LEN, 1, 1, false},
     {"rsg_slice_concat", INTRINSIC_SLICE_CONCAT, 2, 2, false},
 };
@@ -123,8 +123,11 @@ static const RuntimeABI C17_ABI = {
     .assert = RSG_FN_ASSERT,
     .panic_push = "rsg_panic_push",
     .panic_pop = "rsg_panic_pop",
-    .print = "rsgu_print_",
-    .println = "rsgu_println_",
+    .print = "rsg_print_",
+    .println = "rsg_println_",
+    .heap_alloc = "rsg_heap_alloc",
+    .is_panicking = "rsg_is_panicking",
+    .repanic = "rsg_repanic",
     .runtime_header = "rsg_runtime.h",
 };
 

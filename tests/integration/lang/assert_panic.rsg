@@ -3,47 +3,29 @@
 // EXPECT-STDOUT: caught assert with msg: x must be positive
 // EXPECT-STDOUT: assert passes normally
 
-// ── assert(false, "assertion failed") triggers panic, catchable via recover ──
-
-fn catch_assert_fail() -> ?str {
-    var result: ?str = None
-
-    defer {
-        if Some(msg) := recover() {
-            result = Some(msg)
-        }
-    }
-
-    assert(false, "assertion failed")
-    result
-}
+// ── assert(false, "assertion failed") triggers panic, catchable via catch_panic ──
 
 fn test_assert_panics_on_failure() {
-    r := catch_assert_fail()
-    if Some(msg) := r {
-        println("caught assert: {msg}")
+    result := catch_panic(|| -> i32 {
+        assert(false, "assertion failed")
+        0
+    })
+    match result {
+        Ok(_) => assert(true, ""),
+        Err(msg) => println("caught assert: {msg}"),
     }
 }
 
 // ── assert(false, "message") includes custom message ──
 
-fn catch_assert_msg() -> ?str {
-    var result: ?str = None
-
-    defer {
-        if Some(msg) := recover() {
-            result = Some(msg)
-        }
-    }
-
-    assert(false, "x must be positive")
-    result
-}
-
 fn test_assert_panics_with_message() {
-    r := catch_assert_msg()
-    if Some(msg) := r {
-        println("caught assert with msg: {msg}")
+    result := catch_panic(|| -> i32 {
+        assert(false, "x must be positive")
+        0
+    })
+    match result {
+        Ok(_) => assert(true, ""),
+        Err(msg) => println("caught assert with msg: {msg}"),
     }
 }
 

@@ -59,3 +59,41 @@ ext Foo impl Describable {
 fn main() {
     f := Foo {}
 }
+
+// === receiver mismatch ptr vs value ===
+// EXPECT-ERROR: method 'greet' has receiver 'self' but pact 'Greetable' requires '*self'
+
+pact Greetable {
+    fn greet(*self) -> str
+}
+
+struct Foo {
+    x: i32 = 0
+}
+
+ext Foo impl Greetable {
+    fn greet(self) -> str { "hi" }
+}
+
+fn main() {
+    f := Foo {}
+}
+
+// === receiver mismatch value vs ptr ===
+// EXPECT-ERROR: method 'name' has receiver '*self' but pact 'Named' requires 'self'
+
+pact Named {
+    fn name(self) -> str
+}
+
+struct Bar {
+    s: str = ""
+}
+
+ext Bar impl Named {
+    fn name(*self) -> str { self.s }
+}
+
+fn main() {
+    b := Bar {}
+}

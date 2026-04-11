@@ -43,7 +43,7 @@ static HirNode *lower_fn_body(Lower *low, const ASTNode *body_ast) {
 // ── Declaration lower ──────────────────────────────────────────────
 
 HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
-    // Declare fns have no body — skip lowering
+    // Decl fns have no body — skip lowering
     if (ast->fn_decl.is_declare) {
         return NULL;
     }
@@ -54,7 +54,7 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
     HirSymSpec func_spec = {HIR_SYM_FN, name, return_type, false, ast->loc};
     HirSym *func_sym = lower_make_sym(low, &func_spec);
     func_sym->mangled_name =
-        arena_sprintf(low->hir_arena, "rsgu_%s", lower_mangle_name(low->hir_arena, name));
+        arena_sprintf(low->hir_arena, "rsg_%s", lower_mangle_name(low->hir_arena, name));
     lower_scope_define(low, name, func_sym);
 
     lower_scope_enter(low);
@@ -82,7 +82,7 @@ HirNode *lower_fn_decl(Lower *low, const ASTNode *ast) {
 
 HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_name,
                            const Type *struct_type) {
-    // Declare methods have no body — skip lowering
+    // Decl methods have no body — skip lowering
     if (ast->fn_decl.is_declare) {
         return NULL;
     }
@@ -96,7 +96,7 @@ HirNode *lower_method_decl(Lower *low, const ASTNode *ast, const char *struct_na
         HirSymSpec method_spec = {HIR_SYM_FN, key, return_type, false, ast->loc};
         func_sym = lower_make_sym(low, &method_spec);
         func_sym->mangled_name =
-            arena_sprintf(low->hir_arena, "rsgu_%s_%s",
+            arena_sprintf(low->hir_arena, "rsg_%s_%s",
                           lower_mangle_name(low->hir_arena, struct_name), method_name);
         lower_scope_define(low, key, func_sym);
     }

@@ -24,17 +24,17 @@ void rsg_panic_pop(void) {
 void rsg_assert(bool cond, const char *msg, const char *file, int32_t line) {
     if (!cond) {
         if (msg != NULL) {
-            rsgu_panic(msg);
+            rsg_panic(msg);
         } else {
             // Build "assertion failed at file:line"
             char buf[512];
             snprintf(buf, sizeof(buf), "assertion failed at %s:%d", file, line);
-            rsgu_panic(buf);
+            rsg_panic(buf);
         }
     }
 }
 
-void rsgu_panic(const char *msg) {
+_Noreturn void rsg_panic(const char *msg) {
     free(g_rsg_panic_msg);
     g_rsg_panic_msg = NULL;
     if (msg != NULL) {
@@ -56,7 +56,7 @@ void rsgu_panic(const char *msg) {
     exit(1);
 }
 
-const char *rsgu_recover(void) {
+const char *rsg_recover(void) {
     if (!g_rsg_panicking) {
         return NULL;
     }
@@ -68,7 +68,7 @@ bool rsg_is_panicking(void) {
     return g_rsg_panicking;
 }
 
-void rsg_repanic(void) {
+_Noreturn void rsg_repanic(void) {
     if (g_rsg_panic_stack != NULL) {
         longjmp(g_rsg_panic_stack->env, 1);
     }

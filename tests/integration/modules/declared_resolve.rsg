@@ -1,30 +1,34 @@
-// Declared functions resolve from builtin.rsg (not hardcoded)
-// EXPECT-STDOUT: declared resolve works
+// Decl functions resolve from builtin.rsg (not hardcoded)
+// EXPECT-STDOUT: decl resolve works
 
-// ── panic in statement position ──
+// ── panic caught via catch_panic ──
 
-fn test_panic_in_defer_recover() {
-    var caught: ?str = None
-    defer {
-        caught = recover()
+fn test_panic_catch() {
+    result := catch_panic(|| -> i32 {
+        panic("expected panic")
+    })
+    match result {
+        Ok(_) => assert(false, ""),
+        Err(_) => assert(true, ""),
     }
-    panic("expected panic")
 }
 
-// ── recover returns ?str ──
+// ── catch_panic returns Result<T, str> ──
 
-fn test_recover_returns_option_str() {
-    var result: ?str = None
-    defer {
-        result = recover()
+fn test_catch_returns_result() {
+    result := catch_panic(|| -> i32 {
+        panic("caught")
+    })
+    match result {
+        Ok(_) => assert(false, ""),
+        Err(msg) => assert(msg == "caught", ""),
     }
-    panic("caught")
 }
 
 // ── print/println accept str ──
 
 fn test_print_str() {
-    println("declared resolve works")
+    println("decl resolve works")
     print("")
 }
 

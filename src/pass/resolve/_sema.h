@@ -31,14 +31,12 @@ struct FnSig {
     const Type **param_types; /* buf */
     const char **param_names; /* buf */
     int32_t param_count;
-    int32_t required_count; // params before first default (== param_count when no defaults)
     bool is_pub;
     bool is_ptr_recv;
-    bool is_declare;            // true for declare fns
-    bool has_variadic;          // true when last param is variadic (..T)
-    IntrinsicKind intrinsic;    // INTRINSIC_NONE for user fns; set once during resolve
-    DefaultKind *default_kinds; /* buf - parallel to param_types; NULL when no defaults */
-    ASTNode **default_exprs;    /* buf - parallel to param_types; NULL entries for @file/@line */
+    bool is_declare;         // true for decl fns
+    bool has_variadic;       // true when last param is variadic (..T)
+    IntrinsicKind intrinsic; // INTRINSIC_NONE for user fns; set once during resolve
+    const char *extern_name; // C symbol from #[extern("...")]; NULL for default mangling
 };
 
 /** Base for all generic templates (fn, struct, enum). */
@@ -147,13 +145,25 @@ typedef struct GenericTables {
     HashTable type_params; // name → const Type* (active during generic body check)
 } GenericTables;
 
-/** Read-write symbol registry — the 5 global declaration tables. */
+/**
+ * Variant constructor entry — registered during `pub use Enum::*` so
+ * that bare variant calls (e.g. `Some(x)`, `None`) resolve generically
+ * instead of via hardcoded string comparisons.
+ */
+typedef struct VariantCtorInfo {
+    const char *enum_name;    // e.g. "Option" — key into generics.enums
+    const char *variant_name; // e.g. "Some"
+    bool has_payload;         // true for tuple variants (Some(T)), false for unit (None)
+} VariantCtorInfo;
+
+/** Read-write symbol registry — the global declaration tables. */
 typedef struct SemaDB {
-    HashTable type_alias_table; // name → const Type*
-    HashTable fn_table;         // name → FnSig*
-    HashTable struct_table;     // name → StructDef*
-    HashTable enum_table;       // name → EnumDef*
-    HashTable pact_table;       // name → PactDef*
+    HashTable type_alias_table;   // name → const Type*
+    HashTable fn_table;           // name → FnSig*
+    HashTable struct_table;       // name → StructDef*
+    HashTable enum_table;         // name → EnumDef*
+    HashTable pact_table;         // name → PactDef*
+    HashTable variant_ctor_table; // bare_name → VariantCtorInfo*
 } SemaDB;
 
 /** Module-loading context — directory paths and loader callback. */

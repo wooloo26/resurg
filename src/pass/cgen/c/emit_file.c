@@ -61,14 +61,14 @@ static int32_t count_defers(const HirNode *node) {
  */
 static void emit_deferred_cleanup(CGen *cgen, const Type *return_type, bool has_panic_frame,
                                   const char *panic_result_expr) {
-    emit_line(cgen, "_rsg_cleanup:;");
+    emit_line(cgen, RSG_INTERNAL_CLEANUP ":;");
     if (has_panic_frame) {
-        emit_line(cgen, "rsg_panic_pop();");
+        emit_line(cgen, "%s();", cgen->abi->panic_pop);
     }
     for (int32_t i = BUF_LEN(cgen->defer_bodies) - 1; i >= 0; i--) {
         const HirNode *defer_node = cgen->defer_bodies[i];
         if (defer_node->defer_stmt.body != NULL) {
-            emit_line(cgen, "if (_rsg_defer_%d) {", i);
+            emit_line(cgen, "if (" RSG_INTERNAL_DEFER "%d) {", i);
             cgen->indent++;
             emit_stmt(cgen, defer_node->defer_stmt.body);
             cgen->indent--;
@@ -76,23 +76,25 @@ static void emit_deferred_cleanup(CGen *cgen, const Type *return_type, bool has_
         }
     }
     if (has_panic_frame) {
-        emit_line(cgen, "if (_rsg_panicked && rsg_is_panicking()) { rsg_repanic(); }");
+        emit_line(cgen, "if (" RSG_INTERNAL_PANICKED " && %s()) { %s(); }", cgen->abi->is_panicking,
+                  cgen->abi->repanic);
     }
     if (return_type != NULL && return_type->kind != TYPE_UNIT && return_type->kind != TYPE_NEVER) {
         // After panic recovery, defers may have modified the return variable.
         // Re-read the trailing result expression to pick up those changes.
         if (has_panic_frame && panic_result_expr != NULL) {
-            emit_line(cgen, "if (_rsg_panicked) { _rsg_result = %s; }", panic_result_expr);
+            emit_line(cgen, "if (" RSG_INTERNAL_PANICKED ") { " RSG_INTERNAL_RESULT " = %s; }",
+                      panic_result_expr);
         }
-        emit_line(cgen, "return _rsg_result;");
+        emit_line(cgen, "return " RSG_INTERNAL_RESULT ";");
     }
 }
 
 /** Emit a return or defer-cleanup goto for a computed result. */
 static void emit_return_or_defer(CGen *cgen, const char *result, bool has_defers) {
     if (has_defers) {
-        emit_line(cgen, "_rsg_result = %s;", result);
-        emit_line(cgen, "goto _rsg_cleanup;");
+        emit_line(cgen, RSG_INTERNAL_RESULT " = %s;", result);
+        emit_line(cgen, "goto " RSG_INTERNAL_CLEANUP ";");
     } else {
         emit_line(cgen, "return %s;", result);
     }
@@ -132,26 +134,26 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
     cgen->defer_counter = 0;
 
     if (has_defers && !is_unit && !is_main) {
-        emit_line(cgen, "%s _rsg_result;", c_type_for(cgen, return_type));
+        emit_line(cgen, "%s " RSG_INTERNAL_RESULT ";", c_type_for(cgen, return_type));
     }
 
     // Emit volatile boolean activation flags for every defer in this function
     if (has_defers) {
         int32_t defer_count = count_defers(body);
         for (int32_t i = 0; i < defer_count; i++) {
-            emit_line(cgen, "volatile bool _rsg_defer_%d = false;", i);
+            emit_line(cgen, "volatile bool " RSG_INTERNAL_DEFER "%d = false;", i);
         }
     }
 
     // Push a panic frame so defers run on panic (setjmp/longjmp)
     if (has_defers) {
-        emit_line(cgen, "RsgPanicFrame _rsg_panic_frame;");
-        emit_line(cgen, "rsg_panic_push(&_rsg_panic_frame);");
-        emit_line(cgen, "volatile bool _rsg_panicked = false;");
-        emit_line(cgen, "if (setjmp(_rsg_panic_frame.env) != 0) {");
+        emit_line(cgen, "RsgPanicFrame " RSG_INTERNAL_PANIC_FRAME ";");
+        emit_line(cgen, "%s(&" RSG_INTERNAL_PANIC_FRAME ");", cgen->abi->panic_push);
+        emit_line(cgen, "volatile bool " RSG_INTERNAL_PANICKED " = false;");
+        emit_line(cgen, "if (setjmp(" RSG_INTERNAL_PANIC_FRAME ".env) != 0) {");
         cgen->indent++;
-        emit_line(cgen, "_rsg_panicked = true;");
-        emit_line(cgen, "goto _rsg_cleanup;");
+        emit_line(cgen, RSG_INTERNAL_PANICKED " = true;");
+        emit_line(cgen, "goto " RSG_INTERNAL_CLEANUP ";");
         cgen->indent--;
         emit_line(cgen, "}");
     }
@@ -169,10 +171,15 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
                 emit_stmt(cgen, result_node);
             } else if (!is_unit && !is_main) {
                 const char *result_c = emit_expr(cgen, result_node);
-                if (has_defers) {
-                    panic_result_expr = result_c;
+                if (result_node->type != NULL && result_node->type->kind == TYPE_NEVER) {
+                    // never-typed exprs (e.g. panic()) are void in C — emit as stmt
+                    emit_line(cgen, "%s;", result_c);
+                } else {
+                    if (has_defers) {
+                        panic_result_expr = result_c;
+                    }
+                    emit_return_or_defer(cgen, result_c, has_defers);
                 }
-                emit_return_or_defer(cgen, result_c, has_defers);
             } else {
                 emit_discard_result(cgen, result_node);
             }
@@ -181,10 +188,14 @@ static void emit_fn_body(CGen *cgen, const HirNode *fn_node) {
         // Expression body (fn foo() = expr)
         if (!is_unit && !is_main) {
             const char *result_c = emit_expr(cgen, body);
-            if (has_defers) {
-                panic_result_expr = result_c;
+            if (body->type != NULL && body->type->kind == TYPE_NEVER) {
+                emit_line(cgen, "%s;", result_c);
+            } else {
+                if (has_defers) {
+                    panic_result_expr = result_c;
+                }
+                emit_return_or_defer(cgen, result_c, has_defers);
             }
-            emit_return_or_defer(cgen, result_c, has_defers);
         } else {
             emit_line(cgen, "(void)%s;", emit_expr(cgen, body));
         }
@@ -210,18 +221,34 @@ static void emit_fn_sig(CGen *cgen, const HirNode *node) {
     fprintf(cgen->output, "%s%s %s(", prefix, return_type, fn_name);
 
     int32_t param_count = BUF_LEN(node->fn_decl.params);
-    if (param_count == 0) {
+    // Count visible (non-unit, non-recv-unit) params for the C signature
+    int32_t visible_count = 0;
+    for (int32_t i = 0; i < param_count; i++) {
+        const HirNode *p = node->fn_decl.params[i];
+        const Type *pt = p->param.param_type;
+        if (pt != NULL && pt->kind == TYPE_UNIT && !p->param.is_recv) {
+            continue;
+        }
+        visible_count++;
+    }
+    if (visible_count == 0) {
         fprintf(cgen->output, "void");
     } else {
+        bool first = true;
         for (int32_t i = 0; i < param_count; i++) {
             const HirNode *param = node->fn_decl.params[i];
             const Type *param_type = param->param.param_type;
             if (param_type == NULL) {
                 param_type = &TYPE_I32_INST;
             }
-            if (i > 0) {
+            // Skip unit-typed non-receiver params (void cannot be a C param)
+            if (param_type->kind == TYPE_UNIT && !param->param.is_recv) {
+                continue;
+            }
+            if (!first) {
                 fprintf(cgen->output, ", ");
             }
+            first = false;
             if (param->param.is_recv) {
                 if (!param->param.is_ptr_recv) {
                     // Value recv: pass by value (copy)
@@ -265,7 +292,7 @@ static void emit_preamble(CGen *cgen) {
     emit(cgen, "// Generated by resurg pipeline - do not edit.\n");
     emit(cgen, "#include <stdint.h>\n");
     emit(cgen, "#include <stdbool.h>\n");
-    emit(cgen, "#include \"rsg_runtime.h\"\n\n");
+    emit(cgen, "#include \"%s\"\n\n", cgen->abi->runtime_header);
 }
 
 /** Return true if @p node is a top-level stmt. */
@@ -284,11 +311,11 @@ static void emit_entry_point(CGen *cgen, const HirNode *file, bool has_top_stmts
     cgen->indent++;
 
     // Initialise the tracing GC with the stack bottom anchor.
-    emit_line(cgen, "int _rsg_gc_anchor;");
-    emit_line(cgen, "rsg_gc_init(&_rsg_gc_anchor);");
+    emit_line(cgen, "int " RSG_INTERNAL_GC_ANCHOR ";");
+    emit_line(cgen, "%s(&" RSG_INTERNAL_GC_ANCHOR ");", cgen->abi->gc_init);
 
     if (has_top_stmts) {
-        emit_line(cgen, "_rsg_top_level();");
+        emit_line(cgen, RSG_INTERNAL_TOP_LEVEL "();");
     }
 
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
@@ -382,7 +409,7 @@ static bool emit_top_level_wrapper(CGen *cgen, const HirNode *file) {
         return false;
     }
 
-    emit(cgen, "static void _rsg_top_level(void) {\n");
+    emit(cgen, "static void " RSG_INTERNAL_TOP_LEVEL "(void) {\n");
     cgen->indent++;
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         if (is_top_level_stmt(file->file.decls[i])) {

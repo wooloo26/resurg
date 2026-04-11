@@ -16,12 +16,18 @@ TARGET    := $(BUILD)/resurg$(EXE)
 CMAKE_CMD := cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
 ifeq ($(OS),Windows_NT)
+  PYTHON := python
+else
+  PYTHON := python3
+endif
+
+ifeq ($(OS),Windows_NT)
   JOBS ?= $(if $(NUMBER_OF_PROCESSORS),$(NUMBER_OF_PROCESSORS),4)
 else
   JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 endif
 
-.PHONY: all clean configure run test test-one clean-tests format tidy lint setup
+.PHONY: all clean configure run test test-one test-std clean-tests format tidy lint setup
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
@@ -64,13 +70,19 @@ run: all
 
 # Run all test cases
 test: all
-	@python3 tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
+	@$(PYTHON) tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
 		--build=$(BUILD) --runtime=$(RUNTIME) -j$(JOBS)
 
 # Run a single test: make test-one FILE=tests/integration/v0.1.0/primitives.rsg
 test-one: all
-	@python3 tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
+	@$(PYTHON) tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
 		--build=$(BUILD) --runtime=$(RUNTIME) -j1 $(FILE)
+
+# Run std tests only
+test-std: all
+	@$(PYTHON) tests/run_tests.py --resurg=$(TARGET) --cc=$(CC) --rt-objs="$(RT_LIB)" \
+		--build=$(BUILD) --runtime=$(RUNTIME) -j$(JOBS) \
+		tests/integration/stdlib/*.rsg
 
 # Clean only test build artifacts (preserves the compiler)
 clean-tests:
@@ -93,7 +105,11 @@ format:
 TIDY_SRCS := $(filter %.c,$(ALL_C))
 
 tidy: $(BUILD)/Makefile
+ifeq ($(OS),Windows_NT)
+	@$(PYTHON) -c "import subprocess,sys,concurrent.futures as F;fs='$(TIDY_SRCS)'.split();run=lambda f:subprocess.call(['clang-tidy','--quiet','-p','$(BUILD)',f]);x=F.ThreadPoolExecutor($(JOBS));errs=sum(1 for r in x.map(run,fs) if r);sys.exit(errs)"
+else
 	@printf '%s\n' $(TIDY_SRCS) | xargs -P$(JOBS) -n1 clang-tidy --quiet -p $(BUILD)
+endif
 	@echo clang-tidy passed.
 
 # Unified lint: format + tidy

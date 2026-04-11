@@ -20,11 +20,15 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
         const char *key = arena_sprintf(low->hir_arena, "%s.%s", type_name, method_name);
 
         if (method->fn_decl.is_declare) {
-            // Register declare methods with default mangling
-            // so normal call lowering can resolve their symbol.
-            const char *mangled =
-                arena_sprintf(low->hir_arena, "rsgu_%s_%s",
-                              lower_mangle_name(low->hir_arena, type_name), method_name);
+            // Register decl methods — use explicit #[extern("...")]
+            // symbol when provided, otherwise default rsg_ mangling.
+            const char *mangled;
+            if (method->fn_decl.extern_name != NULL) {
+                mangled = arena_sprintf(low->hir_arena, "rsg_%s", method->fn_decl.extern_name);
+            } else {
+                mangled = arena_sprintf(low->hir_arena, "rsg_%s_%s",
+                                        lower_mangle_name(low->hir_arena, type_name), method_name);
+            }
             HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
             HirSym *sym = lower_make_sym(low, &sym_spec);
             sym->mangled_name = mangled;
@@ -33,9 +37,8 @@ static void preregister_type_methods(Lower *low, const char *type_name, ASTNode 
             continue;
         }
 
-        const char *mangled =
-            arena_sprintf(low->hir_arena, "rsgu_%s_%s",
-                          lower_mangle_name(low->hir_arena, type_name), method_name);
+        const char *mangled = arena_sprintf(
+            low->hir_arena, "rsg_%s_%s", lower_mangle_name(low->hir_arena, type_name), method_name);
         HirSymSpec sym_spec = {HIR_SYM_FN, key, ret, false, method->loc};
         HirSym *sym = lower_make_sym(low, &sym_spec);
         sym->mangled_name = mangled;
@@ -54,9 +57,9 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
             return;
         }
         if (decl->fn_decl.is_declare) {
-            // Register declare fns with default "rsgu_" mangling.
+            // Register decl fns with default "rsg_" mangling.
             // Intrinsic builtins (print, assert, etc.) are still expanded by the lower
-            // pass, but non-intrinsic declare fns fall through to normal call lowering
+            // pass, but non-intrinsic decl fns fall through to normal call lowering
             // and need a correctly mangled symbol in scope.
             const char *bare = strrchr(decl->fn_decl.name, '.');
             bare = (bare != NULL) ? bare + 1 : decl->fn_decl.name;
@@ -65,9 +68,14 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
                 const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
                 HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
                 HirSym *sym = lower_make_sym(low, &fn_spec);
-                sym->mangled_name =
-                    arena_sprintf(low->hir_arena, "rsgu_%s",
-                                  lower_mangle_name(low->hir_arena, decl->fn_decl.name));
+                if (decl->fn_decl.extern_name != NULL) {
+                    sym->mangled_name =
+                        arena_sprintf(low->hir_arena, "rsg_%s", decl->fn_decl.extern_name);
+                } else {
+                    sym->mangled_name =
+                        arena_sprintf(low->hir_arena, "rsg_%s",
+                                      lower_mangle_name(low->hir_arena, decl->fn_decl.name));
+                }
                 lower_scope_define(low, decl->fn_decl.name, sym);
             }
             return;
@@ -75,7 +83,7 @@ static void preregister_single_decl(Lower *low, const ASTNode *decl) {
         const Type *ret = decl->type != NULL ? decl->type : &TYPE_UNIT_INST;
         HirSymSpec fn_spec = {HIR_SYM_FN, decl->fn_decl.name, ret, false, decl->loc};
         HirSym *sym = lower_make_sym(low, &fn_spec);
-        sym->mangled_name = arena_sprintf(low->hir_arena, "rsgu_%s",
+        sym->mangled_name = arena_sprintf(low->hir_arena, "rsg_%s",
                                           lower_mangle_name(low->hir_arena, decl->fn_decl.name));
         lower_scope_define(low, decl->fn_decl.name, sym);
     }

@@ -25,4 +25,15 @@ bool sema_check(Sema *sema, ASTNode *file);
  */
 void sema_check_fn_body(Sema *sema, ASTNode *fn_node);
 
+/**
+ * Enable method body checking on @p sema so that generic type
+ * instantiation (which may occur during resolve) can type-check
+ * cloned method bodies immediately.
+ *
+ * Must be called before sema_resolve() when the pipeline needs
+ * associated-type-bearing generic enums (e.g. Option<T>) to have
+ * fully typed method parameters.
+ */
+void sema_enable_method_checking(Sema *sema);
+
 #endif // RSG_CHECK_H

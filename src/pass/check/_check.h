@@ -99,7 +99,8 @@ bool is_lvalue(const ASTNode *node);
 /** Return true when @p struct_name belongs to a foreign module. */
 bool is_foreign_struct(const Sema *sema, const char *struct_name);
 /** Build a NODE_CALL AST node that calls EnumType.None() on @p enum_type. */
-ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc);
+ASTNode *build_unit_variant_call(Arena *arena, const Type *enum_type, const char *variant_name,
+                                 SrcLoc loc);
 /** Find a promoted field from embedded structs. Returns NULL if not found. */
 const Type *find_promoted_field(Sema *sema, const StructDef *sdef, const char *field_name);
 

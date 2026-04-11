@@ -43,6 +43,14 @@ static void register_primitive_method(Sema *sema, const char *type_name, ASTNode
     hash_table_insert(&sema->base.db.fn_table, method_key, sig);
 }
 
+/** Return a human-readable label for a receiver form. */
+static const char *recv_label(bool is_ptr, bool is_mut) {
+    if (is_ptr) {
+        return is_mut ? "mut *self" : "*self";
+    }
+    return "self";
+}
+
 /** Check whether a pact method exists for an enum/primitive target. */
 static bool ext_method_exists(const Sema *sema, const char *target_name, const char *method_name,
                               const EnumDef *edef) {
@@ -120,10 +128,28 @@ static void enforce_ext_struct_pact(Sema *sema, ASTNode *decl, StructDef *sdef,
     for (int32_t i = 0; i < BUF_LEN(pact_methods); i++) {
         bool found = false;
         for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
-            if (strcmp(sdef->methods[j].name, pact_methods[i].name) == 0) {
-                found = true;
-                break;
+            if (strcmp(sdef->methods[j].name, pact_methods[i].name) != 0) {
+                continue;
             }
+            found = true;
+            // Enforce receiver compatibility when pact declares a receiver
+            if (pact_methods[i].recv_name != NULL) {
+                bool p_ptr = pact_methods[i].is_ptr_recv;
+                bool p_mut = pact_methods[i].is_mut_recv;
+                bool s_ptr = sdef->methods[j].is_ptr_recv;
+                bool s_mut = sdef->methods[j].is_mut_recv;
+                if (sdef->methods[j].recv_name == NULL) {
+                    SEMA_ERR(sema, decl->loc,
+                             "method '%s' must have receiver '%s' as required by pact '%s'",
+                             pact_methods[i].name, recv_label(p_ptr, p_mut), pact_name);
+                } else if (p_ptr != s_ptr || p_mut != s_mut) {
+                    SEMA_ERR(sema, decl->loc,
+                             "method '%s' has receiver '%s' but pact '%s' requires '%s'",
+                             pact_methods[i].name, recv_label(s_ptr, s_mut), pact_name,
+                             recv_label(p_ptr, p_mut));
+                }
+            }
+            break;
         }
         if (!found) {
             bool has_body =
@@ -227,6 +253,28 @@ void enforce_ext_pact_conformances(Sema *sema, ASTNode *decl) {
                 if (!has_body) {
                     SEMA_ERR(sema, decl->loc, "missing required method '%s' from pact '%s'",
                              pact_methods[i].name, pact_name);
+                }
+            } else if (edef != NULL && pact_methods[i].recv_name != NULL) {
+                // Enforce receiver compatibility for enum targets
+                for (int32_t j = 0; j < BUF_LEN(edef->methods); j++) {
+                    if (strcmp(edef->methods[j].name, pact_methods[i].name) != 0) {
+                        continue;
+                    }
+                    bool p_ptr = pact_methods[i].is_ptr_recv;
+                    bool p_mut = pact_methods[i].is_mut_recv;
+                    bool s_ptr = edef->methods[j].is_ptr_recv;
+                    bool s_mut = edef->methods[j].is_mut_recv;
+                    if (edef->methods[j].recv_name == NULL) {
+                        SEMA_ERR(sema, decl->loc,
+                                 "method '%s' must have receiver '%s' as required by pact '%s'",
+                                 pact_methods[i].name, recv_label(p_ptr, p_mut), pact_name);
+                    } else if (p_ptr != s_ptr || p_mut != s_mut) {
+                        SEMA_ERR(sema, decl->loc,
+                                 "method '%s' has receiver '%s' but pact '%s' requires '%s'",
+                                 pact_methods[i].name, recv_label(s_ptr, s_mut), pact_name,
+                                 recv_label(p_ptr, p_mut));
+                    }
+                    break;
                 }
             }
         }

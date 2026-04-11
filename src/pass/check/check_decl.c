@@ -20,6 +20,9 @@ void check_struct_method_body(Sema *sema, ASTNode *method, const char *struct_na
         if (method->fn_decl.is_ptr_recv && struct_type->kind != TYPE_PTR) {
             recv_reg_type =
                 type_create_ptr(sema->base.arena, struct_type, method->fn_decl.is_mut_recv);
+        } else if (!method->fn_decl.is_ptr_recv && struct_type->kind == TYPE_PTR) {
+            // Value recv on pointer-wrapped type (e.g. enum ext): unwrap.
+            recv_reg_type = struct_type->ptr.pointee;
         }
         scope_define(sema, &(SymDef){method->fn_decl.recv_name, recv_reg_type, false, SYM_PARAM});
     }

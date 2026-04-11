@@ -34,14 +34,14 @@ fn test_assert_available() {
     assert(1 + 1 == 2, "math works")
 }
 
-fn test_panic_recover() {
-    var caught: ?str = None
-    defer {
-        if Some(msg) := recover() {
-            caught = Some(msg)
-        }
+fn test_panic_catch() {
+    result := catch_panic(|| -> i32 {
+        panic("test panic")
+    })
+    match result {
+        Ok(_) => assert(false, ""),
+        Err(_) => assert(true, ""),
     }
-    panic("test panic")
 }
 
 fn test_len_function() {

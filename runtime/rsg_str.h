@@ -74,4 +74,25 @@ RsgStr rsg_str_builder_finish(RsgStrBuilder *builder);
 /** Return true if @p a and @p b have identical content. */
 bool rsg_str_equal(RsgStr a, RsgStr b);
 
+// ── Extension methods (called by generated code via decl fn) ───
+
+/** Return true when @p s contains @p needle as a substring. */
+bool rsg_str_contains(RsgStr s, RsgStr needle);
+/** Return true when @p s starts with @p prefix. */
+bool rsg_str_starts_with(RsgStr s, RsgStr prefix);
+/** Return true when @p s ends with @p suffix. */
+bool rsg_str_ends_with(RsgStr s, RsgStr suffix);
+/** Strip leading and trailing ASCII whitespace from @p s. */
+RsgStr rsg_str_trim(RsgStr s);
+/** Strip leading ASCII whitespace from @p s. */
+RsgStr rsg_str_trim_start(RsgStr s);
+/** Strip trailing ASCII whitespace from @p s. */
+RsgStr rsg_str_trim_end(RsgStr s);
+/** Repeat @p s exactly @p n times. */
+RsgStr rsg_str_repeat(RsgStr s, int32_t n);
+/** Convert all ASCII letters to uppercase. */
+RsgStr rsg_str_to_upper(RsgStr s);
+/** Convert all ASCII letters to lowercase. */
+RsgStr rsg_str_to_lower(RsgStr s);
+
 #endif // RSG_STR_H

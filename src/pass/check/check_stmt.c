@@ -6,14 +6,13 @@
  * Emit a diagnostic and return true if @p name starts with a prefix
  * reserved for the pipeline or runtime.  Checked prefixes:
  *
- *   rsg_   – runtime fns / types
- *   rsgu_  – codegen-mangled user fns
+ *   rsg_   – runtime fns / types / codegen-mangled user fns
  *   _rsg   – codegen temporaries and internal vars
  *   _Rsg   – codegen compound-type names
  */
 static bool check_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
-    bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "rsgu_", 5) == 0 ||
-                    strncmp(name, "_rsg", 4) == 0 || strncmp(name, "_Rsg", 4) == 0;
+    bool reserved = strncmp(name, "rsg_", 4) == 0 || strncmp(name, "_rsg", 4) == 0 ||
+                    strncmp(name, "_Rsg", 4) == 0;
     if (reserved) {
         SEMA_ERR(sema, loc, "identifier '%s' uses a prefix reserved for the runtime", name);
     }
@@ -122,7 +121,8 @@ static const Type *reconcile_var_init(Sema *sema, ASTNode *node, const Type *dec
                                       const Type *init_type) {
     if (init_type == NULL && node->var_decl.init == NULL && declared->kind == TYPE_ENUM &&
         type_enum_find_variant(declared, "None") != NULL) {
-        node->var_decl.init = build_none_variant_call(sema->base.arena, declared, node->loc);
+        node->var_decl.init =
+            build_unit_variant_call(sema->base.arena, declared, "None", node->loc);
         return declared;
     }
     if (init_type != NULL && node->var_decl.init != NULL) {

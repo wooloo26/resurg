@@ -105,9 +105,11 @@ ASTWhereClause *parse_where_clauses(Parser *parser);
 void parse_recv_and_params(Parser *parser, ASTNode *node);
 /** Parse a method decl inside a struct/enum/ext block. */
 ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub);
+/** Try to parse `#[extern("c_symbol")]`. Returns the C symbol name, or NULL. */
+const char *try_parse_extern_attr(Parser *parser);
 /** Parse a top-level fn decl. */
 ASTNode *parse_fn_decl(Parser *parser, bool is_pub);
-/** Parse `declare var name: Type`. */
+/** Parse `decl var name: Type`. */
 ASTNode *parse_declare_var(Parser *parser, bool is_pub);
 
 #endif // RSG__PARSE_H

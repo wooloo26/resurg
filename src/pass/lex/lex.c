@@ -57,7 +57,7 @@ static const Keyword KEYWORDS[] = {
     {"where", TOKEN_WHERE},
     {"comptime", TOKEN_COMPTIME},
     {"Self", TOKEN_SELF},
-    {"declare", TOKEN_DECLARE},
+    {"decl", TOKEN_DECLARE},
     {"bool", TOKEN_BOOL},
     {"i8", TOKEN_I8},
     {"i16", TOKEN_I16},
@@ -288,6 +288,8 @@ static Token scan_punctuation(Lex *lex, char c, SrcLoc loc) {
     case '?':
         return match(lex, '.') ? build_token(lex, TOKEN_QUESTION_DOT, "?.", 2, loc)
                                : build_token(lex, TOKEN_QUESTION, "?", 1, loc);
+    case '#':
+        return build_token(lex, TOKEN_HASH, "#", 1, loc);
     case '=':
     case '!':
     case '<':

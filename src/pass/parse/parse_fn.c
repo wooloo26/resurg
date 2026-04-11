@@ -5,6 +5,40 @@
 
 #include "_parse.h"
 
+// ── Attribute parsing ──────────────────────────────────────────────────
+
+/**
+ * Try to parse `#[extern("c_symbol")]`.
+ *
+ * Returns the C symbol name, or NULL if no attribute is present.
+ * Currently only the `extern` attribute is recognised; unknown
+ * attribute names produce a diagnostic.
+ */
+const char *try_parse_extern_attr(Parser *parser) {
+    if (!parser_check(parser, TOKEN_HASH)) {
+        return NULL;
+    }
+    parser_advance(parser); // consume '#'
+    parser_expect(parser, TOKEN_LEFT_BRACKET);
+    const Token *attr_name = parser_expect(parser, TOKEN_ID);
+    if (strcmp(attr_name->lexeme, "extern") != 0) {
+        PARSER_ERR(parser, attr_name->loc, "unknown attribute '%s'", attr_name->lexeme);
+        // Skip to ']'
+        while (!parser_check(parser, TOKEN_RIGHT_BRACKET) && !parser_at_end(parser)) {
+            parser_advance(parser);
+        }
+        parser_match(parser, TOKEN_RIGHT_BRACKET);
+        return NULL;
+    }
+    parser_expect(parser, TOKEN_LEFT_PAREN);
+    const Token *sym_tok = parser_expect(parser, TOKEN_STR_LIT);
+    const char *symbol = sym_tok->lit_value.str_value;
+    parser_expect(parser, TOKEN_RIGHT_PAREN);
+    parser_expect(parser, TOKEN_RIGHT_BRACKET);
+    parser_skip_newlines(parser);
+    return symbol;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /** Peek one token ahead without consuming. */
@@ -109,18 +143,12 @@ ASTWhereClause *parse_where_clauses(Parser *parser) {
 
 // ── Shared recv + params parsing ────────────────────────────────
 
-/**
- * Parse a single function parameter: [mut] name: [..]Type [= default].
- *
- * @p seen_default is updated when a default value is present.
- */
-static ASTNode *parse_single_param(Parser *parser, bool *seen_default) {
+/** Parse a single function parameter: [mut] name: [..]Type. */
+static ASTNode *parse_single_param(Parser *parser) {
     SrcLoc ploc = parser_current_loc(parser);
     ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
     param->param.is_mut = parser_match(parser, TOKEN_MUT);
     param->param.is_variadic = false;
-    param->param.default_kind = DEFAULT_NONE;
-    param->param.default_value = NULL;
     param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
     parser_expect(parser, TOKEN_COLON);
     // Detect variadic: `name: ..T`
@@ -128,22 +156,13 @@ static ASTNode *parse_single_param(Parser *parser, bool *seen_default) {
         param->param.is_variadic = true;
     }
     param->param.type = parser_parse_type(parser);
-    // Optional default value: `= expr`
-    if (parser_match(parser, TOKEN_EQUAL)) {
-        param->param.default_kind = DEFAULT_EXPR;
-        param->param.default_value = parser_parse_expr(parser);
-        *seen_default = true;
-    } else if (*seen_default && !param->param.is_variadic) {
-        PARSER_ERR(parser, ploc, "parameter '%s' without default follows parameter with default",
-                   param->param.name);
-    }
     return param;
 }
 
 /** Parse trailing params (comma-separated) after receiver. */
-static void parse_trailing_params(Parser *parser, ASTNode *node, bool *seen_default) {
+static void parse_trailing_params(Parser *parser, ASTNode *node) {
     while (parser_match(parser, TOKEN_COMMA)) {
-        ASTNode *param = parse_single_param(parser, seen_default);
+        ASTNode *param = parse_single_param(parser);
         BUF_PUSH(node->fn_decl.params, param);
     }
 }
@@ -160,7 +179,6 @@ static void parse_trailing_params(Parser *parser, ASTNode *node, bool *seen_defa
  */
 void parse_recv_and_params(Parser *parser, ASTNode *node) {
     parser_expect(parser, TOKEN_LEFT_PAREN);
-    bool seen_default = false;
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
         if (parser_check(parser, TOKEN_STAR) || parser_check(parser, TOKEN_MUT)) {
             bool is_mut = false;
@@ -171,14 +189,14 @@ void parse_recv_and_params(Parser *parser, ASTNode *node) {
             node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
             node->fn_decl.is_mut_recv = is_mut;
             node->fn_decl.is_ptr_recv = true;
-            parse_trailing_params(parser, node, &seen_default);
+            parse_trailing_params(parser, node);
         } else if (parser_check(parser, TOKEN_ID) && !parser_peek_is(parser, TOKEN_COLON)) {
             node->fn_decl.recv_name = parser_expect(parser, TOKEN_ID)->lexeme;
             node->fn_decl.is_ptr_recv = false;
-            parse_trailing_params(parser, node, &seen_default);
+            parse_trailing_params(parser, node);
         } else {
             do {
-                ASTNode *param = parse_single_param(parser, &seen_default);
+                ASTNode *param = parse_single_param(parser);
                 BUF_PUSH(node->fn_decl.params, param);
             } while (parser_match(parser, TOKEN_COMMA));
         }
@@ -198,6 +216,11 @@ void parse_recv_and_params(Parser *parser, ASTNode *node) {
 // ── Method decl (inside struct/enum/ext) ────────────────────────
 
 ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub) {
+    const char *extern_name = try_parse_extern_attr(parser);
+    // `#[extern("...")]` may precede `pub`, so check again after consuming attr.
+    if (extern_name != NULL && !is_pub) {
+        is_pub = parser_match(parser, TOKEN_PUB);
+    }
     bool is_declare = parser_match(parser, TOKEN_DECLARE);
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_FN);
@@ -205,6 +228,7 @@ ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub)
     ASTNode *node = ast_new(parser->arena, NODE_FN_DECL, loc);
     node->fn_decl.is_pub = is_pub;
     node->fn_decl.is_declare = is_declare;
+    node->fn_decl.extern_name = extern_name;
     node->fn_decl.name = parser_expect(parser, TOKEN_ID)->lexeme;
     node->fn_decl.params = NULL;
     node->fn_decl.owner_struct = struct_name;
@@ -222,7 +246,7 @@ ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub)
 
     parser_skip_newlines(parser);
 
-    // Body: block or = expr (absent for declare methods)
+    // Body: block or = expr (absent for decl methods)
     if (is_declare) {
         node->fn_decl.body = NULL;
     } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
@@ -238,7 +262,7 @@ ASTNode *parse_method_decl(Parser *parser, const char *struct_name, bool is_pub)
 
 // ── Fn decl (top-level) ─────────────────────────────────────────
 
-/** Parse `declare var name: Type` — variable declaration without initializer. */
+/** Parse `decl var name: Type` — variable declaration without initializer. */
 ASTNode *parse_declare_var(Parser *parser, bool is_pub) {
     SrcLoc loc = parser_current_loc(parser);
     parser_expect(parser, TOKEN_VAR);
@@ -275,9 +299,8 @@ ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     // Parameters
     parser_expect(parser, TOKEN_LEFT_PAREN);
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
-        bool seen_default = false;
         do {
-            ASTNode *param = parse_single_param(parser, &seen_default);
+            ASTNode *param = parse_single_param(parser);
             BUF_PUSH(node->fn_decl.params, param);
         } while (parser_match(parser, TOKEN_COMMA));
     }
@@ -306,7 +329,7 @@ ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
 
     parser_skip_newlines(parser);
 
-    // Body: block or `= expr` (absent for declare fns)
+    // Body: block or `= expr` (absent for decl fns)
     if (is_declare) {
         node->fn_decl.body = NULL;
     } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {

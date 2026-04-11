@@ -229,9 +229,9 @@ Higher-order programming and code organization.
 ## v0.9.11 — Prelude
 
 - [x] Support `pub use` and `use any::*`
-- [x] Prelude (`print`, `println`, `len`, `panic`, `recover`, `assert`, `Option`, `Result`, etc.)
+- [x] Prelude (`print`, `println`, `len`, `panic`, `catch_panic`, `assert`, `Option`, `Result`, etc.)
 - [x] `panic(message)`
-- [x] `recover()`
+- [x] `catch_panic(f)` — wraps `Fn() -> T`, returns `T!str`
 - [x] `assert` rewritten on top of `panic`
 
 ## v0.9.12 — Fix Bugs

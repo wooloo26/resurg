@@ -40,7 +40,7 @@ enum {
 typedef struct {
     const char *rsg_name;
     const char *c_name;
-    const char *runtime_suffix; // for rsgu_print_TYPE, rsg_str_from_TYPE
+    const char *runtime_suffix; // for rsg_print_TYPE, rsg_str_from_TYPE
     const Type *inst;
     uint8_t flags;
 } TypeInfoEntry;

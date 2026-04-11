@@ -430,8 +430,10 @@ static ASTNode *parse_ext_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
-        bool method_is_pub = parser_match(parser, TOKEN_PUB);
-        if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE)) {
+        // Don't consume `pub` if `#[attr]` comes first — parse_method_decl handles it.
+        bool method_is_pub = !parser_check(parser, TOKEN_HASH) && parser_match(parser, TOKEN_PUB);
+        if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE) ||
+            parser_check(parser, TOKEN_HASH)) {
             ASTNode *method = parse_method_decl(parser, node->ext_decl->target_name, method_is_pub);
             BUF_PUSH(node->ext_decl->methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
@@ -607,16 +609,27 @@ static ASTNode *parse_module_decl(Parser *parser, bool is_pub) {
 ASTNode *parser_parse_decl(Parser *parser) {
     parser_skip_newlines(parser);
 
-    // declare fn / declare var
+    // #[extern("symbol")] on top-level fns
+    if (parser_check(parser, TOKEN_HASH)) {
+        const char *ext_name = try_parse_extern_attr(parser);
+        bool is_pub = parser_match(parser, TOKEN_PUB);
+        ASTNode *node = parse_fn_decl(parser, is_pub);
+        if (node != NULL) {
+            node->fn_decl.extern_name = ext_name;
+        }
+        return node;
+    }
+
+    // decl fn / decl var
     if (parser_check(parser, TOKEN_DECLARE)) {
         if (parser_peek_is(parser, TOKEN_FN)) {
             return parse_fn_decl(parser, false);
         }
         if (parser_peek_is(parser, TOKEN_VAR)) {
-            parser_advance(parser); // consume 'declare'
+            parser_advance(parser); // consume 'decl'
             return parse_declare_var(parser, false);
         }
-        PARSER_ERR(parser, parser_current_loc(parser), "expected 'fn' or 'var' after 'declare'");
+        PARSER_ERR(parser, parser_current_loc(parser), "expected 'fn' or 'var' after 'decl'");
         parser_advance(parser);
         return NULL;
     }
@@ -673,11 +686,10 @@ ASTNode *parser_parse_decl(Parser *parser) {
                 return parse_fn_decl(parser, true);
             }
             if (parser_peek_is(parser, TOKEN_VAR)) {
-                parser_advance(parser); // consume 'declare'
+                parser_advance(parser); // consume 'decl'
                 return parse_declare_var(parser, true);
             }
-            PARSER_ERR(parser, parser_current_loc(parser),
-                       "expected 'fn' or 'var' after 'declare'");
+            PARSER_ERR(parser, parser_current_loc(parser), "expected 'fn' or 'var' after 'decl'");
             parser_advance(parser);
             return NULL;
         }

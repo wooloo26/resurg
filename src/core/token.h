@@ -48,7 +48,7 @@ typedef enum {
     TOKEN_WHERE,    // where
     TOKEN_COMPTIME, // comptime
     TOKEN_SELF,     // Self
-    TOKEN_DECLARE,  // declare
+    TOKEN_DECLARE,  // decl
 
     // Type keywords
     TOKEN_BOOL,  // bool
@@ -120,6 +120,7 @@ typedef enum {
     TOKEN_SEMICOLON,     // ; (optional, for future use)
     TOKEN_QUESTION,      // ?
     TOKEN_QUESTION_DOT,  // ?.
+    TOKEN_HASH,          // #
 
     // Str interpolation (inside strs)
     TOKEN_INTERPOLATION_START, // start of interpolation segment

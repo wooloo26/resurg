@@ -175,7 +175,7 @@ bool type_is_unsigned_integer(const Type *type);
 bool type_is_float(const Type *type);
 /** Return true if @p type has a runtime rsg_print[ln] fn. */
 bool type_is_printable(const Type *type);
-/** Return the runtime suffix for @p type (e.g. "i32" for rsgu_print_i32). */
+/** Return the runtime suffix for @p type (e.g. "i32" for rsg_print_i32). */
 const char *type_runtime_suffix(const Type *type);
 /** Return true if @p type has an rsg_str_from_TYPE runtime conversion. */
 bool type_is_str_convertible(const Type *type);

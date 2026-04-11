@@ -1,0 +1,38 @@
+// stdlib: str extension methods — L2 runtime + L3 pure Resurg
+// EXPECT-STDOUT: str ext tests passed
+
+fn main() {
+    // L3: is_empty (pure Resurg)
+    assert("".is_empty(), "empty str is_empty")
+    assert(!"hello".is_empty(), "non-empty str is_empty")
+
+    // L2: contains (runtime binding)
+    assert("hello world".contains("world"), "contains match")
+    assert("hello world".contains("hello"), "contains prefix")
+    assert(!"hello".contains("xyz"), "contains no match")
+    assert("abc".contains(""), "contains empty needle")
+
+    // L2: starts_with / ends_with
+    assert("hello world".starts_with("hello"), "starts_with match")
+    assert(!"hello world".starts_with("world"), "starts_with no match")
+    assert("hello world".ends_with("world"), "ends_with match")
+    assert(!"hello world".ends_with("hello"), "ends_with no match")
+
+    // L2: trim
+    assert("  hello  ".trim() == "hello", "trim")
+    assert("  hello  ".trim_start() == "hello  ", "trim_start")
+    assert("  hello  ".trim_end() == "  hello", "trim_end")
+    assert("hello".trim() == "hello", "trim no-op")
+
+    // L2: repeat
+    assert("ab".repeat(3) == "ababab", "repeat 3")
+    assert("x".repeat(0) == "", "repeat 0")
+    assert("x".repeat(1) == "x", "repeat 1")
+
+    // L2: to_upper / to_lower
+    assert("hello".to_upper() == "HELLO", "to_upper")
+    assert("HELLO".to_lower() == "hello", "to_lower")
+    assert("Hello123".to_upper() == "HELLO123", "to_upper mixed")
+
+    println("str ext tests passed")
+}

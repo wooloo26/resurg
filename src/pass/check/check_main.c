@@ -17,3 +17,7 @@ bool sema_check(Sema *sema, ASTNode *file) {
 void sema_check_fn_body(Sema *sema, ASTNode *fn_node) {
     check_fn_body(sema, fn_node);
 }
+
+void sema_enable_method_checking(Sema *sema) {
+    sema->method_checker = check_struct_method_body;
+}

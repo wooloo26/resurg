@@ -36,11 +36,11 @@ void emit_line(CGen *cgen, const char *fmt, ...) {
 }
 
 const char *next_temp(CGen *cgen) {
-    return arena_sprintf(cgen->arena, "_rsg_tmp_%d", cgen->temp_counter++);
+    return arena_sprintf(cgen->arena, RSG_INTERNAL_TMP "%d", cgen->temp_counter++);
 }
 
 const char *next_str_builder(CGen *cgen) {
-    return arena_sprintf(cgen->arena, "_rsg_sb_%d", cgen->str_builder_counter++);
+    return arena_sprintf(cgen->arena, RSG_INTERNAL_SB "%d", cgen->str_builder_counter++);
 }
 
 // ── C fmtting helpers ───────────────────────────────────────────────
@@ -193,17 +193,17 @@ const char *c_type_for(CGen *gen, const Type *type) {
         return "/* ? */";
     }
     if (type->kind == TYPE_ARRAY || type->kind == TYPE_TUPLE) {
-        return arena_sprintf(gen->arena, "_Rsg%s", type_tag(gen, type));
+        return arena_sprintf(gen->arena, RSG_INTERNAL_TYPE_PREFIX "%s", type_tag(gen, type));
     }
     if (type->kind == TYPE_SLICE) {
         return "RsgSlice";
     }
     if (type->kind == TYPE_STRUCT) {
-        return arena_sprintf(gen->arena, "_Rsg_%s",
+        return arena_sprintf(gen->arena, RSG_INTERNAL_STRUCT_PREFIX "%s",
                              mangle_dots(gen->arena, type->struct_type.name));
     }
     if (type->kind == TYPE_ENUM) {
-        return arena_sprintf(gen->arena, "_RsgEnum_%s",
+        return arena_sprintf(gen->arena, RSG_INTERNAL_ENUM_PREFIX "%s",
                              mangle_dots(gen->arena, type->enum_type.name));
     }
     if (type->kind == TYPE_PTR) {

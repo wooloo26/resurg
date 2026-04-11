@@ -25,8 +25,6 @@ typedef enum {
     AST_TYPE_SLICE,        // []T
     AST_TYPE_TUPLE,        // (A, B, ...)
     AST_TYPE_PTR,          // *T
-    AST_TYPE_OPTION,       // ?T
-    AST_TYPE_RESULT,       // T ! E
     AST_TYPE_FN,           // fn(Params) -> Return
     AST_TYPE_ASSOC,        // T::Item  (associated type access)
     AST_TYPE_COMPTIME_INT, // compile-time integer (e.g., 5 in Container<i32, 5>)
@@ -47,11 +45,6 @@ struct ASTType {
     ASTType **tuple_elems; /* buf */
     // AST_TYPE_PTR fields
     ASTType *ptr_elem; // pointee type
-    // AST_TYPE_OPTION fields
-    ASTType *option_elem; // inner type of ?T
-    // AST_TYPE_RESULT fields
-    ASTType *result_ok;  // value type of T ! E
-    ASTType *result_err; // error type of T ! E
     // AST_TYPE_FN fields
     ASTType **fn_param_types; /* buf - param types for fn(A, B) -> R */
     ASTType *fn_return_type;  // return type (NULL = unit)
@@ -212,12 +205,6 @@ typedef enum {
 /** Total number of NodeKind values (for dispatch table sizing). */
 #define NODE_KIND_COUNT (NODE_CLOSURE + 1)
 
-/** Kind of default value for a function parameter. */
-typedef enum {
-    DEFAULT_NONE, // no default value
-    DEFAULT_EXPR, // arbitrary expression (stored in default_value)
-} DefaultKind;
-
 /** Sub-kind for NODE_LIT - indicates which payload field is active. */
 typedef enum {
     LIT_BOOL,
@@ -337,16 +324,16 @@ struct ASTNode {
             // Generic type params (NULL for non-generic fns)
             ASTTypeParam *type_params;     /* buf */
             ASTWhereClause *where_clauses; /* buf - where clause predicates */
+            // Attribute: #[extern("c_symbol")]
+            const char *extern_name; // NULL unless #[extern("...")] is present
         } fn_decl;
 
         // NODE_PARAM
         struct {
             const char *name;
             ASTType type;
-            bool is_mut;              // true for `mut name: *T`
-            bool is_variadic;         // true for `name: ..T`
-            DefaultKind default_kind; // DEFAULT_NONE if no default
-            ASTNode *default_value;   // non-NULL for DEFAULT_EXPR
+            bool is_mut;      // true for `mut name: *T`
+            bool is_variadic; // true for `name: ..T`
         } param;
 
         // NODE_VAR_DECL
@@ -356,7 +343,7 @@ struct ASTNode {
             ASTNode *init;   // init expr
             bool is_var;     // true for `var x: T = ...`, false for `:=`
             bool is_immut;   // true for `immut x := ...`
-            bool is_declare; // true for `declare var x: T`
+            bool is_declare; // true for `decl var x: T`
         } var_decl;
 
         // NODE_EXPR_STMT

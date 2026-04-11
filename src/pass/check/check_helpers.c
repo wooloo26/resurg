@@ -51,13 +51,14 @@ bool is_foreign_struct(const Sema *sema, const char *struct_name) {
 
 // ── AST construction helpers ──────────────────────────────────────────
 
-ASTNode *build_none_variant_call(Arena *arena, const Type *enum_type, SrcLoc loc) {
+ASTNode *build_unit_variant_call(Arena *arena, const Type *enum_type, const char *variant_name,
+                                 SrcLoc loc) {
     ASTNode *call = ast_new(arena, NODE_CALL, loc);
     ASTNode *callee = ast_new(arena, NODE_MEMBER, loc);
     callee->member.object = ast_new(arena, NODE_ID, loc);
     callee->member.object->id.name = type_enum_name(enum_type);
     callee->member.object->type = enum_type;
-    callee->member.member = "None";
+    callee->member.member = variant_name;
     call->call.callee = callee;
     call->call.args = NULL;
     call->call.arg_names = NULL;

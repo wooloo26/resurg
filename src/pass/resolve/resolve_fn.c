@@ -25,15 +25,12 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
     sig->param_types = NULL;
     sig->param_names = NULL;
     sig->param_count = BUF_LEN(decl->fn_decl.params);
-    sig->required_count = sig->param_count;
     sig->is_pub = is_pub;
     sig->is_declare = decl->fn_decl.is_declare;
     sig->has_variadic = false;
     sig->intrinsic = intrinsic_lookup(decl->fn_decl.name);
-    sig->default_kinds = NULL;
-    sig->default_exprs = NULL;
+    sig->extern_name = decl->fn_decl.extern_name;
 
-    bool has_defaults = false;
     for (int32_t j = 0; j < sig->param_count; j++) {
         ASTNode *param = decl->fn_decl.params[j];
         const Type *pt = resolve_ast_type(sema, &param->param.type);
@@ -47,27 +44,6 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
         }
         BUF_PUSH(sig->param_types, pt);
         BUF_PUSH(sig->param_names, param->param.name);
-
-        if (param->param.default_kind != DEFAULT_NONE) {
-            has_defaults = true;
-        }
-    }
-
-    // Build default info if any param has a default value
-    if (has_defaults) {
-        sig->required_count = sig->param_count; // will be lowered below
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            ASTNode *param = decl->fn_decl.params[j];
-            BUF_PUSH(sig->default_kinds, param->param.default_kind);
-            BUF_PUSH(sig->default_exprs, param->param.default_value);
-        }
-        // required_count = index of first param with a default
-        for (int32_t j = 0; j < sig->param_count; j++) {
-            if (sig->default_kinds[j] != DEFAULT_NONE) {
-                sig->required_count = j;
-                break;
-            }
-        }
     }
     return sig;
 }

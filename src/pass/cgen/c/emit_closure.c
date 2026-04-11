@@ -9,7 +9,7 @@
  */
 static const char *emit_fn_ref_wrapper(CGen *cgen, const HirSym *fn_sym, const Type *fn_type) {
     const char *mangled = fn_sym->mangled_name;
-    const char *wrapper_name = arena_sprintf(cgen->arena, "_rsg_wrap_%s", mangled);
+    const char *wrapper_name = arena_sprintf(cgen->arena, RSG_INTERNAL_WRAP "%s", mangled);
 
     // Dedup: skip if already emitted
     if (hash_table_lookup(&cgen->wrapper_set, wrapper_name) != NULL) {
@@ -137,12 +137,20 @@ static void emit_closure_companion(CGen *cgen, const HirNode *node) {
         emit_block_stmts(cgen, body);
         if (body->block.result != NULL) {
             const char *result = emit_expr(cgen, body->block.result);
-            emit_line(cgen, "return %s;", result);
+            if (body->block.result->type != NULL && body->block.result->type->kind == TYPE_NEVER) {
+                emit_line(cgen, "%s;", result);
+            } else {
+                emit_line(cgen, "return %s;", result);
+            }
         }
     } else {
         const char *result = emit_expr(cgen, body);
         if (fn_type->fn_type.return_type->kind != TYPE_UNIT) {
-            emit_line(cgen, "return %s;", result);
+            if (body->type != NULL && body->type->kind == TYPE_NEVER) {
+                emit_line(cgen, "%s;", result);
+            } else {
+                emit_line(cgen, "return %s;", result);
+            }
         } else {
             emit_line(cgen, "%s;", result);
         }
@@ -174,7 +182,8 @@ const char *emit_closure_expr(CGen *cgen, const HirNode *node) {
     // Capturing closure: emit env allocation + construction
     const char *env_struct = arena_sprintf(cgen->arena, "%s_env", fn_name);
     const char *env_tmp = next_temp(cgen);
-    emit_line(cgen, "%s *%s = rsg_heap_alloc(sizeof(%s));", env_struct, env_tmp, env_struct);
+    emit_line(cgen, "%s *%s = %s(sizeof(%s));", env_struct, env_tmp, cgen->abi->heap_alloc,
+              env_struct);
     for (int32_t i = 0; i < num_captures; i++) {
         emit_line(cgen, "%s->%s = %s;", env_tmp, node->closure.capture_names[i],
                   node->closure.capture_syms[i]->mangled_name);

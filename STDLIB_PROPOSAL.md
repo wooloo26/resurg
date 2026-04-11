@@ -12,14 +12,14 @@ and are declared in `std/builtin.rsg`.
 
 ### 1.1 Currently Implemented
 
-| Function  | Signature                         |
-| --------- | --------------------------------- |
-| `print`   | `fn print<T>(value: T)`           |
-| `println` | `fn println<T>(value: T)`         |
-| `assert`  | `fn assert(cond: bool, msg: str)` |
-| `len`     | `fn len<T>(value: T) -> i32`      |
-| `panic`   | `fn panic(msg: str) -> never`     |
-| `recover` | `fn recover() -> ?str`            |
+| Function      | Signature                                  |
+| ------------- | ------------------------------------------ |
+| `print`       | `fn print<T>(value: T)`                    |
+| `println`     | `fn println<T>(value: T)`                  |
+| `assert`      | `fn assert(cond: bool, msg: str)`          |
+| `len`         | `fn len<T>(value: T) -> i32`               |
+| `panic`       | `fn panic(msg: str) -> never`              |
+| `catch_panic` | `fn catch_panic<T>(f: Fn() -> T) -> T!str` |
 
 ### 1.2 Proposed Additions
 
@@ -699,7 +699,7 @@ the standard library, so users don't need explicit `use` for everyday operations
 ### Currently in Prelude
 
 - `Option<T>`, `Result<T, E>` (via `builtin.rsg`)
-- `print`, `println`, `assert`, `len`, `panic`, `recover` (via `builtin.rsg`)
+- `print`, `println`, `assert`, `len`, `panic`, `catch_panic` (via `builtin.rsg`)
 
 ### Proposed Prelude Additions
 

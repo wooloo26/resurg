@@ -32,18 +32,18 @@ void rsg_panic_pop(void);
  */
 void rsg_assert(bool cond, const char *msg, const char *file, int32_t line);
 
-void rsgu_panic(const char *msg);
+_Noreturn void rsg_panic(const char *msg);
 
 /**
  * In a defer body, catch an active panic and return its message.
  * Returns NULL if no panic is active.  Clears the panic state.
  */
-const char *rsgu_recover(void);
+const char *rsg_recover(void);
 
 /** Return true if a panic is currently active (not yet recovered). */
 bool rsg_is_panicking(void);
 
 /** Re-trigger the current panic (propagate to parent frame or exit). */
-void rsg_repanic(void);
+_Noreturn void rsg_repanic(void);
 
 #endif // RSG_PANIC_H

@@ -22,13 +22,13 @@ static ASTType parse_fn_type_params(Parser *parser, FnTypeKind fn_kind, SrcLoc l
 
 // ── Prefix type sub-parsers ────────────────────────────────────────
 
-/** Parse option type: ?T */
+/** Parse option sugar: ?T → Option<T>. */
 static ASTType parse_option_type(Parser *parser, SrcLoc loc) {
-    ASTType type = {.kind = AST_TYPE_OPTION, .loc = loc};
     parser_advance(parser); // consume '?'
     ASTType *elem = arena_alloc(parser->arena, sizeof(ASTType));
     *elem = parser_parse_type(parser);
-    type.option_elem = elem;
+    ASTType type = {.kind = AST_TYPE_NAME, .name = "Option", .loc = loc, .type_args = NULL};
+    BUF_PUSH(type.type_args, elem);
     return type;
 }
 
@@ -122,19 +122,19 @@ static void parse_generic_args(Parser *parser, ASTType *type) {
     parser_expect(parser, TOKEN_GREATER);
 }
 
-/** If next token is '!', wrap @p base in a result type: T ! E. */
+/** If next token is '!', wrap @p base in a result type: T!E → Result<T, E>. */
 static ASTType parse_result_postfix(Parser *parser, ASTType base) {
     if (!parser_check(parser, TOKEN_BANG)) {
         return base;
     }
     parser_advance(parser); // consume '!'
-    ASTType result = {.kind = AST_TYPE_RESULT, .loc = base.loc};
     ASTType *ok = arena_alloc(parser->arena, sizeof(ASTType));
     *ok = base;
     ASTType *err = arena_alloc(parser->arena, sizeof(ASTType));
     *err = parser_parse_type(parser);
-    result.result_ok = ok;
-    result.result_err = err;
+    ASTType result = {.kind = AST_TYPE_NAME, .name = "Result", .loc = base.loc, .type_args = NULL};
+    BUF_PUSH(result.type_args, ok);
+    BUF_PUSH(result.type_args, err);
     return result;
 }
 

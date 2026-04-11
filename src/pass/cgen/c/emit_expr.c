@@ -7,9 +7,15 @@
 /** Emit a comma-separated list of exprs from @p nodes into a single str. */
 static const char *join_exprs(CGen *cgen, HirNode **nodes, int32_t count) {
     const char *result = "";
+    bool first = true;
     for (int32_t i = 0; i < count; i++) {
+        // Skip unit-typed arguments (matching skipped unit params in fn sig)
+        if (nodes[i]->type != NULL && nodes[i]->type->kind == TYPE_UNIT) {
+            continue;
+        }
         const char *elem = emit_expr(cgen, nodes[i]);
-        result = (i == 0) ? elem : arena_sprintf(cgen->arena, "%s, %s", result, elem);
+        result = first ? elem : arena_sprintf(cgen->arena, "%s, %s", result, elem);
+        first = false;
     }
     return result;
 }
@@ -56,7 +62,8 @@ static const char *emit_float_lit(CGen *cgen, const HirNode *node) {
 
 static const char *emit_str_lit(CGen *cgen, const HirNode *node) {
     const char *escaped = c_str_escape(cgen, node->str_lit.value, node->str_lit.len);
-    return arena_sprintf(cgen->arena, "rsg_str_new(\"%s\", %d)", escaped, node->str_lit.len);
+    return arena_sprintf(cgen->arena, "%s(\"%s\", %d)", cgen->abi->str_new, escaped,
+                         node->str_lit.len);
 }
 
 static const char *emit_unary_expr(CGen *cgen, const HirNode *node) {
@@ -78,7 +85,7 @@ static const char *emit_binary_expr(CGen *cgen, const HirNode *node) {
 }
 
 /**
- * Emit print/println(arg) → rsgu_print[ln]_TYPE(arg).
+ * Emit print/println(arg) → rsg_print[ln]_TYPE(arg).
  *
  * Type dispatch to the runtime fn happens here (C-backend specific).
  */
@@ -86,8 +93,8 @@ static const char *emit_print_call(CGen *cgen, const HirNode *node, bool newline
     const HirNode *arg = node->call.args[0];
     const char *arg_expr = emit_expr(cgen, arg);
     const char *type_suffix = type_runtime_suffix(arg->type);
-    return arena_sprintf(cgen->arena, "rsgu_print%s_%s(%s)", newline ? "ln" : "", type_suffix,
-                         arg_expr);
+    return arena_sprintf(cgen->arena, "%s%s(%s)", newline ? cgen->abi->println : cgen->abi->print,
+                         type_suffix, arg_expr);
 }
 
 /**
@@ -124,7 +131,7 @@ static const char *emit_rsg_assert_call(CGen *cgen, const HirNode *node) {
 }
 
 /**
- * Emit rsgu_panic(msg).
+ * Emit rsg_panic(msg).
  * The single arg is a str expression; extract .data for the C call.
  */
 static const char *emit_rsg_panic_call(CGen *cgen, const HirNode *node) {
@@ -141,27 +148,68 @@ static const char *emit_rsg_panic_call(CGen *cgen, const HirNode *node) {
 }
 
 /**
- * Emit rsgu_recover() → ?str.
- * Calls the C rsgu_recover(), then builds an Option<str> from the result.
+ * Emit catch_panic(f) → Result<T, str>.
+ *
+ * Pushes a panic frame, calls the closure inside a setjmp guard,
+ * and constructs Ok(value) on success or Err(message) on panic.
  */
-static const char *emit_rsg_recover_call(CGen *cgen, const HirNode *node) {
-    const char *opt_type = c_type_for(cgen, node->type);
-    const char *tmp_raw = next_temp(cgen);
-    const char *tmp_opt = next_temp(cgen);
-    emit_line(cgen, "const char *%s = " RSG_FN_RECOVER "();", tmp_raw);
-    emit_line(cgen, "%s %s;", opt_type, tmp_opt);
-    emit_line(cgen, "if (%s != NULL) {", tmp_raw);
+static const char *emit_catch_panic_call(CGen *cgen, const HirNode *node) {
+    const Type *result_type = node->type;
+    const char *result_c = c_type_for(cgen, result_type);
+
+    // Determine Ok payload type from Result<T, str>
+    const EnumVariant *ok_v = type_enum_find_variant(result_type, "Ok");
+    const Type *ok_type = ok_v->tuple_types[0];
+    bool ok_is_unit = (ok_type->kind == TYPE_UNIT);
+    const char *ok_c = c_type_for(cgen, ok_type);
+
+    // Emit closure argument and store in a local before setjmp
+    const char *closure_expr = emit_expr(cgen, node->call.args[0]);
+    const char *fn_tmp = next_temp(cgen);
+    emit_line(cgen, "RsgFn %s = %s;", fn_tmp, closure_expr);
+
+    const char *tmp_result = next_temp(cgen);
+    emit_line(cgen, "%s %s;", result_c, tmp_result);
+
+    emit_line(cgen, "{");
     cgen->indent++;
-    emit_line(cgen, "%s._tag = 1;", tmp_opt);
-    emit_line(cgen, "%s._data.Some._0 = rsg_str_new(%s, (int32_t)strlen(%s));", tmp_opt, tmp_raw,
-              tmp_raw);
+
+    const char *frame = next_temp(cgen);
+    emit_line(cgen, "RsgPanicFrame %s;", frame);
+    emit_line(cgen, "%s(&%s);", cgen->abi->panic_push, frame);
+
+    emit_line(cgen, "if (setjmp(%s.env) == 0) {", frame);
+    cgen->indent++;
+
+    if (!ok_is_unit) {
+        const char *val = next_temp(cgen);
+        emit_line(cgen, "%s %s = ((%s(*)(void*))%s.fn)(%s.env);", ok_c, val, ok_c, fn_tmp, fn_tmp);
+        emit_line(cgen, "%s._tag = 0;", tmp_result);
+        emit_line(cgen, "%s._data.Ok._0 = %s;", tmp_result, val);
+    } else {
+        emit_line(cgen, "((void(*)(void*))%s.fn)(%s.env);", fn_tmp, fn_tmp);
+        emit_line(cgen, "%s._tag = 0;", tmp_result);
+    }
+
     cgen->indent--;
     emit_line(cgen, "} else {");
     cgen->indent++;
-    emit_line(cgen, "%s._tag = 0;", tmp_opt);
+
+    const char *msg = next_temp(cgen);
+    emit_line(cgen, "const char *%s = " RSG_FN_RECOVER "();", msg);
+    emit_line(cgen, "%s._tag = 1;", tmp_result);
+    emit_line(cgen, "%s._data.Err._0 = %s(%s, (int32_t)strlen(%s));", tmp_result,
+              cgen->abi->str_new, msg, msg);
+
     cgen->indent--;
     emit_line(cgen, "}");
-    return tmp_opt;
+
+    emit_line(cgen, "%s();", cgen->abi->panic_pop);
+
+    cgen->indent--;
+    emit_line(cgen, "}");
+
+    return tmp_result;
 }
 
 // ── Intrinsic emit dispatch table ─────────────────────────────────
@@ -185,9 +233,12 @@ static const char *emit_slice_concat_call(CGen *cgen, const HirNode *node) {
 }
 
 static const IntrinsicEmitFn INTRINSIC_EMIT[INTRINSIC_KIND_COUNT] = {
-    [INTRINSIC_PRINT] = emit_print_wrapper,      [INTRINSIC_PRINTLN] = emit_println_wrapper,
-    [INTRINSIC_ASSERT] = emit_rsg_assert_call,   [INTRINSIC_PANIC] = emit_rsg_panic_call,
-    [INTRINSIC_RECOVER] = emit_rsg_recover_call, [INTRINSIC_SLICE_CONCAT] = emit_slice_concat_call,
+    [INTRINSIC_PRINT] = emit_print_wrapper,
+    [INTRINSIC_PRINTLN] = emit_println_wrapper,
+    [INTRINSIC_ASSERT] = emit_rsg_assert_call,
+    [INTRINSIC_PANIC] = emit_rsg_panic_call,
+    [INTRINSIC_CATCH_PANIC] = emit_catch_panic_call,
+    [INTRINSIC_SLICE_CONCAT] = emit_slice_concat_call,
 };
 
 static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
@@ -215,6 +266,9 @@ static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
         // Build cast: (RetType(*)(void*, P1, P2, ...))
         const char *params_str = "void*";
         for (int32_t i = 0; i < callee_type->fn_type.param_count; i++) {
+            if (callee_type->fn_type.params[i]->kind == TYPE_UNIT) {
+                continue;
+            }
             const char *pt = c_type_for(cgen, callee_type->fn_type.params[i]);
             params_str = arena_sprintf(cgen->arena, "%s, %s", params_str, pt);
         }
@@ -222,6 +276,9 @@ static const char *emit_call_expr(CGen *cgen, const HirNode *node) {
         // Build args: f.env, arg1, arg2, ...
         const char *arg_list = arena_sprintf(cgen->arena, "%s.env", callee_expr);
         for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
+            if (node->call.args[i]->type != NULL && node->call.args[i]->type->kind == TYPE_UNIT) {
+                continue;
+            }
             const char *arg = emit_expr(cgen, node->call.args[i]);
             arg_list = arena_sprintf(cgen->arena, "%s, %s", arg_list, arg);
         }
@@ -333,11 +390,11 @@ static const char *emit_slice_lit_expr(CGen *cgen, const HirNode *node) {
     const Type *elem_type = node->type->slice.elem;
     const char *elem_c = c_type_for(cgen, elem_type);
     if (count == 0) {
-        return arena_sprintf(cgen->arena, "rsg_slice_new(NULL, 0, sizeof(%s))", elem_c);
+        return arena_sprintf(cgen->arena, "%s(NULL, 0, sizeof(%s))", cgen->abi->slice_new, elem_c);
     }
     const char *elems = join_exprs(cgen, node->slice_lit.elems, count);
-    return arena_sprintf(cgen->arena, "rsg_slice_new((%s[]){ %s }, %d, sizeof(%s))", elem_c, elems,
-                         count, elem_c);
+    return arena_sprintf(cgen->arena, "%s((%s[]){ %s }, %d, sizeof(%s))", cgen->abi->slice_new,
+                         elem_c, elems, count, elem_c);
 }
 
 static const char *emit_slice_expr_expr(CGen *cgen, const HirNode *node) {
@@ -348,8 +405,8 @@ static const char *emit_slice_expr_expr(CGen *cgen, const HirNode *node) {
 
     if (node->slice_expr.from_array) {
         int32_t array_size = obj_type->array.size;
-        return arena_sprintf(cgen->arena, "rsg_slice_from_array(%s._data, %d, sizeof(%s))", object,
-                             array_size, elem_c);
+        return arena_sprintf(cgen->arena, "%s(%s._data, %d, sizeof(%s))",
+                             cgen->abi->slice_from_array, object, array_size, elem_c);
     }
 
     const char *start_str = "0";
@@ -362,8 +419,8 @@ static const char *emit_slice_expr_expr(CGen *cgen, const HirNode *node) {
     } else {
         end_str = arena_sprintf(cgen->arena, "%s.len", object);
     }
-    return arena_sprintf(cgen->arena, "rsg_slice_sub(%s, %s, %s, sizeof(%s))", object, start_str,
-                         end_str, elem_c);
+    return arena_sprintf(cgen->arena, "%s(%s, %s, %s, sizeof(%s))", cgen->abi->slice_sub, object,
+                         start_str, end_str, elem_c);
 }
 
 static const char *emit_tuple_lit_expr(CGen *cgen, const HirNode *node) {
@@ -464,7 +521,8 @@ static const char *emit_heap_alloc_expr(CGen *cgen, const HirNode *node) {
     const char *pointee_type = c_type_for(cgen, node->type->ptr.pointee);
     const char *tmp = next_temp(cgen);
     const char *inner = emit_expr(cgen, node->heap_alloc.operand);
-    emit_line(cgen, "%s *%s = rsg_heap_alloc(sizeof(%s));", pointee_type, tmp, pointee_type);
+    emit_line(cgen, "%s *%s = %s(sizeof(%s));", pointee_type, tmp, cgen->abi->heap_alloc,
+              pointee_type);
     emit_line(cgen, "*%s = %s;", tmp, inner);
     return tmp;
 }
@@ -636,6 +694,10 @@ const char *emit_expr(CGen *cgen, const HirNode *node) {
     case HIR_UNIT_LIT:
         return "(void)0";
     case HIR_VAR_REF:
+        // Unit-typed variable reference → emit (void)0 (var may be elided)
+        if (node->type != NULL && node->type->kind == TYPE_UNIT) {
+            return "(void)0";
+        }
         // Function reference → RsgFn wrapper
         if (node->var_ref.sym->kind == HIR_SYM_FN && node->type != NULL &&
             node->type->kind == TYPE_FN) {

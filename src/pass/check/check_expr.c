@@ -45,19 +45,20 @@ const Type *check_id(Sema *sema, ASTNode *node) {
         if (strcmp(node->id.name, "self") == 0) {
             return type_create_module(sema->base.arena, "");
         }
-        // Handle bare `None` — resolve from expected type or fn return type
-        if (strcmp(node->id.name, "None") == 0) {
+        // Handle bare unit variant (e.g., None) — resolve from expected type or fn return type
+        VariantCtorInfo *vci = hash_table_lookup(&sema->base.db.variant_ctor_table, node->id.name);
+        if (vci != NULL && !vci->has_payload) {
             const Type *ctx = sema->infer.expected_type;
             if (ctx == NULL || ctx->kind != TYPE_ENUM) {
                 ctx = sema->infer.fn_return_type;
             }
             if (ctx != NULL && ctx->kind == TYPE_ENUM) {
-                const EnumVariant *variant = type_enum_find_variant(ctx, "None");
+                const EnumVariant *variant = type_enum_find_variant(ctx, node->id.name);
                 if (variant != NULL) {
-                    // Rewrite to enum variant call for lowering
-                    ASTNode *none_call = build_none_variant_call(sema->base.arena, ctx, node->loc);
-                    node->kind = none_call->kind;
-                    node->call = none_call->call;
+                    ASTNode *vc =
+                        build_unit_variant_call(sema->base.arena, ctx, node->id.name, node->loc);
+                    node->kind = vc->kind;
+                    node->call = vc->call;
                     node->type = ctx;
                     return ctx;
                 }

@@ -25,12 +25,12 @@ struct CGen {
     Arena *arena;      // for temp str building
     int32_t indent;
     const char *module;           // current module name (may be NULL)
-    int32_t temp_counter;         // monotonic counter for _rsg_tmp_N
-    int32_t str_builder_counter;  // monotonic counter for _rsg_sb_N
+    int32_t temp_counter;         // monotonic counter for RSG_INTERNAL_TMP
+    int32_t str_builder_counter;  // monotonic counter for RSG_INTERNAL_SB
     const Type **compound_types;  /* buf */
     const HirNode **defer_bodies; /* buf – active defers in current fn */
     bool in_deferred_fn;          // true when current fn has defers
-    int32_t defer_counter;        // monotonic index for _rsg_defer_N flags
+    int32_t defer_counter;        // monotonic index for RSG_INTERNAL_DEFER flags
     HashTable wrapper_set;        // dedup for fn ref wrappers
 };
 

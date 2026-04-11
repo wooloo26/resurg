@@ -68,59 +68,29 @@ static void reorder_named_args(Sema *sema, ASTNode *node, const FnSig *sig) {
 }
 
 /**
- * Fill in missing args with default values at the call site.
- * For expression defaults, reuses the default expression AST node.
- */
-static void fill_default_args(Sema *sema, ASTNode *node, const FnSig *sig) {
-    int32_t arg_count = BUF_LEN(node->call.args);
-    if (arg_count >= sig->param_count || sig->default_kinds == NULL) {
-        return;
-    }
-    for (int32_t i = arg_count; i < sig->param_count; i++) {
-        DefaultKind dk = sig->default_kinds[i];
-        ASTNode *fill = NULL;
-        if (dk == DEFAULT_EXPR) {
-            fill = sig->default_exprs[i];
-            if (fill != NULL) {
-                check_node(sema, fill);
-            }
-        }
-        BUF_PUSH(node->call.args, fill);
-    }
-}
-
-/**
  * Validate arg count against @p sig, promote lit args, and type-check each arg.
  * Handles variadic parameters: when the last param is variadic (..T → []T),
  * remaining call-site args are checked against the element type.
- * Fills default args when the call provides fewer args than params.
  */
 static void check_and_promote_call_args(Sema *sema, ASTNode *node, const FnSig *sig) {
     int32_t arg_count = BUF_LEN(node->call.args);
     int32_t fixed_count = sig->has_variadic ? sig->param_count - 1 : sig->param_count;
-    int32_t min_required = sig->default_kinds != NULL ? sig->required_count : fixed_count;
 
     if (sig->has_variadic) {
-        // Variadic: need at least the fixed args (minus any with defaults)
-        if (arg_count < min_required) {
-            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", min_required, arg_count);
+        if (arg_count < fixed_count) {
+            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", fixed_count, arg_count);
             return;
         }
     } else {
-        if (arg_count < min_required) {
-            SEMA_ERR(sema, node->loc, "expected at least %d args, got %d", min_required, arg_count);
+        if (arg_count < sig->param_count) {
+            SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
             return;
         }
         if (arg_count > sig->param_count) {
-            SEMA_ERR(sema, node->loc, "expected at most %d args, got %d", sig->param_count,
-                     arg_count);
+            SEMA_ERR(sema, node->loc, "expected %d args, got %d", sig->param_count, arg_count);
             return;
         }
     }
-
-    // Fill in missing args with defaults before type-checking
-    fill_default_args(sema, node, sig);
-    arg_count = BUF_LEN(node->call.args);
 
     // Check fixed (non-variadic) args
     for (int32_t i = 0; i < fixed_count && i < arg_count; i++) {
@@ -390,57 +360,61 @@ static const Type *rewrite_variant_call(Sema *sema, ASTNode *node, const Type *e
     return check_enum_variant_call(sema, node, enum_type, variant_name);
 }
 
-/** Handle bare Some(x) → Option<T> and bare Ok(x)/Err(x) → Result<T,E>. */
+/**
+ * Handle bare variant calls (e.g. Some(x), Ok(x), Err(x)) via the
+ * variant constructor table populated by `pub use Enum::*`.
+ *
+ * Resolution order:
+ *  1. Context-based — expected_type or fn_return_type provides the concrete enum.
+ *  2. Inference — for single-type-param generic enums, infer from arg type.
+ */
 static const Type *check_bare_variant_call(Sema *sema, ASTNode *node, const char *fn_name) {
     if (BUF_LEN(node->call.args) != 1) {
         return NULL;
     }
 
-    // bare Some(x) → Option<T>
-    if (strcmp(fn_name, "Some") == 0) {
-        const Type *arg_type = node->call.args[0]->type;
-        if (arg_type == NULL || arg_type->kind == TYPE_ERR) {
-            return NULL;
-        }
-        GenericEnumDef *gdef = sema_lookup_generic_enum(sema, "Option");
-        if (gdef == NULL) {
-            return NULL;
-        }
-        ASTType val_arg = {.kind = AST_TYPE_NAME,
-                           .name = type_name(sema->base.arena, arg_type),
-                           .type_args = NULL,
-                           .loc = node->loc};
-        hash_table_insert(&sema->base.generics.type_params, val_arg.name, (void *)arg_type);
-        GenericInstArgs inst_args = {&val_arg, 1, node->loc};
-        const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
-        hash_table_remove(&sema->base.generics.type_params, val_arg.name);
-        if (mangled != NULL) {
-            const Type *opt_type = sema_lookup_type_alias(sema, mangled);
-            if (opt_type != NULL) {
-                return rewrite_variant_call(sema, node, opt_type, "Some");
-            }
-        }
+    VariantCtorInfo *vci = hash_table_lookup(&sema->base.db.variant_ctor_table, fn_name);
+    if (vci == NULL || !vci->has_payload) {
         return NULL;
     }
 
-    // bare Ok(x) / Err(x) → Result<T, E>
-    if (strcmp(fn_name, "Ok") == 0 || strcmp(fn_name, "Err") == 0) {
-        const Type *expected = sema->infer.expected_type;
-        if (expected == NULL) {
-            expected = sema->infer.fn_return_type;
-        }
-        if (expected == NULL || expected->kind != TYPE_ENUM) {
-            return NULL;
-        }
+    // Inference-based: for single-type-param generic enums, infer T from the arg.
+    // Tried first so nested calls like Some(Some(42)) resolve inside-out.
+    GenericEnumDef *gdef = sema_lookup_generic_enum(sema, vci->enum_name);
+    if (gdef != NULL && gdef->type_param_count == 1) {
         const Type *arg_type = node->call.args[0]->type;
-        if (arg_type == NULL || arg_type->kind == TYPE_ERR) {
-            return NULL;
-        }
-        const EnumVariant *variant = type_enum_find_variant(expected, fn_name);
-        if (variant != NULL) {
-            return rewrite_variant_call(sema, node, expected, fn_name);
+        if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
+            ASTType val_arg = {.kind = AST_TYPE_NAME,
+                               .name = type_name(sema->base.arena, arg_type),
+                               .type_args = NULL,
+                               .loc = node->loc};
+            hash_table_insert(&sema->base.generics.type_params, val_arg.name, (void *)arg_type);
+            GenericInstArgs inst_args = {&val_arg, 1, node->loc};
+            const char *mangled = instantiate_generic_enum(sema, gdef, &inst_args);
+            hash_table_remove(&sema->base.generics.type_params, val_arg.name);
+
+            if (mangled != NULL) {
+                const Type *enum_type = sema_lookup_type_alias(sema, mangled);
+                if (enum_type != NULL) {
+                    return rewrite_variant_call(sema, node, enum_type, fn_name);
+                }
+            }
         }
     }
+
+    // Context-based fallback: expected_type or fn_return_type provides the concrete enum.
+    // Used for multi-param generics like Result<T,E> where full inference is not possible.
+    const Type *ctx = sema->infer.expected_type;
+    if (ctx == NULL) {
+        ctx = sema->infer.fn_return_type;
+    }
+    if (ctx != NULL && ctx->kind == TYPE_ENUM) {
+        const EnumVariant *variant = type_enum_find_variant(ctx, fn_name);
+        if (variant != NULL) {
+            return rewrite_variant_call(sema, node, ctx, fn_name);
+        }
+    }
+
     return NULL;
 }
 

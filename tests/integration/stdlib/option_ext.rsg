@@ -1,0 +1,19 @@
+// stdlib: Option extension methods — L3 pure Resurg
+// EXPECT-STDOUT: option ext tests passed
+
+fn main() {
+    // is_some / is_none
+    var x: ?i32 = Some(42)
+    var y: ?i32 = None
+
+    assert(x.is_some(), "Some is_some")
+    assert(!x.is_none(), "Some is_none")
+    assert(y.is_none(), "None is_none")
+    assert(!y.is_some(), "None is_some")
+
+    // unwrap_or
+    assert(x.unwrap_or(0) == 42, "Some unwrap_or")
+    assert(y.unwrap_or(99) == 99, "None unwrap_or")
+
+    println("option ext tests passed")
+}

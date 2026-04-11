@@ -88,7 +88,7 @@ static HirNode *lower_assert_call(Lower *low, const ASTNode *ast) {
 }
 
 /**
- * Expand panic(msg) → rsgu_panic(msg).
+ * Expand panic(msg) → rsg_panic(msg).
  *
  * Extracts the raw C string from the RsgStr argument.
  */
@@ -104,17 +104,20 @@ static HirNode *lower_panic_call(Lower *low, const ASTNode *ast) {
 }
 
 /**
- * Expand recover() → rsgu_recover() with option wrapping.
+ * Expand catch_panic(f) → HIR_CALL with INTRINSIC_CATCH_PANIC tag.
  *
- * The runtime function returns const char* (NULL = no panic).
- * Codegen handles the conversion to ?str.
+ * Codegen handles the setjmp/longjmp pattern and Result construction.
  */
-static HirNode *lower_recover_call(Lower *low, const ASTNode *ast) {
+static HirNode *lower_catch_panic_call(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
+    HirNode *closure = lower_expr(low, ast->call.args[0]);
+
     HirNode **args = NULL;
+    BUF_PUSH(args, closure);
+    BUF_PUSH(low->compound_types, ast->type);
 
     return lower_make_builtin_call(
-        low, &(BuiltinCallSpec){RSG_FN_RECOVER, ast->type, args, loc, INTRINSIC_RECOVER});
+        low, &(BuiltinCallSpec){"catch_panic", ast->type, args, loc, INTRINSIC_CATCH_PANIC});
 }
 
 /**
@@ -159,9 +162,9 @@ static HirNode *lower_println_wrapper(Lower *low, const ASTNode *ast) {
 }
 
 static const IntrinsicLowerFn INTRINSIC_LOWER[INTRINSIC_KIND_COUNT] = {
-    [INTRINSIC_PRINT] = lower_print_wrapper,  [INTRINSIC_PRINTLN] = lower_println_wrapper,
-    [INTRINSIC_ASSERT] = lower_assert_call,   [INTRINSIC_PANIC] = lower_panic_call,
-    [INTRINSIC_RECOVER] = lower_recover_call, [INTRINSIC_LEN] = lower_len_call,
+    [INTRINSIC_PRINT] = lower_print_wrapper,          [INTRINSIC_PRINTLN] = lower_println_wrapper,
+    [INTRINSIC_ASSERT] = lower_assert_call,           [INTRINSIC_PANIC] = lower_panic_call,
+    [INTRINSIC_CATCH_PANIC] = lower_catch_panic_call, [INTRINSIC_LEN] = lower_len_call,
 };
 
 // ── Method dispatch helpers ───────────────────────────────────────

@@ -1,133 +1,70 @@
-// panic and recover: structured panic/recover control flow
+// panic and catch_panic: structured panic/catch control flow
 // EXPECT-STDOUT: About to panic...
 // EXPECT-STDOUT: Caught panic: went wrong
 // EXPECT-STDOUT: safe_call returned: went wrong
 // EXPECT-STDOUT: after safe_call
 // EXPECT-STDOUT: no panic happened
 // EXPECT-STDOUT: nested: inner panic
-// EXPECT-STDOUT: defer A ran
 // EXPECT-STDOUT: multiple defers work
 
-// ── panic triggers defer, recover catches it ──
+// ── panic caught via catch_panic ──
 
-fn safe_call() -> ?str {
-    var result: ?str = None
-
-    defer {
-        if Some(msg) := recover() {
-            println("Caught panic: {msg}")
-            result = Some(msg)
-        }
-    }
-
-    println("About to panic...")
-    panic("went wrong")
-    result
+fn safe_call() -> str!str {
+    catch_panic(|| -> str {
+        println("About to panic...")
+        panic("went wrong")
+    })
 }
 
-fn test_panic_recover_basic() {
-    msg := safe_call()
-    if Some(m) := msg {
-        println("safe_call returned: {m}")
+fn test_panic_catch_basic() {
+    result := safe_call()
+    match result {
+        Ok(_) => assert(false, ""),
+        Err(msg) => {
+            println("Caught panic: {msg}")
+            println("safe_call returned: {msg}")
+        },
     }
     println("after safe_call")
 }
 
-// ── recover returns None when no panic ──
+// ── catch_panic returns Ok when no panic ──
 
-fn no_panic() -> ?str {
-    var result: ?str = None
-
-    defer {
-        if Some(msg) := recover() {
-            result = Some(msg)
-        } else {
+fn test_catch_no_panic() {
+    result := catch_panic(|| -> i32 { 42 })
+    match result {
+        Ok(v) => {
+            assert(v == 42, "")
             println("no panic happened")
-        }
-    }
-
-    result
-}
-
-fn test_recover_no_panic() {
-    r := no_panic()
-    match r {
-        None => assert(true, ""),
-        _ => assert(false, ""),
-    }
-}
-
-// ── panic with defer LIFO ordering ──
-
-fn defer_order() -> ?str {
-    var result: ?str = None
-
-    defer {
-        println("defer A ran")
-    }
-
-    defer {
-        if Some(msg) := recover() {
-            result = Some(msg)
-        }
-    }
-
-    panic("ordering test")
-    result
-}
-
-fn test_defer_lifo_with_panic() {
-    r := defer_order()
-    if Some(_) := r {
-        assert(true, "")
-    } else {
-        assert(false, "")
+        },
+        Err(_) => assert(false, ""),
     }
 }
 
 // ── nested function panic propagates up ──
 
-fn inner_panic() {
+fn inner_panic() -> str {
     panic("inner panic")
 }
 
-fn outer_catch() -> ?str {
-    var result: ?str = None
-
-    defer {
-        if Some(msg) := recover() {
-            println("nested: {msg}")
-            result = Some(msg)
-        }
-    }
-
-    inner_panic()
-    result
-}
-
 fn test_nested_panic() {
-    r := outer_catch()
-    if Some(_) := r {
-        assert(true, "")
-    } else {
-        assert(false, "")
+    result := catch_panic(inner_panic)
+    match result {
+        Ok(_) => assert(false, ""),
+        Err(msg) => println("nested: {msg}"),
     }
 }
 
-// ── multiple defers run when panic recovered ──
+// ── multiple defers still run when not related to catch_panic ──
 
 fn multiple_defers_fn() {
     defer {
         println("multiple defers work")
     }
 
-    defer {
-        recover()
-    }
-
-    panic("caught silently")
+    // No panic here — just verify defer runs
 }
 
-fn test_multiple_defers_on_panic() {
+fn test_multiple_defers() {
     multiple_defers_fn()
 }

@@ -147,6 +147,10 @@ HirNode *lower_arm_bindings_block(Lower *low, const ASTPattern *pattern,
             if (sub->kind != PATTERN_BINDING || sub->name == NULL || j >= variant->tuple_count) {
                 continue;
             }
+            // Skip unit-typed tuple fields (no data in C union for void)
+            if (variant->tuple_types[j]->kind == TYPE_UNIT) {
+                continue;
+            }
             HirSym *bsym = lower_scope_lookup(low, sub->name);
             if (bsym == NULL) {
                 continue;

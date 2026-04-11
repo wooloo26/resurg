@@ -176,9 +176,9 @@ void emit_stmt(CGen *cgen, const HirNode *node) {
         if (cgen->in_deferred_fn) {
             if (node->return_stmt.value != NULL) {
                 const char *value = emit_expr(cgen, node->return_stmt.value);
-                emit_line(cgen, "_rsg_result = %s;", value);
+                emit_line(cgen, RSG_INTERNAL_RESULT " = %s;", value);
             }
-            emit_line(cgen, "goto _rsg_cleanup;");
+            emit_line(cgen, "goto " RSG_INTERNAL_CLEANUP ";");
         } else {
             emit_return_stmt(cgen, node);
         }
@@ -187,7 +187,7 @@ void emit_stmt(CGen *cgen, const HirNode *node) {
         emit_loop_stmt(cgen, node);
         break;
     case HIR_DEFER:
-        emit_line(cgen, "_rsg_defer_%d = true;", cgen->defer_counter);
+        emit_line(cgen, RSG_INTERNAL_DEFER "%d = true;", cgen->defer_counter);
         cgen->defer_counter++;
         BUF_PUSH(cgen->defer_bodies, node);
         break;

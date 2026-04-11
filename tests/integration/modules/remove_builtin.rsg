@@ -2,19 +2,19 @@
 // EXPECT-STDOUT: builtin-free println
 // EXPECT-STDOUT: 42
 
-// ── println works (now via declare, not builtin) ──
+// ── println works (now via decl, not builtin) ──
 
 fn test_println_no_builtin() {
     println("builtin-free println")
 }
 
-// ── print works (now via declare, not builtin) ──
+// ── print works (now via decl, not builtin) ──
 
 fn test_print_no_builtin() {
     println("{42}")
 }
 
-// ── assert works (now via declare, not builtin) ──
+// ── assert works (now via decl, not builtin) ──
 
 fn test_assert_no_builtin() {
     assert(true, "")
@@ -22,7 +22,7 @@ fn test_assert_no_builtin() {
     assert(1 + 2 == 3, "1 + 2 should equal 3")
 }
 
-// ── len works on slices (now via declare ext, not builtin) ──
+// ── len works on slices (now via decl ext, not builtin) ──
 
 fn test_len_slice_no_builtin() {
     s := []i32{10, 20, 30}

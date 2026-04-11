@@ -161,15 +161,12 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
     FnSig *sig = rsg_malloc(sizeof(*sig));
     sig->name = mangled;
     sig->param_count = BUF_LEN(orig->fn_decl.params);
-    sig->required_count = sig->param_count;
     sig->param_types = NULL;
     sig->param_names = NULL;
     sig->is_pub = false;
     sig->is_ptr_recv = false;
     sig->is_declare = orig->fn_decl.is_declare;
     sig->has_variadic = false;
-    sig->default_kinds = NULL;
-    sig->default_exprs = NULL;
     for (int32_t i = 0; i < sig->param_count; i++) {
         ASTNode *param = orig->fn_decl.params[i];
         const Type *pt = resolve_ast_type(sema, &param->param.type);
@@ -190,7 +187,7 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
 
     hash_table_insert(&sema->base.db.fn_table, mangled, sig);
 
-    // Declare fns have no body to clone/check — skip deferred instantiation.
+    // Decl fns have no body to clone/check — skip deferred instantiation.
     if (!orig->fn_decl.is_declare) {
         GenericInst inst = {.generic = gdef,
                             .mangled_name = mangled,
@@ -275,6 +272,60 @@ static ASTType type_to_ast_type(Arena *arena, const Type *type) {
     }
 }
 
+/**
+ * Recursively infer type parameter bindings by matching an AST type
+ * annotation against a concrete resolved type.
+ *
+ * Handles AST_TYPE_NAME (direct type param) and AST_TYPE_FN (Fn/FnMut types).
+ */
+static void infer_type_params(const ASTType *ast_type, const Type *concrete,
+                              const GenericFnDef *gdef, const Type **inferred) {
+    if (concrete == NULL || concrete->kind == TYPE_ERR) {
+        return;
+    }
+    switch (ast_type->kind) {
+    case AST_TYPE_NAME:
+        for (int32_t i = 0; i < gdef->type_param_count; i++) {
+            if (ast_type->name != NULL && strcmp(ast_type->name, gdef->type_params[i].name) == 0) {
+                inferred[i] = concrete;
+                return;
+            }
+        }
+        break;
+    case AST_TYPE_FN:
+        if (concrete->kind != TYPE_FN) {
+            break;
+        }
+        if (ast_type->fn_return_type != NULL) {
+            infer_type_params(ast_type->fn_return_type, concrete->fn_type.return_type, gdef,
+                              inferred);
+        }
+        for (int32_t i = 0;
+             i < BUF_LEN(ast_type->fn_param_types) && i < concrete->fn_type.param_count; i++) {
+            infer_type_params(ast_type->fn_param_types[i], concrete->fn_type.params[i], gdef,
+                              inferred);
+        }
+        break;
+    case AST_TYPE_PTR:
+        if (concrete->kind == TYPE_PTR && ast_type->ptr_elem != NULL) {
+            infer_type_params(ast_type->ptr_elem, concrete->ptr.pointee, gdef, inferred);
+        }
+        break;
+    case AST_TYPE_SLICE:
+        if (concrete->kind == TYPE_SLICE && ast_type->slice_elem != NULL) {
+            infer_type_params(ast_type->slice_elem, concrete->slice.elem, gdef, inferred);
+        }
+        break;
+    case AST_TYPE_ARRAY:
+        if (concrete->kind == TYPE_ARRAY && ast_type->array_elem != NULL) {
+            infer_type_params(ast_type->array_elem, concrete->array.elem, gdef, inferred);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
     GenericFnDef *gdef = sema_lookup_generic_fn(sema, fn_name);
     if (gdef == NULL) {
@@ -292,18 +343,8 @@ const Type *infer_generic_call(Sema *sema, ASTNode *node, const char *fn_name) {
         (const Type **)arena_alloc_zero(sema->base.arena, num_params * sizeof(const Type *));
     for (int32_t pi = 0; pi < param_count; pi++) {
         ASTNode *param = orig->fn_decl.params[pi];
-        if (param->param.type.kind != AST_TYPE_NAME) {
-            continue;
-        }
-        for (int32_t ti = 0; ti < num_params; ti++) {
-            if (strcmp(param->param.type.name, gdef->type_params[ti].name) == 0) {
-                const Type *arg_type = node->call.args[pi]->type;
-                if (arg_type != NULL && arg_type->kind != TYPE_ERR) {
-                    inferred[ti] = arg_type;
-                }
-                break;
-            }
-        }
+        const Type *arg_type = node->call.args[pi]->type;
+        infer_type_params(&param->param.type, arg_type, gdef, inferred);
     }
 
     for (int32_t i = 0; i < num_params; i++) {
