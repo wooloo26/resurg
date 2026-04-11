@@ -60,58 +60,39 @@ struct Pipeline {
 
 /**
  * Read the entire contents of @p path into a heap-allocated, NUL-terminated
- * buf.  Fatally exits on I/O failure or if the file exceeds
- * MAX_SRC_SIZE.  The caller owns the returned memory.
+ * buf.  Returns NULL on any I/O failure.  The caller owns the returned memory.
  */
-static char *read_src_file(const char *path) {
-    struct stat file_stat;
-    if (stat(path, &file_stat) != 0) {
-        rsg_fatal("cannot stat '%s'", path);
-    }
-    if (!S_ISREG(file_stat.st_mode)) {
-        rsg_fatal("'%s' is not a regular file", path);
-    }
-
-    FILE *file_handle = fopen(path, "rb");
-    if (file_handle == NULL) {
-        rsg_fatal("cannot open '%s'", path);
-    }
-
-    long size = (long)file_stat.st_size;
-    if (size < 0 || size > MAX_SRC_SIZE) {
-        fclose(file_handle);
-        rsg_fatal("cannot read '%s' (size err or file too large)", path);
-    }
-
-    char *buf = rsg_calloc((size_t)size + 1, 1);
-    size_t bytes_read = fread(buf, 1, (size_t)size, file_handle);
-    fclose(file_handle);
-    if (bytes_read != (size_t)size) {
-        free(buf);
-        rsg_fatal("failed to read '%s' (expected %ld bytes, got %zu)", path, size, bytes_read);
-    }
-    return buf;
-}
-
-// ── Module loader callback ─────────────────────────────────────────────
-
-/** Read a module file into a NUL-terminated heap buffer. Returns NULL on failure. */
-static char *read_module_file(const char *path) {
+static char *read_file_contents(const char *path) {
     struct stat st;
     if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return NULL;
+    }
+    long size = (long)st.st_size;
+    if (size < 0 || size > MAX_SRC_SIZE) {
         return NULL;
     }
     FILE *f = fopen(path, "rb");
     if (f == NULL) {
         return NULL;
     }
-    size_t size = (size_t)st.st_size;
-    char *buf = rsg_calloc(size + 1, 1);
-    size_t n = fread(buf, 1, size, f);
+    char *buf = rsg_calloc((size_t)size + 1, 1);
+    size_t n = fread(buf, 1, (size_t)size, f);
     fclose(f);
-    if (n != size) {
+    if (n != (size_t)size) {
         free(buf);
         return NULL;
+    }
+    return buf;
+}
+
+/**
+ * Read the entire contents of @p path, fatally exiting on failure.
+ * The caller owns the returned memory.
+ */
+static char *read_src_file(const char *path) {
+    char *buf = read_file_contents(path);
+    if (buf == NULL) {
+        rsg_fatal("cannot read '%s'", path);
     }
     return buf;
 }
@@ -122,7 +103,7 @@ static char *read_module_file(const char *path) {
  */
 static ASTNode **pipeline_load_module(void *ctx, Arena *arena, const char *mod_path) {
     (void)ctx;
-    char *src = read_module_file(mod_path);
+    char *src = read_file_contents(mod_path);
     if (src == NULL) {
         return NULL;
     }
@@ -223,7 +204,7 @@ static const char *find_std_path(Arena *arena, const PipelineOptions *options) {
  * Returns true when at least one declaration was prepended.
  */
 static bool prepend_rsg_file(Arena *arena, const char *path, ASTNode *file_node) {
-    char *src = read_module_file(path);
+    char *src = read_file_contents(path);
     if (src == NULL) {
         return false;
     }

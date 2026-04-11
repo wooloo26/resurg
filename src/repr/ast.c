@@ -329,7 +329,7 @@ static void clone_use_decl(Arena *arena, const ASTNode *src, ASTNode *dst) {
 
 // ── Dispatch table ──────────────────────────────────────────────
 
-static const ASTCloneHandler clone_handlers[NODE_KIND_COUNT] = {
+static const ASTCloneHandler CLONE_HANDLERS[NODE_KIND_COUNT] = {
     [NODE_LIT] = clone_lit,
     [NODE_ID] = clone_id,
     [NODE_CONTINUE] = clone_continue,
@@ -381,7 +381,7 @@ ASTNode *ast_clone(Arena *arena, ASTNode *src) {
         return NULL;
     }
     ASTNode *dst = ast_new(arena, src->kind, src->loc);
-    ASTCloneHandler handler = clone_handlers[src->kind];
+    ASTCloneHandler handler = CLONE_HANDLERS[src->kind];
     if (handler == NULL) {
         rsg_fatal("ast_clone: no handler for node kind %d", (int)src->kind);
     }

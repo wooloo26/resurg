@@ -153,13 +153,19 @@ static bool validate_generic_bounds(Sema *sema, ASTNode *node, GenericFnDef *gde
 
 // ── Generic fn instantiation ──────────────────────────────────────
 
+/** Resolved type arguments, mangled name, and saved params for a generic fn instantiation. */
+typedef struct {
+    const Type **type_args;
+    const char *mangled_name;
+    const Type **saved_params;
+} GenericFnInstSpec;
+
 /** Build a concrete FnSig from a generic template and queue a deferred instantiation. */
 static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef *gdef,
-                                        const Type **resolved_args, const char *mangled,
-                                        const Type **saved) {
+                                        const GenericFnInstSpec *spec) {
     ASTNode *orig = gdef->decl;
     FnSig *sig = rsg_malloc(sizeof(*sig));
-    sig->name = mangled;
+    sig->name = spec->mangled_name;
     sig->param_count = BUF_LEN(orig->fn_decl.params);
     sig->param_types = NULL;
     sig->param_names = NULL;
@@ -183,20 +189,20 @@ static const Type *emit_generic_fn_inst(Sema *sema, ASTNode *node, GenericFnDef 
     const Type *ret = resolve_ast_type(sema, &orig->fn_decl.return_type);
     sig->return_type = (ret != NULL) ? ret : &TYPE_UNIT_INST;
 
-    sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, saved);
+    sema_pop_type_params(sema, gdef->type_params, gdef->type_param_count, spec->saved_params);
 
-    hash_table_insert(&sema->base.db.fn_table, mangled, sig);
+    hash_table_insert(&sema->base.db.fn_table, spec->mangled_name, sig);
 
     // Decl fns have no body to clone/check — skip deferred instantiation.
     if (!orig->fn_decl.is_declare) {
         GenericInst inst = {.generic = gdef,
-                            .mangled_name = mangled,
-                            .type_args = resolved_args,
+                            .mangled_name = spec->mangled_name,
+                            .type_args = spec->type_args,
                             .file_node = sema->base.file_node};
         BUF_PUSH(sema->pending_insts, inst);
     }
 
-    node->call.callee->id.name = mangled;
+    node->call.callee->id.name = spec->mangled_name;
     return resolve_call(sema, node, sig);
 }
 
@@ -233,7 +239,10 @@ const Type *check_generic_fn_call(Sema *sema, ASTNode *node, const char *fn_name
         return resolve_call(sema, node, existing);
     }
 
-    const Type *result = emit_generic_fn_inst(sema, node, gdef, resolved_args, mangled, saved);
+    const Type *result = emit_generic_fn_inst(sema, node, gdef,
+                                              &(GenericFnInstSpec){.type_args = resolved_args,
+                                                                   .mangled_name = mangled,
+                                                                   .saved_params = saved});
     node->call.type_args = NULL;
     return result;
 }

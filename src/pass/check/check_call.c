@@ -559,11 +559,9 @@ const Type *check_call(Sema *sema, ASTNode *node) {
     }
 
     case CALL_TUPLE_CTOR:
-        // Already applied by classify_call via check_tuple_struct_call.
-        return node->type;
-
     case CALL_BARE_VARIANT:
-        // Already applied by classify_call via check_bare_variant_call.
+        // Already applied by classify_call via
+        // check_tuple_struct_call or check_bare_variant_call.
         return node->type;
 
     case CALL_EXPR: {

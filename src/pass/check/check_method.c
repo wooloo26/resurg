@@ -44,16 +44,22 @@ static const Type *check_struct_method_call(Sema *sema, ASTNode *node, const Typ
 
 // ── Module-qualified calls ────────────────────────────────────────
 
+/** Output from module-qualified call resolution. */
+typedef struct {
+    const Type *type;     // non-NULL → direct resolve done; TYPE_ERR on error
+    const char *fn_name;  // updated fn_name (may be same as method_name)
+    const Type *obj_type; // updated obj_type (may differ for sub-modules/enums)
+} ModuleCallResult;
+
 /**
  * Handle module-qualified calls: mod::fn(args), mod::Enum::Variant(args),
  * mod::Type, or mod::inner sub-module lookup.
  *
- * @return Resolved return type on direct function call hit,
- *         TYPE_ERR on error, or NULL when the caller should continue dispatch.
+ * @return Result with .type == NULL when the caller should continue dispatch.
  */
-static const Type *try_module_qualified_call(Sema *sema, ASTNode *node, const Type *obj_type,
-                                             const char *method_name, const char **out_fn_name,
-                                             const Type **out_obj_type) {
+static ModuleCallResult try_module_qualified_call(Sema *sema, ASTNode *node, const Type *obj_type,
+                                                  const char *method_name) {
+    ModuleCallResult result = {.type = NULL, .fn_name = method_name, .obj_type = obj_type};
     const char *mod_name = obj_type->module_type.name;
     const char *qualified;
     if (strlen(mod_name) == 0) {
@@ -67,38 +73,40 @@ static const Type *try_module_qualified_call(Sema *sema, ASTNode *node, const Ty
     if (sig != NULL) {
         if (!sig->is_pub) {
             SEMA_ERR(sema, node->loc, "'%s' is private in module '%s'", method_name, mod_name);
-            return &TYPE_ERR_INST;
+            result.type = &TYPE_ERR_INST;
+            return result;
         }
         node->call.callee->kind = NODE_ID;
         node->call.callee->id.name = qualified;
         for (int32_t i = 0; i < BUF_LEN(node->call.args); i++) {
             check_node(sema, node->call.args[i]);
         }
-        return resolve_call(sema, node, sig);
+        result.type = resolve_call(sema, node, sig);
+        return result;
     }
 
     // Try as struct lit or enum access: mod::Type
     StructDef *sdef = sema_lookup_struct(sema, qualified);
     if (sdef != NULL) {
         node->call.callee->member.object->type = sdef->type;
-        *out_fn_name = method_name;
-        return NULL;
+        result.fn_name = method_name;
+        return result;
     }
 
     EnumDef *edef = sema_lookup_enum(sema, qualified);
     if (edef != NULL) {
         node->call.callee->member.object->type = edef->type;
         node->call.callee->member.object->id.name = qualified;
-        *out_obj_type = edef->type;
-        return NULL;
+        result.obj_type = edef->type;
+        return result;
     }
 
     // Try as sub-module: mod::inner::...
     Sym *mod_sym = scope_lookup(sema, qualified);
     if (mod_sym != NULL && mod_sym->type != NULL && mod_sym->type->kind == TYPE_MODULE) {
-        *out_obj_type = mod_sym->type;
+        result.obj_type = mod_sym->type;
     }
-    return NULL;
+    return result;
 }
 
 // ── Member call dispatch ──────────────────────────────────────────
@@ -138,11 +146,12 @@ const Type *check_member_call(Sema *sema, ASTNode *node, const char **out_fn_nam
 
     // Module-qualified call: mod::fn(args) or mod::Enum::Variant(args)
     if (obj_type != NULL && obj_type->kind == TYPE_MODULE) {
-        const Type *result =
-            try_module_qualified_call(sema, node, obj_type, method_name, out_fn_name, &obj_type);
-        if (result != NULL) {
-            return result;
+        ModuleCallResult mod = try_module_qualified_call(sema, node, obj_type, method_name);
+        if (mod.type != NULL) {
+            return mod.type;
         }
+        *out_fn_name = mod.fn_name;
+        obj_type = mod.obj_type;
     }
 
     if (obj_type != NULL && obj_type->kind == TYPE_ENUM) {
