@@ -2,14 +2,6 @@
 
 // ── Lookup helpers ─────────────────────────────────────────────────────
 
-/** Return the current module prefix, or NULL when at file scope. */
-static const char *sema_module_prefix(const Sema *sema) {
-    if (sema->base.current_scope != NULL && sema->base.current_scope->module_name != NULL) {
-        return sema->base.current_scope->module_name;
-    }
-    return NULL;
-}
-
 /**
  * Look up @p name in @p table. If not found and a module prefix is active,
  * retry with the qualified name "module.name".

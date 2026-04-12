@@ -43,6 +43,32 @@ Sym *scope_lookup(const Sema *sema, const char *name) {
     return NULL;
 }
 
+const char *sema_module_prefix(const Sema *sema) {
+    if (sema->base.current_scope != NULL && sema->base.current_scope->module_name != NULL) {
+        return sema->base.current_scope->module_name;
+    }
+    return NULL;
+}
+
+Sym *scope_lookup_qualified(Sema *sema, const char *name, const char **out_qualified) {
+    if (out_qualified != NULL) {
+        *out_qualified = NULL;
+    }
+    Sym *sym = scope_lookup(sema, name);
+    if (sym != NULL) {
+        return sym;
+    }
+    const char *mod = sema_module_prefix(sema);
+    if (mod != NULL) {
+        const char *qualified = arena_sprintf(sema->base.arena, "%s.%s", mod, name);
+        sym = scope_lookup(sema, qualified);
+        if (sym != NULL && out_qualified != NULL) {
+            *out_qualified = qualified;
+        }
+    }
+    return sym;
+}
+
 bool in_loop(const Sema *sema) {
     for (Scope *scope = sema->base.current_scope; scope != NULL; scope = scope->parent) {
         if (scope->is_loop) {

@@ -1,0 +1,13 @@
+-- input.rsg --
+struct Point {
+    x: f64
+    y: f64
+}
+fn distance() -> f64 {
+    return 0.0
+}
+-- symbol --
+Point 23
+x 8
+y 8
+distance 12

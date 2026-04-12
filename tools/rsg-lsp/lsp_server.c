@@ -95,12 +95,12 @@ static bool lsp_prepend_rsg_file(Arena *arena, const char *path, ASTNode *file_n
         return false;
     }
 
-    Lex *lex = lex_create(src, path, arena);
+    Lex *lex = lex_create(src, path, arena, NULL);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
     int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, arena, path);
+    Parser *parser = parser_create(tokens, count, arena, path, NULL);
     ASTNode *parsed = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
@@ -136,12 +136,12 @@ static ASTNode **lsp_load_module(void *ctx, Arena *arena, const char *mod_path) 
     if (src == NULL) {
         return NULL;
     }
-    Lex *lex = lex_create(src, mod_path, arena);
+    Lex *lex = lex_create(src, mod_path, arena, NULL);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
     int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, arena, mod_path);
+    Parser *parser = parser_create(tokens, count, arena, mod_path, NULL);
     ASTNode *file_node = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
@@ -348,7 +348,7 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
     // Instead, use a local pipeline_run approach.
 
     // Lex.
-    Lex *lex = lex_create(text, file_path, arena);
+    Lex *lex = lex_create(text, file_path, arena, NULL);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
@@ -409,7 +409,7 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
     // Parse.
     {
         int32_t count = BUF_LEN(tokens);
-        Parser *parser = parser_create(tokens, count, arena, file_path);
+        Parser *parser = parser_create(tokens, count, arena, file_path, NULL);
         ASTNode *file_node = parser_parse(parser);
         int32_t parse_errs = parser_err_count(parser);
         parser_destroy(parser);

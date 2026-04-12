@@ -1,6 +1,7 @@
 #ifndef RSG__PARSE_H
 #define RSG__PARSE_H
 
+#include "core/diag.h"
 #include "rsg/pass/parse/parse.h"
 
 /**
@@ -18,15 +19,20 @@ struct Parser {
     int32_t count;
     int32_t err_count;
     Arena *arena;            // AST alloc arena
+    DiagCtx *dctx;           // structured diagnostic collector (NULL → stderr fallback)
     const char *file;        // src filename for diagnostics
     bool no_struct_lit;      // suppress struct-lit parsing in if/while conditions
     const char *pending_doc; // accumulated doc comment text for next decl (arena-owned)
 };
 
-/** Report a parse err and bump the parser's err counter. */
+/** Report a parse err through the structured diagnostic context. */
 #define PARSER_ERR(parser, loc, ...)                                                               \
     do {                                                                                           \
-        rsg_err(loc, __VA_ARGS__);                                                                 \
+        if ((parser)->dctx != NULL) {                                                              \
+            diag_at((parser)->dctx, DIAG_ERR, loc, NULL, __VA_ARGS__);                             \
+        } else {                                                                                   \
+            rsg_err(loc, __VA_ARGS__);                                                             \
+        }                                                                                          \
         (parser)->err_count++;                                                                     \
     } while (0)
 

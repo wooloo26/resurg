@@ -1,0 +1,9 @@
+-- input.rsg --
+fn greet() {
+    x := 1
+}
+fn main() {
+    greet()
+}
+-- definition 4:5 --
+0:0

@@ -1,6 +1,7 @@
 #ifndef RSG__LEX_H
 #define RSG__LEX_H
 
+#include "core/diag.h"
 #include "lex.h"
 
 /**
@@ -20,10 +21,21 @@ struct Lex {
     int32_t line;             // 1-based current line
     int32_t column;           // 1-based current column
     Arena *arena;             // for allocating lexemes / str lits
+    DiagCtx *dctx;            // structured diagnostic collector (NULL → stderr fallback)
     Token *pending; /* buf */ // bufed tokens from str interpolation
     int32_t pending_pos;      // read cursor into pending
     TokenKind last_kind;      // previous token kind (for ctx-sensitive scanning)
 };
+
+/** Report a lex err through the structured diagnostic context. */
+#define LEX_ERR(lex, loc, ...)                                                                     \
+    do {                                                                                           \
+        if ((lex)->dctx != NULL) {                                                                 \
+            diag_at((lex)->dctx, DIAG_ERR, loc, NULL, __VA_ARGS__);                                \
+        } else {                                                                                   \
+            rsg_err(loc, __VA_ARGS__);                                                             \
+        }                                                                                          \
+    } while (0)
 
 // ── Character-level helpers ────────────────────────────────────────────
 

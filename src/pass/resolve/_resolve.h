@@ -79,6 +79,15 @@ void scope_define(Sema *sema, const SymDef *def);
 Sym *scope_lookup_current(const Sema *sema, const char *name);
 /** Walk the scope chain outward to find @p name. */
 Sym *scope_lookup(const Sema *sema, const char *name);
+/** Return the current module prefix, or NULL when at file scope. */
+const char *sema_module_prefix(const Sema *sema);
+/**
+ * Walk the scope chain for @p name.  If not found and a module prefix is
+ * active, retry with "module.name".  When a qualified match is found,
+ * @p out_qualified receives the arena-allocated qualified name (may be NULL
+ * if the caller does not need it).
+ */
+Sym *scope_lookup_qualified(Sema *sema, const char *name, const char **out_qualified);
 /** Return true if any enclosing scope has is_loop set. */
 bool in_loop(const Sema *sema);
 

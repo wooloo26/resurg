@@ -1,0 +1,5 @@
+-- input.rsg --
+fn main() {
+    var x: i32 = true
+}
+-- diagnostics severity 1 --

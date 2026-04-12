@@ -117,13 +117,15 @@ bool parser_is_pattern_binding(const Parser *parser) {
 
 // ── Parser lifecycle ───────────────────────────────────────────────────
 
-Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file) {
+Parser *parser_create(const Token *tokens, int32_t count, Arena *arena, const char *file,
+                      DiagCtx *dctx) {
     Parser *parser = rsg_malloc(sizeof(*parser));
     parser->tokens = tokens;
     parser->pos = 0;
     parser->count = count;
     parser->err_count = 0;
     parser->arena = arena;
+    parser->dctx = dctx;
     parser->file = file;
     parser->no_struct_lit = false;
     parser->pending_doc = NULL;

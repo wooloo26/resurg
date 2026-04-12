@@ -12,12 +12,18 @@
  * tokens.
  */
 typedef struct Lex Lex;
+typedef struct DiagCtx DiagCtx;
 
 /**
  * Create a lex over @p src (owned by caller).  Tokens and lexemes are
  * allocated from @p arena.
  */
-Lex *lex_create(const char *src, const char *file, Arena *arena);
+/**
+ * Create a lex over @p src (owned by caller).  Tokens and lexemes are
+ * allocated from @p arena.  If @p dctx is non-NULL, lex errs are
+ * collected via the diagnostic context; otherwise they go to stderr.
+ */
+Lex *lex_create(const char *src, const char *file, Arena *arena, DiagCtx *dctx);
 /** Destroy the lex and free its internal bookkeeping. */
 void lex_destroy(Lex *lex);
 /** Return the next token (may drain the interpolation pending buf first). */

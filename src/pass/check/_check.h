@@ -23,18 +23,27 @@ const Type *check_lit(Sema *sema, ASTNode *node);
 const Type *check_id(Sema *sema, ASTNode *node);
 const Type *check_unary(Sema *sema, ASTNode *node);
 const Type *check_binary(Sema *sema, ASTNode *node);
-const Type *check_member(Sema *sema, ASTNode *node);
-const Type *check_idx(Sema *sema, ASTNode *node);
 const Type *check_type_conversion(Sema *sema, ASTNode *node);
 const Type *check_str_interpolation(Sema *sema, ASTNode *node);
+const Type *check_address_of(Sema *sema, ASTNode *node);
+const Type *check_deref(Sema *sema, ASTNode *node);
+const Type *check_closure(Sema *sema, ASTNode *node);
+
+// ── Member / index access (check_member.c) ────────────────────────
+
+const Type *check_member(Sema *sema, ASTNode *node);
+const Type *check_idx(Sema *sema, ASTNode *node);
+
+// ── Collection literals (check_collection.c) ──────────────────────
+
 const Type *check_array_lit(Sema *sema, ASTNode *node);
 const Type *check_slice_lit(Sema *sema, ASTNode *node);
 const Type *check_slice_expr(Sema *sema, ASTNode *node);
 const Type *check_tuple_lit(Sema *sema, ASTNode *node);
+
+// ── Struct literals (check_struct_lit.c) ──────────────────────────
+
 const Type *check_struct_lit(Sema *sema, ASTNode *node);
-const Type *check_address_of(Sema *sema, ASTNode *node);
-const Type *check_deref(Sema *sema, ASTNode *node);
-const Type *check_closure(Sema *sema, ASTNode *node);
 void check_field_match(Sema *sema, ASTNode *value_node, const Type *expected_type);
 
 // ── Call checking (check_call.c) ──────────────────────────────────

@@ -8,10 +8,10 @@
 #include "core/diag.h"
 #include "pass/lex/lex.h"
 #include "pass/lower/hir_passes.h"
+#include "pass/lower/lower.h"
 #include "rsg/driver/pipeline.h"
 #include "rsg/pass/cgen/cgen.h"
 #include "rsg/pass/check/check.h"
-#include "rsg/pass/lower/lower.h"
 #include "rsg/pass/mono/mono.h"
 #include "rsg/pass/parse/parse.h"
 #include "rsg/pass/resolve/resolve.h"
@@ -107,12 +107,12 @@ static ASTNode **pipeline_load_module(void *ctx, Arena *arena, const char *mod_p
     if (src == NULL) {
         return NULL;
     }
-    Lex *lex = lex_create(src, mod_path, arena);
+    Lex *lex = lex_create(src, mod_path, arena, NULL);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
     int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, arena, mod_path);
+    Parser *parser = parser_create(tokens, count, arena, mod_path, NULL);
     ASTNode *file_node = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
@@ -209,12 +209,12 @@ static bool prepend_rsg_file(Arena *arena, const char *path, ASTNode *file_node)
         return false;
     }
 
-    Lex *lex = lex_create(src, path, arena);
+    Lex *lex = lex_create(src, path, arena, NULL);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
     int32_t count = BUF_LEN(tokens);
-    Parser *parser = parser_create(tokens, count, arena, path);
+    Parser *parser = parser_create(tokens, count, arena, path, NULL);
     ASTNode *parsed = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
@@ -279,7 +279,7 @@ static void inject_prelude(Arena *arena, const PipelineOptions *options, const c
 /** Run the lex and optionally dump tokens.  Returns 0 on success, 1 on err. */
 static int stage_lex(const PipelineOptions *options, const char *src, Arena *arena,
                      Token **out_tokens) {
-    Lex *lex = lex_create(src, options->input_file, arena);
+    Lex *lex = lex_create(src, options->input_file, arena, NULL);
     *out_tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
@@ -303,7 +303,7 @@ static int stage_lex(const PipelineOptions *options, const char *src, Arena *are
 /** Run the parser and optionally dump the AST.  Returns NULL on early exit. */
 static ASTNode *stage_parse(const PipelineOptions *options, Token *tokens, int32_t count,
                             Arena *arena, int *out_status) {
-    Parser *parser = parser_create(tokens, count, arena, options->input_file);
+    Parser *parser = parser_create(tokens, count, arena, options->input_file, NULL);
     ASTNode *file_node = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);
@@ -398,7 +398,7 @@ DiagCtx *pipeline_diag_ctx(Pipeline *pipeline) {
 }
 
 Token *pipeline_lex(Pipeline *pipeline, const char *src, const char *file) {
-    Lex *lex = lex_create(src, file, pipeline->arena);
+    Lex *lex = lex_create(src, file, pipeline->arena, &pipeline->dctx);
     Token *tokens = lex_scan_all(lex);
     lex_destroy(lex);
 
@@ -411,7 +411,7 @@ Token *pipeline_lex(Pipeline *pipeline, const char *src, const char *file) {
 }
 
 ASTNode *pipeline_parse(Pipeline *pipeline, Token *tokens, int32_t count, const char *file) {
-    Parser *parser = parser_create(tokens, count, pipeline->arena, file);
+    Parser *parser = parser_create(tokens, count, pipeline->arena, file, &pipeline->dctx);
     ASTNode *file_node = parser_parse(parser);
     int32_t errs = parser_err_count(parser);
     parser_destroy(parser);

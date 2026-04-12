@@ -184,7 +184,7 @@ static Token scan_ident(Lex *lex, SrcLoc loc) {
     TokenKind kind = classify_keyword(start, len);
 
     if (kind == TOKEN_ID && is_reserved_keyword(start, len)) {
-        rsg_err(loc, "'%.*s' is a reserved keyword", len, start);
+        LEX_ERR(lex, loc, "'%.*s' is a reserved keyword", len, start);
         return build_token(lex, TOKEN_ERR, start, len, loc);
     }
 
@@ -306,7 +306,7 @@ static Token scan_punctuation(Lex *lex, char c, SrcLoc loc) {
     default:
         break;
     }
-    rsg_err(loc, "unexpected character '%c'", c);
+    LEX_ERR(lex, loc, "unexpected character '%c'", c);
     return build_token(lex, TOKEN_ERR, &lex->src[lex->pos - 1], 1, loc);
 }
 
@@ -386,7 +386,7 @@ Token scan_token(Lex *lex) {
     return scan_punctuation(lex, c, loc);
 }
 
-Lex *lex_create(const char *src, const char *file, Arena *arena) {
+Lex *lex_create(const char *src, const char *file, Arena *arena, DiagCtx *dctx) {
     Lex *lex = rsg_malloc(sizeof(*lex));
     lex->src = src;
     lex->file = file;
@@ -395,6 +395,7 @@ Lex *lex_create(const char *src, const char *file, Arena *arena) {
     lex->line = 1;
     lex->column = 1;
     lex->arena = arena;
+    lex->dctx = dctx;
     lex->pending = NULL;
     lex->pending_pos = 0;
     lex->last_kind = TOKEN_EOF;

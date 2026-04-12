@@ -1,0 +1,14 @@
+-- input.rsg --
+/// A describable thing.
+pact Describe {
+    fn describe() -> str
+}
+fn show<T: Describe>(v: T) -> str {
+    return v.describe()
+}
+fn main() {
+    x := 1
+}
+-- hover 4:14 contains --
+Describe
+describable

@@ -1,0 +1,6 @@
+-- input.rsg --
+fn main() {
+    x := unknown_var
+}
+-- diagnostics contains --
+unknown_var

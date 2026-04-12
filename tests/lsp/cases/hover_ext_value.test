@@ -1,0 +1,15 @@
+-- input.rsg --
+ext i32 {
+    /// Doubles an integer.
+    fn doubled(n) -> i32 {
+        return n * 2
+    }
+}
+fn main() {
+    x := 42.doubled()
+}
+-- hover 7:12 contains --
+ext i32
+doubled
+n /* i32 */
+Doubles an integer

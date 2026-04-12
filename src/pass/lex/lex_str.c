@@ -25,7 +25,7 @@ Token scan_char_lit(Lex *lex, SrcLoc loc) {
             value = '\0';
             break;
         default:
-            rsg_err(loc, "unknown escape sequence '\\%c'", escaped);
+            LEX_ERR(lex, loc, "unknown escape sequence '\\%c'", escaped);
             value = (unsigned char)escaped;
             break;
         }
@@ -33,7 +33,7 @@ Token scan_char_lit(Lex *lex, SrcLoc loc) {
         value = (unsigned char)advance(lex);
     }
     if (peek(lex) != '\'') {
-        rsg_err(loc, "unterminated character lit");
+        LEX_ERR(lex, loc, "unterminated character lit");
         return build_token(lex, TOKEN_ERR, "'", 1, loc);
     }
     advance(lex); // consume closing '\''
@@ -165,7 +165,7 @@ static Token scan_simple_str(Lex *lex, int32_t content_start, SrcLoc loc) {
     skip_str_body(lex, '"');
 
     if (peek(lex) == '\0') {
-        rsg_err(loc, "unterminated str lit");
+        LEX_ERR(lex, loc, "unterminated str lit");
         return build_token(lex, TOKEN_ERR, lex->src + content_start - 1,
                            lex->pos - content_start + 1, loc);
     }
@@ -270,7 +270,7 @@ static Token scan_interpolated_str(Lex *lex, SrcLoc loc) {
     }
 
     if (peek(lex) == '\0') {
-        rsg_err(loc, "unterminated str lit");
+        LEX_ERR(lex, loc, "unterminated str lit");
     } else {
         advance(lex); // consume '"'
     }

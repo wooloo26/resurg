@@ -1,0 +1,16 @@
+-- input.rsg --
+struct Counter {
+    value: i32 = 0
+}
+ext Counter {
+    fn inc(mut *c) {
+        c.value = c.value + 1
+    }
+}
+fn main() {
+    ct := Counter {}
+    ct.inc()
+}
+-- hover 10:7 contains --
+ext Counter
+mut *c

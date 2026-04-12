@@ -1,13 +1,5 @@
 # Resurg Language Roadmap
 
-## v1.0 — Stable Release
-
-Language completeness, tooling, and ecosystem.
-
-- [x] Language server (LSP) for editor support
-- [x] VSCode LSP extension
-- [x] Compiler diagnostics (clear error messages with source spans)
-
 ## v1.1 — Core Tooling
 
 - [ ] Formatter (`rsg-fmt`)
