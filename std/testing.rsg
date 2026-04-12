@@ -1,15 +1,22 @@
-// std/testing.rsg — test assertion helpers
+// std/testing.rsg — generic test assertion helpers
 //
 // Usage: mod testing
-//        use self::testing::assert_eq_i32
-//
-// Note: Generic assert_eq/assert_ne require compiler trait support.
-// For now, type-specific variants are provided.
+//        use self::testing::assert_eq
 
-pub decl fn assert_eq_i32(actual: i32, expected: i32)
-pub decl fn assert_eq_str(actual: str, expected: str)
-pub decl fn assert_eq_f64(actual: f64, expected: f64)
-pub decl fn assert_eq_bool(actual: bool, expected: bool)
+mod conv
+use self::conv::Display
+use self::conv::Eq
 
-pub decl fn assert_ne_i32(actual: i32, expected: i32)
-pub decl fn assert_ne_str(actual: str, expected: str)
+/// Assert two values are equal. Panics with a diagnostic message on failure.
+pub fn assert_eq<T: Eq + Display>(actual: T, expected: T) {
+    if !actual.eq(expected) {
+        panic("assertion failed: expected {expected.display()}, got {actual.display()}")
+    }
+}
+
+/// Assert two values are not equal. Panics with a diagnostic message on failure.
+pub fn assert_ne<T: Eq + Display>(actual: T, expected: T) {
+    if actual.eq(expected) {
+        panic("assertion failed: values should differ, both are {actual.display()}")
+    }
+}

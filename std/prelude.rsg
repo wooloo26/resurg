@@ -4,5 +4,9 @@
 // recover, print, println) are provided by std/builtin.rsg, which
 // is always injected.
 //
-// This file is reserved for additional standard-library re-exports
-// and user-customizable convenience imports.
+// This file re-exports the fundamental pacts (Display, Eq, Ord, Into)
+// and generic utility functions (to_string, max, min, clamp) from the
+// conv module so they are available by default in all user programs.
+
+mod conv
+pub use self::conv::*

@@ -1,7 +1,11 @@
 // std/math.rsg — mathematical constants and functions
 //
-// Usage: mod math   (loads from std/ directory)
+// Usage: mod math
 //        use self::math::sqrt
+//
+// Generic min/max/clamp are available via the conv module (prelude).
+// Type-specific abs/min/max/clamp are available as extension methods
+// on primitive types (e.g. n.abs(), n.min(other)).
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -15,15 +19,6 @@ pub immut MAX_I64: i64 = 9223372036854775807
 pub immut MIN_I64: i64 = -9223372036854775808
 
 // ── Functions ─────────────────────────────────────────────────────────
-
-pub decl fn abs_i32(x: i32) -> i32
-pub decl fn abs_f64(x: f64) -> f64
-pub decl fn min_i32(a: i32, b: i32) -> i32
-pub decl fn max_i32(a: i32, b: i32) -> i32
-pub decl fn min_f64(a: f64, b: f64) -> f64
-pub decl fn max_f64(a: f64, b: f64) -> f64
-pub decl fn clamp_i32(x: i32, lo: i32, hi: i32) -> i32
-pub decl fn clamp_f64(x: f64, lo: f64, hi: f64) -> f64
 
 pub decl fn floor(x: f64) -> f64
 pub decl fn ceil(x: f64) -> f64

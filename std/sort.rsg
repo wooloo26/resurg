@@ -1,15 +1,58 @@
-// std/sort.rsg — sorting algorithms
+// std/sort.rsg — generic sorting algorithms
 //
 // Usage: mod sort
-//        use self::sort::sort_i32
-//
-// Note: Generic sort<T: Ord> requires compiler trait support.
-// For now, type-specific variants are provided.
+//        use self::sort::sort
 
-pub decl fn sort_i32(mut s: *[]i32)
-pub decl fn sort_i64(mut s: *[]i64)
-pub decl fn sort_f64(mut s: *[]f64)
-pub decl fn sort_str(mut s: *[]str)
-pub decl fn is_sorted_i32(s: []i32) -> bool
-pub decl fn is_sorted_str(s: []str) -> bool
-pub decl fn binary_search_i32(s: []i32, target: i32) -> i32
+mod conv
+use self::conv::Ord
+
+/// Sort a slice in-place (insertion sort).
+pub fn sort<T: Ord>(mut s: *[]T) {
+    var n: i32 = len(*s)
+    for 1..n |i| {
+        var key: T = (*s)[i]
+        var j: i32 = i - 1
+        loop {
+            if j < 0 { break }
+            if key.cmp((*s)[j]) >= 0 { break }
+            (*s)[j + 1] = (*s)[j]
+            j = j - 1
+        }
+        (*s)[j + 1] = key
+    }
+}
+
+/// Check whether a slice is sorted in non-decreasing order.
+pub fn is_sorted<T: Ord>(s: []T) -> bool {
+    var n: i32 = len(s)
+    var result: bool = true
+    for 1..n |i| {
+        if s[i].cmp(s[i - 1]) < 0 {
+            result = false
+            break
+        }
+    }
+    result
+}
+
+/// Binary search for target in a sorted slice.
+/// Returns the index of the target, or -1 if not found.
+pub fn binary_search<T: Ord>(s: []T, target: T) -> i32 {
+    var lo: i32 = 0
+    var hi: i32 = len(s) - 1
+    var result: i32 = -1
+    loop {
+        if lo > hi { break }
+        var mid: i32 = lo + (hi - lo) / 2
+        var c: i32 = target.cmp(s[mid])
+        if c == 0 {
+            result = mid
+            break
+        } else if c < 0 {
+            hi = mid - 1
+        } else {
+            lo = mid + 1
+        }
+    }
+    result
+}
