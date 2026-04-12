@@ -320,7 +320,7 @@ class TestRunner:
         proc = self.start_server()
         rid = 10
         uri = None
-        tmp_path = None
+        tmp_paths: list[str] = []
         initialized = False
         cached_diags: list[dict] | None = None
         results: list[tuple[str, str]] = []
@@ -347,8 +347,8 @@ class TestRunner:
                         suffix=".rsg", mode="w", delete=False, encoding="utf-8",
                     ) as f:
                         f.write(src)
-                        tmp_path = f.name
-                    uri = file_uri(tmp_path)
+                        tmp_paths.append(f.name)
+                    uri = file_uri(tmp_paths[-1])
                     notification(proc, "textDocument/didOpen", {
                         "textDocument": {
                             "uri": uri, "languageId": "resurg",
@@ -542,8 +542,9 @@ class TestRunner:
                     results.append((header, body))
 
         finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.unlink(tmp_path)
+            for tp in tmp_paths:
+                if os.path.exists(tp):
+                    os.unlink(tp)
             try:
                 proc.kill()
                 proc.wait()

@@ -408,50 +408,102 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
 
     // Parse.
     {
+        DiagCtx parse_dctx;
+        diag_ctx_init(&parse_dctx, arena);
         int32_t count = BUF_LEN(tokens);
-        Parser *parser = parser_create(tokens, count, arena, file_path, NULL);
+        Parser *parser = parser_create(tokens, count, arena, file_path, &parse_dctx);
         ASTNode *file_node = parser_parse(parser);
         int32_t parse_errs = parser_err_count(parser);
         parser_destroy(parser);
 
         if (parse_errs > 0 || file_node == NULL) {
-            // Parse errors were emitted to stderr by the parser.
-            // Collect them as diagnostics.
-            // For now, emit a generic parse error.
-            if (diag_buf.len > 1 && diag_buf.data[diag_buf.len - 1] != '[') {
+            // Emit captured parse diagnostics with location info.
+            for (int32_t i = 0; i < BUF_LEN(parse_dctx.diags); i++) {
+                Diagnostic *d = &parse_dctx.diags[i];
+                if (d->level != DIAG_ERR && d->level != DIAG_WARN) {
+                    continue;
+                }
+
+                int32_t line = d->loc.line > 0 ? d->loc.line - 1 : 0;
+                int32_t col = d->loc.column > 0 ? d->loc.column - 1 : 0;
+                int32_t end_line = d->end_loc.line > 0 ? d->end_loc.line - 1 : line;
+                int32_t end_col = d->end_loc.column > 0 ? d->end_loc.column - 1 : col + 1;
+
+                if (diag_buf.len > 1 && diag_buf.data[diag_buf.len - 1] != '[') {
+                    jbuf_comma(&diag_buf);
+                }
+
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "range");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "start");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "line");
+                jbuf_int_val(&diag_buf, line);
                 jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "character");
+                jbuf_int_val(&diag_buf, col);
+                jbuf_obj_end(&diag_buf);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "end");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "line");
+                jbuf_int_val(&diag_buf, end_line);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "character");
+                jbuf_int_val(&diag_buf, end_col);
+                jbuf_obj_end(&diag_buf);
+                jbuf_obj_end(&diag_buf);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "severity");
+                jbuf_int_val(&diag_buf, diag_level_to_severity(d->level));
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "source");
+                jbuf_str_val(&diag_buf, "resurg");
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "message");
+                jbuf_str_val(&diag_buf, d->message);
+                jbuf_obj_end(&diag_buf);
             }
-            jbuf_obj_start(&diag_buf);
-            jbuf_key(&diag_buf, "range");
-            jbuf_obj_start(&diag_buf);
-            jbuf_key(&diag_buf, "start");
-            jbuf_obj_start(&diag_buf);
-            jbuf_key(&diag_buf, "line");
-            jbuf_int_val(&diag_buf, 0);
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "character");
-            jbuf_int_val(&diag_buf, 0);
-            jbuf_obj_end(&diag_buf);
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "end");
-            jbuf_obj_start(&diag_buf);
-            jbuf_key(&diag_buf, "line");
-            jbuf_int_val(&diag_buf, 0);
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "character");
-            jbuf_int_val(&diag_buf, 0);
-            jbuf_obj_end(&diag_buf);
-            jbuf_obj_end(&diag_buf);
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "severity");
-            jbuf_int_val(&diag_buf, 1);
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "source");
-            jbuf_str_val(&diag_buf, "resurg");
-            jbuf_comma(&diag_buf);
-            jbuf_key(&diag_buf, "message");
-            jbuf_str_val(&diag_buf, "parse error");
-            jbuf_obj_end(&diag_buf);
+
+            // Fallback if no diags were captured
+            if (BUF_LEN(parse_dctx.diags) == 0) {
+                if (diag_buf.len > 1 && diag_buf.data[diag_buf.len - 1] != '[') {
+                    jbuf_comma(&diag_buf);
+                }
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "range");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "start");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "line");
+                jbuf_int_val(&diag_buf, 0);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "character");
+                jbuf_int_val(&diag_buf, 0);
+                jbuf_obj_end(&diag_buf);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "end");
+                jbuf_obj_start(&diag_buf);
+                jbuf_key(&diag_buf, "line");
+                jbuf_int_val(&diag_buf, 0);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "character");
+                jbuf_int_val(&diag_buf, 0);
+                jbuf_obj_end(&diag_buf);
+                jbuf_obj_end(&diag_buf);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "severity");
+                jbuf_int_val(&diag_buf, 1);
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "source");
+                jbuf_str_val(&diag_buf, "resurg");
+                jbuf_comma(&diag_buf);
+                jbuf_key(&diag_buf, "message");
+                jbuf_str_val(&diag_buf, "parse error");
+                jbuf_obj_end(&diag_buf);
+            }
+            diag_ctx_destroy(&parse_dctx);
             goto done;
         }
 
@@ -551,6 +603,7 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
         }
 
         sema_destroy(sema);
+        diag_ctx_destroy(&parse_dctx);
     }
 
 done:

@@ -1,5 +1,0 @@
--- input.rsg --
-fn main() {
-    x := 42
-}
--- diagnostics --

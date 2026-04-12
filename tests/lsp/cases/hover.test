@@ -1,0 +1,72 @@
+-- input.rsg --
+/// Adds two numbers.
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+fn main() {
+    x := add(1, 2)
+}
+-- hover 5:9 contains --
+add
+Adds two numbers
+
+-- input.rsg --
+struct Point {
+    x: f64
+    y: f64
+}
+fn main() {
+    p := Point { x = 1.0, y = 2.0 }
+}
+-- hover 5:9 contains --
+Point
+x
+y
+
+-- input.rsg --
+ext i32 {
+    /// Doubles an integer.
+    fn doubled(n) -> i32 {
+        return n * 2
+    }
+}
+fn main() {
+    x := 42.doubled()
+}
+-- hover 7:12 contains --
+ext i32
+doubled
+n /* i32 */
+Doubles an integer
+
+-- input.rsg --
+struct Counter {
+    value: i32 = 0
+}
+ext Counter {
+    fn inc(mut *c) {
+        c.value = c.value + 1
+    }
+}
+fn main() {
+    ct := Counter {}
+    ct.inc()
+}
+-- hover 10:7 contains --
+ext Counter
+mut *c
+
+-- input.rsg --
+/// A describable thing.
+pact Describe {
+    fn describe() -> str
+}
+fn show<T: Describe>(v: T) -> str {
+    return v.describe()
+}
+fn main() {
+    x := 1
+}
+-- hover 4:14 contains --
+Describe
+describable

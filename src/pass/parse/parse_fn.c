@@ -110,12 +110,56 @@ ASTWhereClause *parse_where_clauses(Parser *parser) {
 // ── Shared recv + params parsing ────────────────────────────────
 
 /** Parse a single function parameter: [mut] name: [..]Type. */
-static ASTNode *parse_single_param(Parser *parser) {
+static ASTNode *parse_single_param(Parser *parser, bool in_method) {
     SrcLoc ploc = parser_current_loc(parser);
     ASTNode *param = ast_new(parser->arena, NODE_PARAM, ploc);
+    // Detect `*name` or `mut *name` receiver pattern in non-receiver position
+    if (!in_method && (parser_check(parser, TOKEN_STAR) ||
+                       (parser_check(parser, TOKEN_MUT) && parser_peek_is(parser, TOKEN_STAR)))) {
+        PARSER_ERR(parser, ploc,
+                   "receivers are only allowed as the first parameter of ext or pact methods");
+        if (parser_match(parser, TOKEN_MUT)) {
+            // consume 'mut'
+        }
+        parser_match(parser, TOKEN_STAR); // consume '*'
+        param->param.name = parser_check(parser, TOKEN_ID) ? parser_advance(parser)->lexeme : "_";
+        param->param.is_mut = false;
+        param->param.is_variadic = false;
+        param->param.type.kind = AST_TYPE_INFERRED;
+        return param;
+    }
+    // Detect `*name` or `mut *name` receiver pattern in non-first method position
+    if (in_method && (parser_check(parser, TOKEN_STAR) ||
+                      (parser_check(parser, TOKEN_MUT) && parser_peek_is(parser, TOKEN_STAR)))) {
+        PARSER_ERR(parser, ploc, "receiver must be the first parameter");
+        // Skip the malformed receiver tokens to recover
+        if (parser_match(parser, TOKEN_MUT)) {
+            // consume 'mut'
+        }
+        parser_match(parser, TOKEN_STAR); // consume '*'
+        param->param.name = parser_check(parser, TOKEN_ID) ? parser_advance(parser)->lexeme : "_";
+        param->param.is_mut = false;
+        param->param.is_variadic = false;
+        param->param.type.kind = AST_TYPE_INFERRED;
+        return param;
+    }
     param->param.is_mut = parser_match(parser, TOKEN_MUT);
     param->param.is_variadic = false;
     param->param.name = parser_expect(parser, TOKEN_ID)->lexeme;
+    // Detect untyped parameter (receiver-like) in non-receiver position
+    if (!parser_check(parser, TOKEN_COLON)) {
+        if (in_method) {
+            PARSER_ERR(parser, ploc, "receiver must be the first parameter");
+        } else {
+            PARSER_ERR(parser, ploc,
+                       "untyped parameter '%s'; "
+                       "receivers are only allowed as the first parameter of ext or pact methods",
+                       param->param.name);
+        }
+        // Produce a placeholder type to continue parsing
+        param->param.type.kind = AST_TYPE_INFERRED;
+        return param;
+    }
     parser_expect(parser, TOKEN_COLON);
     // Detect variadic: `name: ..T`
     if (parser_match(parser, TOKEN_DOT_DOT)) {
@@ -128,7 +172,7 @@ static ASTNode *parse_single_param(Parser *parser) {
 /** Parse trailing params (comma-separated) after receiver. */
 static void parse_trailing_params(Parser *parser, ASTNode *node) {
     while (parser_match(parser, TOKEN_COMMA)) {
-        ASTNode *param = parse_single_param(parser);
+        ASTNode *param = parse_single_param(parser, true);
         BUF_PUSH(node->fn_decl.params, param);
     }
 }
@@ -162,7 +206,7 @@ void parse_recv_and_params(Parser *parser, ASTNode *node) {
             parse_trailing_params(parser, node);
         } else {
             do {
-                ASTNode *param = parse_single_param(parser);
+                ASTNode *param = parse_single_param(parser, true);
                 BUF_PUSH(node->fn_decl.params, param);
             } while (parser_match(parser, TOKEN_COMMA));
         }
@@ -260,7 +304,7 @@ ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
     parser_expect(parser, TOKEN_LEFT_PAREN);
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
         do {
-            ASTNode *param = parse_single_param(parser);
+            ASTNode *param = parse_single_param(parser, false);
             BUF_PUSH(node->fn_decl.params, param);
         } while (parser_match(parser, TOKEN_COMMA));
     }

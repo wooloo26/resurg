@@ -1,0 +1,282 @@
+-- input.rsg --
+fn main() {
+    x := 42
+}
+-- diagnostics --
+
+-- input.rsg --
+fn main() {
+    x := unknown_var + 1
+}
+-- diagnostics nonempty --
+
+-- input.rsg --
+fn main() {
+    x := unknown_var
+}
+-- diagnostics contains --
+unknown_var
+
+-- input.rsg --
+fn main() {
+    var x: i32 = true
+}
+-- diagnostics severity 1 --
+
+-- input.rsg --
+fn main() {
+    x := bad_var
+}
+-- diagnostics nonempty --
+-- change --
+fn main() {
+    x := 42
+}
+-- diagnostics --
+
+-- input.rsg --
+fn main() {
+    x := 1 + "hello"
+}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+type mismatch
+
+-- input.rsg --
+fn main() {
+    if true {
+        x := 1
+    }
+    y := x
+}
+-- diagnostics nonempty --
+-- diagnostics contains --
+x
+
+-- input.rsg --
+struct Empty {}
+fn main() {
+    e := Empty {}
+}
+-- diagnostics --
+
+-- input.rsg --
+struct Point {
+    x: f64
+    y: f64
+}
+ext Point {
+    fn origin() -> Point {
+        return Point { x = 0.0, y = 0.0 }
+    }
+}
+fn main() {
+    p := Point.origin()
+}
+-- diagnostics --
+
+-- input.rsg --
+struct Counter {
+    value: i32 = 0
+}
+ext Counter {
+    fn get(self) -> i32 {
+        return self.value
+    }
+    fn inc(mut *self) {
+        self.value = self.value + 1
+    }
+}
+fn main() {
+    ct := Counter {}
+    x := ct.get()
+}
+-- diagnostics --
+
+-- input.rsg --
+fn bad(x) {
+    y := x
+}
+fn main() {}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+receivers are only allowed
+
+-- input.rsg --
+fn bad(*x) {
+    y := 0
+}
+fn main() {}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+receivers are only allowed
+
+-- input.rsg --
+fn bad(mut *x) {
+    y := 0
+}
+fn main() {}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+receivers are only allowed
+
+-- input.rsg --
+struct Foo {
+    x: i32 = 0
+}
+ext Foo {
+    fn bad(a: i32, self) -> i32 {
+        return a
+    }
+}
+fn main() {}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+receiver must be the first parameter
+
+-- input.rsg --
+struct Foo {
+    x: i32 = 0
+}
+ext Foo {
+    fn bad(a: i32, mut *self) {
+        self.x = a
+    }
+}
+fn main() {}
+-- diagnostics severity 1 --
+-- diagnostics contains --
+receiver must be the first parameter
+
+-- input.rsg --
+struct Foo {
+    x: i32 = 0
+}
+ext Foo {
+    fn good(self) -> i32 {
+        return self.x
+    }
+}
+fn main() {
+    f := Foo {}
+    y := f.good()
+}
+-- diagnostics --
+
+-- input.rsg --
+struct Foo {
+    x: i32 = 0
+}
+ext Foo {
+    fn good(mut *self) {
+        self.x = 42
+    }
+}
+fn main() {
+    f := Foo {}
+    f.good()
+}
+-- diagnostics --
+
+-- input.rsg --
+struct Foo {
+    x: i32 = 0
+}
+ext Foo {
+    fn good(*self) -> i32 {
+        return self.x
+    }
+}
+fn main() {
+    f := Foo {}
+    y := f.good()
+}
+-- diagnostics --
+
+-- input.rsg --
+pact Greetable {
+    fn greet(self) -> str
+}
+struct Person {
+    name: str
+}
+ext Person impl Greetable {
+    fn greet(self) -> str {
+        return self.name
+    }
+}
+fn main() {
+    p := Person { name = "Alice" }
+    x := p.greet()
+}
+-- diagnostics --
+
+-- input.rsg --
+pact Resettable {
+    fn reset(mut *self)
+}
+struct Counter {
+    value: i32 = 0
+}
+ext Counter impl Resettable {
+    fn reset(mut *self) {
+        self.value = 0
+    }
+}
+fn main() {
+    ct := Counter {}
+}
+-- diagnostics --
+
+-- input.rsg --
+pact Countable {
+    fn count(*self) -> i32
+}
+struct Bag {
+    n: i32 = 0
+}
+ext Bag impl Countable {
+    fn count(*self) -> i32 {
+        return self.n
+    }
+}
+fn main() {
+    b := Bag { n = 5 }
+    x := b.count()
+}
+-- diagnostics --
+
+-- input.rsg --
+ext i32 {
+    fn doubled(n) -> i32 {
+        return n * 2
+    }
+}
+fn main() {
+    x := 42.doubled()
+}
+-- diagnostics --
+
+-- input.rsg --
+struct Pair {
+    a: i32 = 0
+    b: i32 = 0
+}
+ext Pair {
+    fn sum(self) -> i32 {
+        return self.a + self.b
+    }
+    fn swap(mut *self) {
+        tmp := self.a
+        self.a = self.b
+        self.b = tmp
+    }
+    fn create(x: i32, y: i32) -> Pair {
+        return Pair { a = x, b = y }
+    }
+}
+fn main() {
+    p := Pair.create(1, 2)
+    s := p.sum()
+}
+-- diagnostics --
