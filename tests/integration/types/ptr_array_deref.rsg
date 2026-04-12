@@ -1,0 +1,88 @@
+// Auto-deref for array indexing: x[i] on *[N]T is shorthand for (*x)[i]
+
+// ── read through *[N]T ──
+
+fn test_ptr_array_read() {
+    arr := [4]i32{10, 20, 30, 40}
+    p := &arr
+    assert(p[0] == 10, "")
+    assert(p[1] == 20, "")
+    assert(p[2] == 30, "")
+    assert(p[3] == 40, "")
+}
+
+fn test_ptr_array_f64_read() {
+    vals := [3]f64{1.1, 2.2, 3.3}
+    p := &vals
+    assert(p[0] == 1.1, "")
+    assert(p[1] == 2.2, "")
+    assert(p[2] == 3.3, "")
+}
+
+// ── write through *[N]T ──
+
+fn test_ptr_array_write() {
+    arr := [3]i32{0, 0, 0}
+    p := &arr
+    p[0] = 7
+    p[1] = 8
+    p[2] = 9
+    assert(arr[0] == 7, "")
+    assert(arr[1] == 8, "")
+    assert(arr[2] == 9, "")
+}
+
+// ── pointer to array as function parameter ──
+
+fn sum_ptr_array(p: *[4]i32) -> i32 {
+    p[0] + p[1] + p[2] + p[3]
+}
+
+fn test_ptr_array_param_read() {
+    arr := [4]i32{1, 2, 3, 4}
+    assert(sum_ptr_array(&arr) == 10, "")
+}
+
+fn fill_ptr_array(mut p: *[3]i32, v: i32) {
+    p[0] = v
+    p[1] = v
+    p[2] = v
+}
+
+fn test_ptr_array_param_write() {
+    arr := [3]i32{0, 0, 0}
+    fill_ptr_array(mut &arr, 5)
+    assert(arr[0] == 5, "")
+    assert(arr[1] == 5, "")
+    assert(arr[2] == 5, "")
+}
+
+// ── iteration through *[N]T ──
+
+fn test_ptr_array_loop_read() {
+    arr := [5]i32{2, 4, 6, 8, 10}
+    p := &arr
+    total := 0
+    for 0..5 |i| {
+        total = total + p[i]
+    }
+    assert(total == 30, "")
+}
+
+// ── len through *[N]T ──
+
+fn test_ptr_array_len() {
+    arr := [6]bool{true, false, true, false, true, false}
+    p := &arr
+    assert(len(p) == 6, "")
+}
+
+// ── str array through pointer ──
+
+fn test_ptr_str_array_read() {
+    words := [3]str{"hello", "world", "!"}
+    p := &words
+    assert(p[0] == "hello", "")
+    assert(p[1] == "world", "")
+    assert(p[2] == "!", "")
+}

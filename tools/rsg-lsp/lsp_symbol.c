@@ -271,6 +271,56 @@ static char *format_var_hover(Arena *arena, const ASTNode *node) {
 
 // ── Symbol index builders ─────────────────────────────────────────────
 
+/** Recursively walk an AST node to index local variable declarations. */
+static void index_body_vars(LspSymEntry **syms, Arena *arena, const ASTNode *node) {
+    if (node == NULL) {
+        return;
+    }
+    switch (node->kind) {
+    case NODE_VAR_DECL: {
+        LspSymEntry e = {0};
+        e.name = sym_strdup(node->var_decl.name);
+        e.loc = node->loc;
+        e.lsp_kind = node->var_decl.is_immut ? LSP_SK_CONSTANT : LSP_SK_VARIABLE;
+        e.hover = format_var_hover(arena, node);
+        BUF_PUSH(*syms, e);
+        break;
+    }
+    case NODE_BLOCK:
+        for (int32_t i = 0; i < BUF_LEN(node->block.stmts); i++) {
+            index_body_vars(syms, arena, node->block.stmts[i]);
+        }
+        index_body_vars(syms, arena, node->block.result);
+        break;
+    case NODE_IF:
+        index_body_vars(syms, arena, node->if_expr.then_body);
+        index_body_vars(syms, arena, node->if_expr.else_body);
+        break;
+    case NODE_FOR:
+        index_body_vars(syms, arena, node->for_loop.body);
+        break;
+    case NODE_LOOP:
+        index_body_vars(syms, arena, node->loop.body);
+        break;
+    case NODE_WHILE:
+        index_body_vars(syms, arena, node->while_loop.body);
+        break;
+    case NODE_DEFER:
+        index_body_vars(syms, arena, node->defer_stmt.body);
+        break;
+    case NODE_MATCH:
+        for (int32_t i = 0; i < BUF_LEN(node->match_expr.arms); i++) {
+            index_body_vars(syms, arena, node->match_expr.arms[i].body);
+        }
+        break;
+    case NODE_EXPR_STMT:
+        index_body_vars(syms, arena, node->expr_stmt.expr);
+        break;
+    default:
+        break;
+    }
+}
+
 /** Index a fn declaration.  @p container is non-NULL for methods. */
 static void index_fn_decl(LspSymEntry **syms, Arena *arena, const ASTNode *fn, const Sema *sema,
                           const char *container, const ExtDeclData *ext) {
@@ -281,6 +331,27 @@ static void index_fn_decl(LspSymEntry **syms, Arena *arena, const ASTNode *fn, c
     e.lsp_kind = container != NULL ? LSP_SK_METHOD : LSP_SK_FUNCTION;
     e.hover = format_fn_hover(arena, fn, sema, ext);
     BUF_PUSH(*syms, e);
+
+    // Index parameters as local variables
+    for (int32_t i = 0; i < BUF_LEN(fn->fn_decl.params); i++) {
+        const ASTNode *p = fn->fn_decl.params[i];
+        if (p->kind == NODE_PARAM && p->param.name != NULL) {
+            LspSymEntry pe = {0};
+            pe.name = sym_strdup(p->param.name);
+            pe.loc = p->loc;
+            pe.lsp_kind = LSP_SK_VARIABLE;
+            char *buf = NULL;
+            const char *tname = p->type != NULL ? type_name(arena, p->type) : "?";
+            sbuf_printf(&buf, "```resurg\n%s: %s\n```\n\n(parameter)", p->param.name, tname);
+            pe.hover = buf;
+            BUF_PUSH(*syms, pe);
+        }
+    }
+
+    // Walk function body to index local variables
+    if (fn->fn_decl.body != NULL) {
+        index_body_vars(syms, arena, fn->fn_decl.body);
+    }
 }
 
 /** Index a struct and its methods. */
@@ -422,6 +493,42 @@ const char *lsp_builtin_type_hover(const char *name) {
     return NULL;
 }
 
+const char *lsp_builtin_fn_hover(const char *name) {
+    static const struct {
+        const char *name;
+        const char *sig;
+        const char *desc;
+    } builtins[] = {
+        {"print", "fn print<T>(value: T)",
+         "Print a value to stdout without a trailing newline."},
+        {"println", "fn println<T>(value: T)",
+         "Print a value to stdout followed by a newline."},
+        {"assert", "fn assert(cond: bool, msg: str)",
+         "Assert that `cond` is true; panics with `msg` if false."},
+        {"panic", "fn panic(msg: str) -> never",
+         "Terminate the program immediately with an error message."},
+        {"catch_panic", "fn catch_panic<T>(f: Fn() -> T) -> T!str",
+         "Call `f` and catch any panic, returning `Ok(result)` or `Err(message)`."},
+        {"len", "fn len<T>(value: T) -> i32",
+         "Return the length of a slice, array, or string."},
+    };
+    for (size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); i++) {
+        if (strcmp(name, builtins[i].name) == 0) {
+            // Return a pre-formatted markdown hover string.
+            size_t sig_len = strlen(builtins[i].sig);
+            size_t desc_len = strlen(builtins[i].desc);
+            size_t total = sig_len + desc_len + 32;
+            char *result = malloc(total);
+            if (result != NULL) {
+                snprintf(result, total, "```resurg\n%s\n```\n\n%s", builtins[i].sig,
+                         builtins[i].desc);
+            }
+            return result;
+        }
+    }
+    return NULL;
+}
+
 LspSymEntry *lsp_build_symbol_index(Arena *arena, const ASTNode *file_node, const Sema *sema,
                                     const char *file_path) {
     LspSymEntry *syms = NULL;
@@ -506,4 +613,29 @@ const LspSymEntry *lsp_find_symbol(const LspSymEntry *syms, const char *name) {
         }
     }
     return NULL;
+}
+
+const LspSymEntry *lsp_find_symbol_at(const LspSymEntry *syms, const char *name, int32_t line,
+                                      int32_t col) {
+    (void)col;
+    int32_t n = BUF_LEN(syms);
+    const LspSymEntry *best = NULL;
+    for (int32_t i = 0; i < n; i++) {
+        if (strcmp(syms[i].name, name) != 0) {
+            continue;
+        }
+        // Prefer the symbol defined closest to (but at or before) the cursor.
+        int32_t sym_line = syms[i].loc.line - 1; // SrcLoc is 1-based, LSP is 0-based
+        if (sym_line > line) {
+            continue;
+        }
+        if (best == NULL || sym_line > (best->loc.line - 1)) {
+            best = &syms[i];
+        }
+    }
+    // Fall back to first name match if no position-aware match was found.
+    if (best == NULL) {
+        return lsp_find_symbol(syms, name);
+    }
+    return best;
 }

@@ -828,7 +828,7 @@ static void handle_definition(LspServer *srv, int64_t id, JsonValue *params) {
         return;
     }
 
-    const LspSymEntry *sym = lsp_find_symbol(doc->symbols, word);
+    const LspSymEntry *sym = lsp_find_symbol_at(doc->symbols, word, line, col);
     if (sym == NULL) {
         send_response(srv, id, "null");
         free(word);
@@ -893,7 +893,30 @@ static void handle_hover(LspServer *srv, int64_t id, JsonValue *params) {
         return;
     }
 
-    const LspSymEntry *sym = lsp_find_symbol(doc->symbols, word);
+    // Check builtin functions (print, println, assert, panic, etc.).
+    const char *builtin_fn = lsp_builtin_fn_hover(word);
+    if (builtin_fn != NULL) {
+        JsonBuf b;
+        jbuf_init(&b);
+        jbuf_obj_start(&b);
+        jbuf_key(&b, "contents");
+        jbuf_obj_start(&b);
+        jbuf_key(&b, "kind");
+        jbuf_str_val(&b, "markdown");
+        jbuf_comma(&b);
+        jbuf_key(&b, "value");
+        jbuf_str_val(&b, builtin_fn);
+        jbuf_obj_end(&b);
+        jbuf_obj_end(&b);
+
+        send_response(srv, id, jbuf_str(&b));
+        jbuf_destroy(&b);
+        free((void *)builtin_fn);
+        free(word);
+        return;
+    }
+
+    const LspSymEntry *sym = lsp_find_symbol_at(doc->symbols, word, line, col);
     if (sym == NULL || sym->hover == NULL) {
         send_response(srv, id, "null");
         free(word);

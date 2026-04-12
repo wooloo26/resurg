@@ -39,6 +39,9 @@ void lsp_sym_entry_free(LspSymEntry *e);
 /** Return hover text for a builtin primitive type, or NULL if not a builtin. */
 const char *lsp_builtin_type_hover(const char *name);
 
+/** Return hover text for a builtin function, or NULL if not a builtin fn. */
+const char *lsp_builtin_fn_hover(const char *name);
+
 /** Build the complete symbol index for a document.  Caller must BUF_FREE the result. */
 LspSymEntry *lsp_build_symbol_index(Arena *arena, const struct ASTNode *file_node,
                                     const struct Sema *sema, const char *file_path);
@@ -48,5 +51,9 @@ char *lsp_extract_word_at(const char *text, int32_t line, int32_t col);
 
 /** Find a symbol by name in the index.  Returns NULL if not found. */
 const LspSymEntry *lsp_find_symbol(const LspSymEntry *syms, const char *name);
+
+/** Find a symbol by name, preferring the closest definition at or before the given position. */
+const LspSymEntry *lsp_find_symbol_at(const LspSymEntry *syms, const char *name, int32_t line,
+                                      int32_t col);
 
 #endif // RSG_LSP_SYMBOL_H

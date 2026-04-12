@@ -1,0 +1,119 @@
+// Auto-deref for method calls: x.f on *T is shorthand for (*x).f
+
+struct Point {
+    x: f64 = 0.0
+    y: f64 = 0.0
+}
+
+ext Point {
+    fn sum(*p) -> f64 { p.x + p.y }
+    fn scale(mut *p, factor: f64) {
+        p.x = p.x * factor
+        p.y = p.y * factor
+    }
+    fn copy(p) -> Point { p }
+}
+
+struct Counter {
+    value: i32 = 0
+}
+
+ext Counter {
+    fn get(*c) -> i32 { c.value }
+    fn increment(mut *c) { c.value = c.value + 1 }
+    fn reset(mut *c) { c.value = 0 }
+    fn peek(c) -> i32 { c.value }
+}
+
+ext i32 {
+    fn doubled(n) -> i32 { n * 2 }
+    fn is_positive(n) -> bool { n > 0 }
+    fn negate(mut *n) { *n = 0 - *n }
+}
+
+// ── value receiver through *T ──
+
+fn test_value_recv_via_ptr() {
+    p := &Point { x = 3.0, y = 4.0 }
+    // p : *Point, copy takes value receiver
+    copied := p.copy()
+    assert(copied.x == 3.0, "")
+    assert(copied.y == 4.0, "")
+}
+
+fn check_sum(p: *Point) -> f64 {
+    p.sum()
+}
+
+fn test_value_recv_via_ptr_param() {
+    p := &Point { x = 1.0, y = 5.0 }
+    assert(check_sum(p) == 6.0, "")
+}
+
+// ── pointer receiver through *T ──
+
+fn test_ptr_recv_via_ptr() {
+    p := &Point { x = 2.0, y = 3.0 }
+    // p : *Point, sum takes *ptr receiver
+    assert(p.sum() == 5.0, "")
+}
+
+// ── mut pointer receiver through *T ──
+
+fn test_mut_recv_via_ptr() {
+    p := &Point { x = 1.0, y = 2.0 }
+    // p : *Point, scale takes mut *ptr receiver
+    p.scale(3.0)
+    assert(p.x == 3.0, "")
+    assert(p.y == 6.0, "")
+}
+
+// ── chained calls through *T ──
+
+fn test_chained_via_ptr() {
+    c := &Counter { value = 0 }
+    c.increment()
+    c.increment()
+    c.increment()
+    assert(c.get() == 3, "")
+    c.reset()
+    assert(c.get() == 0, "")
+}
+
+// ── value receiver via pointer (lvalue copy) ──
+
+fn test_peek_via_ptr() {
+    c := &Counter { value = 7 }
+    // peek takes Counter by value, c is *Counter
+    assert(c.peek() == 7, "")
+}
+
+// ── ext methods on primitive through *primitive ──
+
+fn test_prim_method_via_ptr() {
+    x := 4
+    px := &x
+    // px : *i32, doubled takes value receiver
+    assert(px.doubled() == 8, "")
+    assert(px.is_positive() == true, "")
+}
+
+fn test_prim_mut_method_via_ptr() {
+    x := 5
+    px := &x
+    px.negate()
+    assert(x == -5, "")
+}
+
+// ── method through *T where T is returned by value ──
+
+fn make_counter(v: i32) -> *Counter {
+    &Counter { value = v }
+}
+
+fn test_method_via_returned_ptr() {
+    c := make_counter(10)
+    assert(c.get() == 10, "")
+    c.increment()
+    assert(c.get() == 11, "")
+}

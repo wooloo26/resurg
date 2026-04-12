@@ -142,7 +142,7 @@ struct Point {
 
 ### Memory Model
 
-No pointer arithmetic. Auto-deref on access (`p` works on `*T` and receiver `fn(*p)`; `*p` works on `**T`).
+No pointer arithmetic. Single-layer auto-deref on access — `*p` for `**T` only.
 
 **Struct:** Structs are value types (copied on assignment). `&` heap-allocates and returns `*T`.
 
@@ -229,14 +229,41 @@ process(&Point { x = 1.0, y = 2.0 })
 
 **Pointer types:**
 
-| Type   | Meaning                 |
-| ------ | ----------------------- |
-| `*T`   | Pointer to `T`          |
-| `*[]T` | Pointer to slice header |
-| `**T`  | Pointer to pointer      |
-| `[]*T` | Slice of pointers       |
+| Type    | Meaning                       |
+| ------- | ----------------------------- |
+| `*T`    | Pointer to `T`                |
+| `*[N]T` | Pointer to fixed-size array   |
+| `*[]T`  | Pointer to slice header       |
+| `**T`   | Pointer to pointer            |
+| `[]*T`  | Slice of pointers             |
 
-Auto-deref applies to pointer-to-fat-pointer (`*[]T`, `*str`): indexing, slicing, and `len()` work through the pointer.
+**Auto-deref rules** (single-layer; `**T` requires explicit `*p`):
+
+| Expression   | Condition                                   | Desugars to      |
+| ------------ | ------------------------------------------- | ---------------- |
+| `x.field`    | `x: *T`, `T` is a struct                   | `(*x).field`     |
+| `x.method()` | `x: *T`, `T` has method `method`           | `(*x).method()`  |
+| `x[i]`       | `x: *[N]T` — pointer to fixed-size array   | `(*x)[i]`        |
+| `x[i]`       | `x: *[]T` — pointer to slice               | `(*x)[i]`        |
+| `x[a..b]`    | `x: *[N]T` or `x: *[]T`                    | `(*x)[a..b]`     |
+| `len(x)`     | `x: *[N]T`, `x: *[]T`, or `x: *str`       | `len(*x)`        |
+
+```rsg
+struct Point { x: f64; y: f64 }
+ext Point {
+    fn sum(*p) -> f64 { p.x + p.y }        // pointer receiver
+    fn copy(p) -> Point { p }               // value receiver
+}
+
+heap_pt := &Point { x = 1.0, y = 2.0 }    // heap_pt : *Point
+assert(heap_pt.sum() == 3.0)               // (*heap_pt).sum()
+assert(heap_pt.copy().x == 1.0)           // (*heap_pt).copy()
+
+arr := [3]i32{10, 20, 30}
+parr := &arr                               // parr : *[3]i32
+assert(parr[1] == 20)                      // (*parr)[1]
+assert(len(parr) == 3)                     // len(*parr)
+```
 
 ```rsg
 fn extend(mut s: *[]i32) {
@@ -487,7 +514,7 @@ ext str impl Display {
 
 ### Literal Methods
 
-Receiver type determines callability on literals. Value receivers work on lvalues and rvalues; pointer receivers require an addressable lvalue.
+Receiver type determines callability on literals. Value receivers work on lvalues and rvalues; pointer receivers require an addressable lvalue. For a pointer `y: *T` where `T` has methods, `y.method()` auto-derefs to `(*y).method()`.
 
 ```rsg
 ext i32 {
@@ -500,16 +527,18 @@ ext i32 {
 x := 10
 x.increment()        // x eq 11. OK: variable is addressable
 x.is_even()          // OK: value receiver on lvalue
-y := &x
-y.is_even()          // eq x.is_even()
-y.increment()        // eq x.increment()
+y := &x              // y : *i32
+y.is_even()          // (*y).is_even() — auto-deref, value receiver
+y.increment()        // (*y).increment() — auto-deref, mut pointer receiver
 
 // Struct: same rules
 (Counter { value = 0 }).get_value()   // OK: value receiver
 // (Counter { value = 0 }).increment()  // ERROR: rvalue
 c := Counter { value = 0 }
 c.increment()        // OK: implicitly &c
-(&Counter { value = 0 }).increment() // OK
+p := &Counter { value = 0 }   // p : *Counter — heap allocation
+p.increment()        // (*p).increment() — auto-deref
+p.get_value()        // (*p).get_value() — auto-deref, value receiver
 
 ext<T> []T {
     fn len(s) -> usize { len(s) }
