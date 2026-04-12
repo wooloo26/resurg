@@ -4,7 +4,7 @@
     {
       "label": "compile-extension",
       "type": "shell",
-      "command": "npm run compile",
+      "command": "pnpm run compile",
       "options": {
         "cwd": "${workspaceFolder}/tools/rsg-lsp/editors/vscode"
       },
@@ -14,7 +14,7 @@
     {
       "label": "watch-extension",
       "type": "shell",
-      "command": "npm run watch",
+      "command": "pnpm run watch",
       "options": {
         "cwd": "${workspaceFolder}/tools/rsg-lsp/editors/vscode"
       },

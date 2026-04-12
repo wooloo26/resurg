@@ -13,6 +13,7 @@ else
 endif
 
 TARGET    := $(BUILD)/resurg$(EXE)
+VSCODE_EXT:= tools/rsg-lsp/editors/vscode
 CMAKE_CMD := cmake -S . -B $(BUILD) -DCMAKE_C_COMPILER=$(CC) -G "Unix Makefiles"
 
 ifeq ($(OS),Windows_NT)
@@ -27,7 +28,7 @@ else
   JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 endif
 
-.PHONY: all clean configure run test test-one test-std test-lsp clean-tests format tidy lint setup
+.PHONY: all clean configure run test test-one test-std test-lsp vscode-lsp clean-tests format tidy lint setup
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
@@ -86,6 +87,13 @@ test-std: all
 
 test-lsp: all
 	@$(PYTHON) tests/lsp/test_lsp.py --lsp=$(BUILD)/rsg-lsp$(EXE)
+
+# Build rsg-lsp, compile VSCode extension, and run LSP tests
+vscode-lsp: all
+	@cd $(VSCODE_EXT) && (pnpm install --frozen-lockfile 2>/dev/null || pnpm install)
+	@cd $(VSCODE_EXT) && pnpm run compile
+	@$(PYTHON) tests/lsp/test_lsp.py --lsp=$(BUILD)/rsg-lsp$(EXE)
+	@echo 'VSCode LSP extension: built and tested.'
 
 # Clean only test build artifacts (preserves the compiler)
 clean-tests:
