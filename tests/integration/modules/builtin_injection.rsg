@@ -76,7 +76,7 @@ fn test_result_err_path() {
     }
 }
 
-// ── Option with if-let ──
+// ── Option with if-var ──
 
 fn test_option_if_let() {
     var x: ?i32 = Some(42)

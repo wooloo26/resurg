@@ -29,11 +29,17 @@ pub use Result::*
 // ── Compiler primitives ───────────────────────────────────────
 // The compiler auto-mangles these names; the runtime adapts.
 
+/// Print a value to stdout without a trailing newline.
 pub decl fn print<T>(value: T)
+/// Print a value to stdout followed by a newline.
 pub decl fn println<T>(value: T)
+/// Assert that `cond` is true; panics with `msg` if false.
 pub decl fn assert(cond: bool, msg: str)
+/// Return the length of a slice, array, or string.
 pub decl fn len<T>(value: T) -> i32
+/// Terminate the program immediately with an error message.
 pub decl fn panic(msg: str) -> never
+/// Call `f` and catch any panic, returning `Ok(result)` or `Err(message)`.
 pub decl fn catch_panic<T>(f: Fn() -> T) -> T!str
 
 // ── Method extensions ──────────────────────────────────────────

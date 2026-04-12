@@ -15,7 +15,7 @@ fn iter_next(mut iter: *Iterator) -> ?i32 {
     }
 }
 
-// ── while-let consumes iterator ──
+// ── while-var consumes iterator ──
 
 fn test_while_let_iterator() {
     iter := &Iterator { items = []i32{1, 2, 3} }
@@ -26,7 +26,7 @@ fn test_while_let_iterator() {
     assert(sum == 6, "")
 }
 
-// ── while-let empty iterator ──
+// ── while-var empty iterator ──
 
 fn test_while_let_empty() {
     iter := &Iterator { items = []i32{} }
@@ -37,7 +37,7 @@ fn test_while_let_empty() {
     assert(count == 0, "")
 }
 
-// ── while-let sum ──
+// ── while-var sum ──
 
 fn test_while_let_sum() {
     iter := &Iterator { items = []i32{10, 20, 30} }

@@ -267,14 +267,14 @@ assert(len(parr) == 3)                     // len(*parr)
 
 ```rsg
 fn extend(mut s: *[]i32) {
-    s[0] = 99                         // auto-deref index
-    s = s[1..]                        // auto-deref slice + assign
+    s[0] = 99                          // auto-deref index
+    *s = s[1..]                        // auto-deref slice + assign
 }
 ```
 
 ```rsg
 fn allocate(p: **Node) {
-    *p = &Node{ value = 42 }
+    **p = &Node{ value = 42 }
 }
 ```
 

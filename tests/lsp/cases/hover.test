@@ -70,3 +70,43 @@ fn main() {
 -- hover 4:14 contains --
 Describe
 describable
+
+-- input.rsg --
+struct Foo { x: i32 }
+ext Foo {
+    fn get_x(self) -> i32 {
+        return self.x
+    }
+}
+fn main() {
+    f := Foo { x = 1 }
+}
+-- hover 3:15 contains --
+self: Foo
+(receiver)
+
+-- input.rsg --
+fn compute(a: i32, b: i32) -> i32 {
+    var result = a + b
+    return result
+}
+fn main() {}
+-- hover 2:11 contains --
+var result: i32
+
+-- input.rsg --
+fn main() {
+    println("hello")
+}
+-- hover 1:4 contains --
+fn println
+Print a value to stdout followed by a newline
+
+-- input.rsg --
+fn main() {
+    for 0..5 |x| {
+        println(x)
+    }
+}
+-- hover 2:16 contains --
+for loop variable

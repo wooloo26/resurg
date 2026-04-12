@@ -49,6 +49,12 @@ void parser_skip_newlines(Parser *parser) {
     }
 }
 
+void parser_skip_lines_only(Parser *parser) {
+    while (parser_check(parser, TOKEN_NEWLINE) || parser_check(parser, TOKEN_SEMICOLON)) {
+        parser_advance(parser);
+    }
+}
+
 void parser_skip_newlines_collect_docs(Parser *parser) {
     // Reset pending doc — only the most recent contiguous block survives.
     parser->pending_doc = NULL;

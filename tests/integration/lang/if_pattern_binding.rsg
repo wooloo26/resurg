@@ -1,6 +1,6 @@
 // if pattern binding: if Some(x) := expr { ... }
 
-// ── if-let with Some ──
+// ── if-var with Some ──
 
 fn find_value(key: str) -> ?i32 {
     if key == "x" { Some(42) }
@@ -28,7 +28,7 @@ fn test_if_let_none() {
     assert(missed == true, "")
 }
 
-// ── if-let with Ok/Err ──
+// ── if-var with Ok/Err ──
 
 fn parse_integer(s: str) -> i32 ! str {
     if s == "42" { Ok(42) }
@@ -56,7 +56,7 @@ fn test_if_let_ok_miss() {
     assert(missed == true, "")
 }
 
-// ── if-let used as expression guard ──
+// ── if-var used as expression guard ──
 
 fn test_if_let_guard() {
     result := find_value("x")

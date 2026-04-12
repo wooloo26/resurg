@@ -14,10 +14,11 @@
 
 /** Context carried through the semantic token AST walk. */
 typedef struct {
-    SemToken *tokens;      /* buf */
-    const char *file_path; // filter: only emit tokens from this file
-    const char **params;   /* buf - current fn param names */
-    const char *recv_name; // current fn receiver, or NULL
+    SemToken *tokens;         /* buf */
+    const char *file_path;    // filter: only emit tokens from this file
+    const char **params;      /* buf - current fn param names */
+    const char *recv_name;    // current fn receiver, or NULL
+    const char **local_vars;  /* buf - local variable names in current fn scope */
 } SemWalkCtx;
 
 // ── Forward declarations ───────────────────────────────────────────────
@@ -43,7 +44,7 @@ static void sem_emit(SemWalkCtx *ctx, SrcLoc loc, int32_t len, int32_t type, int
     BUF_PUSH(ctx->tokens, t);
 }
 
-/** Check if name matches a parameter or receiver in current scope. */
+/** Check if name matches a parameter, receiver, or local variable in current scope. */
 static bool sem_emit_id(SemWalkCtx *ctx, const ASTNode *node) {
     const char *name = node->id.name;
     int32_t len = (int32_t)strlen(name);
@@ -57,6 +58,12 @@ static bool sem_emit_id(SemWalkCtx *ctx, const ASTNode *node) {
             return true;
         }
     }
+    for (int32_t i = 0; i < BUF_LEN(ctx->local_vars); i++) {
+        if (strcmp(name, ctx->local_vars[i]) == 0) {
+            sem_emit(ctx, node->loc, len, SEM_TYPE_VARIABLE, 0);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -67,11 +74,39 @@ static void sem_walk_arr(SemWalkCtx *ctx, ASTNode **arr) {
     }
 }
 
+/**
+ * Recursively push all variable binding names from @p pat into
+ * @c ctx->local_vars so that uses of those names inside the arm/body
+ * receive a @c SEM_TYPE_VARIABLE semantic token.
+ */
+static void sem_push_pattern_bindings(SemWalkCtx *ctx, const ASTPattern *pat) {
+    if (pat == NULL) {
+        return;
+    }
+    switch (pat->kind) {
+    case PATTERN_BINDING:
+        if (pat->name != NULL && strcmp(pat->name, "_") != 0) {
+            BUF_PUSH(ctx->local_vars, pat->name);
+        }
+        break;
+    case PATTERN_VARIANT_TUPLE:
+    case PATTERN_VARIANT_STRUCT:
+        for (int32_t i = 0; i < BUF_LEN(pat->sub_patterns); i++) {
+            sem_push_pattern_bindings(ctx, pat->sub_patterns[i]);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
 /** Walk a function declaration: set up param scope, walk body. */
 static void sem_walk_fn(SemWalkCtx *ctx, const ASTNode *node) {
     const char **prev_params = ctx->params;
     const char *prev_recv = ctx->recv_name;
+    const char **prev_locals = ctx->local_vars;
     ctx->params = NULL;
+    ctx->local_vars = NULL;
     ctx->recv_name = node->fn_decl.recv_name;
     for (int32_t i = 0; i < BUF_LEN(node->fn_decl.params); i++) {
         const ASTNode *p = node->fn_decl.params[i];
@@ -81,7 +116,9 @@ static void sem_walk_fn(SemWalkCtx *ctx, const ASTNode *node) {
     }
     sem_walk(ctx, node->fn_decl.body);
     BUF_FREE(ctx->params);
+    BUF_FREE(ctx->local_vars);
     ctx->params = prev_params;
+    ctx->local_vars = prev_locals;
     ctx->recv_name = prev_recv;
 }
 
@@ -102,7 +139,9 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
     case NODE_CLOSURE: {
         const char **prev_params = ctx->params;
         const char *prev_recv = ctx->recv_name;
+        const char **prev_locals = ctx->local_vars;
         ctx->params = NULL;
+        ctx->local_vars = NULL;
         ctx->recv_name = NULL;
         for (int32_t i = 0; i < BUF_LEN(node->closure.params); i++) {
             const ASTNode *p = node->closure.params[i];
@@ -112,7 +151,9 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
         }
         sem_walk(ctx, node->closure.body);
         BUF_FREE(ctx->params);
+        BUF_FREE(ctx->local_vars);
         ctx->params = prev_params;
+        ctx->local_vars = prev_locals;
         ctx->recv_name = prev_recv;
         break;
     }
@@ -154,6 +195,7 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
         break;
     case NODE_IF:
         sem_walk(ctx, node->if_expr.cond);
+        sem_push_pattern_bindings(ctx, node->if_expr.pattern);
         sem_walk(ctx, node->if_expr.then_body);
         sem_walk(ctx, node->if_expr.else_body);
         sem_walk(ctx, node->if_expr.pattern_init);
@@ -163,10 +205,18 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
         break;
     case NODE_WHILE:
         sem_walk(ctx, node->while_loop.cond);
+        sem_push_pattern_bindings(ctx, node->while_loop.pattern);
         sem_walk(ctx, node->while_loop.body);
         sem_walk(ctx, node->while_loop.pattern_init);
         break;
     case NODE_FOR:
+        // Track the for-loop iteration variable(s).
+        if (node->for_loop.var_name != NULL) {
+            BUF_PUSH(ctx->local_vars, node->for_loop.var_name);
+        }
+        if (node->for_loop.idx_name != NULL) {
+            BUF_PUSH(ctx->local_vars, node->for_loop.idx_name);
+        }
         sem_walk(ctx, node->for_loop.start);
         sem_walk(ctx, node->for_loop.end);
         sem_walk(ctx, node->for_loop.iterable);
@@ -176,6 +226,8 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
         sem_walk(ctx, node->return_stmt.value);
         break;
     case NODE_VAR_DECL:
+        // Track the variable name so its usages get SEM_TYPE_VARIABLE token.
+        BUF_PUSH(ctx->local_vars, node->var_decl.name);
         sem_walk(ctx, node->var_decl.init);
         break;
     case NODE_STR_INTERPOLATION:
@@ -210,6 +262,8 @@ static void sem_walk(SemWalkCtx *ctx, const ASTNode *node) {
     case NODE_MATCH:
         sem_walk(ctx, node->match_expr.operand);
         for (int32_t i = 0; i < BUF_LEN(node->match_expr.arms); i++) {
+            sem_push_pattern_bindings(ctx, node->match_expr.arms[i].pattern);
+            sem_walk(ctx, node->match_expr.arms[i].guard);
             sem_walk(ctx, node->match_expr.arms[i].body);
         }
         break;

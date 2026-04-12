@@ -594,7 +594,7 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
 
         // Build symbol index before destroying sema.
         if (out_symbols != NULL) {
-            *out_symbols = lsp_build_symbol_index(arena, file_node, sema, file_path);
+            *out_symbols = lsp_build_symbol_index(arena, file_node, sema, file_path, srv->std_path);
         }
 
         // Build semantic tokens (param/receiver refs in function bodies).
@@ -864,7 +864,7 @@ static void handle_hover(LspServer *srv, int64_t id, JsonValue *params) {
         return;
     }
 
-    // Check builtin primitive types first.
+    // Check builtin primitive types first (no AST nodes for primitives).
     const char *builtin_desc = lsp_builtin_type_hover(word);
     if (builtin_desc != NULL) {
         size_t len = strlen(word) + strlen(builtin_desc) + 32;
@@ -889,29 +889,6 @@ static void handle_hover(LspServer *srv, int64_t id, JsonValue *params) {
         send_response(srv, id, jbuf_str(&b));
         jbuf_destroy(&b);
         free(hover_text);
-        free(word);
-        return;
-    }
-
-    // Check builtin functions (print, println, assert, panic, etc.).
-    const char *builtin_fn = lsp_builtin_fn_hover(word);
-    if (builtin_fn != NULL) {
-        JsonBuf b;
-        jbuf_init(&b);
-        jbuf_obj_start(&b);
-        jbuf_key(&b, "contents");
-        jbuf_obj_start(&b);
-        jbuf_key(&b, "kind");
-        jbuf_str_val(&b, "markdown");
-        jbuf_comma(&b);
-        jbuf_key(&b, "value");
-        jbuf_str_val(&b, builtin_fn);
-        jbuf_obj_end(&b);
-        jbuf_obj_end(&b);
-
-        send_response(srv, id, jbuf_str(&b));
-        jbuf_destroy(&b);
-        free((void *)builtin_fn);
         free(word);
         return;
     }
@@ -1032,6 +1009,10 @@ static void handle_document_symbol(LspServer *srv, int64_t id, JsonValue *params
     int32_t n = BUF_LEN(doc->symbols);
     for (int32_t i = 0; i < n; i++) {
         const LspSymEntry *s = &doc->symbols[i];
+        // Exclude std-library symbols from the document symbol list.
+        if (s->is_std) {
+            continue;
+        }
         int32_t sl = s->loc.line > 0 ? s->loc.line - 1 : 0;
         int32_t sc = s->loc.column > 0 ? s->loc.column - 1 : 0;
 

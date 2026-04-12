@@ -57,6 +57,8 @@ bool parser_match(Parser *parser, TokenKind kind);
 const Token *parser_expect(Parser *parser, TokenKind kind);
 /** Skip consecutive newline tokens. */
 void parser_skip_newlines(Parser *parser);
+/** Skip newlines/semicolons only, NOT doc-comment tokens. */
+void parser_skip_lines_only(Parser *parser);
 /** Skip newlines and collect doc comments into parser->pending_doc. */
 void parser_skip_newlines_collect_docs(Parser *parser);
 /** Consume and return the pending doc comment, resetting it to NULL. */
@@ -86,7 +88,7 @@ bool parser_is_pattern_binding(const Parser *parser);
 
 /** Parse a match expression: match operand { pattern => body, ... }. */
 ASTNode *parser_parse_match(Parser *parser);
-/** Parse a single pattern (for if-let/while-let/match arms). */
+/** Parse a single pattern (for if-var/while-var/match arms). */
 ASTPattern *parser_parse_pattern(Parser *parser);
 
 // ── Statement / block parsing (parser/stmt.c) ─────────────────────

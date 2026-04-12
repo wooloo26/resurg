@@ -10,7 +10,7 @@
 // ── Statement / control-flow lower ─────────────────────────────────
 
 HirNode *lower_stmt_if(Lower *low, const ASTNode *ast) {
-    // if-let: desugar to HIR_MATCH with 2 arms
+    // if-var: desugar to HIR_MATCH with 2 arms
     if (ast->if_expr.pattern != NULL) {
         HirNode *match_operand = lower_expr(low, ast->if_expr.pattern_init);
         const Type *op_type = match_operand->type;

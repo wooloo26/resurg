@@ -327,11 +327,12 @@ ASTNode *parse_fn_decl(Parser *parser, bool is_pub) {
         node->fn_decl.return_type = parser_parse_type(parser);
     }
 
-    // Optional where clauses
-    parser_skip_newlines(parser);
+    // Optional where clauses — use skip_lines_only so doc comments on the NEXT
+    // top-level declaration are not silently consumed.
+    parser_skip_lines_only(parser);
     node->fn_decl.where_clauses = parse_where_clauses(parser);
 
-    parser_skip_newlines(parser);
+    parser_skip_lines_only(parser);
 
     // Body: block or `= expr` (absent for decl fns)
     if (is_declare) {

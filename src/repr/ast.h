@@ -423,8 +423,8 @@ struct ASTNode {
             ASTNode *cond;
             ASTNode *then_body;
             ASTNode *else_body;    // may be NULL
-            ASTPattern *pattern;   // for if-let: if Some(x) := expr { ... }
-            ASTNode *pattern_init; // expr in if-let (may be NULL)
+            ASTPattern *pattern;   // for if-var: if Some(x) := expr { ... }
+            ASTNode *pattern_init; // expr in if-var (may be NULL)
         } if_expr;
 
         // NODE_LOOP
@@ -575,8 +575,8 @@ struct ASTNode {
         struct {
             ASTNode *cond;
             ASTNode *body;
-            ASTPattern *pattern;   // for while-let: while Some(x) := expr { ... }
-            ASTNode *pattern_init; // expr in while-let (may be NULL)
+            ASTPattern *pattern;   // for while-var: while Some(x) := expr { ... }
+            ASTNode *pattern_init; // expr in while-var (may be NULL)
         } while_loop;
 
         // NODE_DEFER

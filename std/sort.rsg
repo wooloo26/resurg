@@ -7,24 +7,25 @@
 
 /// Sort a slice in-place (insertion sort).
 pub fn sort<T: Ord>(mut s: *[]T) {
-    var n: i32 = len(*s)
+    var n: i32 = len(s)
+    s.len()
     for 1..n |i| {
-        var key: T = (*s)[i]
+        var key: T = s[i]
         var j: i32 = i - 1
         loop {
             if j < 0 { break }
-            if key.cmp((*s)[j]) >= 0 { break }
-            (*s)[j + 1] = (*s)[j]
+            if key.cmp(s[j]) >= 0 { break }
+            s[j + 1] = s[j]
             j = j - 1
         }
-        (*s)[j + 1] = key
+        s[j + 1] = key
     }
 }
 
 /// Check whether a slice is sorted in non-decreasing order.
 pub fn is_sorted<T: Ord>(s: []T) -> bool {
     var n: i32 = len(s)
-    var result: bool = true
+    result := true
     for 1..n |i| {
         if s[i].cmp(s[i - 1]) < 0 {
             result = false

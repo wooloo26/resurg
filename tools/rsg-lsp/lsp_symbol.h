@@ -31,6 +31,7 @@ typedef struct LspSymEntry {
     char *hover;      // pre-formatted hover markdown (owned)
     SrcLoc loc;       // definition location
     int32_t lsp_kind; // LSP SymbolKind
+    bool is_std;      // true when symbol originates from a std library file
 } LspSymEntry;
 
 /** Free the contents of a symbol entry (not the entry itself). */
@@ -39,12 +40,13 @@ void lsp_sym_entry_free(LspSymEntry *e);
 /** Return hover text for a builtin primitive type, or NULL if not a builtin. */
 const char *lsp_builtin_type_hover(const char *name);
 
-/** Return hover text for a builtin function, or NULL if not a builtin fn. */
-const char *lsp_builtin_fn_hover(const char *name);
-
-/** Build the complete symbol index for a document.  Caller must BUF_FREE the result. */
+/** Build the complete symbol index for a document.  Caller must BUF_FREE the result.
+ *  @p std_path — path prefix for std library files; their symbols are included but
+ *                marked @c is_std = true so the caller can filter them from documentSymbol.
+ *                Pass NULL to exclude all non-file_path symbols. */
 LspSymEntry *lsp_build_symbol_index(Arena *arena, const struct ASTNode *file_node,
-                                    const struct Sema *sema, const char *file_path);
+                                    const struct Sema *sema, const char *file_path,
+                                    const char *std_path);
 
 /** Extract the identifier under the cursor from document text. */
 char *lsp_extract_word_at(const char *text, int32_t line, int32_t col);

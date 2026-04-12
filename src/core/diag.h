@@ -117,7 +117,7 @@ int32_t diag_count(const DiagCtx *dctx);
  *     file:line:col: err[E0001]: message
  *       --> file:line:col
  *       |
- *    42 | let x: i32 = "hello";
+ *    42 | var x: i32 = "hello";
  *       |              ^^^^^^^ type mismatch
  *       |
  *       = note: expected 'i32', got 'str'

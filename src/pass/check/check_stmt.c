@@ -23,7 +23,7 @@ static bool check_reserved_id(Sema *sema, SrcLoc loc, const char *name) {
 
 const Type *check_if(Sema *sema, ASTNode *node) {
     if (node->if_expr.pattern != NULL) {
-        // if-let pattern binding: if Some(x) := expr { ... }
+        // if-var pattern binding: if Some(x) := expr { ... }
         const Type *init_type = check_node(sema, node->if_expr.pattern_init);
 
         // Push a scope for pattern bindings visible inside then_body
@@ -329,7 +329,7 @@ static const Type *check_loop(Sema *sema, ASTNode *node) {
 
 static void check_while(Sema *sema, ASTNode *node) {
     if (node->while_loop.pattern != NULL) {
-        // while-let pattern binding: while Some(x) := expr { ... }
+        // while-var pattern binding: while Some(x) := expr { ... }
         const Type *init_type = check_node(sema, node->while_loop.pattern_init);
         scope_push(sema, true);
         if (init_type != NULL && init_type->kind == TYPE_ENUM) {

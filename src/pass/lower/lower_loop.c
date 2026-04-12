@@ -120,7 +120,7 @@ HirNode *lower_loop(Lower *low, const ASTNode *ast) {
 HirNode *lower_while(Lower *low, const ASTNode *ast) {
     SrcLoc loc = ast->loc;
 
-    // while-let: desugar to loop { match pattern_init { P => body, _ => break } }
+    // while-var: desugar to loop { match pattern_init { P => body, _ => break } }
     if (ast->while_loop.pattern != NULL) {
         HirNode *match_operand = lower_expr(low, ast->while_loop.pattern_init);
         const Type *op_type = match_operand->type;
