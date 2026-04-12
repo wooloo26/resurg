@@ -1,0 +1,72 @@
+{
+  "name": "resurg-lsp",
+  "displayName": "Resurg",
+  "description": "Language support for Resurg (.rsg) via rsg-lsp",
+  "version": "1.0.0",
+  "publisher": "resurg",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/resurg/resurg"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:resurg"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "resurg",
+        "aliases": [
+          "Resurg",
+          "rsg"
+        ],
+        "extensions": [
+          ".rsg"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "resurg",
+        "scopeName": "source.resurg",
+        "path": "./syntaxes/resurg.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Resurg",
+      "properties": {
+        "resurg.lspPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to rsg-lsp binary. Leave empty to auto-detect."
+        },
+        "resurg.stdPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Resurg std library directory."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.7.1",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,56 @@
+// TEST: compile_error
+// v1.0 — Diagnostic message clarity
+//
+// Verifies that error messages are human-readable and describe the
+// problem clearly, referencing the relevant types/names.
+
+// === assignment to immut binding ===
+// EXPECT-ERROR: immut
+
+immut PI: f64 = 3.14
+
+fn main() {
+    PI = 6.28
+}
+
+// === missing struct field ===
+// EXPECT-ERROR: missing field
+
+struct Point {
+    x: f64
+    y: f64
+}
+
+fn main() {
+    p := Point { x = 1.0 }
+}
+
+// === private field access ===
+// EXPECT-ERROR: private
+
+mod secret {
+    pub struct Hidden {
+        data: i32 = 0
+    }
+}
+
+fn main() {
+    h := secret::Hidden {}
+    x := h.data
+}
+
+// === wrong argument count ===
+// EXPECT-ERROR: expected 2 args
+
+fn add(a: i32, b: i32) -> i32 = a + b
+
+fn main() {
+    result := add(1, 2, 3)
+}
+
+// === unknown type in annotation ===
+// EXPECT-ERROR: unknown type
+
+fn main() {
+    var x: DoesNotExist = 42
+}

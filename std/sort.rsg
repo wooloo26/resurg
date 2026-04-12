@@ -2,9 +2,8 @@
 //
 // Usage: mod sort
 //        use self::sort::sort
-
-mod conv
-use self::conv::Ord
+//
+// Depends on the Ord pact from conv (available via prelude).
 
 /// Sort a slice in-place (insertion sort).
 pub fn sort<T: Ord>(mut s: *[]T) {

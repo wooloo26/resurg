@@ -1,0 +1,47 @@
+// TEST: compile_error
+// v1.0 — Compiler diagnostics: clear error messages with source spans.
+//
+// Verifies that compiler error messages include source location info
+// (file:line:col) and are specific enough to diagnose the problem.
+
+// === undefined variable span ===
+// EXPECT-ERROR: undefined variable 'unknown_var'
+
+fn main() {
+    x := unknown_var + 1
+}
+
+// === type mismatch span ===
+// EXPECT-ERROR: type mismatch
+
+fn main() {
+    var x: i32 = "not an integer"
+}
+
+// === undefined function span ===
+// EXPECT-ERROR: undefined function 'nonexistent_fn'
+
+fn main() {
+    result := nonexistent_fn(42)
+}
+
+// === unknown type span ===
+// EXPECT-ERROR: unknown type
+
+fn main() {
+    var x: Nonexistent = 1
+}
+
+// === negate string span ===
+// EXPECT-ERROR: '-' requires numeric operand
+
+fn main() {
+    var x: str = -"hello"
+}
+
+// === break outside loop span ===
+// EXPECT-ERROR: 'break' outside of loop
+
+fn main() {
+    break
+}

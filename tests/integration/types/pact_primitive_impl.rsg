@@ -1,29 +1,29 @@
 // Pact implementation on primitive types
 // TEST: normal
 
-pact Display {
-    fn display() -> str
+pact Show {
+    fn show_text() -> str
 }
 
-ext i32 impl Display {
-    fn display(n) -> str = n.to_str()
+ext i32 impl Show {
+    fn show_text(n) -> str = n.to_str()
 }
 
-ext f64 impl Display {
-    fn display(n) -> str = n.to_str()
+ext f64 impl Show {
+    fn show_text(n) -> str = n.to_str()
 }
 
-ext bool impl Display {
-    fn display(b) -> str = b.to_str()
+ext bool impl Show {
+    fn show_text(b) -> str = b.to_str()
 }
 
-ext str impl Display {
-    fn display(s) -> str = s
+ext str impl Show {
+    fn show_text(s) -> str = s
 }
 
-// Generic function bounded by Display
-fn show<T: Display>(value: T) -> str {
-    value.display()
+// Generic function bounded by Show
+fn show<T: Show>(value: T) -> str {
+    value.show_text()
 }
 
 fn test_primitive_display() {
@@ -33,29 +33,29 @@ fn test_primitive_display() {
 }
 
 fn test_direct_call() {
-    assert(42.display() == "42", "direct i32")
-    assert(true.display() == "true", "direct bool")
-    assert("hi".display() == "hi", "direct str")
+    assert(42.show_text() == "42", "direct i32")
+    assert(true.show_text() == "true", "direct bool")
+    assert("hi".show_text() == "hi", "direct str")
 }
 
-// ── Into<T> pact on primitives ──
+// ── Convertible<T> pact on primitives ──
 
-pact Into<T> {
-    fn into() -> T
+pact Convertible<T> {
+    fn convert() -> T
 }
 
-ext i32 impl Into {
-    fn into(n) -> str = n.to_str()
+ext i32 impl Convertible {
+    fn convert(n) -> str = n.to_str()
 }
 
-fn convert<T: Into>(value: T) -> str {
-    value.into()
+fn convert_value<T: Convertible>(value: T) -> str {
+    value.convert()
 }
 
 fn test_into() {
-    var s: str = 42.into()
+    var s: str = 42.convert()
     assert(s == "42", "i32 into str")
-    assert(convert<i32>(100) == "100", "convert generic")
+    assert(convert_value<i32>(100) == "100", "convert generic")
 }
 
 fn main() {

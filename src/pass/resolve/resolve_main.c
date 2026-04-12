@@ -111,6 +111,11 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         if (decl->kind != NODE_MODULE) {
             continue;
         }
+        // Skip if this module is already registered (e.g., prelude already loaded it)
+        Sym *existing = scope_lookup(sema, decl->module.name);
+        if (existing != NULL && existing->kind == SYM_MODULE) {
+            continue;
+        }
         if (decl->module.decls == NULL) {
             // Filesystem module resolution: load <name>.rsg from module search dir
             const char *mod_path =

@@ -27,7 +27,7 @@ else
   JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 endif
 
-.PHONY: all clean configure run test test-one test-std clean-tests format tidy lint setup
+.PHONY: all clean configure run test test-one test-std test-lsp clean-tests format tidy lint setup
 
 # Build everything (auto-configures on first run)
 all: $(BUILD)/Makefile
@@ -84,6 +84,9 @@ test-std: all
 		--build=$(BUILD) --runtime=$(RUNTIME) -j$(JOBS) \
 		tests/integration/stdlib/*.rsg
 
+test-lsp: all
+	@$(PYTHON) tests/lsp/test_lsp.py --lsp=$(BUILD)/rsg-lsp$(EXE)
+
 # Clean only test build artifacts (preserves the compiler)
 clean-tests:
 ifeq ($(OS),Windows_NT)
@@ -96,7 +99,8 @@ endif
 ALL_C := $(wildcard src/*.c src/*.h src/*/*.c src/*/*.h src/*/*/*.c src/*/*/*.h \
                     src/*/*/*/*.c src/*/*/*/*.h \
                     include/*.h include/*/*.h include/*/*/*.h \
-                    $(RUNTIME)/*.c $(RUNTIME)/*.h)
+                    $(RUNTIME)/*.c $(RUNTIME)/*.h \
+                    tools/rsg-lsp/*.c tools/rsg-lsp/*.h)
 format:
 	@clang-format -i --style=file $(ALL_C)
 	@echo 'Formatted $(words $(ALL_C)) file(s).'

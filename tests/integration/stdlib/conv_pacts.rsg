@@ -1,8 +1,8 @@
 // Test std/conv module: pacts and generic functions on primitives
 // TEST: normal
 
-mod conv
-use self::conv::*
+// conv module pacts (Display, Eq, Ord, Into) and generic functions
+// (to_string, max, min, clamp) are available via the prelude.
 
 // ── Display pact ──
 

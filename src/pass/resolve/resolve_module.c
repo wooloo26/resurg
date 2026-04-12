@@ -80,11 +80,38 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
             }
             FnSig *sig = (FnSig *)e->value;
             if (sig->is_pub) {
-                hash_table_insert(&sema->base.db.fn_table, bare, sig);
+                if (hash_table_lookup(&sema->base.db.fn_table, bare) == NULL) {
+                    hash_table_insert(&sema->base.db.fn_table, bare, sig);
+                }
                 if (reexport_prefix != NULL) {
                     const char *rekey =
                         arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
                     hash_table_insert(&sema->base.db.fn_table, rekey, sig);
+                }
+            }
+        }
+    }
+
+    // Scan generics.fn (generic functions like min<T>, max<T>)
+    for (int32_t i = 0; i < sema->base.generics.fn.capacity; i++) {
+        HashEntry *e = &sema->base.generics.fn.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            GenericFnDef *gfn = (GenericFnDef *)e->value;
+            if (gfn->decl->fn_decl.is_pub) {
+                if (hash_table_lookup(&sema->base.generics.fn, bare) == NULL) {
+                    hash_table_insert(&sema->base.generics.fn, bare, gfn);
+                }
+                if (reexport_prefix != NULL) {
+                    const char *rekey =
+                        arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
+                    hash_table_insert(&sema->base.generics.fn, rekey, gfn);
                 }
             }
         }
@@ -102,8 +129,10 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
                 continue;
             }
             StructDef *sdef = (StructDef *)e->value;
-            hash_table_insert(&sema->base.db.struct_table, bare, sdef);
-            scope_define(sema, &(SymDef){bare, sdef->type, true, SYM_TYPE});
+            if (hash_table_lookup(&sema->base.db.struct_table, bare) == NULL) {
+                hash_table_insert(&sema->base.db.struct_table, bare, sdef);
+                scope_define(sema, &(SymDef){bare, sdef->type, true, SYM_TYPE});
+            }
             if (reexport_prefix != NULL) {
                 const char *rekey = arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
                 hash_table_insert(&sema->base.db.struct_table, rekey, sdef);
@@ -124,8 +153,10 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
                 continue;
             }
             EnumDef *edef = (EnumDef *)e->value;
-            hash_table_insert(&sema->base.db.enum_table, bare, edef);
-            scope_define(sema, &(SymDef){bare, edef->type, true, SYM_TYPE});
+            if (hash_table_lookup(&sema->base.db.enum_table, bare) == NULL) {
+                hash_table_insert(&sema->base.db.enum_table, bare, edef);
+                scope_define(sema, &(SymDef){bare, edef->type, true, SYM_TYPE});
+            }
             if (reexport_prefix != NULL) {
                 const char *rekey = arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
                 hash_table_insert(&sema->base.db.enum_table, rekey, edef);
@@ -145,7 +176,9 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
             if (strchr(bare, '.') != NULL) {
                 continue;
             }
-            hash_table_insert(&sema->base.db.type_alias_table, bare, e->value);
+            if (hash_table_lookup(&sema->base.db.type_alias_table, bare) == NULL) {
+                hash_table_insert(&sema->base.db.type_alias_table, bare, e->value);
+            }
             if (reexport_prefix != NULL) {
                 const char *rekey = arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
                 hash_table_insert(&sema->base.db.type_alias_table, rekey, e->value);
@@ -166,8 +199,10 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
             }
             VarInfo *vi = (VarInfo *)e->value;
             if (vi->is_pub) {
-                hash_table_insert(&sema->base.db.var_table, bare, vi);
-                scope_define(sema, &(SymDef){bare, vi->type, true, SYM_VAR});
+                if (hash_table_lookup(&sema->base.db.var_table, bare) == NULL) {
+                    hash_table_insert(&sema->base.db.var_table, bare, vi);
+                    scope_define(sema, &(SymDef){bare, vi->type, true, SYM_VAR});
+                }
                 if (reexport_prefix != NULL) {
                     const char *rekey =
                         arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
@@ -191,7 +226,9 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
             }
             PactDef *pdef = (PactDef *)e->value;
             if (pdef->is_pub) {
-                hash_table_insert(&sema->base.db.pact_table, bare, pdef);
+                if (hash_table_lookup(&sema->base.db.pact_table, bare) == NULL) {
+                    hash_table_insert(&sema->base.db.pact_table, bare, pdef);
+                }
                 if (reexport_prefix != NULL) {
                     const char *rekey =
                         arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
@@ -226,6 +263,12 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
 
 void register_module_decl(Sema *sema, ASTNode *decl) {
     const char *mod_name = decl->module.name;
+
+    // Skip re-registration if this module was already processed
+    Sym *existing = scope_lookup(sema, mod_name);
+    if (existing != NULL && existing->kind == SYM_MODULE) {
+        return;
+    }
 
     // Create module type and register in scope
     const Type *mod_type = type_create_module(sema->base.arena, mod_name);
@@ -442,6 +485,22 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
                 const char *rekey =
                     arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
                 hash_table_insert(&sema->base.db.fn_table, rekey, sig);
+            }
+            continue;
+        }
+
+        // Try generic fn
+        GenericFnDef *gfn = sema_lookup_generic_fn(sema, qualified);
+        if (gfn != NULL) {
+            if (!gfn->decl->fn_decl.is_pub) {
+                SEMA_ERR(sema, decl->loc, "'%s' is private in module '%s'", name, mod_name);
+                continue;
+            }
+            hash_table_insert(&sema->base.generics.fn, alias, gfn);
+            if (reexport_prefix != NULL) {
+                const char *rekey =
+                    arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->base.generics.fn, rekey, gfn);
             }
             continue;
         }

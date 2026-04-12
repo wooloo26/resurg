@@ -4,7 +4,7 @@
 
 ```sh
 make test                     # run all tests (parallel, TAP output)
-make test-one FILE=tests/integration/v0.1.0/primitives.rsg  # single test
+make test-one FILE=tests/integration/lang/primitives.rsg  # single test
 make clean-tests              # remove test build artifacts only
 ```
 
@@ -32,7 +32,7 @@ python3 tests/run_tests.py --cache
 
 ## Test File Conventions
 
-- Header comment: `// v0.X.0 — Description`
+- Header comment: `// Name — Description`
 - Module declaration: `module test_<feature>`
 - No `main()` needed — the compiler auto-generates one that calls all `test_*` / `main` functions
 
@@ -40,15 +40,15 @@ python3 tests/run_tests.py --cache
 
 Embed expected behavior in `.rsg` file comments:
 
-| Directive                   | Description                                        |
-| --------------------------- | -------------------------------------------------- |
-| `// TEST: compile_error`    | `resurg` must exit ≠ 0                             |
-| `// TEST: runtime_error`    | Compiled binary must exit ≠ 0                      |
-| `// EXPECT-ERROR: <text>`   | stderr must contain `<text>`                       |
-| `// EXPECT-STDOUT: <text>`  | stdout must contain `<text>` (repeatable)           |
-| `// TIMEOUT: <seconds>`     | Per-test timeout override (default: 10s / `$RSG_TEST_TIMEOUT`) |
-| `// SKIP: <reason>`         | Skip this test unconditionally                     |
-| `// DEPENDS: <file.rsg>`    | Additional source file for multi-file tests (repeatable) |
+| Directive                  | Description                                                    |
+| -------------------------- | -------------------------------------------------------------- |
+| `// TEST: compile_error`   | `resurg` must exit ≠ 0                                         |
+| `// TEST: runtime_error`   | Compiled binary must exit ≠ 0                                  |
+| `// EXPECT-ERROR: <text>`  | stderr must contain `<text>`                                   |
+| `// EXPECT-STDOUT: <text>` | stdout must contain `<text>` (repeatable)                      |
+| `// TIMEOUT: <seconds>`    | Per-test timeout override (default: 10s / `$RSG_TEST_TIMEOUT`) |
+| `// SKIP: <reason>`        | Skip this test unconditionally                                 |
+| `// DEPENDS: <file.rsg>`   | Additional source file for multi-file tests (repeatable)       |
 
 ### Examples
 
@@ -62,7 +62,7 @@ fn main() {
 }
 ```
 
-```rouge name=tests/integration/v0.1.0/hello.rsg
+```rouge name=tests/integration/temp/hello.rsg
 // EXPECT-STDOUT: hello world
 module test_hello
 
@@ -79,12 +79,12 @@ module test_net
 
 ## Project Structure
 
-```
+```plain
 tests/
 ├── TESTING.md
 ├── run_tests.py          # unified test runner (Python)
 ├── integration/
-│   ├── vx.x.x/
+│   ├── syntax_type/
 │   │   └── *.rsg
 │   ├── errors/
 │   │   └── *.rsg

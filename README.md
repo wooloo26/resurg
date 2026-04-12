@@ -1103,7 +1103,7 @@ fn main() {
 as       break  comptime  continue  defer  else   enum
 false    fn     for       if        immut  impl   loop
 match    mod    mut       pact      pub    return struct
-true     type   use       var       while  where
+true     type   use       var       while  where  decl
 ```
 
 **Reserved:** `async`, `await`, `macro`, `spawn`.

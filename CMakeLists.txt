@@ -35,3 +35,16 @@ file(GLOB_RECURSE RUNTIME_HDRS CONFIGURE_DEPENDS runtime/*.h)
 
 add_library(resurg_runtime STATIC ${RUNTIME_SRCS} ${RUNTIME_HDRS})
 target_include_directories(resurg_runtime PRIVATE runtime)
+
+# --- Language server (rsg-lsp) ---
+
+set(LSP_SRCS
+    tools/rsg-lsp/lsp_main.c
+    tools/rsg-lsp/lsp_json.c
+    tools/rsg-lsp/lsp_transport.c
+    tools/rsg-lsp/lsp_server.c
+)
+
+add_executable(rsg-lsp ${LSP_SRCS})
+target_link_libraries(rsg-lsp PRIVATE rsg)
+target_include_directories(rsg-lsp PRIVATE src tools/rsg-lsp)

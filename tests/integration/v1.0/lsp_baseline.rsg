@@ -1,0 +1,6 @@
+// v1.0 — Verify diagnostics with --dump-diag (JSON output for LSP)
+// EXPECT-STDOUT: hello from v1.0
+
+fn main() {
+    println("hello from v1.0")
+}
