@@ -9,6 +9,7 @@
     { "include": "#numbers" },
     { "include": "#function-definition" },
     { "include": "#keywords" },
+    { "include": "#type-with-generics" },
     { "include": "#types" },
     { "include": "#constants" },
     { "include": "#function-call" },
@@ -101,28 +102,110 @@
         }
       ]
     },
+    "generic-type-parameters": {
+      "comment": "Generic type parameter list in declarations: <T>, <T: Bound + Ord>",
+      "begin": "<",
+      "end": ">",
+      "beginCaptures": {
+        "0": { "name": "punctuation.bracket.resurg" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.bracket.resurg" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "comment": "comptime keyword before type parameter",
+          "match": "\\b(comptime)\\b",
+          "name": "keyword.other.resurg"
+        },
+        {
+          "comment": "Type parameter with bound lookahead: T before :",
+          "match": "\\b([A-Z][A-Za-z0-9]*)(?=\\s*:(?!:))",
+          "captures": {
+            "1": { "name": "entity.name.type.parameter.resurg" }
+          }
+        },
+        {
+          "comment": "Constraint colon (not ::)",
+          "match": ":(?!:)",
+          "name": "keyword.operator.colon.resurg"
+        },
+        {
+          "comment": "Bound combiner +",
+          "match": "\\+",
+          "name": "keyword.operator.arithmetic.resurg"
+        },
+        {
+          "comment": "Default type =",
+          "match": "=",
+          "name": "keyword.operator.assignment.resurg"
+        },
+        { "include": "#type-with-generics" },
+        { "include": "#types" },
+        { "include": "#punctuation" }
+      ]
+    },
+    "type-with-generics": {
+      "comment": "Type with generic arguments: Option<T>, Into<str>, Vec<i32>",
+      "begin": "\\b([A-Z][A-Za-z0-9]*)(<)(?![<=])",
+      "end": ">",
+      "beginCaptures": {
+        "1": { "name": "entity.name.type.resurg" },
+        "2": { "name": "punctuation.bracket.resurg" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.bracket.resurg" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "comment": "Constraint colon inside generic args",
+          "match": ":(?!:)",
+          "name": "keyword.operator.colon.resurg"
+        },
+        {
+          "comment": "Bound combiner +",
+          "match": "\\+",
+          "name": "keyword.operator.arithmetic.resurg"
+        },
+        { "include": "#type-with-generics" },
+        { "include": "#types" },
+        { "include": "#operators" },
+        { "include": "#punctuation" }
+      ]
+    },
     "function-definition": {
       "patterns": [
         {
-          "comment": "Function definition with parameter list: fn name<...>(...)",
-          "begin": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?:<[^>]*>)?\\s*(\\()",
+          "comment": "Function definition: fn name<...>(...)",
+          "begin": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*[<(])",
           "end": "\\)",
           "beginCaptures": {
-            "1": { "name": "storage.type.primitive.resurg" },
-            "2": { "name": "entity.name.function.resurg" },
-            "3": { "name": "punctuation.bracket.resurg" }
+            "1": { "name": "storage.type.fn.resurg" },
+            "2": { "name": "entity.name.function.resurg" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.bracket.round.resurg" }
           },
           "patterns": [
+            { "include": "#generic-type-parameters" },
             { "include": "#comments" },
             {
               "match": "\\b(self)\\b",
               "name": "variable.language.self.resurg"
             },
             {
-              "comment": "Parameter name before colon",
+              "comment": "Typed parameter: name before colon",
               "match": "\\b([a-z_][a-z0-9_]*)\\s*(?=:)",
               "captures": { "1": { "name": "variable.parameter.resurg" } }
             },
+            {
+              "comment": "Bare parameter (receiver or untyped) after ( or ,",
+              "match": "(?<=[,(])\\s*([a-z_][a-z0-9_]*)(?=\\s*[,)])",
+              "captures": { "1": { "name": "variable.parameter.resurg" } }
+            },
+            { "include": "#type-with-generics" },
             { "include": "#types" },
             { "include": "#constants" },
             { "include": "#operators" },
@@ -133,7 +216,7 @@
           "comment": "Function name after fn keyword (no parens visible yet)",
           "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
           "captures": {
-            "1": { "name": "storage.type.primitive.resurg" },
+            "1": { "name": "storage.type.fn.resurg" },
             "2": { "name": "entity.name.function.resurg" }
           }
         }
@@ -147,11 +230,11 @@
         },
         {
           "name": "keyword.declaration.resurg",
-          "match": "\\b(?:let|var|const|struct|enum|pact|ext|impl|type|mod|use|decl)\\b"
+          "match": "\\b(?:ext|impl|mod|use|decl)\\b"
         },
         {
           "name": "keyword.other.resurg",
-          "match": "\\b(?:pub|mut|immut|where|as|is|in|comptime)\\b"
+          "match": "\\b(?:pub|mut|where|as|is|in|comptime)\\b"
         },
         {
           "name": "variable.language.self.resurg",
@@ -164,7 +247,7 @@
         {
           "comment": "fn/Fn/FnMut/Self and primitive types",
           "name": "storage.type.primitive.resurg",
-          "match": "\\b(?:fn|Fn|FnMut|Self|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|char|str|usize|isize|unit|never)\\b"
+          "match": "\\b(?:type|struct|enum|var|pact|immut|Fn|FnMut|Self|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|char|str|usize|isize|unit|never)\\b"
         },
         {
           "comment": "Return type arrow",
@@ -219,6 +302,10 @@
           "match": "\\|>"
         },
         {
+          "name": "keyword.operator.colon.resurg",
+          "match": ":"
+        },
+        {
           "name": "keyword.operator.optional-chain.resurg",
           "match": "\\?\\."
         },
@@ -241,6 +328,14 @@
         {
           "name": "keyword.operator.arithmetic.resurg",
           "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.not.resurg",
+          "match": "!"
+        },
+        {
+          "name": "keyword.operator.try.resurg",
+          "match": "\\?"
         },
         {
           "name": "keyword.operator.reference.resurg",

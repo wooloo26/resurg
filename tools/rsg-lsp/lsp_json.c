@@ -184,8 +184,10 @@ static JsonValue *jp_parse_array(JsonParser *p) {
         // Grow array.
         if (v->array.count >= cap) {
             cap = cap == 0 ? 8 : cap * 2;
-            JsonValue **tmp = realloc(v->array.items, (size_t)cap * sizeof(JsonValue *));
+            JsonValue **tmp =
+                (JsonValue **)realloc((void *)v->array.items, (size_t)cap * sizeof(JsonValue *));
             if (tmp == NULL) {
+                json_free(item);
                 json_free(v);
                 return NULL;
             }
@@ -344,14 +346,14 @@ void json_free(JsonValue *val) {
         break;
     case JSON_ARRAY:
         for (int32_t i = 0; i < val->array.count; i++) {
-            json_free(val->array.items[i]);
+            json_free(val->array.items[i]); // NOLINT(clang-analyzer-core.CallAndMessage)
         }
-        free(val->array.items);
+        free((void *)val->array.items);
         break;
     case JSON_OBJECT:
         for (int32_t i = 0; i < val->object.count; i++) {
-            free(val->object.pairs[i].key);
-            json_free(val->object.pairs[i].value);
+            free(val->object.pairs[i].key);        // NOLINT(clang-analyzer-core.CallAndMessage)
+            json_free(val->object.pairs[i].value); // NOLINT(clang-analyzer-core.CallAndMessage)
         }
         free(val->object.pairs);
         break;

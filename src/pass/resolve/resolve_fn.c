@@ -32,6 +32,13 @@ FnSig *build_fn_sig(Sema *sema, ASTNode *decl, bool is_pub) {
 
     for (int32_t j = 0; j < sig->param_count; j++) {
         ASTNode *param = decl->fn_decl.params[j];
+        // Forbid 'Self' as a parameter type
+        if (param->param.type.kind == AST_TYPE_NAME && param->param.type.name != NULL &&
+            strcmp(param->param.type.name, "Self") == 0) {
+            SEMA_ERR(sema, param->loc,
+                     "'Self' cannot be used as a parameter type; "
+                     "use an untyped receiver instead");
+        }
         const Type *pt = resolve_ast_type(sema, &param->param.type);
         if (pt == NULL) {
             pt = &TYPE_ERR_INST;

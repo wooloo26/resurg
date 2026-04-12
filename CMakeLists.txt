@@ -43,6 +43,8 @@ set(LSP_SRCS
     tools/rsg-lsp/lsp_json.c
     tools/rsg-lsp/lsp_transport.c
     tools/rsg-lsp/lsp_server.c
+    tools/rsg-lsp/lsp_semtokens.c
+    tools/rsg-lsp/lsp_symbol.c
 )
 
 add_executable(rsg-lsp ${LSP_SRCS})

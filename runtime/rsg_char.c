@@ -25,11 +25,13 @@ bool rsg_char_is_lower(char c) {
 }
 
 char rsg_char_to_upper(char c) {
-    return (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions)
+    return (c >= 'a' && c <= 'z') ? (char)(c - 32) : (char)c;
 }
 
 char rsg_char_to_lower(char c) {
-    return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+    // NOLINTNEXTLINE(bugprone-narrowing-conversions)
+    return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
 }
 
 RsgStr rsg_char_to_str(char c) {

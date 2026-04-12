@@ -427,14 +427,16 @@ static ASTNode *parse_ext_decl(Parser *parser) {
 
     parser_skip_newlines(parser);
     parser_expect(parser, TOKEN_LEFT_BRACE);
-    parser_skip_newlines(parser);
+    parser_skip_newlines_collect_docs(parser);
 
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        const char *method_doc = parser_take_doc(parser);
         // Don't consume `pub` if `#[attr]` comes first — parse_method_decl handles it.
         bool method_is_pub = !parser_check(parser, TOKEN_HASH) && parser_match(parser, TOKEN_PUB);
         if (parser_check(parser, TOKEN_FN) || parser_check(parser, TOKEN_DECLARE) ||
             parser_check(parser, TOKEN_HASH)) {
             ASTNode *method = parse_method_decl(parser, node->ext_decl->target_name, method_is_pub);
+            method->doc_comment = method_doc;
             BUF_PUSH(node->ext_decl->methods, method);
         } else if (parser_check(parser, TOKEN_TYPE)) {
             // Associated type: type Name = ConcreteType  OR  type Pact::Name = ConcreteType
@@ -457,7 +459,7 @@ static ASTNode *parse_ext_decl(Parser *parser) {
             PARSER_ERR(parser, parser_current_loc(parser), "expected method in ext block");
             parser_advance(parser);
         }
-        parser_skip_newlines(parser);
+        parser_skip_newlines_collect_docs(parser);
     }
 
     parser_expect(parser, TOKEN_RIGHT_BRACE);

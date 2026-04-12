@@ -648,6 +648,251 @@ def test_document_symbol(t: LspTest) -> None:
 # ── Main ────────────────────────────────────────────────────────────────
 
 
+def test_hover_ext_value_recv(t: LspTest) -> None:
+    """Hover on ext method with bare value receiver shows ext context and receiver."""
+    proc = t.start_server()
+    try:
+        t.initialize(proc)
+        # ext i32 method with bare value receiver (untyped alias)
+        src = (
+            "ext i32 {\n"
+            "    /// Doubles an integer.\n"
+            "    fn doubled(n) -> i32 {\n"
+            "        return n * 2\n"
+            "    }\n"
+            "}\n"
+            "fn main() {\n"
+            "    x := 42.doubled()\n"
+            "}\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".rsg", mode="w", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src)
+            tmp_path = f.name
+        try:
+            uri = file_uri(tmp_path)
+            notification(proc, "textDocument/didOpen", {
+                "textDocument": {"uri": uri, "languageId": "resurg", "version": 1, "text": src},
+            })
+            _diag = read_message(proc, timeout=5.0)
+            if _diag is None:
+                t.fail("hover ext value recv: no publishDiagnostics after didOpen")
+                return
+
+            # Hover over "doubled" on line 7, character 12.
+            request(proc, 20, "textDocument/hover", {
+                "textDocument": {"uri": uri},
+                "position": {"line": 7, "character": 12},
+            })
+            resp = read_message(proc, timeout=5.0)
+            if resp is None or "result" not in resp:
+                t.fail("hover ext value recv: no response")
+                return
+            result = resp["result"]
+            if result is None:
+                t.fail("hover ext value recv: result is null")
+                return
+            value = result.get("contents", {}).get("value", "")
+            if "ext i32" not in value:
+                t.fail("hover ext value recv: missing 'ext i32' context", value)
+                return
+            if "doubled" not in value:
+                t.fail("hover ext value recv: missing method name", value)
+                return
+            if "n /* i32 */" not in value:
+                t.fail("hover ext value recv: missing receiver annotation 'n /* i32 */'", value)
+                return
+            if "Doubles an integer" not in value:
+                t.fail("hover ext value recv: missing doc comment", value)
+                return
+            t.ok("hover ext value recv: shows ext context, receiver, and doc")
+        finally:
+            os.unlink(tmp_path)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_hover_ext_ptr_recv(t: LspTest) -> None:
+    """Hover on ext method with pointer receiver shows *recv_name."""
+    proc = t.start_server()
+    try:
+        t.initialize(proc)
+        src = (
+            "struct Counter {\n"
+            "    value: i32 = 0\n"
+            "}\n"
+            "ext Counter {\n"
+            "    fn inc(mut *c) {\n"
+            "        c.value = c.value + 1\n"
+            "    }\n"
+            "}\n"
+            "fn main() {\n"
+            "    ct := Counter {}\n"
+            "    ct.inc()\n"
+            "}\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".rsg", mode="w", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src)
+            tmp_path = f.name
+        try:
+            uri = file_uri(tmp_path)
+            notification(proc, "textDocument/didOpen", {
+                "textDocument": {"uri": uri, "languageId": "resurg", "version": 1, "text": src},
+            })
+            _diag = read_message(proc, timeout=5.0)
+            if _diag is None:
+                t.fail("hover ext ptr recv: no publishDiagnostics after didOpen")
+                return
+
+            # Hover over "inc" on line 10, character 7.
+            request(proc, 21, "textDocument/hover", {
+                "textDocument": {"uri": uri},
+                "position": {"line": 10, "character": 7},
+            })
+            resp = read_message(proc, timeout=5.0)
+            if resp is None or "result" not in resp:
+                t.fail("hover ext ptr recv: no response")
+                return
+            result = resp["result"]
+            if result is None:
+                t.fail("hover ext ptr recv: result is null")
+                return
+            value = result.get("contents", {}).get("value", "")
+            if "ext Counter" not in value:
+                t.fail("hover ext ptr recv: missing 'ext Counter' context", value)
+                return
+            if "mut *c" not in value:
+                t.fail("hover ext ptr recv: missing 'mut *c' receiver", value)
+                return
+            t.ok("hover ext ptr recv: shows ext context and pointer receiver")
+        finally:
+            os.unlink(tmp_path)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_hover_struct(t: LspTest) -> None:
+    """Hover on struct name shows field layout."""
+    proc = t.start_server()
+    try:
+        t.initialize(proc)
+        src = (
+            "struct Point {\n"
+            "    x: f64\n"
+            "    y: f64\n"
+            "}\n"
+            "fn main() {\n"
+            "    p := Point { x = 1.0, y = 2.0 }\n"
+            "}\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".rsg", mode="w", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src)
+            tmp_path = f.name
+        try:
+            uri = file_uri(tmp_path)
+            notification(proc, "textDocument/didOpen", {
+                "textDocument": {"uri": uri, "languageId": "resurg", "version": 1, "text": src},
+            })
+            _diag = read_message(proc, timeout=5.0)
+            if _diag is None:
+                t.fail("hover struct: no publishDiagnostics after didOpen")
+                return
+
+            # Hover over "Point" on line 5, character 9.
+            request(proc, 22, "textDocument/hover", {
+                "textDocument": {"uri": uri},
+                "position": {"line": 5, "character": 9},
+            })
+            resp = read_message(proc, timeout=5.0)
+            if resp is None or "result" not in resp:
+                t.fail("hover struct: no response")
+                return
+            result = resp["result"]
+            if result is None:
+                t.fail("hover struct: result is null")
+                return
+            value = result.get("contents", {}).get("value", "")
+            if "Point" not in value:
+                t.fail("hover struct: missing struct name", value)
+                return
+            if "x" not in value or "y" not in value:
+                t.fail("hover struct: missing fields", value)
+                return
+            t.ok("hover struct: shows struct name and fields")
+        finally:
+            os.unlink(tmp_path)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_hover_pact(t: LspTest) -> None:
+    """Hover on pact name shows pact info."""
+    proc = t.start_server()
+    try:
+        t.initialize(proc)
+        src = (
+            "/// A describable thing.\n"
+            "pact Describe {\n"
+            "    fn describe() -> str\n"
+            "}\n"
+            "fn show<T: Describe>(v: T) -> str {\n"
+            "    return v.describe()\n"
+            "}\n"
+            "fn main() {\n"
+            "    x := 1\n"
+            "}\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            suffix=".rsg", mode="w", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(src)
+            tmp_path = f.name
+        try:
+            uri = file_uri(tmp_path)
+            notification(proc, "textDocument/didOpen", {
+                "textDocument": {"uri": uri, "languageId": "resurg", "version": 1, "text": src},
+            })
+            _diag = read_message(proc, timeout=5.0)
+            if _diag is None:
+                t.fail("hover pact: no publishDiagnostics after didOpen")
+                return
+
+            # Hover over "Describe" on line 4, character 14.
+            request(proc, 23, "textDocument/hover", {
+                "textDocument": {"uri": uri},
+                "position": {"line": 4, "character": 14},
+            })
+            resp = read_message(proc, timeout=5.0)
+            if resp is None or "result" not in resp:
+                t.fail("hover pact: no response")
+                return
+            result = resp["result"]
+            if result is None:
+                t.fail("hover pact: result is null")
+                return
+            value = result.get("contents", {}).get("value", "")
+            if "Describe" not in value:
+                t.fail("hover pact: missing pact name", value)
+                return
+            if "describable" not in value.lower():
+                t.fail("hover pact: missing doc comment", value)
+                return
+            t.ok("hover pact: shows pact name and doc comment")
+        finally:
+            os.unlink(tmp_path)
+    finally:
+        proc.kill()
+        proc.wait()
+
+
 ALL_TESTS = [
     test_initialize,
     test_shutdown_exit,
@@ -657,6 +902,10 @@ ALL_TESTS = [
     test_diagnostics_severity,
     test_diagnostics_message_content,
     test_hover,
+    test_hover_ext_value_recv,
+    test_hover_ext_ptr_recv,
+    test_hover_struct,
+    test_hover_pact,
     test_definition,
     test_document_symbol,
 ]

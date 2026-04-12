@@ -223,6 +223,16 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
     // Register methods
     for (int32_t i = 0; i < BUF_LEN(decl->pact_decl->methods); i++) {
         ASTNode *method = decl->pact_decl->methods[i];
+        // Forbid 'Self' as a parameter type in pact method signatures
+        for (int32_t j = 0; j < BUF_LEN(method->fn_decl.params); j++) {
+            ASTNode *param = method->fn_decl.params[j];
+            if (param->param.type.kind == AST_TYPE_NAME && param->param.type.name != NULL &&
+                strcmp(param->param.type.name, "Self") == 0) {
+                SEMA_ERR(sema, param->loc,
+                         "'Self' cannot be used as a parameter type; "
+                         "use an untyped receiver instead");
+            }
+        }
         StructMethodInfo mi = {.name = method->fn_decl.name,
                                .is_mut_recv = method->fn_decl.is_mut_recv,
                                .is_ptr_recv = method->fn_decl.is_ptr_recv,

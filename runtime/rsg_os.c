@@ -1,4 +1,5 @@
 #ifndef _WIN32
+// NOLINTNEXTLINE(readability-identifier-naming)
 #define _POSIX_C_SOURCE 200112L
 #endif
 
@@ -60,7 +61,7 @@ void rsg_os_set_env(RsgStr key, RsgStr value) {
 #ifdef _WIN32
     _putenv_s(ckey, cval);
 #else
-    setenv(ckey, cval, 1);
+    setenv(ckey, cval, 1); // NOLINT(concurrency-mt-unsafe)
 #endif
 
     free(ckey);
@@ -68,5 +69,5 @@ void rsg_os_set_env(RsgStr key, RsgStr value) {
 }
 
 void rsg_os_exit(int32_t code) {
-    exit(code);
+    exit(code); // NOLINT(concurrency-mt-unsafe)
 }

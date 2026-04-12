@@ -235,7 +235,8 @@ RsgStr rsg_str_to_upper(RsgStr s) {
     char *buf = checked_malloc(s.len + 1);
     for (int32_t i = 0; i < s.len; i++) {
         char c = s.data[i];
-        buf[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : c;
+        // NOLINTNEXTLINE(bugprone-narrowing-conversions)
+        buf[i] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : (char)c;
     }
     buf[s.len] = '\0';
     return (RsgStr){.data = buf, .len = s.len, .ref_count = 1};
@@ -248,7 +249,8 @@ RsgStr rsg_str_to_lower(RsgStr s) {
     char *buf = checked_malloc(s.len + 1);
     for (int32_t i = 0; i < s.len; i++) {
         char c = s.data[i];
-        buf[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
+        // NOLINTNEXTLINE(bugprone-narrowing-conversions)
+        buf[i] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
     }
     buf[s.len] = '\0';
     return (RsgStr){.data = buf, .len = s.len, .ref_count = 1};

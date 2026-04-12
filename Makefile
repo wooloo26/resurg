@@ -95,6 +95,20 @@ vscode-lsp: all
 	@$(PYTHON) tests/lsp/test_lsp.py --lsp=$(BUILD)/rsg-lsp$(EXE)
 	@echo 'VSCode LSP extension: built and tested.'
 
+# Install the VSCode extension via symlink (dev mode)
+install-ext: vscode-lsp
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(APPDATA)\Code\extensions\resurg.resurg-lsp-1.0.0" ( \
+		mklink /D "$(APPDATA)\Code\extensions\resurg.resurg-lsp-1.0.0" "$(CURDIR)\$(VSCODE_EXT)" \
+	)
+else
+	@EXT_DIR="$$HOME/.vscode-server/extensions"; \
+	 if [ ! -d "$$EXT_DIR" ]; then EXT_DIR="$$HOME/.vscode/extensions"; fi; \
+	 mkdir -p "$$EXT_DIR"; \
+	 ln -sfn "$(CURDIR)/$(VSCODE_EXT)" "$$EXT_DIR/resurg.resurg-lsp-1.0.0"
+endif
+	@echo 'VSCode extension installed (symlink).'
+
 # Clean only test build artifacts (preserves the compiler)
 clean-tests:
 ifeq ($(OS),Windows_NT)

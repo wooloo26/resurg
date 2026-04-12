@@ -19,12 +19,11 @@
 #include "core/common.h"
 #include "core/diag.h"
 #include "lsp_json.h"
+#include "lsp_semtokens.h"
+#include "lsp_symbol.h"
 #include "lsp_transport.h"
 #include "pass/lex/lex.h"
-#include "pass/resolve/_resolve.h"
-#include "pass/resolve/_sema.h"
 #include "repr/ast.h"
-#include "repr/types.h"
 #include "rsg/driver/pipeline.h"
 #include "rsg/pass/check/check.h"
 #include "rsg/pass/mono/mono.h"
@@ -154,368 +153,6 @@ static ASTNode **lsp_load_module(void *ctx, Arena *arena, const char *mod_path) 
     return file_node->file.decls;
 }
 
-// ── Symbol index ───────────────────────────────────────────────────────
-
-// LSP SymbolKind values.
-#define LSP_SK_FUNCTION 12
-#define LSP_SK_METHOD 6
-#define LSP_SK_STRUCT 23
-#define LSP_SK_ENUM 10
-#define LSP_SK_INTERFACE 11
-#define LSP_SK_VARIABLE 13
-#define LSP_SK_CONSTANT 14
-#define LSP_SK_FIELD 8
-#define LSP_SK_ENUM_MEMBER 22
-
-/** A resolved symbol entry in the document index. */
-typedef struct LspSymEntry {
-    char *name;       // symbol name (owned)
-    char *container;  // owning type name, or NULL (owned)
-    char *hover;      // pre-formatted hover markdown (owned)
-    SrcLoc loc;       // definition location
-    int32_t lsp_kind; // LSP SymbolKind
-} LspSymEntry;
-
-static void sym_entry_free(LspSymEntry *e) {
-    free(e->name);
-    free(e->container);
-    free(e->hover);
-}
-
-// ── Hover formatting helpers ───────────────────────────────────────────
-
-/** Append printf-formatted text to a dynamic string buffer. */
-static void sbuf_printf(char **buf, const char *fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(NULL, 0, fmt, ap);
-    va_end(ap);
-    if (n <= 0) {
-        return;
-    }
-    size_t old_len = *buf != NULL ? strlen(*buf) : 0;
-    char *new_buf = realloc(*buf, old_len + (size_t)n + 1);
-    if (new_buf == NULL) {
-        return;
-    }
-    *buf = new_buf;
-    va_start(ap, fmt);
-    vsnprintf(*buf + old_len, (size_t)n + 1, fmt, ap);
-    va_end(ap);
-}
-
-/** Build hover text for a function declaration. */
-static char *format_fn_hover(Arena *arena, const ASTNode *fn, const Sema *sema) {
-    char *buf = NULL;
-    const char *vis = fn->fn_decl.is_pub ? "pub " : "";
-    sbuf_printf(&buf, "```resurg\n%sfn %s(", vis, fn->fn_decl.name);
-
-    int32_t pc = BUF_LEN(fn->fn_decl.params);
-    for (int32_t i = 0; i < pc; i++) {
-        ASTNode *p = fn->fn_decl.params[i];
-        if (i > 0) {
-            sbuf_printf(&buf, ", ");
-        }
-        if (p->kind == NODE_PARAM) {
-            const char *tname = p->type != NULL ? type_name(arena, p->type) : "?";
-            if (strcmp(p->param.name, "self") == 0) {
-                sbuf_printf(&buf, "self");
-            } else {
-                sbuf_printf(&buf, "%s: %s", p->param.name, tname);
-            }
-        }
-    }
-
-    const Type *ret =
-        fn->type != NULL && fn->type->kind == TYPE_FN ? fn->type->fn_type.return_type : NULL;
-    if (ret != NULL && ret->kind != TYPE_UNIT) {
-        sbuf_printf(&buf, ") -> %s", type_name(arena, ret));
-    } else {
-        sbuf_printf(&buf, ")");
-    }
-    sbuf_printf(&buf, "\n```");
-
-    if (fn->doc_comment != NULL) {
-        sbuf_printf(&buf, "\n\n---\n\n%s", fn->doc_comment);
-    }
-    (void)sema;
-    return buf;
-}
-
-/** Build hover text for a struct declaration. */
-static char *format_struct_hover(Arena *arena, const StructDef *sd, const ASTNode *node) {
-    char *buf = NULL;
-    sbuf_printf(&buf, "```resurg\nstruct %s", sd->name);
-    int32_t fc = BUF_LEN(sd->fields);
-    if (fc > 0) {
-        sbuf_printf(&buf, " {\n");
-        for (int32_t i = 0; i < fc; i++) {
-            const char *tname =
-                sd->fields[i].type != NULL ? type_name(arena, sd->fields[i].type) : "?";
-            sbuf_printf(&buf, "    %s: %s,\n", sd->fields[i].name, tname);
-        }
-        sbuf_printf(&buf, "}");
-    }
-    sbuf_printf(&buf, "\n```");
-    if (node != NULL && node->doc_comment != NULL) {
-        sbuf_printf(&buf, "\n\n---\n\n%s", node->doc_comment);
-    }
-    return buf;
-}
-
-/** Build hover text for an enum declaration. */
-static char *format_enum_hover(const ASTNode *node) {
-    char *buf = NULL;
-    EnumDeclData *ed = node->enum_decl;
-    sbuf_printf(&buf, "```resurg\nenum %s", ed->name);
-    int32_t vc = BUF_LEN(ed->variants);
-    if (vc > 0) {
-        sbuf_printf(&buf, " {\n");
-        for (int32_t i = 0; i < vc; i++) {
-            sbuf_printf(&buf, "    %s,\n", ed->variants[i].name);
-        }
-        sbuf_printf(&buf, "}");
-    }
-    sbuf_printf(&buf, "\n```");
-    if (node->doc_comment != NULL) {
-        sbuf_printf(&buf, "\n\n---\n\n%s", node->doc_comment);
-    }
-    return buf;
-}
-
-/** Build hover text for a pact declaration. */
-static char *format_pact_hover(const ASTNode *node) {
-    char *buf = NULL;
-    PactDeclData *pd = node->pact_decl;
-    sbuf_printf(&buf, "```resurg\npact %s\n```", pd->name);
-    if (node->doc_comment != NULL) {
-        sbuf_printf(&buf, "\n\n---\n\n%s", node->doc_comment);
-    }
-    return buf;
-}
-
-/** Build hover text for a variable declaration. */
-static char *format_var_hover(Arena *arena, const ASTNode *node) {
-    char *buf = NULL;
-    const char *kw = node->var_decl.is_var ? "var" : "let";
-    if (node->var_decl.is_immut) {
-        kw = "immut";
-    }
-    const char *tname = node->type != NULL ? type_name(arena, node->type) : "?";
-    sbuf_printf(&buf, "```resurg\n%s %s: %s\n```", kw, node->var_decl.name, tname);
-    if (node->doc_comment != NULL) {
-        sbuf_printf(&buf, "\n\n---\n\n%s", node->doc_comment);
-    }
-    return buf;
-}
-
-// ── Symbol index builder ───────────────────────────────────────────────
-
-/** Index a fn declaration.  @p container is non-NULL for methods. */
-static void index_fn_decl(LspSymEntry **syms, Arena *arena, const ASTNode *fn, const Sema *sema,
-                          const char *container) {
-    LspSymEntry e = {0};
-    e.name = lsp_strdup(fn->fn_decl.name);
-    e.container = container != NULL ? lsp_strdup(container) : NULL;
-    e.loc = fn->loc;
-    e.lsp_kind = container != NULL ? LSP_SK_METHOD : LSP_SK_FUNCTION;
-    e.hover = format_fn_hover(arena, fn, sema);
-    BUF_PUSH(*syms, e);
-}
-
-/** Index a struct and its methods. */
-static void index_struct_decl(LspSymEntry **syms, Arena *arena, const ASTNode *node,
-                              const Sema *sema) {
-    StructDeclData *sd_ast = node->struct_decl;
-    StructDef *sd = sema_lookup_struct(sema, sd_ast->name);
-
-    LspSymEntry e = {0};
-    e.name = lsp_strdup(sd_ast->name);
-    e.loc = node->loc;
-    e.lsp_kind = LSP_SK_STRUCT;
-    e.hover = sd != NULL ? format_struct_hover(arena, sd, node) : NULL;
-    BUF_PUSH(*syms, e);
-
-    // Index methods.
-    int32_t mc = BUF_LEN(sd_ast->methods);
-    for (int32_t i = 0; i < mc; i++) {
-        index_fn_decl(syms, arena, sd_ast->methods[i], sema, sd_ast->name);
-    }
-
-    // Index fields.
-    if (sd != NULL) {
-        int32_t fc = BUF_LEN(sd->fields);
-        for (int32_t i = 0; i < fc; i++) {
-            LspSymEntry fe = {0};
-            fe.name = lsp_strdup(sd->fields[i].name);
-            fe.container = lsp_strdup(sd_ast->name);
-            fe.lsp_kind = LSP_SK_FIELD;
-            // Best-effort location: use the struct's location.
-            fe.loc = node->loc;
-            const char *tname =
-                sd->fields[i].type != NULL ? type_name(arena, sd->fields[i].type) : "?";
-            char *hbuf = NULL;
-            sbuf_printf(&hbuf, "```resurg\n%s.%s: %s\n```", sd_ast->name, sd->fields[i].name,
-                        tname);
-            fe.hover = hbuf;
-            BUF_PUSH(*syms, fe);
-        }
-    }
-}
-
-/** Index an enum and its methods. */
-static void index_enum_decl(LspSymEntry **syms, Arena *arena, const ASTNode *node,
-                            const Sema *sema) {
-    EnumDeclData *ed = node->enum_decl;
-
-    LspSymEntry e = {0};
-    e.name = lsp_strdup(ed->name);
-    e.loc = node->loc;
-    e.lsp_kind = LSP_SK_ENUM;
-    e.hover = format_enum_hover(node);
-    BUF_PUSH(*syms, e);
-
-    // Index variants.
-    int32_t vc = BUF_LEN(ed->variants);
-    for (int32_t i = 0; i < vc; i++) {
-        LspSymEntry ve = {0};
-        ve.name = lsp_strdup(ed->variants[i].name);
-        ve.container = lsp_strdup(ed->name);
-        ve.loc = node->loc;
-        ve.lsp_kind = LSP_SK_ENUM_MEMBER;
-        char *hbuf = NULL;
-        sbuf_printf(&hbuf, "```resurg\n%s::%s\n```", ed->name, ed->variants[i].name);
-        ve.hover = hbuf;
-        BUF_PUSH(*syms, ve);
-    }
-
-    // Index methods.
-    int32_t mc = BUF_LEN(ed->methods);
-    for (int32_t i = 0; i < mc; i++) {
-        index_fn_decl(syms, arena, ed->methods[i], sema, ed->name);
-    }
-    (void)arena;
-}
-
-/** Index a pact declaration. */
-static void index_pact_decl(LspSymEntry **syms, Arena *arena, const ASTNode *node,
-                            const Sema *sema) {
-    PactDeclData *pd = node->pact_decl;
-
-    LspSymEntry e = {0};
-    e.name = lsp_strdup(pd->name);
-    e.loc = node->loc;
-    e.lsp_kind = LSP_SK_INTERFACE;
-    e.hover = format_pact_hover(node);
-    BUF_PUSH(*syms, e);
-
-    int32_t mc = BUF_LEN(pd->methods);
-    for (int32_t i = 0; i < mc; i++) {
-        index_fn_decl(syms, arena, pd->methods[i], sema, pd->name);
-    }
-    (void)arena;
-}
-
-/** Index methods inside an ext block. */
-static void index_ext_decl(LspSymEntry **syms, Arena *arena, const ASTNode *node,
-                           const Sema *sema) {
-    ExtDeclData *ed = node->ext_decl;
-    int32_t mc = BUF_LEN(ed->methods);
-    for (int32_t i = 0; i < mc; i++) {
-        index_fn_decl(syms, arena, ed->methods[i], sema, ed->target_name);
-    }
-}
-
-/** Build the complete symbol index for a document.  Caller must BUF_FREE the result. */
-static LspSymEntry *build_symbol_index(Arena *arena, const ASTNode *file_node, const Sema *sema,
-                                       const char *file_path) {
-    LspSymEntry *syms = NULL;
-    int32_t dc = BUF_LEN(file_node->file.decls);
-    for (int32_t i = 0; i < dc; i++) {
-        const ASTNode *decl = file_node->file.decls[i];
-        // Skip declarations from injected std files.
-        if (decl->loc.file != NULL && file_path != NULL && strcmp(decl->loc.file, file_path) != 0) {
-            continue;
-        }
-        switch (decl->kind) {
-        case NODE_FN_DECL:
-            index_fn_decl(&syms, arena, decl, sema, NULL);
-            break;
-        case NODE_STRUCT_DECL:
-            index_struct_decl(&syms, arena, decl, sema);
-            break;
-        case NODE_ENUM_DECL:
-            index_enum_decl(&syms, arena, decl, sema);
-            break;
-        case NODE_PACT_DECL:
-            index_pact_decl(&syms, arena, decl, sema);
-            break;
-        case NODE_EXT_DECL:
-            index_ext_decl(&syms, arena, decl, sema);
-            break;
-        case NODE_VAR_DECL: {
-            LspSymEntry e = {0};
-            e.name = lsp_strdup(decl->var_decl.name);
-            e.loc = decl->loc;
-            e.lsp_kind = decl->var_decl.is_immut ? LSP_SK_CONSTANT : LSP_SK_VARIABLE;
-            e.hover = format_var_hover(arena, decl);
-            BUF_PUSH(syms, e);
-            break;
-        }
-        default:
-            break;
-        }
-    }
-    return syms;
-}
-
-/** Extract the identifier under the cursor from document text. */
-static char *extract_word_at(const char *text, int32_t line, int32_t col) {
-    const char *p = text;
-    for (int32_t i = 0; i < line && *p != '\0'; i++) {
-        while (*p != '\0' && *p != '\n') {
-            p++;
-        }
-        if (*p == '\n') {
-            p++;
-        }
-    }
-    const char *line_start = p;
-    for (int32_t i = 0; i < col && *p != '\0' && *p != '\n'; i++) {
-        p++;
-    }
-    const char *start = p;
-    while (start > line_start && (isalnum((unsigned char)start[-1]) || start[-1] == '_')) {
-        start--;
-    }
-    const char *end = p;
-    while (*end != '\0' && *end != '\n' && (isalnum((unsigned char)*end) || *end == '_')) {
-        end++;
-    }
-    if (start == end) {
-        return NULL;
-    }
-    size_t len = (size_t)(end - start);
-    char *word = malloc(len + 1);
-    if (word == NULL) {
-        return NULL;
-    }
-    memcpy(word, start, len);
-    word[len] = '\0';
-    return word;
-}
-
-/** Find a symbol by name in the index.  Returns NULL if not found. */
-static const LspSymEntry *find_symbol(const LspSymEntry *syms, const char *name) {
-    int32_t n = BUF_LEN(syms);
-    for (int32_t i = 0; i < n; i++) {
-        if (strcmp(syms[i].name, name) == 0) {
-            return &syms[i];
-        }
-    }
-    return NULL;
-}
-
 // ── Document store ─────────────────────────────────────────────────────
 
 /** An open document tracked by the server. */
@@ -524,6 +161,7 @@ typedef struct LspDocument {
     char *text;
     int32_t version;
     LspSymEntry *symbols; // buf - symbol index (rebuilt on each change)
+    SemToken *sem_tokens; // buf - semantic tokens (rebuilt on each change)
     struct LspDocument *next;
 } LspDocument;
 
@@ -544,6 +182,7 @@ static char *uri_to_path(const char *uri) {
         return NULL;
     }
     const char *path = uri;
+    // NOLINTBEGIN(bugprone-branch-clone) - intentional: Windows uses +8, Unix uses +7
     if (strncmp(uri, "file:///", 8) == 0) {
 #ifdef _WIN32
         // file:///C:/foo → C:/foo
@@ -555,6 +194,7 @@ static char *uri_to_path(const char *uri) {
     } else if (strncmp(uri, "file://", 7) == 0) {
         path = uri + 7;
     }
+    // NOLINTEND(bugprone-branch-clone)
     size_t len = strlen(path);
     char *result = malloc(len + 1);
     if (result == NULL) {
@@ -587,7 +227,7 @@ static LspDocument *find_document(LspServer *srv, const char *uri) {
 static void free_symbol_index(LspSymEntry *syms) {
     int32_t n = BUF_LEN(syms);
     for (int32_t i = 0; i < n; i++) {
-        sym_entry_free(&syms[i]);
+        lsp_sym_entry_free(&syms[i]);
     }
     BUF_FREE(syms);
 }
@@ -601,6 +241,8 @@ static LspDocument *upsert_document(LspServer *srv, const char *uri, const char 
         doc->version = version;
         free_symbol_index(doc->symbols);
         doc->symbols = NULL;
+        BUF_FREE(doc->sem_tokens);
+        doc->sem_tokens = NULL;
         return doc;
     }
     doc = calloc(1, sizeof(LspDocument));
@@ -624,6 +266,7 @@ static void remove_document(LspServer *srv, const char *uri) {
             free(old->uri);
             free(old->text);
             free_symbol_index(old->symbols);
+            BUF_FREE(old->sem_tokens);
             free(old);
             return;
         }
@@ -688,11 +331,15 @@ static int diag_level_to_severity(DiagLevel level) {
  * Run lex → parse → resolve → check on a document and collect diagnostics.
  * Produces an LSP-format JSON diagnostics array string (heap-allocated).
  * If @p out_symbols is non-NULL, builds a symbol index (caller must BUF_FREE).
+ * If @p out_sem_tokens is non-NULL, builds semantic tokens (caller must BUF_FREE).
  */
 static char *compile_diagnostics(LspServer *srv, const char *text, const char *file_path,
-                                 LspSymEntry **out_symbols) {
+                                 LspSymEntry **out_symbols, SemToken **out_sem_tokens) {
     if (out_symbols != NULL) {
         *out_symbols = NULL;
+    }
+    if (out_sem_tokens != NULL) {
+        *out_sem_tokens = NULL;
     }
     Pipeline *pipeline = pipeline_create();
     Arena *arena = arena_create();
@@ -895,7 +542,12 @@ static char *compile_diagnostics(LspServer *srv, const char *text, const char *f
 
         // Build symbol index before destroying sema.
         if (out_symbols != NULL) {
-            *out_symbols = build_symbol_index(arena, file_node, sema, file_path);
+            *out_symbols = lsp_build_symbol_index(arena, file_node, sema, file_path);
+        }
+
+        // Build semantic tokens (param/receiver refs in function bodies).
+        if (out_sem_tokens != NULL) {
+            *out_sem_tokens = lsp_build_semantic_tokens(file_node, file_path);
         }
 
         sema_destroy(sema);
@@ -930,17 +582,21 @@ static void publish_diagnostics(LspServer *srv, const char *uri, const char *dia
 static void validate_document(LspServer *srv, const char *uri, const char *text) {
     char *file_path = uri_to_path(uri);
     LspSymEntry *syms = NULL;
-    char *diag_json =
-        compile_diagnostics(srv, text, file_path != NULL ? file_path : "buffer.rsg", &syms);
+    SemToken *sem_tokens = NULL;
+    char *diag_json = compile_diagnostics(srv, text, file_path != NULL ? file_path : "buffer.rsg",
+                                          &syms, &sem_tokens);
     publish_diagnostics(srv, uri, diag_json);
 
-    // Store the symbol index in the document.
+    // Store the symbol index and semantic tokens in the document.
     LspDocument *doc = find_document(srv, uri);
     if (doc != NULL) {
         free_symbol_index(doc->symbols);
         doc->symbols = syms;
+        BUF_FREE(doc->sem_tokens);
+        doc->sem_tokens = sem_tokens;
     } else {
         free_symbol_index(syms);
+        BUF_FREE(sem_tokens);
     }
 
     free(diag_json);
@@ -987,10 +643,38 @@ static void handle_initialize(LspServer *srv, int64_t id) {
     jbuf_key(&cap, "hoverProvider");
     jbuf_bool_val(&cap, true);
 
+    // referencesProvider
+    jbuf_comma(&cap);
+    jbuf_key(&cap, "referencesProvider");
+    jbuf_bool_val(&cap, true);
+
     // documentSymbolProvider
     jbuf_comma(&cap);
     jbuf_key(&cap, "documentSymbolProvider");
     jbuf_bool_val(&cap, true);
+
+    // semanticTokensProvider
+    jbuf_comma(&cap);
+    jbuf_key(&cap, "semanticTokensProvider");
+    jbuf_obj_start(&cap);
+    jbuf_key(&cap, "legend");
+    jbuf_obj_start(&cap);
+    jbuf_key(&cap, "tokenTypes");
+    jbuf_raw(&cap, "[\"namespace\",\"type\",\"class\",\"enum\",\"interface\","
+                   "\"struct\",\"typeParameter\",\"parameter\",\"variable\","
+                   "\"property\",\"enumMember\",\"event\",\"function\","
+                   "\"method\",\"macro\",\"keyword\",\"modifier\","
+                   "\"comment\",\"string\",\"number\",\"regexp\",\"operator\"]");
+    jbuf_comma(&cap);
+    jbuf_key(&cap, "tokenModifiers");
+    jbuf_raw(&cap, "[\"declaration\",\"definition\",\"readonly\",\"static\","
+                   "\"deprecated\",\"abstract\",\"async\",\"modification\","
+                   "\"documentation\",\"defaultLibrary\"]");
+    jbuf_obj_end(&cap); // end legend
+    jbuf_comma(&cap);
+    jbuf_key(&cap, "full");
+    jbuf_bool_val(&cap, true);
+    jbuf_obj_end(&cap); // end semanticTokensProvider
 
     jbuf_obj_end(&cap); // end capabilities
 
@@ -1085,13 +769,13 @@ static void handle_definition(LspServer *srv, int64_t id, JsonValue *params) {
         return;
     }
 
-    char *word = extract_word_at(doc->text, line, col);
+    char *word = lsp_extract_word_at(doc->text, line, col);
     if (word == NULL) {
         send_response(srv, id, "null");
         return;
     }
 
-    const LspSymEntry *sym = find_symbol(doc->symbols, word);
+    const LspSymEntry *sym = lsp_find_symbol(doc->symbols, word);
     if (sym == NULL) {
         send_response(srv, id, "null");
         free(word);
@@ -1121,13 +805,42 @@ static void handle_hover(LspServer *srv, int64_t id, JsonValue *params) {
         return;
     }
 
-    char *word = extract_word_at(doc->text, line, col);
+    char *word = lsp_extract_word_at(doc->text, line, col);
     if (word == NULL) {
         send_response(srv, id, "null");
         return;
     }
 
-    const LspSymEntry *sym = find_symbol(doc->symbols, word);
+    // Check builtin primitive types first.
+    const char *builtin_desc = lsp_builtin_type_hover(word);
+    if (builtin_desc != NULL) {
+        size_t len = strlen(word) + strlen(builtin_desc) + 32;
+        char *hover_text = malloc(len);
+        if (hover_text != NULL) {
+            snprintf(hover_text, len, "```resurg\n%s\n```\n\n%s", word, builtin_desc);
+        }
+
+        JsonBuf b;
+        jbuf_init(&b);
+        jbuf_obj_start(&b);
+        jbuf_key(&b, "contents");
+        jbuf_obj_start(&b);
+        jbuf_key(&b, "kind");
+        jbuf_str_val(&b, "markdown");
+        jbuf_comma(&b);
+        jbuf_key(&b, "value");
+        jbuf_str_val(&b, hover_text);
+        jbuf_obj_end(&b);
+        jbuf_obj_end(&b);
+
+        send_response(srv, id, jbuf_str(&b));
+        jbuf_destroy(&b);
+        free(hover_text);
+        free(word);
+        return;
+    }
+
+    const LspSymEntry *sym = lsp_find_symbol(doc->symbols, word);
     if (sym == NULL || sym->hover == NULL) {
         send_response(srv, id, "null");
         free(word);
@@ -1147,6 +860,70 @@ static void handle_hover(LspServer *srv, int64_t id, JsonValue *params) {
     jbuf_obj_end(&b);
     jbuf_obj_end(&b);
 
+    send_response(srv, id, jbuf_str(&b));
+    jbuf_destroy(&b);
+    free(word);
+}
+
+// ── textDocument/references ────────────────────────────────────────────
+
+static void handle_references(LspServer *srv, int64_t id, JsonValue *params) {
+    const char *uri = NULL;
+    int32_t line = 0, col = 0;
+    if (!parse_text_document_position(params, &uri, &line, &col)) {
+        send_response(srv, id, "[]");
+        return;
+    }
+
+    LspDocument *doc = find_document(srv, uri);
+    if (doc == NULL || doc->text == NULL) {
+        send_response(srv, id, "[]");
+        return;
+    }
+
+    char *word = lsp_extract_word_at(doc->text, line, col);
+    if (word == NULL) {
+        send_response(srv, id, "[]");
+        return;
+    }
+
+    size_t word_len = strlen(word);
+
+    JsonBuf b;
+    jbuf_init(&b);
+    jbuf_arr_start(&b);
+
+    // Scan the document text for all word-boundary occurrences.
+    const char *p = doc->text;
+    int32_t cur_line = 0;
+    int32_t cur_col = 0;
+
+    while (*p != '\0') {
+        if (strncmp(p, word, word_len) == 0) {
+            bool start_ok = (p == doc->text) || !(isalnum((unsigned char)p[-1]) || p[-1] == '_');
+            bool end_ok = !isalnum((unsigned char)p[word_len]) && p[word_len] != '_';
+
+            if (start_ok && end_ok) {
+                if (b.len > 1 && b.data[b.len - 1] != '[') {
+                    jbuf_comma(&b);
+                }
+                SrcLoc loc = {.file = NULL, .line = cur_line + 1, .column = cur_col + 1};
+                char *loc_json = location_to_json(uri, loc);
+                jbuf_raw(&b, loc_json);
+                free(loc_json);
+            }
+        }
+
+        if (*p == '\n') {
+            cur_line++;
+            cur_col = 0;
+        } else {
+            cur_col++;
+        }
+        p++;
+    }
+
+    jbuf_arr_end(&b);
     send_response(srv, id, jbuf_str(&b));
     jbuf_destroy(&b);
     free(word);
@@ -1233,6 +1010,66 @@ static void handle_document_symbol(LspServer *srv, int64_t id, JsonValue *params
     }
 
     jbuf_arr_end(&b);
+    send_response(srv, id, jbuf_str(&b));
+    jbuf_destroy(&b);
+}
+
+// ── textDocument/semanticTokens/full ───────────────────────────────────
+
+static void handle_semantic_tokens_full(LspServer *srv, int64_t id, JsonValue *params) {
+    JsonValue *td = json_get(params, "textDocument");
+    if (td == NULL) {
+        send_response(srv, id, "{\"data\":[]}");
+        return;
+    }
+    const char *uri = json_str(json_get(td, "uri"));
+    if (uri == NULL) {
+        send_response(srv, id, "{\"data\":[]}");
+        return;
+    }
+    LspDocument *doc = find_document(srv, uri);
+    if (doc == NULL || doc->sem_tokens == NULL) {
+        send_response(srv, id, "{\"data\":[]}");
+        return;
+    }
+
+    int32_t n = BUF_LEN(doc->sem_tokens);
+
+    // Sort tokens by position for delta encoding.
+    qsort(doc->sem_tokens, (size_t)n, sizeof(SemToken), lsp_sem_token_cmp);
+
+    JsonBuf b;
+    jbuf_init(&b);
+    jbuf_obj_start(&b);
+    jbuf_key(&b, "data");
+    jbuf_arr_start(&b);
+
+    int32_t prev_line = 0;
+    int32_t prev_col = 0;
+    for (int32_t i = 0; i < n; i++) {
+        const SemToken *t = &doc->sem_tokens[i];
+        int32_t delta_line = t->line - prev_line;
+        int32_t delta_col = delta_line == 0 ? t->start_char - prev_col : t->start_char;
+
+        if (i > 0) {
+            jbuf_comma(&b);
+        }
+        jbuf_int_val(&b, delta_line);
+        jbuf_comma(&b);
+        jbuf_int_val(&b, delta_col);
+        jbuf_comma(&b);
+        jbuf_int_val(&b, t->length);
+        jbuf_comma(&b);
+        jbuf_int_val(&b, t->token_type);
+        jbuf_comma(&b);
+        jbuf_int_val(&b, t->modifiers);
+
+        prev_line = t->line;
+        prev_col = t->start_char;
+    }
+
+    jbuf_arr_end(&b);
+    jbuf_obj_end(&b);
     send_response(srv, id, jbuf_str(&b));
     jbuf_destroy(&b);
 }
@@ -1374,8 +1211,12 @@ int lsp_server_run(LspServer *srv) {
             handle_definition(srv, id, params);
         } else if (strcmp(method, "textDocument/hover") == 0) {
             handle_hover(srv, id, params);
+        } else if (strcmp(method, "textDocument/references") == 0) {
+            handle_references(srv, id, params);
         } else if (strcmp(method, "textDocument/documentSymbol") == 0) {
             handle_document_symbol(srv, id, params);
+        } else if (strcmp(method, "textDocument/semanticTokens/full") == 0) {
+            handle_semantic_tokens_full(srv, id, params);
         }
         // Unknown methods are silently ignored (per LSP spec).
 
@@ -1396,6 +1237,7 @@ void lsp_server_destroy(LspServer *srv) {
         free(doc->uri);
         free(doc->text);
         free_symbol_index(doc->symbols);
+        BUF_FREE(doc->sem_tokens);
         free(doc);
         doc = next;
     }

@@ -167,13 +167,18 @@ RsgSlice rsg_fs_read_dir(RsgStr path) {
     int32_t capacity = 16;
     RsgStr *entries = checked_malloc(capacity * sizeof(RsgStr));
     struct dirent *ent;
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
     while ((ent = readdir(d)) != NULL) {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
             continue;
         }
         if (count >= capacity) {
             capacity *= 2;
-            entries = realloc(entries, capacity * sizeof(RsgStr));
+            RsgStr *tmp = realloc(entries, capacity * sizeof(RsgStr));
+            if (tmp == NULL) {
+                break;
+            }
+            entries = tmp;
         }
         entries[count++] = rsg_str_new(ent->d_name, (int32_t)strlen(ent->d_name));
     }
