@@ -110,6 +110,7 @@ struct EnumDef {
 /** Pact (interface) def — registered during the first pass. */
 struct PactDef {
     const char *name;
+    bool is_pub;
     StructFieldInfo *fields;   /* buf - required fields */
     StructMethodInfo *methods; /* buf - all methods (required + default) */
     const char **super_pacts;  /* buf - constraint alias refs */

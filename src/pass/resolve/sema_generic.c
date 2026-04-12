@@ -18,47 +18,114 @@ bool type_satisfies_bound(Sema *sema, const Type *type, const char *bound_name) 
         return false;
     }
 
-    // TODO: extend to support TYPE_ENUM once enums can conform to pacts
-    if (type == NULL || type->kind != TYPE_STRUCT) {
+    if (type == NULL) {
         return false;
     }
-    const char *struct_name = type->struct_type.name;
-    StructDef *sdef = sema_lookup_struct(sema, struct_name);
-    if (sdef == NULL) {
-        return false;
-    }
-    // Check required fields
-    for (int32_t i = 0; i < BUF_LEN(pact->fields); i++) {
-        bool found = false;
-        for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
-            if (strcmp(sdef->fields[j].name, pact->fields[i].name) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+
+    // ── Struct path ───────────────────────────────────────────────
+    if (type->kind == TYPE_STRUCT) {
+        const char *struct_name = type->struct_type.name;
+        StructDef *sdef = sema_lookup_struct(sema, struct_name);
+        if (sdef == NULL) {
             return false;
         }
+        // Check required fields
+        for (int32_t i = 0; i < BUF_LEN(pact->fields); i++) {
+            bool found = false;
+            for (int32_t j = 0; j < BUF_LEN(sdef->fields); j++) {
+                if (strcmp(sdef->fields[j].name, pact->fields[i].name) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        // Check required methods (non-default)
+        for (int32_t i = 0; i < BUF_LEN(pact->methods); i++) {
+            bool has_default =
+                pact->methods[i].decl != NULL && pact->methods[i].decl->fn_decl.body != NULL;
+            if (has_default) {
+                continue;
+            }
+            bool found = false;
+            for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
+                if (strcmp(sdef->methods[j].name, pact->methods[i].name) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        // Recursively check super pact requirements
+        for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
+            if (!type_satisfies_bound(sema, type, pact->super_pacts[i])) {
+                return false;
+            }
+        }
+        return true;
     }
-    // Check required methods (non-default)
+
+    // ── Enum path ─────────────────────────────────────────────────
+    if (type->kind == TYPE_ENUM) {
+        const char *enum_name = type->enum_type.name;
+        EnumDef *edef = sema_lookup_enum(sema, enum_name);
+        if (edef == NULL) {
+            return false;
+        }
+        // Pacts cannot require fields on enums
+        if (BUF_LEN(pact->fields) > 0) {
+            return false;
+        }
+        for (int32_t i = 0; i < BUF_LEN(pact->methods); i++) {
+            bool has_default =
+                pact->methods[i].decl != NULL && pact->methods[i].decl->fn_decl.body != NULL;
+            if (has_default) {
+                continue;
+            }
+            bool found = false;
+            for (int32_t j = 0; j < BUF_LEN(edef->methods); j++) {
+                if (strcmp(edef->methods[j].name, pact->methods[i].name) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
+            if (!type_satisfies_bound(sema, type, pact->super_pacts[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // ── Primitive path (i32, str, bool, f64, etc.) ────────────────
+    const char *prim_name = type_name(sema->base.arena, type);
+    if (prim_name == NULL) {
+        return false;
+    }
+    // Pacts cannot require fields on primitives
+    if (BUF_LEN(pact->fields) > 0) {
+        return false;
+    }
     for (int32_t i = 0; i < BUF_LEN(pact->methods); i++) {
         bool has_default =
             pact->methods[i].decl != NULL && pact->methods[i].decl->fn_decl.body != NULL;
         if (has_default) {
             continue;
         }
-        bool found = false;
-        for (int32_t j = 0; j < BUF_LEN(sdef->methods); j++) {
-            if (strcmp(sdef->methods[j].name, pact->methods[i].name) == 0) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
+        const char *key =
+            arena_sprintf(sema->base.arena, "%s.%s", prim_name, pact->methods[i].name);
+        if (sema_lookup_fn(sema, key) == NULL) {
             return false;
         }
     }
-    // Recursively check super pact requirements
     for (int32_t i = 0; i < BUF_LEN(pact->super_pacts); i++) {
         if (!type_satisfies_bound(sema, type, pact->super_pacts[i])) {
             return false;

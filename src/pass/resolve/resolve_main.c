@@ -201,25 +201,27 @@ static void register_all_decls(Sema *sema, ASTNode *file) {
         }
     }
 
-    // Register extension methods and validate conformances
+    // Register extension methods
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_EXT_DECL) {
             register_ext_decl(sema, decl);
         }
     }
-    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
-        ASTNode *decl = file->file.decls[i];
-        if (decl->kind == NODE_EXT_DECL && BUF_LEN(decl->ext_decl->impl_pacts) > 0) {
-            enforce_ext_pact_conformances(sema, decl);
-        }
-    }
 
-    // Resolve use imports (after all modules' decls are registered)
+    // Resolve use imports (before pact conformance checks so imported pact names are visible)
     for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
         ASTNode *decl = file->file.decls[i];
         if (decl->kind == NODE_USE_DECL) {
             register_use_decl(sema, decl);
+        }
+    }
+
+    // Validate pact conformances (after use imports make pact names available)
+    for (int32_t i = 0; i < BUF_LEN(file->file.decls); i++) {
+        ASTNode *decl = file->file.decls[i];
+        if (decl->kind == NODE_EXT_DECL && BUF_LEN(decl->ext_decl->impl_pacts) > 0) {
+            enforce_ext_pact_conformances(sema, decl);
         }
     }
 }

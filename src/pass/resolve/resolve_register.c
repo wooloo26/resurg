@@ -192,6 +192,7 @@ void register_pact_def(Sema *sema, ASTNode *decl) {
 
     PactDef *def = rsg_malloc(sizeof(*def));
     def->name = pact_name;
+    def->is_pub = decl->pact_decl->is_pub;
     def->fields = NULL;
     def->methods = NULL;
     def->super_pacts = NULL;

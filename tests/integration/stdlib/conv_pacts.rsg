@@ -1,0 +1,91 @@
+// Test std/conv module: pacts and generic functions on primitives
+// TEST: normal
+
+mod conv
+use self::conv::*
+
+// ── Display pact ──
+
+fn test_display() {
+    assert(to_string<i32>(42) == "42", "display i32")
+    assert(to_string<i64>(i64(100)) == "100", "display i64")
+    assert(to_string<f64>(3.14) == "3.14", "display f64")
+    assert(to_string<bool>(true) == "true", "display bool")
+    assert(to_string<str>("hello") == "hello", "display str")
+    assert(to_string<char>('A') == "A", "display char")
+}
+
+fn test_display_direct() {
+    assert(42.display() == "42", "direct i32 display")
+    assert(true.display() == "true", "direct bool display")
+    assert("hi".display() == "hi", "direct str display")
+}
+
+// ── Eq pact ──
+
+fn test_eq() {
+    assert(42.eq(42), "eq i32 true")
+    assert(!42.eq(99), "eq i32 false")
+    assert("abc".eq("abc"), "eq str true")
+    assert(!'a'.eq('b'), "eq char false")
+    assert(true.eq(true), "eq bool true")
+}
+
+// ── Ord pact ──
+
+fn test_ord() {
+    assert(1.cmp(2) == -1, "cmp lt")
+    assert(3.cmp(3) == 0, "cmp eq")
+    assert(5.cmp(1) == 1, "cmp gt")
+    assert("abc".cmp("abd") == -1, "str cmp lt")
+    assert("abc".cmp("abc") == 0, "str cmp eq")
+    assert("b".cmp("a") == 1, "str cmp gt")
+}
+
+// ── Generic max/min/clamp ──
+
+fn test_generic_max_min() {
+    assert(max<i32>(3, 7) == 7, "max i32")
+    assert(min<i32>(3, 7) == 3, "min i32")
+    assert(max<i64>(i64(10), i64(20)) == i64(20), "max i64")
+    assert(min<i64>(i64(10), i64(20)) == i64(10), "min i64")
+}
+
+fn test_clamp() {
+    assert(clamp<i32>(5, 1, 10) == 5, "clamp in range")
+    assert(clamp<i32>(-5, 0, 100) == 0, "clamp below")
+    assert(clamp<i32>(200, 0, 100) == 100, "clamp above")
+}
+
+// ── Struct conformance ──
+
+struct Point {
+    x: i32 = 0
+    y: i32 = 0
+}
+
+ext Point impl Display {
+    fn display(p) -> str = "({p.x}, {p.y})"
+}
+
+ext Point impl Eq {
+    fn eq(a, other: Point) -> bool = a.x == other.x && a.y == other.y
+}
+
+fn test_struct_display() {
+    p := Point { x = 1, y = 2 }
+    assert(to_string<Point>(p) == "(1, 2)", "struct display")
+}
+
+fn main() {
+    test_display()
+    test_display_direct()
+    test_eq()
+    test_ord()
+    test_generic_max_min()
+    test_clamp()
+    test_struct_display()
+    println("all conv tests passed")
+}
+
+// EXPECT-STDOUT: all conv tests passed

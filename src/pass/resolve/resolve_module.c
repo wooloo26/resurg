@@ -178,6 +178,29 @@ static void register_wildcard_use(Sema *sema, const char *mod_name, const char *
         }
     }
 
+    // Scan pact_table
+    for (int32_t i = 0; i < sema->base.db.pact_table.capacity; i++) {
+        HashEntry *e = &sema->base.db.pact_table.entries[i];
+        if (e->key == NULL || e->key == (const char *)(uintptr_t)1) {
+            continue;
+        }
+        if (strncmp(e->key, prefix_dot, prefix_dot_len) == 0) {
+            const char *bare = e->key + prefix_dot_len;
+            if (strchr(bare, '.') != NULL) {
+                continue;
+            }
+            PactDef *pdef = (PactDef *)e->value;
+            if (pdef->is_pub) {
+                hash_table_insert(&sema->base.db.pact_table, bare, pdef);
+                if (reexport_prefix != NULL) {
+                    const char *rekey =
+                        arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, bare);
+                    hash_table_insert(&sema->base.db.pact_table, rekey, pdef);
+                }
+            }
+        }
+    }
+
     // Register variant constructors from generic enums matching mod_name.
     // e.g., `pub use Option::*` makes Some and None available as bare names.
     GenericEnumDef *gdef =
@@ -330,6 +353,20 @@ void register_module_decl(Sema *sema, ASTNode *decl) {
         }
     }
 
+    // Register extension methods from the module
+    for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
+        ASTNode *inner = decl->module.decls[i];
+        if (inner->kind == NODE_EXT_DECL) {
+            register_ext_decl(sema, inner);
+        }
+    }
+    for (int32_t i = 0; i < BUF_LEN(decl->module.decls); i++) {
+        ASTNode *inner = decl->module.decls[i];
+        if (inner->kind == NODE_EXT_DECL && BUF_LEN(inner->ext_decl->impl_pacts) > 0) {
+            enforce_ext_pact_conformances(sema, inner);
+        }
+    }
+
     sema->base.current_scope->module_name = prev_module_name;
 }
 
@@ -463,6 +500,22 @@ void register_use_decl(Sema *sema, ASTNode *decl) {
                     arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
                 hash_table_insert(&sema->base.db.var_table, rekey, vi);
                 scope_define(sema, &(SymDef){rekey, vi->type, true, SYM_VAR});
+            }
+            continue;
+        }
+
+        // Try pact
+        PactDef *pdef = sema_lookup_pact(sema, qualified);
+        if (pdef != NULL) {
+            if (!pdef->is_pub) {
+                SEMA_ERR(sema, decl->loc, "'%s' is private in module '%s'", name, mod_name);
+                continue;
+            }
+            hash_table_insert(&sema->base.db.pact_table, alias, pdef);
+            if (reexport_prefix != NULL) {
+                const char *rekey =
+                    arena_sprintf(sema->base.arena, "%s.%s", reexport_prefix, alias);
+                hash_table_insert(&sema->base.db.pact_table, rekey, pdef);
             }
             continue;
         }

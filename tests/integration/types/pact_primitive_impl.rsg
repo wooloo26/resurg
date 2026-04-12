@@ -1,0 +1,68 @@
+// Pact implementation on primitive types
+// TEST: normal
+
+pact Display {
+    fn display() -> str
+}
+
+ext i32 impl Display {
+    fn display(n) -> str = n.to_str()
+}
+
+ext f64 impl Display {
+    fn display(n) -> str = n.to_str()
+}
+
+ext bool impl Display {
+    fn display(b) -> str = b.to_str()
+}
+
+ext str impl Display {
+    fn display(s) -> str = s
+}
+
+// Generic function bounded by Display
+fn show<T: Display>(value: T) -> str {
+    value.display()
+}
+
+fn test_primitive_display() {
+    assert(show<i32>(42) == "42", "i32 display")
+    assert(show<bool>(true) == "true", "bool display")
+    assert(show<str>("hello") == "hello", "str display")
+}
+
+fn test_direct_call() {
+    assert(42.display() == "42", "direct i32")
+    assert(true.display() == "true", "direct bool")
+    assert("hi".display() == "hi", "direct str")
+}
+
+// ── Into<T> pact on primitives ──
+
+pact Into<T> {
+    fn into() -> T
+}
+
+ext i32 impl Into {
+    fn into(n) -> str = n.to_str()
+}
+
+fn convert<T: Into>(value: T) -> str {
+    value.into()
+}
+
+fn test_into() {
+    var s: str = 42.into()
+    assert(s == "42", "i32 into str")
+    assert(convert<i32>(100) == "100", "convert generic")
+}
+
+fn main() {
+    test_primitive_display()
+    test_direct_call()
+    test_into()
+    println("all pact primitive tests passed")
+}
+
+// EXPECT-STDOUT: all pact primitive tests passed
