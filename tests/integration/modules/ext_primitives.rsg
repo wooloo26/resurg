@@ -3,7 +3,7 @@
 // ── ext on i32 ──
 
 ext i32 {
-    fn abs(n) -> i32 {
+    fn magnitude(n) -> i32 {
         if n < 0 { 0 - n } else { n }
     }
 
@@ -13,13 +13,13 @@ ext i32 {
 
 fn test_ext_i32_value_receiver() {
     x := 42
-    assert(x.abs() == 42, "")
+    assert(x.magnitude() == 42, "")
 
     y := -10
-    assert(y.abs() == 10, "")
+    assert(y.magnitude() == 10, "")
 
     z := 0
-    assert(z.abs() == 0, "")
+    assert(z.magnitude() == 0, "")
 }
 
 fn test_ext_i32_pointer_receiver() {
@@ -35,17 +35,17 @@ fn test_ext_i32_pointer_receiver() {
 // ── ext on bool ──
 
 ext bool {
-    fn to_i32(b) -> i32 {
+    fn as_int(b) -> i32 {
         if b { 1 } else { 0 }
     }
 }
 
 fn test_ext_bool() {
     t := true
-    assert(t.to_i32() == 1, "")
+    assert(t.as_int() == 1, "")
 
     f := false
-    assert(f.to_i32() == 0, "")
+    assert(f.as_int() == 0, "")
 }
 
 // ── ext on f64 ──

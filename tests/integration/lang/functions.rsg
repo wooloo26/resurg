@@ -124,13 +124,13 @@ fn test_str_functions() {
 }
 
 // ── function with bool params ──
-fn bool_to_str(val: bool) -> str {
+fn format_bool(val: bool) -> str {
     if val { "yes" } else { "no" }
 }
 
 fn test_bool_functions() {
-    assert(bool_to_str(true) == "yes", "")
-    assert(bool_to_str(false) == "no", "")
+    assert(format_bool(true) == "yes", "")
+    assert(format_bool(false) == "no", "")
 }
 
 // ── function with u32 params ──

@@ -88,12 +88,12 @@ fn test_fn_type_alias() {
 
 // ── function type with bool parameter ──
 
-fn bool_to_i32(b: bool) -> i32 {
+fn convert_bool(b: bool) -> i32 {
     if b { 1 } else { 0 }
 }
 
 fn test_fn_type_bool_param() {
-    var f: fn(bool) -> i32 = bool_to_i32
+    var f: fn(bool) -> i32 = convert_bool
     assert(f(true) == 1, "")
     assert(f(false) == 0, "")
 }

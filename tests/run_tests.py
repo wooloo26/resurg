@@ -420,6 +420,8 @@ def _compile_c(
         cc, "-std=c17", "-Wno-tautological-compare",
         f"-I{runtime_dir}", "-o", str(test_bin), str(test_c),
     ] + rt_list
+    if sys.platform != "win32":
+        cmd.append("-lm")
     result.command = " ".join(cmd)
     try:
         proc = subprocess.run(
